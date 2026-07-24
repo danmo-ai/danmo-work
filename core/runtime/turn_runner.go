@@ -772,63 +772,31 @@ func isHugeResult(content string) bool {
 }
 
 func (p *TurnRunner) enforceToolPairing(messages []Message) []Message {
-	// Build a set of tool_call IDs that have a matching tool_result.
-	callIdx := make(map[string]int)
-	resultIDs := make(map[string]bool)
-	for i, m := range messages {
-		if m.Role == RoleAssistant {
-			for _, tc := range m.ToolCalls {
-				callIdx[tc.ID] = i
-			}
-		}
-		if m.Role == RoleTool && m.ToolCallID != "" {
-			resultIDs[m.ToolCallID] = true
-		}
-	}
-
-	out := make([]Message, 0, len(messages))
-	for _, m := range messages {
-		if m.Role == RoleTool && m.ToolCallID != "" {
-			// Drop orphan tool results (no matching assistant tool_call).
-			if _, ok := callIdx[m.ToolCallID]; !ok {
-				continue
-			}
-		}
-		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
-			// Drop orphan assistant tool_calls whose results are all missing.
-			// An assistant(tool_calls) without any matching tool_result would
-			// cause an OpenAI-compatible API error ("tool_call without result").
-			allMissing := true
-			for _, tc := range m.ToolCalls {
-				if resultIDs[tc.ID] {
-					allMissing = false
-					break
-				}
-			}
-			if allMissing {
-				continue
-			}
-		}
-		out = append(out, m)
-	}
-	return out
+	return keepCompleteToolPairs(messages)
 }
 
 // salvagePairedTurnDelta keeps this-turn messages that form complete tool pairs.
 // Used when a turn is cancelled/failed so the next turn still sees finished work
 // (e.g. read_file/glob results) without unpaired assistant tool_calls.
 func salvagePairedTurnDelta(delta []Message) []Message {
-	if len(delta) == 0 {
-		return delta
+	return keepCompleteToolPairs(delta)
+}
+
+// keepCompleteToolPairs returns an API-safe message sequence. In a batched
+// assistant response, each call is retained independently only when its result
+// exists. Text content survives even if all tool calls are removed.
+func keepCompleteToolPairs(messages []Message) []Message {
+	if len(messages) == 0 {
+		return messages
 	}
 	haveResult := make(map[string]bool)
-	for _, m := range delta {
+	for _, m := range messages {
 		if m.Role == RoleTool && m.ToolCallID != "" {
 			haveResult[m.ToolCallID] = true
 		}
 	}
-	out := make([]Message, 0, len(delta))
-	for _, m := range delta {
+	out := make([]Message, 0, len(messages))
+	for _, m := range messages {
 		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
 			kept := make([]ToolCall, 0, len(m.ToolCalls))
 			for _, tc := range m.ToolCalls {
@@ -837,6 +805,11 @@ func salvagePairedTurnDelta(delta []Message) []Message {
 				}
 			}
 			if len(kept) == 0 {
+				if m.Content != "" {
+					cp := m
+					cp.ToolCalls = nil
+					out = append(out, cp)
+				}
 				continue
 			}
 			cp := m

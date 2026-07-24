@@ -19,8 +19,8 @@ type mockToolHandler struct {
 	calls int
 }
 
-func (h *mockToolHandler) Name() string              { return h.name }
-func (h *mockToolHandler) RiskLevel() domain.RiskLevel { return h.risk }
+func (h *mockToolHandler) Name() string                        { return h.name }
+func (h *mockToolHandler) RiskLevel() domain.RiskLevel         { return h.risk }
 func (h *mockToolHandler) Describe(args map[string]any) string { return h.name }
 func (h *mockToolHandler) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
@@ -145,7 +145,7 @@ func TestTurnRunnerDoomLoopMessagesIntegrity(t *testing.T) {
 		Model:     "test-model",
 		MaxSteps:  20,
 		WorkDir:   "/tmp",
-		Messages: append(append([]Message(nil), msgs...), Message{Role: RoleUser, Content: "continue"}),
+		Messages:  append(append([]Message(nil), msgs...), Message{Role: RoleUser, Content: "continue"}),
 	}
 
 	rep2, msgs2, err2 := tr2.Run(ctx, tctx2)
@@ -415,10 +415,10 @@ func TestEnforceToolPairingDropsOrphanAssistantToolCalls(t *testing.T) {
 	validateToolMessagePairs(t, out, "enforceToolPairing orphan assistant")
 }
 
-func TestEnforceToolPairingKeepsPartialAssistantWithSomeResults(t *testing.T) {
+func TestEnforceToolPairingStripsPartialAssistantBatch(t *testing.T) {
 	tr := NewTurnRunner(nil, nil, nil, nil, nil)
-	// Assistant with 2 tool_calls, only 1 has a result — should be kept
-	// (the missing one will be handled by closeUnfinishedToolCalls elsewhere).
+	// Assistant with 2 tool_calls, only 1 has a result. Replay/compaction must
+	// remove the missing call rather than send an API-invalid partial batch.
 	msgs := []Message{
 		{Role: RoleSystem, Content: "sys"},
 		{Role: RoleUser, Content: "hi"},
@@ -430,16 +430,19 @@ func TestEnforceToolPairingKeepsPartialAssistantWithSomeResults(t *testing.T) {
 	}
 	out := tr.enforceToolPairing(msgs)
 
-	// Assistant should be kept because c1 has a result.
-	foundAssistant := false
+	foundC1 := false
 	for _, m := range out {
 		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
-			foundAssistant = true
+			if len(m.ToolCalls) != 1 || m.ToolCalls[0].ID != "c1" {
+				t.Fatalf("assistant should retain only completed call c1, got %+v", m.ToolCalls)
+			}
+			foundC1 = true
 		}
 	}
-	if !foundAssistant {
-		t.Fatal("assistant with at least one matching result should be kept")
+	if !foundC1 {
+		t.Fatal("assistant with completed call c1 should be kept")
 	}
+	validateToolMessagePairs(t, out, "enforceToolPairing partial batch")
 }
 
 func TestSnipHeadPreservesLastUserMessage(t *testing.T) {

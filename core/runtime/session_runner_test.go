@@ -1,11 +1,37 @@
 package runtime
 
 import (
+	"errors"
 	"testing"
 
 	"danmo-work/core/domain"
+	"danmo-work/core/port"
 	"danmo-work/core/runtime/tool/builtin"
 )
+
+func TestReserveSessionTurnPreventsConcurrentStartAndResume(t *testing.T) {
+	engine := &Engine{}
+	if err := engine.reserveSessionTurn("session-1", "turn-1"); err != nil {
+		t.Fatalf("reserve first turn: %v", err)
+	}
+	if err := engine.reserveSessionTurn("session-1", "turn-2"); !errors.Is(err, port.ErrSessionTurnRunning) {
+		t.Fatalf("second turn should conflict, got %v", err)
+	}
+
+	// A stale goroutine must not release another turn's reservation.
+	engine.releaseSessionTurn("session-1", "turn-2")
+	if err := engine.reserveSessionTurn("session-1", "turn-3"); !errors.Is(err, port.ErrSessionTurnRunning) {
+		t.Fatalf("stale release cleared active turn: %v", err)
+	}
+
+	engine.releaseSessionTurn("session-1", "turn-1")
+	if err := engine.reserveSessionTurn("session-1", "turn-3"); err != nil {
+		t.Fatalf("reserve after release: %v", err)
+	}
+	if err := engine.reserveSessionTurn("session-2", "turn-4"); err != nil {
+		t.Fatalf("different session should run independently: %v", err)
+	}
+}
 
 func TestBuildTurnMessages_IncludesPreviousTurnMessages(t *testing.T) {
 	engine := &Engine{

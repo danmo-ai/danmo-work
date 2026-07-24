@@ -79,7 +79,6 @@ func (s *CheckpointStore) Load(sessionID string) (*domain.CompactionCheckpoint, 
 	}
 
 	var latest *domain.CompactionCheckpoint
-	var latestCount int
 
 	for _, e := range entries {
 		name := e.Name()
@@ -95,10 +94,16 @@ func (s *CheckpointStore) Load(sessionID string) (*domain.CompactionCheckpoint, 
 		if err := json.Unmarshal(data, &cp); err != nil {
 			continue
 		}
+		if cp.SessionID != "" && cp.SessionID != sessionID {
+			continue
+		}
 
-		if cp.TurnCount > latestCount {
+		// TurnCount is monotonic for normal compaction. TurnID (nanosecond
+		// suffix) deterministically selects the newest checkpoint on ties.
+		if latest == nil ||
+			cp.TurnCount > latest.TurnCount ||
+			(cp.TurnCount == latest.TurnCount && cp.TurnID > latest.TurnID) {
 			latest = &cp
-			latestCount = cp.TurnCount
 		}
 	}
 
