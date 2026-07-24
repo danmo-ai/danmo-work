@@ -14,7 +14,7 @@ metadata:
 
 # Git Workflow Skill
 
-> Worktree and branch-finish sections adapted from obra/superpowers (© Jesse Vincent / contributors, MIT); core workflow is DanQing Teams original.
+> Worktree and branch-finish sections adapted from obra/superpowers (© Jesse Vincent / contributors, MIT); core workflow is Danmo Work original.
 > Not a verbatim copy of upstream skills.
 
 Standard Git version control operations and best practices.

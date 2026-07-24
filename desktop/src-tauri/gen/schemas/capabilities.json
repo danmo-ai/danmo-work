@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default capabilities for DanQing Teams desktop","local":true,"windows":["main"],"permissions":["core:default","dialog:default","updater:default","process:default","allow-write-file-bytes"]}}
+{"default":{"identifier":"default","description":"Default capabilities for Danmo Work desktop","local":true,"windows":["main"],"permissions":["core:default","dialog:default","updater:default","process:default","allow-write-file-bytes"]}}

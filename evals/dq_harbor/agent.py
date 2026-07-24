@@ -1,4 +1,4 @@
-"""Harbor BaseInstalledAgent adapter for DanQing Teams.
+"""Harbor BaseInstalledAgent adapter for Danmo Work.
 
 Usage:
   make eval-harbor-bin

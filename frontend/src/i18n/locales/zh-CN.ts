@@ -348,7 +348,7 @@ export default {
     marketSourceName: '显示名称',
     marketPlatform: '平台',
     marketRepo: '仓库 / 路径',
-    marketRepoPlaceholder: 'https://github.com/danqing-ai/dq-market 或本地绝对路径',
+    marketRepoPlaceholder: 'https://github.com/danmo-ai/dq-market 或本地绝对路径',
     marketRef: '分支 / Tag',
     marketCatalogPath: '目录文件路径',
     marketToken: '访问令牌（可选）',

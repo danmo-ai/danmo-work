@@ -5,7 +5,7 @@ const (
 	DefaultAppID     = "bot"
 	DefaultBotType   = "3"
 	DefaultChannelVer = "2.4.3"
-	DefaultBotAgent  = "DanQingTeams/1.0.0"
+	DefaultBotAgent  = "DanmoWork/1.0.0"
 )
 
 const (

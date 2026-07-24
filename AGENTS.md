@@ -1,4 +1,4 @@
-# AGENTS.md — DanQing Teams
+# AGENTS.md — Danmo Work
 
 ## Quick reference
 
@@ -107,7 +107,7 @@ Builds Go backend as a Tauri sidecar binary (`scripts/build_sidecar.sh`), inject
 - Linux server → `out/dist/danqing-teams-linux-*.tar.gz`
 - Windows desktop → `out/desktop/bundle/**/*.exe`
 
-Checks out `danqing-ai/dq-ui` alongside the repo.
+Checks out `danmo-ai/dq-ui` alongside the repo.
 
 ## Architecture
 

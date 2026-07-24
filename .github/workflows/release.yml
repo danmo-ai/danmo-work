@@ -33,7 +33,7 @@ jobs:
       - name: Checkout dq-ui
         uses: actions/checkout@v6
         with:
-          repository: danqing-ai/dq-ui
+          repository: danmo-ai/dq-ui
           path: dq-ui
 
       - name: Setup Go
@@ -119,7 +119,7 @@ jobs:
       - name: Checkout dq-ui
         uses: actions/checkout@v6
         with:
-          repository: danqing-ai/dq-ui
+          repository: danmo-ai/dq-ui
           path: dq-ui
 
       - name: Setup Go
@@ -193,7 +193,7 @@ jobs:
       - name: Checkout dq-ui
         uses: actions/checkout@v6
         with:
-          repository: danqing-ai/dq-ui
+          repository: danmo-ai/dq-ui
           path: dq-ui
 
       - name: Setup Go
@@ -320,7 +320,7 @@ jobs:
               --base-url "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}" \
               --asset-dir release-assets \
               --out release-assets/latest.json \
-              --notes "DanQing Teams $RELEASE_VERSION"
+              --notes "Danmo Work $RELEASE_VERSION"
             echo "has_manifest=true" >> "$GITHUB_OUTPUT"
           else
             echo "No updater artifacts found — skip latest.json (set TAURI_SIGNING_PRIVATE_KEY secret)"

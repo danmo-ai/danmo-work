@@ -14,7 +14,7 @@ metadata:
 # Requesting Code Review
 
 > Adapted from obra/superpowers `requesting-code-review` (© Jesse Vincent / contributors, MIT).
-> Rewritten for DanQing Teams tools and agents; not a verbatim copy.
+> Rewritten for Danmo Work tools and agents; not a verbatim copy.
 
 Review early against the *work product*, not the author’s chat history. Give the reviewer precise scope and evidence.
 

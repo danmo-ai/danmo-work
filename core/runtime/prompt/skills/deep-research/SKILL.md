@@ -14,7 +14,7 @@ metadata:
 # Deep Research
 
 > Adapted from alirezarezvani/claude-skills `deep-research` (© Alireza Rezvani / contributors, MIT).
-> Rewritten for DanQing Teams tools and agents; not a verbatim copy.
+> Rewritten for Danmo Work tools and agents; not a verbatim copy.
 
 Use when a wrong answer is expensive. Prefer a short direct answer for low-risk fact checks.
 

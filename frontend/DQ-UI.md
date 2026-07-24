@@ -1,4 +1,4 @@
-# DanQing UI in Teams
+# Danmo UI in Danmo Work
 
 与 [DanQing-Studio](../DanQing-Studio/frontend/DQ-UI.md) 一致，使用共享包 [`../dq-ui`](../dq-ui)。
 

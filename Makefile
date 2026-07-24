@@ -29,7 +29,7 @@ HARBOR_ENV ?= docker
 PODMAN_BIN ?= $(shell command -v podman 2>/dev/null || echo /opt/podman/bin/podman)
 
 help:
-	@echo "DanQing Teams"
+	@echo "Danmo Work"
 	@echo ""
 	@echo "Dev:"
 	@echo "  backend       Start backend only (:7801) — for Go debugger"

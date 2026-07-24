@@ -14,7 +14,7 @@ metadata:
 # Writing Plans
 
 > Adapted from obra/superpowers `writing-plans` (© Jesse Vincent / contributors, MIT).
-> Rewritten for DanQing Teams tools and agents; not a verbatim copy.
+> Rewritten for Danmo Work tools and agents; not a verbatim copy.
 
 Write plans that a skilled engineer with little repo context can execute: exact files, concrete steps, tests, and commands. Prefer DRY, YAGNI, TDD, frequent commits.
 

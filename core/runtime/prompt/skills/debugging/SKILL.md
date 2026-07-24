@@ -15,7 +15,7 @@ metadata:
 # Debugging Skill
 
 > Adapted from obra/superpowers `systematic-debugging` and `verification-before-completion` (© Jesse Vincent / contributors, MIT).
-> Rewritten for DanQing Teams tools and agents; not a verbatim copy.
+> Rewritten for Danmo Work tools and agents; not a verbatim copy.
 
 **Iron law:** no fixes without root-cause investigation first. **Completion law:** no “fixed/passing/done” claims without fresh verification evidence.
 

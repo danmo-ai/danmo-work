@@ -25,7 +25,7 @@ func main() {
 	core := bootstrap.New(bootstrap.Config{ConfigPath: os.Getenv("TEAMS_CONFIG")})
 	defer core.Close()
 	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Println("DanQing Teams CLI. Type 'exit' to quit. Use 'danqing-teams-cli run --help' for headless eval.")
+	fmt.Println("Danmo Work CLI. Type 'exit' to quit. Use 'danqing-teams-cli run --help' for headless eval.")
 	for {
 		fmt.Print("> ")
 		if !scanner.Scan() {

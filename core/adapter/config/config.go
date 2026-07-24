@@ -174,7 +174,7 @@ func defaultMarketSources() []domain.MarketSource {
 			Name:        "Official (GitHub)",
 			Kind:        "git",
 			Platform:    "github",
-			Repo:        "https://github.com/danqing-ai/dq-market",
+			Repo:        "https://github.com/danmo-ai/dq-market",
 			Ref:         "main",
 			CatalogPath: "catalog/index.json",
 			Enabled:     true,

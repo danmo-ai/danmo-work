@@ -14,7 +14,7 @@ metadata:
 # Brainstorming
 
 > Adapted from obra/superpowers `brainstorming` (© Jesse Vincent / contributors, MIT).
-> Rewritten for DanQing Teams tools and agents; not a verbatim copy.
+> Rewritten for Danmo Work tools and agents; not a verbatim copy.
 
 Turn fuzzy ideas into an approved design before implementation. Do not write production code or scaffolds until the user approves the design (a short design is fine for small work).
 

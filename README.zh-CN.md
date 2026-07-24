@@ -1,10 +1,10 @@
-# DanQing Teams
+# Danmo Work
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-[![Release](https://img.shields.io/github/v/release/danqing-ai/danqing-teams?label=release)](https://github.com/danqing-ai/danqing-teams/releases/latest)
-[![License](https://img.shields.io/github/license/danqing-ai/danqing-teams)](LICENSE)
-[![Go](https://img.shields.io/github/go-mod/go-version/danqing-ai/danqing-teams?filename=go.mod)](go.mod)
+[![Release](https://img.shields.io/github/v/release/danmo-ai/danmo-work?label=release)](https://github.com/danmo-ai/danmo-work/releases/latest)
+[![License](https://img.shields.io/github/license/danmo-ai/danmo-work)](LICENSE)
+[![Go](https://img.shields.io/github/go-mod/go-version/danmo-ai/danmo-work?filename=go.mod)](go.mod)
 
 通用型 **AI Work Agent**（兼具 Coding 能力）。引擎面向 **长程复杂任务**，靠多 Agent 协作完成。
 
@@ -27,11 +27,11 @@ MIT · Web / 桌面 / CLI / TUI · 支持 Anthropic 与 OpenAI 兼容接口
 
 | 平台 | 下载 |
 |------|------|
-| **macOS**（Apple Silicon） | [`.dmg`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
-| **Windows** | [安装包 `.exe`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
-| **Linux 服务端** | [`.tar.gz`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
+| **macOS**（Apple Silicon） | [`.dmg`](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **Windows** | [安装包 `.exe`](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **Linux 服务端** | [`.tar.gz`](https://github.com/danmo-ai/danmo-work/releases/latest) |
 
-或从源码跑（需同级 [`dq-ui`](https://github.com/danqing-ai/dq-ui)）：
+或从源码跑（需同级 [`dq-ui`](https://github.com/danmo-ai/dq-ui)）：
 
 ```bash
 make dev-web   # → http://localhost:5801/app/
@@ -157,7 +157,7 @@ System prompt 中的 `<memory-policy>` 引导模型：记住持久偏好与项�
 
 **与主流 AI Agent 的差异**
 
-| 做法 | 常见产品 / 栈 | 问题 | DanQing Teams |
+| 做法 | 常见产品 / 栈 | 问题 | Danmo Work |
 |------|---------------|------|---------------|
 | 黑盒产品记忆 | ChatGPT / Claude Memory | 结构、作用域、写入时机对用户不透明 | 显式 Tool + 可见记忆 Tab；带 key 与作用域 |
 | IDE / Coding Agent 记忆 | Cursor 类 memory | 常锁在产品内，难审计、难跨端复用 | Web / 桌面 / CLI 共用 SQLite；API 可列表 / 删除 |
@@ -165,7 +165,7 @@ System prompt 中的 `<memory-policy>` 引导模型：记住持久偏好与项�
 | 外部向量记忆服务 | Mem0 / Zep 等 | 额外基建；写入策略常在 Agent Loop 之外 | 内置在 Agent Loop 的 Tool；v1 关键词检索，无独立服务 |
 | 自动摘要全量索引 | 每轮 / 每段自动记 | 噪声大、有效召回低（我们试过已移除） | 仅模型判定「值得记」时写入 |
 
-主流要么把记忆做成**看不见的产品魔法**，要么做成**再接一套向量库**。DanQing Teams 把记忆留在同一套 Tool 抽象上：模型决策、存储可检视、人通过记忆 Tab 参与。
+主流要么把记忆做成**看不见的产品魔法**，要么做成**再接一套向量库**。Danmo Work 把记忆留在同一套 Tool 抽象上：模型决策、存储可检视、人通过记忆 Tab 参与。
 
 ### 日志即状态（Persistent Execution Trace）
 
@@ -176,7 +176,7 @@ System prompt 中的 `<memory-policy>` 引导模型：记住持久偏好与项�
 
 ## 与主流框架的根本差异
 
-| 维度 | 主流框架（LangGraph / CrewAI / AutoGen）与典型 Coding Agent | DanQing Teams |
+| 维度 | 主流框架（LangGraph / CrewAI / AutoGen）与典型 Coding Agent | Danmo Work |
 |------|---------|--------|
 | **控制流** | 人工维护的 Graph、角色路由或产品 Mode | **纯 LLM 驱动**——无人工维护的流程 |
 | **抽象层级** | Agent / Chain / Graph / Role / Mode 多层抽象 | **Tool（唯一抽象）**，极简无层级 |
@@ -189,7 +189,7 @@ System prompt 中的 `<memory-policy>` 引导模型：记住持久偏好与项�
 | **调试方式** | 断点 / 外部日志 | 可视化回放，改 Tool Result 继续推演 |
 | **人机关系** | 人下指令，机器执行（主从） | 人进入思维流，共同迭代（对等） |
 
-**本质差异**：主流是「开发者（或产品）编排，LLM 执行」；DanQing Teams 是「LLM 在同一思维链上编排；开发者提供能力单元；子 Agent 是带上下文隔离的 Tool Call」。
+**本质差异**：主流是「开发者（或产品）编排，LLM 执行」；Danmo Work 是「LLM 在同一思维链上编排；开发者提供能力单元；子 Agent 是带上下文隔离的 Tool Call」。
 
 ## 概念模型
 
@@ -247,11 +247,11 @@ server/   cli/   tui/    frontend/ (Vue 3 + Vite)
 
 - Go 1.25+
 - Node.js 20+（前端 / 桌面）
-- 同级目录的 [`dq-ui`](https://github.com/danqing-ai/dq-ui) 仓库（前端依赖 `file:../../dq-ui/packages/*`）
+- 同级目录的 [`dq-ui`](https://github.com/danmo-ai/dq-ui) 仓库（前端依赖 `file:../../dq-ui/packages/*`）
 
 ```text
 Workspace/
-  DanQing-Teams/
+  Danmo-Work/
   dq-ui/
 ```
 

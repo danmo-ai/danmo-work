@@ -10,7 +10,7 @@ use std::process::Command;
 #[cfg(windows)]
 use tauri::path::BaseDirectory;
 
-const HELP_URL: &str = "https://github.com/danqing-ai/DanQing-Teams#macos-%E5%AE%89%E8%A3%85";
+const HELP_URL: &str = "https://github.com/danmo-ai/danmo-work#macos-%E5%AE%89%E8%A3%85";
 const BACKEND_ADDR: &str = "127.0.0.1:7801";
 const BACKEND_READY_TIMEOUT: Duration = Duration::from_secs(45);
 const BACKEND_READY_INTERVAL: Duration = Duration::from_millis(200);

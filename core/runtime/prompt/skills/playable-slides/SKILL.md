@@ -14,7 +14,7 @@ metadata:
 # Playable Slides
 
 > Adapted from alirezarezvani/claude-skills `md-slides` (© Alireza Rezvani / contributors, MIT).
-> Rewritten for DanQing Teams as self-contained HTML decks (not PPTX); not a verbatim copy.
+> Rewritten for Danmo Work as self-contained HTML decks (not PPTX); not a verbatim copy.
 
 Ship a **single HTML file** the user can open in a browser and present. Do not require PowerPoint/Keynote unless the user explicitly asks for those formats.
 

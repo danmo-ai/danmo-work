@@ -1,4 +1,4 @@
-# DanQing Teams configuration file
+# Danmo Work configuration file
 # Default location: ~/.dq-teams/config.yaml
 # All entry points (server, cli, tui, desktop) share this home directory.
 # Override with TEAMS_CONFIG / TEAMS_DATA_DIR / TEAMS_DB_PATH if needed.
@@ -90,7 +90,7 @@ market:
       name: Official (GitHub)
       kind: git
       platform: github
-      repo: https://github.com/danqing-ai/dq-market
+      repo: https://github.com/danmo-ai/dq-market
       ref: main
       catalog_path: catalog/index.json
       enabled: true

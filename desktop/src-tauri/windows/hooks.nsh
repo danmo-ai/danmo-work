@@ -1,4 +1,4 @@
-; DanQing Teams Windows NSIS hooks — install bundled Microsoft Coreutils by default.
+; Danmo Work Windows NSIS hooks — install bundled Microsoft Coreutils by default.
 ; Runs after files are copied into $INSTDIR so exec_shell has POSIX utilities without Git Bash.
 
 !include LogicLib.nsh

@@ -14,7 +14,7 @@ metadata:
 # Test-Driven Development
 
 > Adapted from obra/superpowers `test-driven-development` (© Jesse Vincent / contributors, MIT).
-> Rewritten for DanQing Teams tools and agents; not a verbatim copy.
+> Rewritten for Danmo Work tools and agents; not a verbatim copy.
 
 **Iron law:** no production code without a failing test first. If you wrote implementation before a failing test, delete it and start over.
 

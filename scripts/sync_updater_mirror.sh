@@ -53,7 +53,7 @@ find "$ASSET_DIR" \( \
   --base-url "$MIRROR_BASE" \
   --asset-dir "$WORK/upload" \
   --out "$WORK/upload/latest.json" \
-  --notes "DanQing Teams $VERSION"
+  --notes "Danmo Work $VERSION"
 
 echo "==> Syncing updater assets to $MIRROR_BASE"
 

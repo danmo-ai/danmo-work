@@ -1,6 +1,6 @@
 {
   "identifier": "default",
-  "description": "Default capabilities for DanQing Teams desktop",
+  "description": "Default capabilities for Danmo Work desktop",
   "windows": ["main"],
   "permissions": [
     "core:default",

@@ -1,10 +1,10 @@
-# DanQing Teams
+# Danmo Work
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-[![Release](https://img.shields.io/github/v/release/danqing-ai/danqing-teams?label=release)](https://github.com/danqing-ai/danqing-teams/releases/latest)
-[![License](https://img.shields.io/github/license/danqing-ai/danqing-teams)](LICENSE)
-[![Go](https://img.shields.io/github/go-mod/go-version/danqing-ai/danqing-teams?filename=go.mod)](go.mod)
+[![Release](https://img.shields.io/github/v/release/danmo-ai/danmo-work?label=release)](https://github.com/danmo-ai/danmo-work/releases/latest)
+[![License](https://img.shields.io/github/license/danmo-ai/danmo-work)](LICENSE)
+[![Go](https://img.shields.io/github/go-mod/go-version/danmo-ai/danmo-work?filename=go.mod)](go.mod)
 
 General-purpose **AI Work Agent** (with coding capability). Built for **long-horizon complex tasks** via multi-agent collaboration.
 
@@ -27,11 +27,11 @@ MIT · Web / Desktop / CLI / TUI · Anthropic & OpenAI-compatible providers
 
 | Platform | Download |
 |----------|----------|
-| **macOS** (Apple Silicon) | [`.dmg`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
-| **Windows** | [Setup `.exe`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
-| **Linux server** | [`.tar.gz`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
+| **macOS** (Apple Silicon) | [`.dmg`](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **Windows** | [Setup `.exe`](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **Linux server** | [`.tar.gz`](https://github.com/danmo-ai/danmo-work/releases/latest) |
 
-Or run from source (needs sibling [`dq-ui`](https://github.com/danqing-ai/dq-ui)):
+Or run from source (needs sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui)):
 
 ```bash
 make dev-web   # → http://localhost:5801/app/
@@ -157,7 +157,7 @@ System prompt includes a `<memory-policy>` that steers the model: remember lasti
 
 **vs mainstream AI agents**
 
-| Approach | Typical products / stacks | Gap | DanQing Teams |
+| Approach | Typical products / stacks | Gap | Danmo Work |
 |----------|---------------------------|-----|---------------|
 | Opaque product memory | ChatGPT / Claude “Memory” | User rarely sees structure, scope, or exact writes | Explicit tools + visible Memory tab; scoped keys |
 | IDE / coding-agent memory | Cursor-style memories | Often product-private; hard to audit or share across surfaces | Same SQLite store for web / desktop / CLI; API list/delete |
@@ -165,7 +165,7 @@ System prompt includes a `<memory-policy>` that steers the model: remember lasti
 | Vector memory services | Mem0 / Zep-style stores | Extra infra; write policy often external to the agent loop | Built-in tools on the Agent Loop; keyword search v1, no extra service |
 | Auto-summarize everything | Turn/episode auto-index | Noise, near-zero useful recall (we tried this; removed) | Model-gated writes only when worth remembering |
 
-Mainstream often treats memory as either *invisible product magic* or *another vector DB to wire up*. DanQing Teams keeps memory on the same Tool abstraction: the LLM decides, storage is inspectable, and humans stay in the loop via the Memory tab.
+Mainstream often treats memory as either *invisible product magic* or *another vector DB to wire up*. Danmo Work keeps memory on the same Tool abstraction: the LLM decides, storage is inspectable, and humans stay in the loop via the Memory tab.
 
 ### Log is state
 
@@ -176,7 +176,7 @@ Mainstream often treats memory as either *invisible product magic* or *another v
 
 ## Why different from mainstream frameworks
 
-| Dimension | LangChain / LangGraph / CrewAI / AutoGen / typical coding agents | DanQing Teams |
+| Dimension | LangChain / LangGraph / CrewAI / AutoGen / typical coding agents | Danmo Work |
 |-----------|------------------------------------------------------------------|---------------|
 | Control flow | Developer-written graph, role router, or product modes | **Pure LLM-driven** — no human-maintained workflow |
 | Abstraction | Agent / Chain / Graph / Role / Mode layers | **Tool only** — minimal, flat |
@@ -189,7 +189,7 @@ Mainstream often treats memory as either *invisible product magic* or *another v
 | Debugging | Breakpoints / external logs | Visual replay; edit results and continue |
 | Human role | Command → execute (master/slave) | Join the reasoning stream (peer) |
 
-Mainstream: *developer (or product) orchestrates, LLM executes*. DanQing Teams: *LLM orchestrates on one thinking chain; developers supply capability units; sub-agents are isolated tool calls*.
+Mainstream: *developer (or product) orchestrates, LLM executes*. Danmo Work: *LLM orchestrates on one thinking chain; developers supply capability units; sub-agents are isolated tool calls*.
 
 ## Concept model
 
@@ -247,11 +247,11 @@ server/   cli/   tui/    frontend/ (Vue 3 + Vite)
 
 - Go 1.25+
 - Node.js 20+ (frontend / desktop)
-- Sibling [`dq-ui`](https://github.com/danqing-ai/dq-ui) repo (frontend depends on `file:../../dq-ui/packages/*`)
+- Sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui) repo (frontend depends on `file:../../dq-ui/packages/*`)
 
 ```text
 Workspace/
-  DanQing-Teams/
+  Danmo-Work/
   dq-ui/
 ```
 

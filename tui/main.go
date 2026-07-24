@@ -15,5 +15,5 @@ func main() {
 	core := bootstrap.New(bootstrap.Config{ConfigPath: os.Getenv("TEAMS_CONFIG")})
 	defer core.Close()
 	_ = core
-	fmt.Println("DanQing Teams TUI (placeholder)")
+	fmt.Println("Danmo Work TUI (placeholder)")
 }

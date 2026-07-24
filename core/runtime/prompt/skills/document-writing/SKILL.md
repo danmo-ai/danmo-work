@@ -14,7 +14,7 @@ metadata:
 # Document Writing
 
 > Adapted from alirezarezvani/claude-skills `md-document` (© Alireza Rezvani / contributors, MIT).
-> Rewritten for DanQing Teams (no upstream design-system/scripts required); not a verbatim copy.
+> Rewritten for Danmo Work (no upstream design-system/scripts required); not a verbatim copy.
 
 Produce clear long-form documents. Prefer Markdown as the source of truth; optionally emit a self-contained HTML reader.
 

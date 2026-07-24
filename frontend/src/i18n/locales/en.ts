@@ -348,7 +348,7 @@ export default {
     marketSourceName: 'Display name',
     marketPlatform: 'Platform',
     marketRepo: 'Repo / path',
-    marketRepoPlaceholder: 'https://github.com/danqing-ai/dq-market or local absolute path',
+    marketRepoPlaceholder: 'https://github.com/danmo-ai/dq-market or local absolute path',
     marketRef: 'Branch / tag',
     marketCatalogPath: 'Catalog path',
     marketToken: 'Access token (optional)',

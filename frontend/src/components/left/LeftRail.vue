@@ -244,7 +244,7 @@ function sessionTitle(t_: Session): string {
 
 const userLabel = computed(() => t('navigation.userFallback'))
 const userInitial = computed(() => userLabel.value.slice(0, 1).toUpperCase())
-const userPlan = computed(() => 'DanQing')
+const userPlan = computed(() => 'Danmo')
 
 /** Default collapsed so chats/projects stay primary; persist only after user toggles. */
 const resourcesCollapsed = ref(localStorage.getItem('app-resources-collapsed') !== '0')

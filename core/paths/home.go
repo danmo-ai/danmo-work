@@ -1,4 +1,4 @@
-// Package paths provides the unified user-home data layout for DanQing Teams.
+// Package paths provides the unified user-home data layout for Danmo Work.
 //
 //	~/.dq-teams/
 //	  config.yaml   — runtime config

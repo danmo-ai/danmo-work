@@ -1,8 +1,8 @@
 ---
 name: skill-creator
-description: Create new skills, modify and improve existing skills for DanQing Teams agents. Use when users want to create a skill from scratch, edit or optimize an existing skill, or understand the Agentskills specification format.
+description: Create new skills, modify and improve existing skills for Danmo Work agents. Use when users want to create a skill from scratch, edit or optimize an existing skill, or understand the Agentskills specification format.
 license: Apache-2.0
-compatibility: Requires DanQing Teams 1.0+
+compatibility: Requires Danmo Work 1.0+
 metadata:
   author: danqing-teams
   version: "1.0"
@@ -12,7 +12,7 @@ metadata:
 
 # Skill Creator
 
-A skill for creating and improving skills that extend agent capabilities in DanQing Teams.
+A skill for creating and improving skills that extend agent capabilities in Danmo Work.
 
 ## What Is a Skill?
 

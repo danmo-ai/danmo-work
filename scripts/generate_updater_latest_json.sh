@@ -4,7 +4,7 @@
 # Usage:
 #   scripts/generate_updater_latest_json.sh \
 #     --version 0.6.8 \
-#     --base-url https://github.com/danqing-ai/DanQing-Teams/releases/download/v0.6.8 \
+#     --base-url https://github.com/danmo-ai/danmo-work/releases/download/v0.6.8 \
 #     --out latest.json \
 #     [--notes "release notes"] \
 #     [--asset-dir release-assets]
