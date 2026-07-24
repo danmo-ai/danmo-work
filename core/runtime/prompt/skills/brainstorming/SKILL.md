@@ -4,7 +4,7 @@ description: Clarify intent, requirements, and design before building. Use befor
 license: MIT
 compatibility: Requires read_file, grep, glob; web_search optional
 metadata:
-  author: danqing-teams
+  author: danmo-work
   version: "1.0"
   category: work
   adapted_from: "https://github.com/obra/superpowers/tree/main/skills/brainstorming"
@@ -14,7 +14,7 @@ metadata:
 # Brainstorming
 
 > Adapted from obra/superpowers `brainstorming` (© Jesse Vincent / contributors, MIT).
-> Rewritten for DanQing Teams tools and agents; not a verbatim copy.
+> Rewritten for Danmo Work tools and agents; not a verbatim copy.
 
 Turn fuzzy ideas into an approved design before implementation. Do not write production code or scaffolds until the user approves the design (a short design is fine for small work).
 

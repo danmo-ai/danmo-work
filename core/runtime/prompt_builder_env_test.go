@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 func TestBuildRuntimeEnvironmentGitBash(t *testing.T) {
@@ -55,12 +55,12 @@ func TestBuildRuntimeEnvironmentCmdCoreutils(t *testing.T) {
 	out := buildRuntimeEnvironment(domain.SandboxStatus{
 		Backend:      domain.SandboxBackendWinToken,
 		Shell:        "cmd (Coreutils)",
-		CoreutilsBin: `C:\Users\x\.dq-teams\bin\coreutils\bin`,
+		CoreutilsBin: `C:\Users\x\.danmo-work\bin\coreutils\bin`,
 	})
 	for _, want := range []string{
 		"Shell: cmd (Coreutils)",
 		"Microsoft Coreutils on PATH",
-		`Coreutils bin: C:\Users\x\.dq-teams\bin\coreutils\bin`,
+		`Coreutils bin: C:\Users\x\.danmo-work\bin\coreutils\bin`,
 		"NUL instead of /dev/null",
 	} {
 		if !strings.Contains(out, want) {

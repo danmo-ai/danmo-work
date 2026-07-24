@@ -10,7 +10,8 @@ func TestHomeLayoutAndMigrate(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 
-	legacyDir := filepath.Join(tmp, "Library", "Application Support", "com.danqing.teams")
+	// Migrate from pre-Danmo layout (~/.dq-teams/teams.db).
+	legacyDir := filepath.Join(tmp, ".dq-teams")
 	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -21,7 +22,7 @@ func TestHomeLayoutAndMigrate(t *testing.T) {
 
 	MigrateLegacyOnce()
 
-	wantHome := filepath.Join(tmp, ".dq-teams")
+	wantHome := filepath.Join(tmp, ".danmo-work")
 	if Home() != wantHome {
 		t.Fatalf("Home() = %q, want %q", Home(), wantHome)
 	}
@@ -47,7 +48,7 @@ func TestResolveAgainstHome(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 	rel := ResolveAgainstHome("data")
-	if rel != filepath.Join(tmp, ".dq-teams", "data") {
+	if rel != filepath.Join(tmp, ".danmo-work", "data") {
 		t.Fatalf("rel = %q", rel)
 	}
 	abs := ResolveAgainstHome("/var/tmp/x")

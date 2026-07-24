@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
-	"danqing-teams/core/runtime/sandbox"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
+	"danmo-work/core/runtime/sandbox"
 )
 
 func hostRunShell(ctx context.Context, opts port.SandboxRunOptions) ([]byte, error) {

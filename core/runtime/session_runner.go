@@ -12,18 +12,18 @@ import (
 	"sync"
 	"time"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
-	"danqing-teams/core/runtime/permission"
-	"danqing-teams/core/runtime/tool"
-	"danqing-teams/core/runtime/tool/builtin"
-	"danqing-teams/core/service"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
+	"danmo-work/core/runtime/permission"
+	"danmo-work/core/runtime/tool"
+	"danmo-work/core/runtime/tool/builtin"
+	"danmo-work/core/service"
 )
 
 var _ port.Engine = (*Engine)(nil)
 
 func evalModeEnabled() bool {
-	v := strings.TrimSpace(strings.ToLower(os.Getenv("TEAMS_EVAL_MODE")))
+	v := strings.TrimSpace(strings.ToLower(os.Getenv("WORK_EVAL_MODE")))
 	return v == "1" || v == "true" || v == "yes"
 }
 

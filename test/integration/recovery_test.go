@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"danqing-teams/core/bootstrap"
-	"danqing-teams/core/domain"
+	"danmo-work/core/bootstrap"
+	"danmo-work/core/domain"
 )
 
 // ---------- helpers ----------
@@ -21,10 +21,10 @@ import (
 func setupRecoveryEnv(t *testing.T) (dbPath, dataDir string) {
 	t.Helper()
 	tmpDir := t.TempDir()
-	dbPath = filepath.Join(tmpDir, "teams.db")
-	copyDB(t, "data/teams.db", dbPath)
+	dbPath = filepath.Join(tmpDir, "work.db")
+	copyDB(t, "data/work.db", dbPath)
 	dataDir = filepath.Join(tmpDir, "data")
-	t.Setenv("TEAMS_DB_PATH", dbPath)
+	t.Setenv("WORK_DB_PATH", dbPath)
 	return dbPath, dataDir
 }
 

@@ -244,7 +244,7 @@ function sessionTitle(t_: Session): string {
 
 const userLabel = computed(() => t('navigation.userFallback'))
 const userInitial = computed(() => userLabel.value.slice(0, 1).toUpperCase())
-const userPlan = computed(() => 'DanQing')
+const userPlan = computed(() => 'Danmo')
 
 /** Default collapsed so chats/projects stay primary; persist only after user toggles. */
 const resourcesCollapsed = ref(localStorage.getItem('app-resources-collapsed') !== '0')
@@ -619,8 +619,8 @@ watch(() => projects.projects.length, (len) => {
   height: 100%;
   min-height: 0;
   transition: width 0.2s ease;
-  border-right: 1px solid var(--teams-glass-border);
-  background: var(--teams-glass-bg);
+  border-right: 1px solid var(--work-glass-border);
+  background: var(--work-glass-bg);
 }
 
 .module-sidebar.is-collapsed {

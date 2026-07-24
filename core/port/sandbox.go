@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 // SandboxRunOptions configures a single sandboxed process invocation.

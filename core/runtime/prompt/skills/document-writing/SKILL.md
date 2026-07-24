@@ -4,7 +4,7 @@ description: Structure and produce long-form workplace documents (reports, RFCs,
 license: MIT
 compatibility: Requires write, edit, read_file
 metadata:
-  author: danqing-teams
+  author: danmo-work
   version: "1.0"
   category: work
   adapted_from: "https://github.com/alirezarezvani/claude-skills/tree/main/markdown-html/skills/md-document"
@@ -14,7 +14,7 @@ metadata:
 # Document Writing
 
 > Adapted from alirezarezvani/claude-skills `md-document` (© Alireza Rezvani / contributors, MIT).
-> Rewritten for DanQing Teams (no upstream design-system/scripts required); not a verbatim copy.
+> Rewritten for Danmo Work (no upstream design-system/scripts required); not a verbatim copy.
 
 Produce clear long-form documents. Prefer Markdown as the source of truth; optionally emit a self-contained HTML reader.
 

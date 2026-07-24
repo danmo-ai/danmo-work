@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
 )
 
 // ConfigManager exposes the full user-editable configuration file to API

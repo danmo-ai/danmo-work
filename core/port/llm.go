@@ -2,7 +2,7 @@ package port
 
 import (
 	"context"
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 // ChatContentPart is a multimodal content block (text or image) for vision models.

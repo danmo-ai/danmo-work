@@ -19,28 +19,28 @@ export HARBOR_N_CONCURRENT="${HARBOR_N_CONCURRENT:-1}"
 unset HARBOR_TASKS
 
 # Prefer DeepSeek from local Teams DB if env not set.
-if [[ -z "${TEAMS_API_KEY:-}" && -f "$HOME/.dq-teams/teams.db" ]]; then
-  TEAMS_API_KEY="$(sqlite3 "$HOME/.dq-teams/teams.db" "SELECT api_key FROM llm_configs WHERE name='deepseek' LIMIT 1;" 2>/dev/null || true)"
-  export TEAMS_API_KEY
+if [[ -z "${WORK_API_KEY:-}" && -f "$HOME/.danmo-work/work.db" ]]; then
+  WORK_API_KEY="$(sqlite3 "$HOME/.danmo-work/work.db" "SELECT api_key FROM llm_configs WHERE name='deepseek' LIMIT 1;" 2>/dev/null || true)"
+  export WORK_API_KEY
 fi
-export TEAMS_BASE_URL="${TEAMS_BASE_URL:-https://api.deepseek.com}"
-export TEAMS_MODEL="${TEAMS_MODEL:-deepseek/deepseek-v4-flash}"
-export HARBOR_MODEL="${HARBOR_MODEL:-$TEAMS_MODEL}"
+export WORK_BASE_URL="${WORK_BASE_URL:-https://api.deepseek.com}"
+export WORK_MODEL="${WORK_MODEL:-deepseek/deepseek-v4-flash}"
+export HARBOR_MODEL="${HARBOR_MODEL:-$WORK_MODEL}"
 
 # Credentials for third-party agents
-export OPENAI_API_KEY="${OPENAI_API_KEY:-$TEAMS_API_KEY}"
+export OPENAI_API_KEY="${OPENAI_API_KEY:-$WORK_API_KEY}"
 # Prefer /v1 so OpenAI-compat clients hit chat.completions (not /responses).
-export OPENAI_BASE_URL="${OPENAI_BASE_URL:-${TEAMS_BASE_URL%/}/v1}"
-export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$TEAMS_API_KEY}"
+export OPENAI_BASE_URL="${OPENAI_BASE_URL:-${WORK_BASE_URL%/}/v1}"
+export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$WORK_API_KEY}"
 # OpenHands / LiteLLM
-export LLM_API_KEY="${LLM_API_KEY:-$TEAMS_API_KEY}"
+export LLM_API_KEY="${LLM_API_KEY:-$WORK_API_KEY}"
 export LLM_BASE_URL="${LLM_BASE_URL:-$OPENAI_BASE_URL}"
 
 # Model strings:
 # - DanQing: provider/model matching its LLMConfig (deepseek/deepseek-v4-flash)
 # - OpenCode: native deepseek provider (openai/* + custom baseURL hits /responses → 404)
 # - OpenHands: openai/<model> + LLM_BASE_URL, or deepseek/<model>
-DANQING_MODEL="${DANQING_MODEL:-$TEAMS_MODEL}"
+DANQING_MODEL="${DANQING_MODEL:-$WORK_MODEL}"
 COMPAT_MODEL="${COMPAT_MODEL:-deepseek/deepseek-v4-flash}"
 OPENHANDS_MODEL="${OPENHANDS_MODEL:-openai/deepseek-v4-flash}"
 # Prebaked Node/OpenCode image + skip-install agent (see images/base/)
@@ -64,12 +64,12 @@ run_one() {
   set +e
   if [[ "$agent" == *DanQing* ]]; then
     HARBOR_MODEL="$model" HARBOR_ENV="$HARBOR_ENV" \
-      DANQING_CLI_BIN="$ROOT/out/eval/danqing-teams-cli" \
+      DANQING_CLI_BIN="$ROOT/out/eval/danmo-work-cli" \
       "$ROOT/evals/dq_harbor/run_suite.sh" "$agent" >"$log" 2>&1
   else
     # Pass OpenAI-compatible keys for third-party agents
     HARBOR_MODEL="$model" HARBOR_ENV="$HARBOR_ENV" \
-      TEAMS_API_KEY="$TEAMS_API_KEY" TEAMS_BASE_URL="$TEAMS_BASE_URL" \
+      WORK_API_KEY="$WORK_API_KEY" WORK_BASE_URL="$WORK_BASE_URL" \
       OPENAI_API_KEY="$OPENAI_API_KEY" OPENAI_BASE_URL="$OPENAI_BASE_URL" \
       DEEPSEEK_API_KEY="$DEEPSEEK_API_KEY" \
       LLM_API_KEY="$LLM_API_KEY" LLM_BASE_URL="$LLM_BASE_URL" \
@@ -84,7 +84,7 @@ run_one() {
   echo "$ec" >"$OUT_DIR/${label}.exit"
 }
 
-run_one "danqing" "dq_harbor.agent:DanQingAgent" "$DANQING_MODEL"
+run_one "danqing" "dq_harbor.agent:DanmoWorkAgent" "$DANQING_MODEL"
 # Third-party agents need longer timeouts (install + run).
 export HARBOR_TIMEOUT_MULT="${HARBOR_TIMEOUT_MULT:-2}"
 export HARBOR_AGENT_TIMEOUT_MULT="${HARBOR_AGENT_TIMEOUT_MULT:-3}"

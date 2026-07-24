@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"danqing-teams/core/adapter/llm"
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
-	"danqing-teams/core/runtime/permission"
-	"danqing-teams/core/runtime/tool"
+	"danmo-work/core/adapter/llm"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
+	"danmo-work/core/runtime/permission"
+	"danmo-work/core/runtime/tool"
 )
 
 type mockToolHandler struct {

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 func TestParseDuckDuckGoResults_Goquery(t *testing.T) {

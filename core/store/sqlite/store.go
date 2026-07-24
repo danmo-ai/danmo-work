@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/paths"
-	"danqing-teams/core/port"
+	"danmo-work/core/domain"
+	"danmo-work/core/paths"
+	"danmo-work/core/port"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"

@@ -1,6 +1,6 @@
 package llm
 
-import "danqing-teams/core/domain"
+import "danmo-work/core/domain"
 
 func ApplyReasoningEffort(provider domain.LLMProviderType, effort string, genParams *EffortConfig, body map[string]any) {
 	if effort == "" || effort == "off" {

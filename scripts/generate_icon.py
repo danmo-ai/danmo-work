@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate DanQing Teams desktop icon."""
+"""Generate Danmo Work desktop icon."""
 from PIL import Image, ImageDraw, ImageFilter
 import math, os
 

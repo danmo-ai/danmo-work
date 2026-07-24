@@ -2087,7 +2087,7 @@ const hasFooterActions = computed(() => {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--teams-glass-bg);
+  background: var(--work-glass-bg);
 }
 
 /* ── Form control consistency ── */
@@ -2095,7 +2095,7 @@ const hasFooterActions = computed(() => {
 /* Make DqInput match shared control density */
 .settings-view :deep(.dq-input) {
   background: var(--dq-glass-control-bg-solid);
-  border-color: var(--teams-glass-border);
+  border-color: var(--work-glass-border);
   min-height: 28px;
   font-size: var(--dq-font-size-body);
 }
@@ -2118,8 +2118,8 @@ const hasFooterActions = computed(() => {
 .settings-sidebar {
   flex-shrink: 0;
   width: 200px;
-  border-right: 1px solid var(--teams-glass-border);
-  background: var(--teams-glass-bg);
+  border-right: 1px solid var(--work-glass-border);
+  background: var(--work-glass-bg);
   display: flex;
   flex-direction: column;
   padding: 16px 12px;
@@ -2310,7 +2310,7 @@ const hasFooterActions = computed(() => {
 }
 
 .market-source-card {
-  border: 1px solid var(--teams-glass-border);
+  border: 1px solid var(--work-glass-border);
   border-radius: 10px;
   padding: 14px;
   margin-bottom: 12px;
@@ -2483,7 +2483,7 @@ const hasFooterActions = computed(() => {
   padding: 14px;
   border-radius: 12px;
   background: var(--dq-bg-elevated);
-  border: 1px solid var(--teams-glass-border);
+  border: 1px solid var(--work-glass-border);
 }
 
 .model-list__head {
@@ -2524,7 +2524,7 @@ const hasFooterActions = computed(() => {
 
 .model-list__item:hover {
   background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
-  border-color: var(--teams-glass-border);
+  border-color: var(--work-glass-border);
 }
 
 .model-list__item.is-disabled {
@@ -2605,7 +2605,7 @@ const hasFooterActions = computed(() => {
   background: transparent;
   overflow: visible;
   padding: 16px 0;
-  border-bottom: 1px solid var(--teams-glass-border);
+  border-bottom: 1px solid var(--work-glass-border);
 }
 
 .provider-card:last-child {
@@ -2656,7 +2656,7 @@ const hasFooterActions = computed(() => {
   padding: 4px 10px;
   border-radius: 6px;
   background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
-  border: 1px solid var(--teams-glass-border);
+  border: 1px solid var(--work-glass-border);
   font-size: var(--dq-font-size-footnote);
 }
 
@@ -2706,7 +2706,7 @@ const hasFooterActions = computed(() => {
   gap: 6px;
   padding: 16px 10px;
   border-radius: 12px;
-  border: 1px solid var(--teams-glass-border);
+  border: 1px solid var(--work-glass-border);
   background: var(--dq-bg-elevated);
   cursor: pointer;
   transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
@@ -2802,7 +2802,7 @@ const hasFooterActions = computed(() => {
 
 /* Subsection divider within settings panel */
 .settings-subsection {
-  border-top: 1px solid var(--teams-glass-border);
+  border-top: 1px solid var(--work-glass-border);
   padding-top: 16px;
 }
 
@@ -2822,7 +2822,7 @@ const hasFooterActions = computed(() => {
 /* Model limits list */
 .model-limit-list {
   margin-top: 12px;
-  border: 1px solid var(--teams-glass-border);
+  border: 1px solid var(--work-glass-border);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -2832,7 +2832,7 @@ const hasFooterActions = computed(() => {
   align-items: center;
   padding: 8px 12px;
   background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
-  border-bottom: 1px solid var(--teams-glass-border);
+  border-bottom: 1px solid var(--work-glass-border);
   font-size: var(--dq-font-size-footnote);
   font-weight: 600;
   color: var(--dq-label-secondary);
@@ -2893,7 +2893,7 @@ const hasFooterActions = computed(() => {
   flex-direction: column;
   padding: 14px;
   border-radius: 14px;
-  border: 1.5px solid var(--teams-glass-border);
+  border: 1.5px solid var(--work-glass-border);
   background: var(--dq-bg-elevated);
   cursor: pointer;
   text-align: left;

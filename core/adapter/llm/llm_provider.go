@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"danqing-teams/core/service"
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
+	"danmo-work/core/service"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
 )
 
 type DefaultLLMProviderClient struct {

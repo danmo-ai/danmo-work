@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
-	"danqing-teams/core/runtime/tool/builtin"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
+	"danmo-work/core/runtime/tool/builtin"
 )
 
 func TestReserveSessionTurnPreventsConcurrentStartAndResume(t *testing.T) {

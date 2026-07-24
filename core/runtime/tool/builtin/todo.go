@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 type TodoWrite struct{}

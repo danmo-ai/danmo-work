@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
 )
 
 func TestNewDefaultsAndStatus(t *testing.T) {

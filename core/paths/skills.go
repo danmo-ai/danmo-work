@@ -19,7 +19,7 @@ func UserSkillDirs() []string {
 }
 
 // ProjectSkillDirs returns project-level custom skill roots under workDir,
-// low priority → high priority (.agents then .dq-teams).
+// low priority → high priority (.agents then .danmo-work).
 func ProjectSkillDirs(workDir string) []string {
 	if workDir == "" {
 		return nil

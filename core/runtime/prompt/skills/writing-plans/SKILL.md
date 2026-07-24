@@ -4,7 +4,7 @@ description: Write file-level, bite-sized implementation plans before coding. Us
 license: MIT
 compatibility: Requires read_file, grep, glob; write for saving the plan when requested
 metadata:
-  author: danqing-teams
+  author: danmo-work
   version: "1.0"
   category: coding
   adapted_from: "https://github.com/obra/superpowers/tree/main/skills/writing-plans"
@@ -14,7 +14,7 @@ metadata:
 # Writing Plans
 
 > Adapted from obra/superpowers `writing-plans` (© Jesse Vincent / contributors, MIT).
-> Rewritten for DanQing Teams tools and agents; not a verbatim copy.
+> Rewritten for Danmo Work tools and agents; not a verbatim copy.
 
 Write plans that a skilled engineer with little repo context can execute: exact files, concrete steps, tests, and commands. Prefer DRY, YAGNI, TDD, frequent commits.
 

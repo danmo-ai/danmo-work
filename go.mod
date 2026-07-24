@@ -1,4 +1,4 @@
-module danqing-teams
+module danmo-work
 
 go 1.26
 

@@ -1,4 +1,4 @@
-/* DanQing Teams — layout & glass surfaces (tokens from @danqing/dq-tokens/dq-mac.css) */
+/* Danmo Work — layout & glass surfaces (tokens from @danqing/dq-tokens/dq-mac.css) */
 
 /* Hide number input spinner arrows */
 input[type="number"]::-webkit-inner-spin-button,
@@ -17,15 +17,15 @@ body.app-is-resizing {
 
 :root {
   /* App semantic layer — only tokens still referenced by product CSS */
-  --teams-radius-island: var(--dq-radius-group);
-  --teams-radius-card: var(--dq-radius-group);
-  --teams-glass-bg: var(--dq-glass-sidebar-bg);
-  --teams-glass-border: var(--dq-glass-border);
-  --teams-glass-border-subtle: var(--dq-border-subtle);
-  --teams-glass-inset: color-mix(in srgb, var(--dq-label-quaternary) 20%, transparent);
-  --teams-glass-shadow: var(--dq-shadow-lg);
-  --teams-surface-muted: color-mix(in srgb, var(--dq-bg-elevated) 55%, transparent);
-  --teams-surface-head: color-mix(in srgb, var(--dq-bg-elevated) 70%, transparent);
+  --work-radius-island: var(--dq-radius-group);
+  --work-radius-card: var(--dq-radius-group);
+  --work-glass-bg: var(--dq-glass-sidebar-bg);
+  --work-glass-border: var(--dq-glass-border);
+  --work-glass-border-subtle: var(--dq-border-subtle);
+  --work-glass-inset: color-mix(in srgb, var(--dq-label-quaternary) 20%, transparent);
+  --work-glass-shadow: var(--dq-shadow-lg);
+  --work-surface-muted: color-mix(in srgb, var(--dq-bg-elevated) 55%, transparent);
+  --work-surface-head: color-mix(in srgb, var(--dq-bg-elevated) 70%, transparent);
 }
 
 html,
@@ -112,7 +112,7 @@ body {
 /* Resource / panel surface — flat docked (glass only on floating overlays) */
 .float-island {
   border-radius: 0;
-  border: 1px solid var(--teams-glass-border);
+  border: 1px solid var(--work-glass-border);
   background: var(--dq-bg-base);
   min-height: 0;
   overflow: hidden;
@@ -136,8 +136,8 @@ body {
 
 .teams-app .teams-left-rail {
   height: 100%;
-  border-right: 1px solid var(--teams-glass-border);
-  background: var(--teams-glass-bg);
+  border-right: 1px solid var(--work-glass-border);
+  background: var(--work-glass-bg);
 }
 
 .teams-app .agent-sidebar__panel {
@@ -156,8 +156,8 @@ body {
 
 .teams-app .teams-right-rail {
   height: 100%;
-  border-left: 1px solid var(--teams-glass-border);
-  background: var(--teams-glass-bg);
+  border-left: 1px solid var(--work-glass-border);
+  background: var(--work-glass-bg);
 }
 
 .teams-app .agent-inspector__panel,
@@ -206,13 +206,13 @@ body {
   flex: 1;
   min-height: 0;
   padding: 10px 0;
-  border-radius: var(--teams-radius-island);
-  border: 1px solid var(--teams-glass-border);
-  background: var(--teams-glass-bg);
+  border-radius: var(--work-radius-island);
+  border: 1px solid var(--work-glass-border);
+  background: var(--work-glass-bg);
   backdrop-filter: var(--dq-glass-blur-heavy);
   box-shadow:
-    0 0 0 1px var(--teams-glass-inset) inset,
-    var(--teams-glass-shadow);
+    0 0 0 1px var(--work-glass-inset) inset,
+    var(--work-glass-shadow);
 }
 
 .teams-left-rail__strip-label {
@@ -236,12 +236,12 @@ body {
 }
 
 .teams-left-panel.float-island {
-  border: 1px solid var(--teams-glass-border);
-  background: var(--teams-glass-bg);
+  border: 1px solid var(--work-glass-border);
+  background: var(--work-glass-bg);
   backdrop-filter: var(--dq-glass-blur-heavy);
   box-shadow:
-    0 0 0 1px var(--teams-glass-inset) inset,
-    var(--teams-glass-shadow);
+    0 0 0 1px var(--work-glass-inset) inset,
+    var(--work-glass-shadow);
 }
 
 .teams-left-panel .dq-surface-card__header {
@@ -337,13 +337,13 @@ body.teams-is-resizing {
   flex: 1;
   min-height: 0;
   padding: 10px 0;
-  border-radius: var(--teams-radius-island);
-  border: 1px solid var(--teams-glass-border);
-  background: var(--teams-glass-bg);
+  border-radius: var(--work-radius-island);
+  border: 1px solid var(--work-glass-border);
+  background: var(--work-glass-bg);
   backdrop-filter: var(--dq-glass-blur-heavy);
   box-shadow:
-    0 0 0 1px var(--teams-glass-inset) inset,
-    var(--teams-glass-shadow);
+    0 0 0 1px var(--work-glass-inset) inset,
+    var(--work-glass-shadow);
 }
 
 .teams-right-rail__strip-label {
@@ -367,12 +367,12 @@ body.teams-is-resizing {
 }
 
 .teams-right-panel.float-island {
-  border: 1px solid var(--teams-glass-border);
-  background: var(--teams-glass-bg);
+  border: 1px solid var(--work-glass-border);
+  background: var(--work-glass-bg);
   backdrop-filter: var(--dq-glass-blur-heavy);
   box-shadow:
-    0 0 0 1px var(--teams-glass-inset) inset,
-    var(--teams-glass-shadow);
+    0 0 0 1px var(--work-glass-inset) inset,
+    var(--work-glass-shadow);
 }
 
 .teams-right-panel .dq-surface-card__header {
@@ -689,13 +689,13 @@ body.teams-is-resizing {
 }
 
 .composer-float.is-locked .composer-float__card {
-  border-color: var(--teams-glass-border-subtle);
-  box-shadow: 0 0 0 1px var(--teams-glass-inset) inset;
+  border-color: var(--work-glass-border-subtle);
+  box-shadow: 0 0 0 1px var(--work-glass-inset) inset;
 }
 
 .composer-float.is-locked:focus-within .composer-float__card {
-  border-color: var(--teams-glass-border-subtle);
-  box-shadow: 0 0 0 1px var(--teams-glass-inset) inset;
+  border-color: var(--work-glass-border-subtle);
+  box-shadow: 0 0 0 1px var(--work-glass-inset) inset;
 }
 
 .composer-float__hint--muted {
@@ -784,7 +784,7 @@ body.teams-is-resizing {
 
 .task-list__filter:hover {
   color: var(--dq-label-secondary);
-  background: var(--teams-surface-head);
+  background: var(--work-surface-head);
 }
 
 .task-list__filter.is-active {
@@ -1420,7 +1420,7 @@ body.teams-is-resizing {
   grid-template-columns: 260px minmax(0, 1fr);
   gap: 0;
   overflow: hidden;
-  border-radius: var(--teams-radius-island);
+  border-radius: var(--work-radius-island);
 }
 
 .resource-rail {

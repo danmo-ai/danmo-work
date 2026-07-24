@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
-	"danqing-teams/core/service"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
+	"danmo-work/core/service"
 )
 
 type DelegateAgent struct {

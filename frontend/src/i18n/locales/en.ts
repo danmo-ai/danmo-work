@@ -348,7 +348,7 @@ export default {
     marketSourceName: 'Display name',
     marketPlatform: 'Platform',
     marketRepo: 'Repo / path',
-    marketRepoPlaceholder: 'https://github.com/danqing-ai/dq-market or local absolute path',
+    marketRepoPlaceholder: 'https://github.com/danmo-ai/dq-market or local absolute path',
     marketRef: 'Branch / tag',
     marketCatalogPath: 'Catalog path',
     marketToken: 'Access token (optional)',
@@ -495,7 +495,7 @@ export default {
   desktop: {
     startingBackend: 'Starting backend…',
     backendStartTimeout:
-      'Backend failed to start in time. Quit and retry; if it persists, check ~/.dq-teams/backend.log',
+      'Backend failed to start in time. Quit and retry; if it persists, check ~/.danmo-work/backend.log',
     backendStartFailed: 'Failed to start backend',
   },
   updater: {

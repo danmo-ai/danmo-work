@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=out_paths.sh
 source "$SCRIPT_DIR/out_paths.sh"
 
-APP_NAME="${DQ_APP_NAME:-danqing-teams}"
+APP_NAME="${DQ_APP_NAME:-danmo-work}"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$DQ_DESKTOP_CARGO}"
 dq_ensure_out_layout
 
@@ -65,8 +65,8 @@ echo "==> Coreutils OK: $CU_EXE ($(du -h "$CU_EXE" | cut -f1))"
 
 # Ensure only the target-tripled sidecar exists in bin/ to avoid duplicates in the bundle
 BIN_DIR="$DQ_ROOT/desktop/src-tauri/bin"
-rm -f "$BIN_DIR"/danqing-teams-backend.exe
-rm -f "$BIN_DIR"/danqing-teams-backend
+rm -f "$BIN_DIR"/danmo-work-backend.exe
+rm -f "$BIN_DIR"/danmo-work-backend
 
 echo "==> Tauri build ($APP_NAME) -> $CARGO_TARGET_DIR"
 if has_tauri_signing_key; then

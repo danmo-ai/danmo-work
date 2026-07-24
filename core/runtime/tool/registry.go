@@ -3,7 +3,7 @@ package tool
 import (
 	"sync"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 type Registry struct {

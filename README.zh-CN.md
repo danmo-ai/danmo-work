@@ -1,10 +1,10 @@
-# DanQing Teams
+# Danmo Work
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-[![Release](https://img.shields.io/github/v/release/danqing-ai/danqing-teams?label=release)](https://github.com/danqing-ai/danqing-teams/releases/latest)
-[![License](https://img.shields.io/github/license/danqing-ai/danqing-teams)](LICENSE)
-[![Go](https://img.shields.io/github/go-mod/go-version/danqing-ai/danqing-teams?filename=go.mod)](go.mod)
+[![Release](https://img.shields.io/github/v/release/danmo-ai/danmo-work?label=release)](https://github.com/danmo-ai/danmo-work/releases/latest)
+[![License](https://img.shields.io/github/license/danmo-ai/danmo-work)](LICENSE)
+[![Go](https://img.shields.io/github/go-mod/go-version/danmo-ai/danmo-work?filename=go.mod)](go.mod)
 
 通用型 **AI Work Agent**（兼具 Coding 能力）。引擎面向 **长程复杂任务**，靠多 Agent 协作完成。
 
@@ -27,17 +27,17 @@ MIT · Web / 桌面 / CLI / TUI · 支持 Anthropic 与 OpenAI 兼容接口
 
 | 平台 | 下载 |
 |------|------|
-| **macOS**（Apple Silicon） | [`.dmg`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
-| **Windows** | [安装包 `.exe`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
-| **Linux 服务端** | [`.tar.gz`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
+| **macOS**（Apple Silicon） | [`.dmg`](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **Windows** | [安装包 `.exe`](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **Linux 服务端** | [`.tar.gz`](https://github.com/danmo-ai/danmo-work/releases/latest) |
 
-或从源码跑（需同级 [`dq-ui`](https://github.com/danqing-ai/dq-ui)）：
+或从源码跑（需同级 [`dq-ui`](https://github.com/danmo-ai/dq-ui)）：
 
 ```bash
 make dev-web   # → http://localhost:5801/app/
 ```
 
-在 UI 里填 LLM API Key（或编辑 `~/.dq-teams/config.yaml`）。完整步骤见 [快速开始](#快速开始)。
+在 UI 里填 LLM API Key（或编辑 `~/.danmo-work/config.yaml`）。完整步骤见 [快速开始](#快速开始)。
 
 ## 界面一览
 
@@ -157,7 +157,7 @@ System prompt 中的 `<memory-policy>` 引导模型：记住持久偏好与项�
 
 **与主流 AI Agent 的差异**
 
-| 做法 | 常见产品 / 栈 | 问题 | DanQing Teams |
+| 做法 | 常见产品 / 栈 | 问题 | Danmo Work |
 |------|---------------|------|---------------|
 | 黑盒产品记忆 | ChatGPT / Claude Memory | 结构、作用域、写入时机对用户不透明 | 显式 Tool + 可见记忆 Tab；带 key 与作用域 |
 | IDE / Coding Agent 记忆 | Cursor 类 memory | 常锁在产品内，难审计、难跨端复用 | Web / 桌面 / CLI 共用 SQLite；API 可列表 / 删除 |
@@ -165,7 +165,7 @@ System prompt 中的 `<memory-policy>` 引导模型：记住持久偏好与项�
 | 外部向量记忆服务 | Mem0 / Zep 等 | 额外基建；写入策略常在 Agent Loop 之外 | 内置在 Agent Loop 的 Tool；v1 关键词检索，无独立服务 |
 | 自动摘要全量索引 | 每轮 / 每段自动记 | 噪声大、有效召回低（我们试过已移除） | 仅模型判定「值得记」时写入 |
 
-主流要么把记忆做成**看不见的产品魔法**，要么做成**再接一套向量库**。DanQing Teams 把记忆留在同一套 Tool 抽象上：模型决策、存储可检视、人通过记忆 Tab 参与。
+主流要么把记忆做成**看不见的产品魔法**，要么做成**再接一套向量库**。Danmo Work 把记忆留在同一套 Tool 抽象上：模型决策、存储可检视、人通过记忆 Tab 参与。
 
 ### 日志即状态（Persistent Execution Trace）
 
@@ -176,7 +176,7 @@ System prompt 中的 `<memory-policy>` 引导模型：记住持久偏好与项�
 
 ## 与主流框架的根本差异
 
-| 维度 | 主流框架（LangGraph / CrewAI / AutoGen）与典型 Coding Agent | DanQing Teams |
+| 维度 | 主流框架（LangGraph / CrewAI / AutoGen）与典型 Coding Agent | Danmo Work |
 |------|---------|--------|
 | **控制流** | 人工维护的 Graph、角色路由或产品 Mode | **纯 LLM 驱动**——无人工维护的流程 |
 | **抽象层级** | Agent / Chain / Graph / Role / Mode 多层抽象 | **Tool（唯一抽象）**，极简无层级 |
@@ -189,7 +189,7 @@ System prompt 中的 `<memory-policy>` 引导模型：记住持久偏好与项�
 | **调试方式** | 断点 / 外部日志 | 可视化回放，改 Tool Result 继续推演 |
 | **人机关系** | 人下指令，机器执行（主从） | 人进入思维流，共同迭代（对等） |
 
-**本质差异**：主流是「开发者（或产品）编排，LLM 执行」；DanQing Teams 是「LLM 在同一思维链上编排；开发者提供能力单元；子 Agent 是带上下文隔离的 Tool Call」。
+**本质差异**：主流是「开发者（或产品）编排，LLM 执行」；Danmo Work 是「LLM 在同一思维链上编排；开发者提供能力单元；子 Agent 是带上下文隔离的 Tool Call」。
 
 ## 概念模型
 
@@ -247,11 +247,11 @@ server/   cli/   tui/    frontend/ (Vue 3 + Vite)
 
 - Go 1.25+
 - Node.js 20+（前端 / 桌面）
-- 同级目录的 [`dq-ui`](https://github.com/danqing-ai/dq-ui) 仓库（前端依赖 `file:../../dq-ui/packages/*`）
+- 同级目录的 [`dq-ui`](https://github.com/danmo-ai/dq-ui) 仓库（前端依赖 `file:../../dq-ui/packages/*`）
 
 ```text
 Workspace/
-  DanQing-Teams/
+  Danmo-Work/
   dq-ui/
 ```
 
@@ -271,8 +271,8 @@ make stop             # 停止所有 DQ_DEV 进程
 首次使用可复制并编辑配置：
 
 ```bash
-mkdir -p ~/.dq-teams
-cp config.example.yaml ~/.dq-teams/config.yaml
+mkdir -p ~/.danmo-work
+cp config.example.yaml ~/.danmo-work/config.yaml
 # 在 UI 或配置文件中填入 LLM Provider API Key
 ```
 
@@ -292,7 +292,7 @@ make clean                  # 删除 out/
 ```text
 out/
   frontend/dist/     # Vite 生产构建（挂载于 /app/）
-  server/            # danqing-teams / danqing-teams-cli / danqing-teams-tui
+  server/            # danmo-work / danmo-work-cli / danmo-work-tui
   desktop/bundle/    # Tauri 安装包
   desktop/cargo/     # Cargo 中间产物
   dist/              # Linux server 发布包
@@ -319,7 +319,7 @@ make eval-harbor-base                                   # dq-harbor-base:local
 GH_TOKEN=$(gh auth token) make eval-harbor-sync-tb2     # → evals/dq_harbor/tasks/（89 题，gitignore）
 make eval-harbor-bin
 
-export TEAMS_MODEL=deepseek/deepseek-v4-flash TEAMS_API_KEY=... TEAMS_BASE_URL=https://api.deepseek.com
+export WORK_MODEL=deepseek/deepseek-v4-flash WORK_API_KEY=... WORK_BASE_URL=https://api.deepseek.com
 make eval-harbor-smoke                                  # 1 题冒烟
 # make eval-harbor-suite                                # 全量 89：oracle 再 DanQing
 ./evals/dq_harbor/compare_agents.sh                     # DanQing / OpenCode / OpenHands
@@ -329,14 +329,14 @@ make eval-harbor-smoke                                  # 1 题冒烟
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
-| `TEAMS_CONFIG` | `~/.dq-teams/config.yaml` | YAML 配置文件路径 |
-| `TEAMS_DB_PATH` | `~/.dq-teams/teams.db` | SQLite 数据库 |
-| `TEAMS_DATA_DIR` | `~/.dq-teams/data` | 项目与 turn 日志目录 |
+| `WORK_CONFIG` | `~/.danmo-work/config.yaml` | YAML 配置文件路径 |
+| `WORK_DB_PATH` | `~/.danmo-work/work.db` | SQLite 数据库 |
+| `WORK_DATA_DIR` | `~/.danmo-work/data` | 项目与 turn 日志目录 |
 | `DQ_BACKEND_PORT` | `7801` | 开发后端端口 |
 | `DQ_FRONTEND_PORT` | `5801` | 开发前端端口 |
 | `VITE_API_BASE_URL` | `""` | 前端 API 基址（空 = 同源） |
 
-Server、CLI、TUI、桌面端默认共用 `~/.dq-teams/`。首次启动可能从 `~/Library/Application Support/com.danqing.teams/` 或 `./data/teams.db` 迁移已有数据。
+Server、CLI、TUI、桌面端默认共用 `~/.danmo-work/`。首次启动可能从 `~/Library/Application Support/com.danmo.work/` 或 `./data/work.db` 迁移已有数据。
 
 ### 自定义技能目录
 
@@ -345,11 +345,11 @@ Server、CLI、TUI、桌面端默认共用 `~/.dq-teams/`。首次启动可能�
 | 路径 | 范围 |
 |------|------|
 | `~/.agents/skills/` | 用户 |
-| `~/.dq-teams/skills/` | 用户 |
+| `~/.danmo-work/skills/` | 用户 |
 | `<项目根>/.agents/skills/` | 项目 |
-| `<项目根>/.dq-teams/skills/` | 项目 |
+| `<项目根>/.danmo-work/skills/` | 项目 |
 
-同名技能后者覆盖前者（项目 `.dq-teams` 优先最高）。改磁盘后下一 turn 生效。
+同名技能后者覆盖前者（项目 `.danmo-work` 优先最高）。改磁盘后下一 turn 生效。
 
 ## 桌面端（Tauri）
 
@@ -368,7 +368,7 @@ SKIP_BACKEND=1 make dev-desktop
 | Job | 产物 |
 |-----|------|
 | macOS desktop | `out/desktop/bundle/*.dmg`、`*.app` |
-| Linux server | `out/dist/danqing-teams-linux-*.tar.gz` |
+| Linux server | `out/dist/danmo-work-linux-*.tar.gz` |
 | Windows desktop | `out/desktop/bundle/*.exe` |
 
 Tag 触发时会将产物附加到 GitHub Release。

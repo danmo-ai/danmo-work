@@ -2,7 +2,7 @@
 # Sync updater artifacts + mirror latest.json to a China-reachable object store.
 #
 # Requires:
-#   UPDATE_MIRROR_BASE_URL  e.g. https://releases.danqing.ai/danqing-teams
+#   UPDATE_MIRROR_BASE_URL  e.g. https://releases.danmo.ai/danmo-work
 #   And one of:
 #     - aws CLI + AWS_* credentials (S3-compatible, including OSS/COS with S3 API)
 #     - rclone remote configured via UPDATE_MIRROR_RCLONE_REMOTE
@@ -53,7 +53,7 @@ find "$ASSET_DIR" \( \
   --base-url "$MIRROR_BASE" \
   --asset-dir "$WORK/upload" \
   --out "$WORK/upload/latest.json" \
-  --notes "DanQing Teams $VERSION"
+  --notes "Danmo Work $VERSION"
 
 echo "==> Syncing updater assets to $MIRROR_BASE"
 

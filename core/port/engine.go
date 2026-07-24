@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 var ErrSessionTurnRunning = errors.New("session already has a running turn")

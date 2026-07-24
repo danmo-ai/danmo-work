@@ -3,7 +3,7 @@ package permission
 import (
 	"testing"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 func strongSB(net domain.SandboxNetwork) domain.SandboxStatus {

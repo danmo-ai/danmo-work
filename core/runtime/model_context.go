@@ -1,7 +1,7 @@
 package runtime
 
 import (
-	"danqing-teams/core/service"
+	"danmo-work/core/service"
 )
 
 // ModelConfigRegistry is re-exported from core/service to avoid import cycles.

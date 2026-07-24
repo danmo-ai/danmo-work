@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/service"
+	"danmo-work/core/domain"
+	"danmo-work/core/service"
 
 	"github.com/gin-gonic/gin"
 )

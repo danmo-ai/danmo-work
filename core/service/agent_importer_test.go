@@ -3,7 +3,7 @@ package service
 import (
 	"testing"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 func TestParseAgentMD(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 	"log"
 	"strings"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"

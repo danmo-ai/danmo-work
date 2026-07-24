@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "DanQing Teams",
+  "productName": "Danmo Work",
   "version": "0.8.6",
-  "identifier": "com.danqing.teams",
+  "identifier": "com.danmo.work",
   "build": {
     "beforeDevCommand": "cd ../frontend && npm run dev",
     "devUrl": "http://localhost:5801/",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "DanQing Teams",
+        "title": "Danmo Work",
         "width": 1280,
         "height": 800,
         "titleBarStyle": "Visible",
@@ -34,14 +34,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["bin/danqing-teams-backend"]
+    "externalBin": ["bin/danmo-work-backend"]
   },
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE3NjFEOUQ3RUQzQkNEOUUKUldTZXpUdnQxOWxocHdya3Y3OVhXTzRESUV3WVc3enZwcUsvTkNQZTRJaUppNmNkdjJrYTMvbksK",
       "endpoints": [
-        "https://releases.danqing.ai/danqing-teams/latest.json",
-        "https://github.com/danqing-ai/DanQing-Teams/releases/latest/download/latest.json"
+        "https://releases.danmo.ai/danmo-work/latest.json",
+        "https://github.com/danmo-ai/danmo-work/releases/latest/download/latest.json"
       ]
     }
   }

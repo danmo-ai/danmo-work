@@ -4,7 +4,7 @@ description: Standard Git workflow operations including branching, committing, r
 license: MIT
 compatibility: Requires git CLI and access to the project repository
 metadata:
-  author: danqing-teams
+  author: danmo-work
   version: "1.1"
   category: coding
   adapted_from: "https://github.com/obra/superpowers/tree/main/skills/using-git-worktrees"
@@ -14,7 +14,7 @@ metadata:
 
 # Git Workflow Skill
 
-> Worktree and branch-finish sections adapted from obra/superpowers (© Jesse Vincent / contributors, MIT); core workflow is DanQing Teams original.
+> Worktree and branch-finish sections adapted from obra/superpowers (© Jesse Vincent / contributors, MIT); core workflow is Danmo Work original.
 > Not a verbatim copy of upstream skills.
 
 Standard Git version control operations and best practices.

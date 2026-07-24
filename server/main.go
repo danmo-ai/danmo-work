@@ -6,17 +6,17 @@ import (
 	"os/signal"
 	"syscall"
 
-	"danqing-teams/core/bootstrap"
-	"danqing-teams/core/runtime/sandbox"
-	"danqing-teams/core/service"
-	apiv1 "danqing-teams/server/api/v1"
+	"danmo-work/core/bootstrap"
+	"danmo-work/core/runtime/sandbox"
+	"danmo-work/core/service"
+	apiv1 "danmo-work/server/api/v1"
 )
 
 func main() {
 	if sandbox.MaybeReexec() {
 		return
 	}
-	core := bootstrap.New(bootstrap.Config{ConfigPath: os.Getenv("TEAMS_CONFIG")})
+	core := bootstrap.New(bootstrap.Config{ConfigPath: os.Getenv("WORK_CONFIG")})
 	defer core.Close()
 
 	h := &apiv1.Handler{

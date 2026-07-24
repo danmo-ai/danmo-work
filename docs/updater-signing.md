@@ -26,8 +26,8 @@ Common failure: `failed to decode base64 secret key: Invalid padding`
 
 Optional China mirror secrets:
 
-- `UPDATE_MIRROR_BASE_URL` — public HTTPS base (e.g. `https://releases.danqing.ai/danqing-teams`); must match the first `plugins.updater.endpoints` entry host/path
-- `UPDATE_MIRROR_S3_URI` — S3/OSS URI for `aws s3 sync` (e.g. `s3://bucket/danqing-teams`)
+- `UPDATE_MIRROR_BASE_URL` — public HTTPS base (e.g. `https://releases.danmo.ai/danmo-work`); must match the first `plugins.updater.endpoints` entry host/path
+- `UPDATE_MIRROR_S3_URI` — S3/OSS URI for `aws s3 sync` (e.g. `s3://bucket/danmo-work`)
 - or `UPDATE_MIRROR_RCLONE_REMOTE` — rclone destination
 - `UPDATE_MIRROR_AWS_ACCESS_KEY_ID` / `UPDATE_MIRROR_AWS_SECRET_ACCESS_KEY` / `UPDATE_MIRROR_AWS_REGION` / `UPDATE_MIRROR_AWS_ENDPOINT_URL` as needed for S3-compatible storage
 

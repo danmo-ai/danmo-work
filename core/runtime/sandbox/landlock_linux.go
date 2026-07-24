@@ -7,7 +7,7 @@ import (
 	"os"
 	"unsafe"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 
 	"golang.org/x/sys/unix"
 )

@@ -18,7 +18,7 @@ env:
   GO_VERSION: '1.26'
   NODE_VERSION: '20'
   REPO_DIR: app
-  APP_NAME: danqing-teams
+  APP_NAME: danmo-work
 
 jobs:
   macos-desktop:
@@ -33,7 +33,7 @@ jobs:
       - name: Checkout dq-ui
         uses: actions/checkout@v6
         with:
-          repository: danqing-ai/dq-ui
+          repository: danmo-ai/dq-ui
           path: dq-ui
 
       - name: Setup Go
@@ -100,7 +100,7 @@ jobs:
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: danqing-teams-desktop-macos
+          name: danmo-work-desktop-macos
           path: |
             ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.dmg
             ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.app.tar.gz
@@ -119,7 +119,7 @@ jobs:
       - name: Checkout dq-ui
         uses: actions/checkout@v6
         with:
-          repository: danqing-ai/dq-ui
+          repository: danmo-ai/dq-ui
           path: dq-ui
 
       - name: Setup Go
@@ -174,7 +174,7 @@ jobs:
       - name: Upload Linux server artifact
         uses: actions/upload-artifact@v6
         with:
-          name: danqing-teams-server-linux
+          name: danmo-work-server-linux
           path: ${{ env.REPO_DIR }}/out/dist/${{ env.APP_NAME }}-linux-*.tar.gz
           if-no-files-found: error
 
@@ -193,7 +193,7 @@ jobs:
       - name: Checkout dq-ui
         uses: actions/checkout@v6
         with:
-          repository: danqing-ai/dq-ui
+          repository: danmo-ai/dq-ui
           path: dq-ui
 
       - name: Setup Go
@@ -270,7 +270,7 @@ jobs:
       - name: Upload Windows desktop artifact
         uses: actions/upload-artifact@v6
         with:
-          name: danqing-teams-desktop-windows
+          name: danmo-work-desktop-windows
           path: |
             ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.exe
             ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.nsis.zip
@@ -292,19 +292,19 @@ jobs:
       - name: Download macOS artifact
         uses: actions/download-artifact@v7
         with:
-          name: danqing-teams-desktop-macos
+          name: danmo-work-desktop-macos
           path: release-assets/macos
 
       - name: Download Linux server artifact
         uses: actions/download-artifact@v7
         with:
-          name: danqing-teams-server-linux
+          name: danmo-work-server-linux
           path: release-assets/linux
 
       - name: Download Windows desktop artifact
         uses: actions/download-artifact@v7
         with:
-          name: danqing-teams-desktop-windows
+          name: danmo-work-desktop-windows
           path: release-assets/windows
 
       - name: Set release version
@@ -320,7 +320,7 @@ jobs:
               --base-url "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}" \
               --asset-dir release-assets \
               --out release-assets/latest.json \
-              --notes "DanQing Teams $RELEASE_VERSION"
+              --notes "Danmo Work $RELEASE_VERSION"
             echo "has_manifest=true" >> "$GITHUB_OUTPUT"
           else
             echo "No updater artifacts found — skip latest.json (set TAURI_SIGNING_PRIVATE_KEY secret)"

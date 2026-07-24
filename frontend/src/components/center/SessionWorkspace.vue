@@ -1746,8 +1746,8 @@ function onTitleKeydown(e: KeyboardEvent) {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 20px;
-  border-bottom: 1px solid var(--teams-glass-border);
-  background: var(--teams-glass-bg);
+  border-bottom: 1px solid var(--work-glass-border);
+  background: var(--work-glass-bg);
   backdrop-filter: blur(8px);
 }
 
@@ -2364,8 +2364,8 @@ function onTitleKeydown(e: KeyboardEvent) {
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-  border-left: 1px solid var(--teams-glass-border);
-  background: var(--teams-glass-bg);
+  border-left: 1px solid var(--work-glass-border);
+  background: var(--work-glass-bg);
 }
 
 .session-workspace__right > :deep(.right-workspace) {
@@ -2484,7 +2484,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   height: 28px;
   padding: 0 10px;
   border-radius: 6px;
-  border: 1px solid var(--teams-glass-border);
+  border: 1px solid var(--work-glass-border);
   background: var(--dq-bg-base);
   color: var(--dq-label-primary);
   font-size: var(--dq-font-size-footnote);

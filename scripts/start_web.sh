@@ -8,7 +8,7 @@ source "$SCRIPT_DIR/out_paths.sh"
 # shellcheck source=dev_process.sh
 source "$SCRIPT_DIR/dev_process.sh"
 
-APP_NAME="${DQ_APP_NAME:-danqing-teams}"
+APP_NAME="${DQ_APP_NAME:-danmo-work}"
 BACKEND_PORT="${DQ_BACKEND_PORT}"
 FRONTEND_PORT="${DQ_FRONTEND_PORT}"
 
@@ -28,7 +28,7 @@ DEV_BACKEND_BIN="$DQ_RUN_DIR/backend-bin"
 echo "==> Building dev backend -> $DEV_BACKEND_BIN"
 (cd "$DQ_ROOT" && go build -o "$DEV_BACKEND_BIN" ./server)
 
-export DQ_DEV_ENV=$'TEAMS_AUTO_APPROVE='"${TEAMS_AUTO_APPROVE:-false}"$'\nTEAMS_ADDR=0.0.0.0:'"${BACKEND_PORT}"
+export DQ_DEV_ENV=$'WORK_AUTO_APPROVE='"${WORK_AUTO_APPROVE:-false}"$'\nWORK_ADDR=0.0.0.0:'"${BACKEND_PORT}"
 dq_dev_start backend "$DQ_ROOT" "$DEV_BACKEND_BIN"
 unset DQ_DEV_ENV
 

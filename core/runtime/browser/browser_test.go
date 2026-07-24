@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
 )
 
 func TestProbeStatus_Disabled(t *testing.T) {
@@ -37,7 +37,7 @@ func TestProbeStatus_AttachCDP(t *testing.T) {
 func TestProbeStatus_MissingBinary(t *testing.T) {
 	m := New(domain.ConfigBrowserSection{
 		Enabled:        true,
-		ExecutablePath: "/nonexistent/chrome-binary-dq-teams-test",
+		ExecutablePath: "/nonexistent/chrome-binary-danmo-work-test",
 	})
 	st := m.Status()
 	// May still find system Chrome via discover if executable_path is invalid —

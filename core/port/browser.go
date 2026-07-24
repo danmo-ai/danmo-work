@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 // BrowserRenderOptions configures a single headless page render.

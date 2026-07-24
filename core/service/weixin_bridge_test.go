@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"danqing-teams/core/adapter/config"
-	"danqing-teams/core/adapter/weixin/ilink"
-	"danqing-teams/core/domain"
-	"danqing-teams/core/service"
-	sqlitestore "danqing-teams/core/store/sqlite"
+	"danmo-work/core/adapter/config"
+	"danmo-work/core/adapter/weixin/ilink"
+	"danmo-work/core/domain"
+	"danmo-work/core/service"
+	sqlitestore "danmo-work/core/store/sqlite"
 )
 
 func TestWeixinBindingRepoPeerSession(t *testing.T) {

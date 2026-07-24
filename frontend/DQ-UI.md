@@ -1,4 +1,4 @@
-# DanQing UI in Teams
+# Danmo UI in Danmo Work
 
 与 [DanQing-Studio](../DanQing-Studio/frontend/DQ-UI.md) 一致，使用共享包 [`../dq-ui`](../dq-ui)。
 
@@ -15,7 +15,7 @@
 ## 约定
 
 - **主题切换**：使用 `applyDqTheme` / `THEME_OPTIONS`（见 `@danqing/dq-tokens`），经 `stores/theme.ts` 持久化；不要维护私有主题 class 列表。
-- **间距 / 半径**：优先 `--dq-space-*`、`--dq-radius-*`；产品语义层仅保留仍在用的 `--teams-*`（glass / surface / radius）。
+- **间距 / 半径**：优先 `--dq-space-*`、`--dq-radius-*`；产品语义层仅保留仍在用的 `--work-*`（glass / surface / radius）。
 - **Size**：紧凑控件只用 `size="sm"`（禁止 `small` / `mini`）。
 - **Select**：Composer / 工具栏用 `size="sm" variant="ghost"`。
 - **Agent UI**：`main.ts` 引入 `@danqing/dq-tokens/dq-agent.css`；对话正文用 `.dq-prose`；工具行用 `DqToolCard` + `.dq-status-dot`；右栏 tabs 用 `DqPillTabs`。

@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"strings"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, canDelegate bool, checkpoint string, activeTodos string, fileChanges string, sandboxStatus domain.SandboxStatus) string {

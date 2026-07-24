@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"danqing-teams/core/adapter/feishu"
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
+	"danmo-work/core/adapter/feishu"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
 )
 
 // FeishuPeerStore uses config project_id + generic channel_bindings table.

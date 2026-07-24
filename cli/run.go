@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"danqing-teams/core/bootstrap"
-	"danqing-teams/core/domain"
+	"danmo-work/core/bootstrap"
+	"danmo-work/core/domain"
 )
 
 func runHeadless(args []string) int {
@@ -21,17 +21,17 @@ func runHeadless(args []string) int {
 	workdir := fs.String("workdir", "", "project working directory (required)")
 	goal := fs.String("goal", "", "task goal / instruction (required)")
 	agentID := fs.String("agent", "default", "agent id")
-	modelID := fs.String("model", "", "model id as provider_name/model_name (or TEAMS_MODEL)")
+	modelID := fs.String("model", "", "model id as provider_name/model_name (or WORK_MODEL)")
 	timeoutStr := fs.String("timeout", "10m", "max wall time for the turn")
 	autoApprove := fs.Bool("auto-approve", true, "auto-approve tool permissions")
 	reportPath := fs.String("report", "", "write final Report JSON to this path")
 	logsDir := fs.String("logs-dir", "", "export turn JSONL + events + failure analysis (e.g. /logs/agent/turnlogs)")
-	apiKey := fs.String("api-key", "", "LLM API key (or TEAMS_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY)")
-	baseURL := fs.String("base-url", "", "LLM base URL (or TEAMS_BASE_URL)")
-	providerType := fs.String("provider-type", "", "openai|anthropic (default: inferred from model / TEAMS_PROVIDER_TYPE)")
+	apiKey := fs.String("api-key", "", "LLM API key (or WORK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY)")
+	baseURL := fs.String("base-url", "", "LLM base URL (or WORK_BASE_URL)")
+	providerType := fs.String("provider-type", "", "openai|anthropic (default: inferred from model / WORK_PROVIDER_TYPE)")
 	evalMode := fs.Bool("eval", true, "eval mode: disable ask_user and isolate data dirs")
-	dataDir := fs.String("data-dir", "", "override TEAMS_DATA_DIR (default: temp under workdir/.dq-eval)")
-	configPath := fs.String("config", "", "TEAMS_CONFIG path (optional)")
+	dataDir := fs.String("data-dir", "", "override WORK_DATA_DIR (default: temp under workdir/.dq-eval)")
+	configPath := fs.String("config", "", "WORK_CONFIG path (optional)")
 
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -40,7 +40,7 @@ func runHeadless(args []string) int {
 		return 2
 	}
 	if strings.TrimSpace(*workdir) == "" || strings.TrimSpace(*goal) == "" {
-		fmt.Fprintln(os.Stderr, "usage: danqing-teams-cli run --workdir DIR --goal TEXT [--model provider/model] ...")
+		fmt.Fprintln(os.Stderr, "usage: danmo-work-cli run --workdir DIR --goal TEXT [--model provider/model] ...")
 		fs.PrintDefaults()
 		return 2
 	}
@@ -61,21 +61,21 @@ func runHeadless(args []string) int {
 		return 2
 	}
 
-	model := firstNonEmpty(*modelID, os.Getenv("TEAMS_MODEL"))
+	model := firstNonEmpty(*modelID, os.Getenv("WORK_MODEL"))
 	if model == "" {
-		fmt.Fprintln(os.Stderr, "--model or TEAMS_MODEL is required")
+		fmt.Fprintln(os.Stderr, "--model or WORK_MODEL is required")
 		return 2
 	}
 
-	key := firstNonEmpty(*apiKey, os.Getenv("TEAMS_API_KEY"), os.Getenv("OPENAI_API_KEY"), os.Getenv("ANTHROPIC_API_KEY"))
-	base := firstNonEmpty(*baseURL, os.Getenv("TEAMS_BASE_URL"))
-	ptype := firstNonEmpty(*providerType, os.Getenv("TEAMS_PROVIDER_TYPE"))
+	key := firstNonEmpty(*apiKey, os.Getenv("WORK_API_KEY"), os.Getenv("OPENAI_API_KEY"), os.Getenv("ANTHROPIC_API_KEY"))
+	base := firstNonEmpty(*baseURL, os.Getenv("WORK_BASE_URL"))
+	ptype := firstNonEmpty(*providerType, os.Getenv("WORK_PROVIDER_TYPE"))
 
 	if *evalMode {
-		_ = os.Setenv("TEAMS_EVAL_MODE", "1")
+		_ = os.Setenv("WORK_EVAL_MODE", "1")
 	}
 	if *autoApprove {
-		_ = os.Setenv("TEAMS_AUTO_APPROVE", "true")
+		_ = os.Setenv("WORK_AUTO_APPROVE", "true")
 	}
 
 	evalRoot := *dataDir
@@ -86,14 +86,14 @@ func runHeadless(args []string) int {
 		fmt.Fprintln(os.Stderr, "data-dir:", err)
 		return 1
 	}
-	dbPath := filepath.Join(evalRoot, "teams.db")
+	dbPath := filepath.Join(evalRoot, "work.db")
 	dataPath := filepath.Join(evalRoot, "data")
-	_ = os.Setenv("TEAMS_DB_PATH", dbPath)
-	_ = os.Setenv("TEAMS_DATA_DIR", dataPath)
+	_ = os.Setenv("WORK_DB_PATH", dbPath)
+	_ = os.Setenv("WORK_DATA_DIR", dataPath)
 
 	cfgPath := *configPath
 	if cfgPath == "" {
-		cfgPath = os.Getenv("TEAMS_CONFIG")
+		cfgPath = os.Getenv("WORK_CONFIG")
 	}
 	if cfgPath == "" {
 		if cand := filepath.Join(filepath.Dir(os.Args[0]), "config.yaml"); fileExists(cand) {
@@ -139,8 +139,8 @@ func runHeadless(args []string) int {
 	events := core.Sessions.StreamEvents(session.ID, 0)
 
 	outLogs := *logsDir
-	if outLogs == "" && os.Getenv("TEAMS_EVAL_LOGS_DIR") != "" {
-		outLogs = os.Getenv("TEAMS_EVAL_LOGS_DIR")
+	if outLogs == "" && os.Getenv("WORK_EVAL_LOGS_DIR") != "" {
+		outLogs = os.Getenv("WORK_EVAL_LOGS_DIR")
 	}
 	if outLogs != "" {
 		if err := exportEvalArtifacts(core, session.ID, proj.ID, *goal, model, outLogs, rep, waitErr, events); err != nil {
@@ -404,7 +404,7 @@ func ensureEvalLLM(ctx context.Context, core *bootstrap.Core, modelID, apiKey, b
 		if _, _, err := core.LLMConfig.ResolveProvider(ctx, modelID); err == nil {
 			return nil
 		}
-		return fmt.Errorf("API key required (--api-key / TEAMS_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY)")
+		return fmt.Errorf("API key required (--api-key / WORK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY)")
 	}
 
 	_, err := core.LLMConfig.Upsert(ctx, domain.UpsertLLMProviderConfigRequest{

@@ -23,7 +23,7 @@ import '@danqing/dq-tokens/dq-glass.css'
 import '@danqing/dq-tokens/dq-agent.css'
 import '@danqing/dq-ui/style.css'
 import '@danqing/dq-shell/style.css'
-import '@/styles/teams.css'
+import '@/styles/work.css'
 
 // Theme class is managed by theme store; default flash before init is mac dark
 document.documentElement.classList.add('dq-mac', 'dark')

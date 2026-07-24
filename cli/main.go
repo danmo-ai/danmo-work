@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"danqing-teams/core/bootstrap"
-	"danqing-teams/core/domain"
-	"danqing-teams/core/runtime/sandbox"
+	"danmo-work/core/bootstrap"
+	"danmo-work/core/domain"
+	"danmo-work/core/runtime/sandbox"
 )
 
 func main() {
@@ -22,10 +22,10 @@ func main() {
 		os.Exit(runHeadless(os.Args[2:]))
 	}
 
-	core := bootstrap.New(bootstrap.Config{ConfigPath: os.Getenv("TEAMS_CONFIG")})
+	core := bootstrap.New(bootstrap.Config{ConfigPath: os.Getenv("WORK_CONFIG")})
 	defer core.Close()
 	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Println("DanQing Teams CLI. Type 'exit' to quit. Use 'danqing-teams-cli run --help' for headless eval.")
+	fmt.Println("Danmo Work CLI. Type 'exit' to quit. Use 'danmo-work-cli run --help' for headless eval.")
 	for {
 		fmt.Print("> ")
 		if !scanner.Scan() {

@@ -3,7 +3,7 @@ package sqlite
 import (
 	"encoding/json"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 
 	"gorm.io/gorm"
 )

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"danqing-teams/core/runtime/tool"
+	"danmo-work/core/runtime/tool"
 )
 
 func resolvePath(workDir, path string) (string, error) {

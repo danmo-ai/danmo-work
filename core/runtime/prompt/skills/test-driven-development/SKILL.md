@@ -4,7 +4,7 @@ description: RED-GREEN-REFACTOR before writing production code. Use when impleme
 license: MIT
 compatibility: Requires project test runner via exec_shell when available; implementer may write tests with write/edit only
 metadata:
-  author: danqing-teams
+  author: danmo-work
   version: "1.0"
   category: coding
   adapted_from: "https://github.com/obra/superpowers/tree/main/skills/test-driven-development"
@@ -14,7 +14,7 @@ metadata:
 # Test-Driven Development
 
 > Adapted from obra/superpowers `test-driven-development` (© Jesse Vincent / contributors, MIT).
-> Rewritten for DanQing Teams tools and agents; not a verbatim copy.
+> Rewritten for Danmo Work tools and agents; not a verbatim copy.
 
 **Iron law:** no production code without a failing test first. If you wrote implementation before a failing test, delete it and start over.
 

@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
 )
 
 const (
@@ -146,7 +146,7 @@ func filterEnv(environ []string) []string {
 	// Drop secrets that should not leak into sandboxed shells by default.
 	denyPrefix := []string{
 		"AWS_SECRET", "AWS_ACCESS_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
-		"TEAMS_LLM", "GITHUB_TOKEN", "GH_TOKEN", "NPM_TOKEN",
+		"WORK_LLM", "GITHUB_TOKEN", "GH_TOKEN", "NPM_TOKEN",
 	}
 	out := make([]string, 0, len(environ))
 	for _, e := range environ {

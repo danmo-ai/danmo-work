@@ -348,7 +348,7 @@ export default {
     marketSourceName: '显示名称',
     marketPlatform: '平台',
     marketRepo: '仓库 / 路径',
-    marketRepoPlaceholder: 'https://github.com/danqing-ai/dq-market 或本地绝对路径',
+    marketRepoPlaceholder: 'https://github.com/danmo-ai/dq-market 或本地绝对路径',
     marketRef: '分支 / Tag',
     marketCatalogPath: '目录文件路径',
     marketToken: '访问令牌（可选）',
@@ -494,7 +494,7 @@ export default {
   },
   desktop: {
     startingBackend: '正在启动后端服务…',
-    backendStartTimeout: '后端服务启动超时。请退出应用后重试；若仍失败，请查看 ~/.dq-teams/backend.log',
+    backendStartTimeout: '后端服务启动超时。请退出应用后重试；若仍失败，请查看 ~/.danmo-work/backend.log',
     backendStartFailed: '后端服务启动失败',
   },
   updater: {

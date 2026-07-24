@@ -1,10 +1,10 @@
-# DanQing Teams
+# Danmo Work
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-[![Release](https://img.shields.io/github/v/release/danqing-ai/danqing-teams?label=release)](https://github.com/danqing-ai/danqing-teams/releases/latest)
-[![License](https://img.shields.io/github/license/danqing-ai/danqing-teams)](LICENSE)
-[![Go](https://img.shields.io/github/go-mod/go-version/danqing-ai/danqing-teams?filename=go.mod)](go.mod)
+[![Release](https://img.shields.io/github/v/release/danmo-ai/danmo-work?label=release)](https://github.com/danmo-ai/danmo-work/releases/latest)
+[![License](https://img.shields.io/github/license/danmo-ai/danmo-work)](LICENSE)
+[![Go](https://img.shields.io/github/go-mod/go-version/danmo-ai/danmo-work?filename=go.mod)](go.mod)
 
 General-purpose **AI Work Agent** (with coding capability). Built for **long-horizon complex tasks** via multi-agent collaboration.
 
@@ -27,17 +27,17 @@ MIT · Web / Desktop / CLI / TUI · Anthropic & OpenAI-compatible providers
 
 | Platform | Download |
 |----------|----------|
-| **macOS** (Apple Silicon) | [`.dmg`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
-| **Windows** | [Setup `.exe`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
-| **Linux server** | [`.tar.gz`](https://github.com/danqing-ai/danqing-teams/releases/latest) |
+| **macOS** (Apple Silicon) | [`.dmg`](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **Windows** | [Setup `.exe`](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **Linux server** | [`.tar.gz`](https://github.com/danmo-ai/danmo-work/releases/latest) |
 
-Or run from source (needs sibling [`dq-ui`](https://github.com/danqing-ai/dq-ui)):
+Or run from source (needs sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui)):
 
 ```bash
 make dev-web   # → http://localhost:5801/app/
 ```
 
-Add an LLM API key in the UI (or `~/.dq-teams/config.yaml`). See [Quick start](#quick-start) for the full flow.
+Add an LLM API key in the UI (or `~/.danmo-work/config.yaml`). See [Quick start](#quick-start) for the full flow.
 
 ## See it
 
@@ -157,7 +157,7 @@ System prompt includes a `<memory-policy>` that steers the model: remember lasti
 
 **vs mainstream AI agents**
 
-| Approach | Typical products / stacks | Gap | DanQing Teams |
+| Approach | Typical products / stacks | Gap | Danmo Work |
 |----------|---------------------------|-----|---------------|
 | Opaque product memory | ChatGPT / Claude “Memory” | User rarely sees structure, scope, or exact writes | Explicit tools + visible Memory tab; scoped keys |
 | IDE / coding-agent memory | Cursor-style memories | Often product-private; hard to audit or share across surfaces | Same SQLite store for web / desktop / CLI; API list/delete |
@@ -165,7 +165,7 @@ System prompt includes a `<memory-policy>` that steers the model: remember lasti
 | Vector memory services | Mem0 / Zep-style stores | Extra infra; write policy often external to the agent loop | Built-in tools on the Agent Loop; keyword search v1, no extra service |
 | Auto-summarize everything | Turn/episode auto-index | Noise, near-zero useful recall (we tried this; removed) | Model-gated writes only when worth remembering |
 
-Mainstream often treats memory as either *invisible product magic* or *another vector DB to wire up*. DanQing Teams keeps memory on the same Tool abstraction: the LLM decides, storage is inspectable, and humans stay in the loop via the Memory tab.
+Mainstream often treats memory as either *invisible product magic* or *another vector DB to wire up*. Danmo Work keeps memory on the same Tool abstraction: the LLM decides, storage is inspectable, and humans stay in the loop via the Memory tab.
 
 ### Log is state
 
@@ -176,7 +176,7 @@ Mainstream often treats memory as either *invisible product magic* or *another v
 
 ## Why different from mainstream frameworks
 
-| Dimension | LangChain / LangGraph / CrewAI / AutoGen / typical coding agents | DanQing Teams |
+| Dimension | LangChain / LangGraph / CrewAI / AutoGen / typical coding agents | Danmo Work |
 |-----------|------------------------------------------------------------------|---------------|
 | Control flow | Developer-written graph, role router, or product modes | **Pure LLM-driven** — no human-maintained workflow |
 | Abstraction | Agent / Chain / Graph / Role / Mode layers | **Tool only** — minimal, flat |
@@ -189,7 +189,7 @@ Mainstream often treats memory as either *invisible product magic* or *another v
 | Debugging | Breakpoints / external logs | Visual replay; edit results and continue |
 | Human role | Command → execute (master/slave) | Join the reasoning stream (peer) |
 
-Mainstream: *developer (or product) orchestrates, LLM executes*. DanQing Teams: *LLM orchestrates on one thinking chain; developers supply capability units; sub-agents are isolated tool calls*.
+Mainstream: *developer (or product) orchestrates, LLM executes*. Danmo Work: *LLM orchestrates on one thinking chain; developers supply capability units; sub-agents are isolated tool calls*.
 
 ## Concept model
 
@@ -247,11 +247,11 @@ server/   cli/   tui/    frontend/ (Vue 3 + Vite)
 
 - Go 1.25+
 - Node.js 20+ (frontend / desktop)
-- Sibling [`dq-ui`](https://github.com/danqing-ai/dq-ui) repo (frontend depends on `file:../../dq-ui/packages/*`)
+- Sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui) repo (frontend depends on `file:../../dq-ui/packages/*`)
 
 ```text
 Workspace/
-  DanQing-Teams/
+  Danmo-Work/
   dq-ui/
 ```
 
@@ -271,8 +271,8 @@ make stop             # stop all DQ_DEV processes
 Copy and edit config on first run:
 
 ```bash
-mkdir -p ~/.dq-teams
-cp config.example.yaml ~/.dq-teams/config.yaml
+mkdir -p ~/.danmo-work
+cp config.example.yaml ~/.danmo-work/config.yaml
 # Add LLM provider API keys in the UI or config
 ```
 
@@ -292,7 +292,7 @@ make clean                  # rm -rf out/
 ```text
 out/
   frontend/dist/     # Vite production build (served at /app/)
-  server/            # danqing-teams, danqing-teams-cli, danqing-teams-tui
+  server/            # danmo-work, danmo-work-cli, danmo-work-tui
   desktop/bundle/    # Tauri installers
   desktop/cargo/     # Cargo intermediate
   dist/              # Linux server release tarball
@@ -319,7 +319,7 @@ make eval-harbor-base                                   # dq-harbor-base:local
 GH_TOKEN=$(gh auth token) make eval-harbor-sync-tb2     # → evals/dq_harbor/tasks/ (89, gitignored)
 make eval-harbor-bin
 
-export TEAMS_MODEL=deepseek/deepseek-v4-flash TEAMS_API_KEY=... TEAMS_BASE_URL=https://api.deepseek.com
+export WORK_MODEL=deepseek/deepseek-v4-flash WORK_API_KEY=... WORK_BASE_URL=https://api.deepseek.com
 make eval-harbor-smoke                                  # 1-task smoke
 # make eval-harbor-suite                                # full 89: oracle then DanQing
 ./evals/dq_harbor/compare_agents.sh                     # DanQing vs OpenCode vs OpenHands
@@ -329,14 +329,14 @@ make eval-harbor-smoke                                  # 1-task smoke
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `TEAMS_CONFIG` | `~/.dq-teams/config.yaml` | YAML config path |
-| `TEAMS_DB_PATH` | `~/.dq-teams/teams.db` | SQLite database |
-| `TEAMS_DATA_DIR` | `~/.dq-teams/data` | Projects / turn logs |
+| `WORK_CONFIG` | `~/.danmo-work/config.yaml` | YAML config path |
+| `WORK_DB_PATH` | `~/.danmo-work/work.db` | SQLite database |
+| `WORK_DATA_DIR` | `~/.danmo-work/data` | Projects / turn logs |
 | `DQ_BACKEND_PORT` | `7801` | Dev backend port |
 | `DQ_FRONTEND_PORT` | `5801` | Dev frontend port |
 | `VITE_API_BASE_URL` | `""` | Frontend API base (empty = same origin) |
 
-User data lives under `~/.dq-teams/` for server, CLI, TUI, and desktop. On first launch, data may migrate from `~/Library/Application Support/com.danqing.teams/` or `./data/teams.db`.
+User data lives under `~/.danmo-work/` for server, CLI, TUI, and desktop. On first launch, data may migrate from `~/Library/Application Support/com.danmo.work/` or `./data/work.db`.
 
 ### Custom skill directories
 
@@ -345,11 +345,11 @@ Each new turn scans these Agentskills directories (`skill-name/SKILL.md`) in mem
 | Path | Scope |
 |------|-------|
 | `~/.agents/skills/` | User |
-| `~/.dq-teams/skills/` | User |
+| `~/.danmo-work/skills/` | User |
 | `<projectRoot>/.agents/skills/` | Project |
-| `<projectRoot>/.dq-teams/skills/` | Project |
+| `<projectRoot>/.danmo-work/skills/` | Project |
 
-Later paths override earlier ones on skill ID collision (project `.dq-teams` wins). Disk changes apply on the next turn.
+Later paths override earlier ones on skill ID collision (project `.danmo-work` wins). Disk changes apply on the next turn.
 
 ## Desktop (Tauri)
 
@@ -368,7 +368,7 @@ SKIP_BACKEND=1 make dev-desktop
 | Job | Artifact |
 |-----|----------|
 | macOS desktop | `out/desktop/bundle/*.dmg`, `*.app` |
-| Linux server | `out/dist/danqing-teams-linux-*.tar.gz` |
+| Linux server | `out/dist/danmo-work-linux-*.tar.gz` |
 | Windows desktop | `out/desktop/bundle/*.exe` |
 
 Tag builds are attached to the GitHub Release.

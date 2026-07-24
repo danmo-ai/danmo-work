@@ -1,6 +1,6 @@
 # Third-Party Notices — Built-in Skills
 
-DanQing Teams includes built-in Agent Skills that were **adapted (rewritten)** from
+Danmo Work includes built-in Agent Skills that were **adapted (rewritten)** from
 upstream MIT-licensed projects. They are not verbatim copies.
 
 This notice satisfies attribution requirements for those adaptations.
@@ -54,5 +54,5 @@ Adapted skills in this product:
 
 Windows desktop builds may download and bundle `coreutils.exe` (multi-call binary)
 via `scripts/fetch_windows_coreutils.sh`, then install applet hardlinks under
-`~/.dq-teams/bin/coreutils/` for `exec_shell` PATH injection. This replaces the
+`~/.danmo-work/bin/coreutils/` for `exec_shell` PATH injection. This replaces the
 need for Git Bash to run POSIX utilities on Windows host / win-token backends.

@@ -10,8 +10,8 @@ import (
 
 // Env vars for Windows Coreutils (Microsoft / uutils multi-call binary).
 const (
-	envCoreutilsBin = "TEAMS_COREUTILS_BIN" // directory with ls.exe / cat.exe hardlinks
-	envCoreutilsExe = "TEAMS_COREUTILS_EXE" // absolute path to coreutils.exe (optional)
+	envCoreutilsBin = "WORK_COREUTILS_BIN" // directory with ls.exe / cat.exe hardlinks
+	envCoreutilsExe = "WORK_COREUTILS_EXE" // absolute path to coreutils.exe (optional)
 )
 
 // coreutilsApplets are hardlink names created next to a bundled coreutils.exe.
@@ -65,7 +65,7 @@ func defaultCoreutilsCandidateBins() []string {
 		add(v)
 	}
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		add(filepath.Join(home, ".dq-teams", "bin", "coreutils", "bin"))
+		add(filepath.Join(home, ".danmo-work", "bin", "coreutils", "bin"))
 	}
 	if pf := os.Getenv("ProgramFiles"); pf != "" {
 		add(filepath.Join(pf, "coreutils", "bin"))
@@ -123,7 +123,7 @@ func defaultCoreutilsExeCandidates() []string {
 		add(v)
 	}
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		add(filepath.Join(home, ".dq-teams", "bin", "coreutils", "coreutils.exe"))
+		add(filepath.Join(home, ".danmo-work", "bin", "coreutils", "coreutils.exe"))
 	}
 	if pf := os.Getenv("ProgramFiles"); pf != "" {
 		add(filepath.Join(pf, "coreutils", "coreutils.exe"))
@@ -146,7 +146,7 @@ func findCoreutilsExe() string {
 	return ""
 }
 
-// prepareCoreutilsFromExe installs hardlinks under ~/.dq-teams/bin/coreutils/bin
+// prepareCoreutilsFromExe installs hardlinks under ~/.danmo-work/bin/coreutils/bin
 // (or next to the given exe when already under that tree).
 func prepareCoreutilsFromExe(exePath string) (string, error) {
 	exePath = filepath.Clean(exePath)
@@ -156,7 +156,7 @@ func prepareCoreutilsFromExe(exePath string) (string, error) {
 	if err != nil || home == "" {
 		home = appDir
 	}
-	dstRoot := filepath.Join(home, ".dq-teams", "bin", "coreutils")
+	dstRoot := filepath.Join(home, ".danmo-work", "bin", "coreutils")
 	dstExe := filepath.Join(dstRoot, "coreutils.exe")
 	binDir := filepath.Join(dstRoot, "bin")
 

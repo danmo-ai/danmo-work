@@ -35,7 +35,7 @@ case "$OS-$ARCH" in
     ;;
 esac
 
-BINARY_NAME="danqing-teams-backend-$TRIPLE"
+BINARY_NAME="danmo-work-backend-$TRIPLE"
 # Go on Windows always produces .exe; Tauri externalBin expects it
 if [[ "$GOOS" == "windows" ]]; then
   BINARY_NAME="${BINARY_NAME}.exe"
@@ -44,7 +44,7 @@ fi
 # Align sidecar /api/v1/version with desktop release when RELEASE_VERSION is set
 VERSION_LDFLAGS="-w"
 if [[ -n "${RELEASE_VERSION:-}" ]]; then
-  VERSION_LDFLAGS="-w -X 'danqing-teams/server/api/v1.Version=${RELEASE_VERSION}'"
+  VERSION_LDFLAGS="-w -X 'danmo-work/server/api/v1.Version=${RELEASE_VERSION}'"
   echo "==> Sidecar version: $RELEASE_VERSION"
 fi
 

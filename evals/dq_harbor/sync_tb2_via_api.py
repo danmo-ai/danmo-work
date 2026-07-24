@@ -44,7 +44,7 @@ RETRIES = 5
 def headers() -> dict[str, str]:
     h = {
         "Accept": "application/vnd.github+json",
-        "User-Agent": "danqing-teams-tb2-sync",
+        "User-Agent": "danmo-work-tb2-sync",
     }
     token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
     if token:

@@ -6,7 +6,7 @@
 #   ./evals/dq_harbor/sync_tb2_tasks.sh
 #   make eval-harbor-base
 #   ./evals/dq_harbor/run_suite.sh oracle
-#   ./evals/dq_harbor/run_suite.sh dq_harbor.agent:DanQingAgent
+#   ./evals/dq_harbor/run_suite.sh dq_harbor.agent:DanmoWorkAgent
 #   ./evals/dq_harbor/run_suite.sh opencode
 #
 # Harbor 0.19 has no built-in podman env: use --env docker with DOCKER_HOST
@@ -17,7 +17,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TASKS_DIR="$ROOT/evals/dq_harbor/tasks"
 AGENT="${1:-}"
 ENV_TYPE="${HARBOR_ENV:-docker}"
-MODEL="${HARBOR_MODEL:-${TEAMS_MODEL:-}}"
+MODEL="${HARBOR_MODEL:-${WORK_MODEL:-}}"
 N_CONCURRENT="${HARBOR_N_CONCURRENT:-1}"
 # OpenCode/OpenHands install (nvm/npm/pip) is slow; give agents more wall time.
 TIMEOUT_MULT="${HARBOR_TIMEOUT_MULT:-1}"
@@ -27,7 +27,7 @@ PODMAN_BIN="${PODMAN_BIN:-$(command -v podman 2>/dev/null || true)}"
 [[ -z "$PODMAN_BIN" && -x /opt/podman/bin/podman ]] && PODMAN_BIN=/opt/podman/bin/podman
 
 if [[ -z "$AGENT" ]]; then
-  echo "usage: $0 <agent>   e.g. oracle | dq_harbor.agent:DanQingAgent | opencode" >&2
+  echo "usage: $0 <agent>   e.g. oracle | dq_harbor.agent:DanmoWorkAgent | opencode" >&2
   exit 2
 fi
 
@@ -42,7 +42,7 @@ if [[ ! -d "$TASKS_DIR" ]] || ! compgen -G "$TASKS_DIR"/*/task.toml >/dev/null; 
 fi
 
 if [[ "$AGENT" != "oracle" && -z "$MODEL" ]]; then
-  echo "Set TEAMS_MODEL or HARBOR_MODEL (required for non-oracle agents)" >&2
+  echo "Set WORK_MODEL or HARBOR_MODEL (required for non-oracle agents)" >&2
   exit 2
 fi
 
@@ -57,8 +57,8 @@ if [[ -z "${DOCKER_HOST:-}" ]]; then
 fi
 
 AE_ARGS=()
-[[ -n "${TEAMS_API_KEY:-}" ]] && AE_ARGS+=(--ae "TEAMS_API_KEY=$TEAMS_API_KEY")
-[[ -n "${TEAMS_BASE_URL:-}" ]] && AE_ARGS+=(--ae "TEAMS_BASE_URL=$TEAMS_BASE_URL")
+[[ -n "${WORK_API_KEY:-}" ]] && AE_ARGS+=(--ae "WORK_API_KEY=$WORK_API_KEY")
+[[ -n "${WORK_BASE_URL:-}" ]] && AE_ARGS+=(--ae "WORK_BASE_URL=$WORK_BASE_URL")
 [[ -n "${OPENAI_API_KEY:-}" ]] && AE_ARGS+=(--ae "OPENAI_API_KEY=$OPENAI_API_KEY")
 [[ -n "${ANTHROPIC_API_KEY:-}" ]] && AE_ARGS+=(--ae "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
 [[ -n "${OPENAI_BASE_URL:-}" ]] && AE_ARGS+=(--ae "OPENAI_BASE_URL=$OPENAI_BASE_URL")
@@ -72,8 +72,8 @@ AE_ARGS=()
 if [[ "$AGENT" == dq_harbor.* ]]; then
   export PYTHONPATH="$ROOT/evals${PYTHONPATH:+:$PYTHONPATH}"
 fi
-if [[ "$AGENT" == "dq_harbor.agent:DanQingAgent" || "$AGENT" == *DanQingAgent* ]]; then
-  BIN="${DANQING_CLI_BIN:-$ROOT/out/eval/danqing-teams-cli}"
+if [[ "$AGENT" == "dq_harbor.agent:DanmoWorkAgent" || "$AGENT" == *DanmoWorkAgent* ]]; then
+  BIN="${DANQING_CLI_BIN:-$ROOT/out/eval/danmo-work-cli}"
   if [[ ! -f "$BIN" ]]; then
     echo "missing $BIN — run: make eval-harbor-bin" >&2
     exit 1

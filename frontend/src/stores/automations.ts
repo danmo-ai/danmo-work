@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Automation } from '@/types'
 
-const AUTO_KEY = 'danqing-automations'
+const AUTO_KEY = 'danmo-work-automations'
 
 function loadJSON<T>(key: string): T[] {
   try {

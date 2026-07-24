@@ -3,8 +3,8 @@ package feishu_test
 import (
 	"testing"
 
-	"danqing-teams/core/adapter/feishu"
-	"danqing-teams/core/port"
+	"danmo-work/core/adapter/feishu"
+	"danmo-work/core/port"
 
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )

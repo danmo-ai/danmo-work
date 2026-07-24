@@ -1,4 +1,4 @@
-APP_NAME := danqing-teams
+APP_NAME := danmo-work
 SERVER_BIN := $(CURDIR)/out/server/$(APP_NAME)
 CLI_BIN := $(CURDIR)/out/server/$(APP_NAME)-cli
 TUI_BIN := $(CURDIR)/out/server/$(APP_NAME)-tui
@@ -6,7 +6,7 @@ FRONTEND_DIR := $(CURDIR)/frontend
 OUT_DIR := $(CURDIR)/out
 FRONTEND_DIST := $(OUT_DIR)/frontend/dist
 RELEASE_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -w -X 'danqing-teams/server/api/v1.Version=$(RELEASE_VERSION)'
+LDFLAGS := -w -X 'danmo-work/server/api/v1.Version=$(RELEASE_VERSION)'
 
 export DQ_APP_NAME := $(APP_NAME)
 
@@ -18,18 +18,18 @@ export DQ_APP_NAME := $(APP_NAME)
 	eval-harbor-bin eval-harbor-base eval-harbor-sync-tb2 eval-harbor-smoke eval-harbor-suite eval-harbor-compare
 
 EVAL_BIN_DIR := $(OUT_DIR)/eval
-EVAL_CLI_BIN := $(EVAL_BIN_DIR)/danqing-teams-cli
+EVAL_CLI_BIN := $(EVAL_BIN_DIR)/danmo-work-cli
 # Podman on Apple Silicon typically runs linux/arm64; Linux x86 hosts use amd64.
 EVAL_GOARCH ?= $(shell uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
 # First synced TB2 task (after `make eval-harbor-sync-tb2`); override with HARBOR_TASK=...
 HARBOR_TASK ?= $(shell ls -1d $(CURDIR)/evals/dq_harbor/tasks/*/ 2>/dev/null | head -1 | sed 's:/*$$::')
-HARBOR_MODEL ?= $(TEAMS_MODEL)
+HARBOR_MODEL ?= $(WORK_MODEL)
 # Harbor 0.19 has no built-in "podman" env; use docker API against Podman via DOCKER_HOST.
 HARBOR_ENV ?= docker
 PODMAN_BIN ?= $(shell command -v podman 2>/dev/null || echo /opt/podman/bin/podman)
 
 help:
-	@echo "DanQing Teams"
+	@echo "Danmo Work"
 	@echo ""
 	@echo "Dev:"
 	@echo "  backend       Start backend only (:7801) — for Go debugger"
@@ -154,7 +154,7 @@ eval-harbor-sync-tb2:
 eval-harbor-smoke: eval-harbor-sync-tb2 eval-harbor-base eval-harbor-bin
 	@test -x "$(PODMAN_BIN)" || (echo "podman not found (tried $(PODMAN_BIN))" >&2; exit 1)
 	@command -v harbor >/dev/null 2>&1 || (echo "harbor not found — install with: uv tool install harbor" >&2; exit 1)
-	@test -n "$(HARBOR_MODEL)" || (echo "Set TEAMS_MODEL or HARBOR_MODEL (e.g. deepseek/deepseek-v4-flash)" >&2; exit 1)
+	@test -n "$(HARBOR_MODEL)" || (echo "Set WORK_MODEL or HARBOR_MODEL (e.g. deepseek/deepseek-v4-flash)" >&2; exit 1)
 	@test -n "$(HARBOR_TASK)" || (echo "no tasks — run make eval-harbor-sync-tb2" >&2; exit 1)
 	chmod +x $(HARBOR_TASK)/tests/test.sh $(HARBOR_TASK)/solution/solve.sh
 	@SOCK="$$($(PODMAN_BIN) machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}' 2>/dev/null || true)"; \
@@ -166,12 +166,12 @@ eval-harbor-smoke: eval-harbor-sync-tb2 eval-harbor-base eval-harbor-bin
 	  PYTHONPATH=$(CURDIR)/evals \
 	  DANQING_CLI_BIN=$(EVAL_CLI_BIN) \
 	  harbor run --path $(HARBOR_TASK) \
-		--agent dq_harbor.agent:DanQingAgent \
+		--agent dq_harbor.agent:DanmoWorkAgent \
 		--model $(HARBOR_MODEL) \
 		--env $(HARBOR_ENV) \
 		--n-concurrent 1 \
-		$(if $(TEAMS_API_KEY),--ae TEAMS_API_KEY=$(TEAMS_API_KEY),) \
-		$(if $(TEAMS_BASE_URL),--ae TEAMS_BASE_URL=$(TEAMS_BASE_URL),) \
+		$(if $(WORK_API_KEY),--ae WORK_API_KEY=$(WORK_API_KEY),) \
+		$(if $(WORK_BASE_URL),--ae WORK_BASE_URL=$(WORK_BASE_URL),) \
 		$(if $(OPENAI_API_KEY),--ae OPENAI_API_KEY=$(OPENAI_API_KEY),) \
 		$(if $(ANTHROPIC_API_KEY),--ae ANTHROPIC_API_KEY=$(ANTHROPIC_API_KEY),) \
 		$(if $(OPENAI_BASE_URL),--ae OPENAI_BASE_URL=$(OPENAI_BASE_URL),)
@@ -180,7 +180,7 @@ eval-harbor-smoke: eval-harbor-sync-tb2 eval-harbor-base eval-harbor-bin
 eval-harbor-suite: eval-harbor-sync-tb2 eval-harbor-bin
 	@test -x "$(PODMAN_BIN)" || (echo "podman not found (tried $(PODMAN_BIN))" >&2; exit 1)
 	@command -v harbor >/dev/null 2>&1 || (echo "harbor not found — install with: uv tool install harbor" >&2; exit 1)
-	@test -n "$(HARBOR_MODEL)" || (echo "Set TEAMS_MODEL or HARBOR_MODEL" >&2; exit 1)
+	@test -n "$(HARBOR_MODEL)" || (echo "Set WORK_MODEL or HARBOR_MODEL" >&2; exit 1)
 	chmod +x $(CURDIR)/evals/dq_harbor/run_suite.sh
 	@SOCK="$$($(PODMAN_BIN) machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}' 2>/dev/null || true)"; \
 	  if [ -n "$$SOCK" ]; then export DOCKER_HOST="unix://$$SOCK"; fi; \
@@ -189,14 +189,14 @@ eval-harbor-suite: eval-harbor-sync-tb2 eval-harbor-bin
 	    $(CURDIR)/evals/dq_harbor/run_suite.sh oracle; \
 	  HARBOR_ENV=$(HARBOR_ENV) HARBOR_MODEL=$(HARBOR_MODEL) \
 	    DANQING_CLI_BIN=$(EVAL_CLI_BIN) \
-	    $(CURDIR)/evals/dq_harbor/run_suite.sh dq_harbor.agent:DanQingAgent
+	    $(CURDIR)/evals/dq_harbor/run_suite.sh dq_harbor.agent:DanmoWorkAgent
 
 # Same suite for a comparison agent, e.g. make eval-harbor-compare HARBOR_COMPARE_AGENT=opencode
 HARBOR_COMPARE_AGENT ?= opencode
 eval-harbor-compare: eval-harbor-sync-tb2 eval-harbor-base
 	@test -x "$(PODMAN_BIN)" || (echo "podman not found (tried $(PODMAN_BIN))" >&2; exit 1)
 	@command -v harbor >/dev/null 2>&1 || (echo "harbor not found" >&2; exit 1)
-	@test -n "$(HARBOR_MODEL)" || (echo "Set TEAMS_MODEL or HARBOR_MODEL" >&2; exit 1)
+	@test -n "$(HARBOR_MODEL)" || (echo "Set WORK_MODEL or HARBOR_MODEL" >&2; exit 1)
 	chmod +x $(CURDIR)/evals/dq_harbor/run_suite.sh
 	@SOCK="$$($(PODMAN_BIN) machine inspect --format '{{.ConnectionInfo.PodmanSocket.Path}}' 2>/dev/null || true)"; \
 	  if [ -n "$$SOCK" ]; then export DOCKER_HOST="unix://$$SOCK"; fi; \

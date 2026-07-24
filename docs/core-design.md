@@ -1,4 +1,4 @@
-# DanQing Teams — Core Design
+# Danmo Work — Core Design
 
 > 统一 Agent 架构：一切皆工具，模型驱动一切
 
@@ -6,7 +6,7 @@
 
 ## 1. 项目定位
 
-DanQing Teams 是一个**通用型 AI Work Agent**，兼具基本的 AI Coding 能力。引擎核心是**多 Agent 协作**，完成**长程复杂任务**。
+Danmo Work 是一个**通用型 AI Work Agent**，兼具基本的 AI Coding 能力。引擎核心是**多 Agent 协作**，完成**长程复杂任务**。
 
 **核心设计理念**：一切都是工具，模型驱动一切。人也是工具（通过 `ask_user` 要求用户参与），有自己人设能力的 Sub Agent 也是工具（通过 `delegate_agent` 委派）。所有能力统一为 tool 接口，由模型自主决策调用。
 
@@ -16,7 +16,7 @@ DanQing Teams 是一个**通用型 AI Work Agent**，兼具基本的 AI Coding �
 |------|-----------|---------|
 | Google Docs | 文档内容 | 多人同时编辑文字 |
 | Figma | 设计图层 | 多人同时操作画布 |
-| **DanQing Teams** | **思维过程** | **多人同时编辑 Agent 的「认知」** |
+| **Danmo Work** | **思维过程** | **多人同时编辑 Agent 的「认知」** |
 
 ---
 
@@ -176,7 +176,7 @@ ask_user:
 ## 5. 仓库结构与分层
 
 ```
-DanQing-Teams/
+Danmo-Work/
 ├── server/                 # HTTP API 入口 (Gin)
 │   ├── main.go
 │   └── api/v1/             # REST handlers
@@ -313,11 +313,11 @@ Doom-loop 检测、权限门禁、审批阻塞、`ask_user` 阻塞均在此层�
 | 路径 | 范围 |
 |------|------|
 | `~/.agents/skills/` | 用户 |
-| `~/.dq-teams/skills/` | 用户 |
+| `~/.danmo-work/skills/` | 用户 |
 | `<projectRoot>/.agents/skills/` | 项目（`WorkDir`） |
-| `<projectRoot>/.dq-teams/skills/` | 项目（`WorkDir`） |
+| `<projectRoot>/.danmo-work/skills/` | 项目（`WorkDir`） |
 
-同名 ID 覆盖顺序（后者赢）：绑定 DB → `~/.agents` → `~/.dq-teams` → 项目 `.agents` → 项目 `.dq-teams`。目录缺失或坏 `SKILL.md` 跳过。Skills 管理页仍只显示 DB（内置 / 手建 / 市场）。
+同名 ID 覆盖顺序（后者赢）：绑定 DB → `~/.agents` → `~/.danmo-work` → 项目 `.agents` → 项目 `.danmo-work`。目录缺失或坏 `SKILL.md` 跳过。Skills 管理页仍只显示 DB（内置 / 手建 / 市场）。
 
 按 Agent 挂载：
 
@@ -440,10 +440,10 @@ Tool:
 
 | 存储 | 路径 / 位置 | 内容 |
 |------|------------|------|
-| SQLite | `~/.dq-teams/teams.db` | agents, sessions, projects, turns, approvals, skills, knowledge, **memories**, mcp, llm_configs, stream_events |
+| SQLite | `~/.danmo-work/work.db` | agents, sessions, projects, turns, approvals, skills, knowledge, **memories**, mcp, llm_configs, stream_events |
 | Turn Log | `{dataDir}/{project}/sessions/{sessionID}/{turnID}.jsonl` | start / tool_call / tool_result / end |
 | Checkpoint | 同 Session 目录 `checkpoint_*.json` | 跨 Turn 压缩摘要 |
-| 配置 | `~/.dq-teams/config.yaml` | 运行时配置（含 `runtime.memory.read_top_k`） |
+| 配置 | `~/.danmo-work/config.yaml` | 运行时配置（含 `runtime.memory.read_top_k`） |
 
 ### 9.2 设计原则
 
@@ -577,7 +577,7 @@ Zone C — Scratch:  当前 Turn 的 user + Step 消息
 >
 > 系统不需要显式模式，只需要：统一的 Tool 抽象、参数化的调度策略、完全透明的执行轨迹。
 
-| | 主流框架 | DanQing Teams |
+| | 主流框架 | Danmo Work |
 |--|---------|---------------|
 | **哲学** | LLM 当作组件，开发者编排 | LLM 是唯一决策中心 |
 | **抽象** | Agent / Chain / Graph / Role 多层 | 单一 Tool 抽象 |
