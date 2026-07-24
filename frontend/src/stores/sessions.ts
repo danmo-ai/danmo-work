@@ -125,9 +125,8 @@ export const useSessionsStore = defineStore('sessions', () => {
   async function loadCatalog() {
     try {
       agents.value = asArray(await fetchJSON<Agent[]>('/agents'))
-    } catch (e) {
+    } catch {
       agents.value = []
-      throw e
     }
     try {
       skills.value = asArray(await fetchJSON<Skill[]>('/skills'))

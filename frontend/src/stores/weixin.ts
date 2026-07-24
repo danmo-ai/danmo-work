@@ -57,6 +57,8 @@ export const useWeixinStore = defineStore('weixin', () => {
     loading.value = true
     try {
       status.value = await fetchJSON<WeixinStatus>('/channels/weixin/status')
+    } catch {
+      status.value = null
     } finally {
       loading.value = false
     }

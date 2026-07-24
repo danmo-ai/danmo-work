@@ -234,7 +234,9 @@ function formatEffortBudgetTokens(map: Record<string, number> | undefined): stri
 
 onMounted(async () => {
   void initAppVersion()
-  await Promise.all([
+  // Soft-fail each loader so one missing/optional API (e.g. channels on an old
+  // sidecar) cannot take down the whole Settings view via unhandledrejection.
+  await Promise.allSettled([
     llm.loadConfigs(),
     llm.loadModels(),
     llm.loadPresets(),

@@ -25,6 +25,8 @@ export const useFeishuStore = defineStore('feishu', () => {
     loading.value = true
     try {
       status.value = await fetchJSON<FeishuStatus>('/channels/feishu/status')
+    } catch {
+      status.value = null
     } finally {
       loading.value = false
     }

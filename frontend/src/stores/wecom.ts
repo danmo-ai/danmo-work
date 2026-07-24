@@ -23,6 +23,8 @@ export const useWecomStore = defineStore('wecom', () => {
     loading.value = true
     try {
       status.value = await fetchJSON<WecomStatus>('/channels/wecom/status')
+    } catch {
+      status.value = null
     } finally {
       loading.value = false
     }
