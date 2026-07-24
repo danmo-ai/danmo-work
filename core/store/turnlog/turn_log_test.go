@@ -449,3 +449,37 @@ func TestLoadSessionMessagesHonorsRetainSkip(t *testing.T) {
 		t.Fatalf("expected NEW tool result, got %+v", msgs[1])
 	}
 }
+
+func TestLoadSessionMessagesRepairsRetainSkipInsideToolPair(t *testing.T) {
+	root := t.TempDir()
+	s := NewTurnLogStore(testProjector(root))
+
+	_ = s.Create("turn-1", "sess-mid-pair", "proj-a", "a", "g")
+	s.Append("turn-1", "user", map[string]any{"content": "u1"})
+	s.Append("turn-1", "assistant", map[string]any{
+		"tool_calls": []any{
+			map[string]any{"id": "c1", "name": "read_file", "arguments": map[string]any{"p": "a"}},
+		},
+	})
+	s.Append("turn-1", "tool_result", map[string]any{"call_id": "c1", "name": "read_file", "output": "ORPHAN"})
+	s.Append("turn-1", "assistant", map[string]any{
+		"tool_calls": []any{
+			map[string]any{"id": "c2", "name": "read_file", "arguments": map[string]any{"p": "b"}},
+		},
+	})
+	s.Append("turn-1", "tool_result", map[string]any{"call_id": "c2", "name": "read_file", "output": "PAIRED"})
+	s.EndTurn("turn-1", domain.TurnCompleted)
+
+	// A malformed/stale checkpoint skips user + c1 assistant but leaves c1's
+	// result at the head. Recovery must drop that orphan and keep the next pair.
+	msgs := s.LoadSessionMessages("sess-mid-pair", "turn-1", 2)
+	if len(msgs) != 2 {
+		t.Fatalf("want only the complete c2 pair, got %d %+v", len(msgs), msgs)
+	}
+	if msgs[0].Role != "assistant" || len(msgs[0].ToolCalls) != 1 || msgs[0].ToolCalls[0].ID != "c2" {
+		t.Fatalf("expected c2 assistant, got %+v", msgs[0])
+	}
+	if msgs[1].Role != "tool" || msgs[1].ToolCallID != "c2" || msgs[1].Content != "PAIRED" {
+		t.Fatalf("expected c2 result, got %+v", msgs[1])
+	}
+}

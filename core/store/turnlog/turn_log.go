@@ -277,9 +277,53 @@ func (s *TurnLogStore) LoadSessionMessages(sessionID, retainFromTurnID string, r
 			}
 			msgs = msgs[retainSkipMessages:]
 		}
+		// Checkpoint cursors should be written at message-block boundaries, but
+		// repair the retained slice defensively so a stale/manual cursor can
+		// never replay orphan calls or results to an LLM.
+		msgs = keepCompleteChatToolPairs(msgs)
 		out = append(out, msgs...)
 	}
 	return out
+}
+
+func keepCompleteChatToolPairs(messages []port.ChatMessage) []port.ChatMessage {
+	haveResult := make(map[string]bool)
+	for _, m := range messages {
+		if m.Role == "tool" && m.ToolCallID != "" {
+			haveResult[m.ToolCallID] = true
+		}
+	}
+
+	out := make([]port.ChatMessage, 0, len(messages))
+	keptCallIDs := make(map[string]bool)
+	for _, m := range messages {
+		if m.Role != "assistant" || len(m.ToolCalls) == 0 {
+			out = append(out, m)
+			continue
+		}
+		calls := make([]port.ChatToolCall, 0, len(m.ToolCalls))
+		for _, tc := range m.ToolCalls {
+			if haveResult[tc.ID] {
+				calls = append(calls, tc)
+				keptCallIDs[tc.ID] = true
+			}
+		}
+		if len(calls) == 0 && m.Content == "" {
+			continue
+		}
+		cp := m
+		cp.ToolCalls = calls
+		out = append(out, cp)
+	}
+
+	final := make([]port.ChatMessage, 0, len(out))
+	for _, m := range out {
+		if m.Role == "tool" && m.ToolCallID != "" && !keptCallIDs[m.ToolCallID] {
+			continue
+		}
+		final = append(final, m)
+	}
+	return final
 }
 
 func (s *TurnLogStore) LoadTurnMessages(turnID string) []port.ChatMessage {
