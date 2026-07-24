@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +60,7 @@ type Engine struct {
 	sessionPerm   map[string]sessionPermState
 	askUserWait   map[string]chan string
 	cancel        map[string]context.CancelFunc
+	activeTurns   map[string]string // session ID -> in-flight turn ID
 	agentChain    []string
 	readSkill     *builtin.ReadSkill
 }
@@ -140,6 +142,7 @@ func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, pro
 		sessionPerm:   make(map[string]sessionPermState),
 		askUserWait:   make(map[string]chan string),
 		cancel:        make(map[string]context.CancelFunc),
+		activeTurns:   make(map[string]string),
 	}
 	turnRunner.Approval = e
 	turnRunner.SandboxStatus = e.sandboxStatus
@@ -192,7 +195,14 @@ func (e *Engine) RegisterTool(h tool.Handler) {
 func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments []domain.UserAttachment) {
 	turnID := fmt.Sprintf("turn-%d", time.Now().UnixNano())
 	atts := append([]domain.UserAttachment(nil), attachments...)
+	if err := e.reserveSessionTurn(s.ID, turnID); err != nil {
+		e.stream.Publish(ctx, s.ID, turnID, domain.EventTurnFailed, domain.ErrorPayload{
+			Message: err.Error(), Kind: "conflict",
+		})
+		return
+	}
 	go func() {
+		defer e.releaseSessionTurn(s.ID, turnID)
 		turnCtx, cancel := context.WithCancel(context.Background())
 		e.mu.Lock()
 		e.cancel[turnID] = cancel
@@ -219,10 +229,14 @@ func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments
 
 func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, modelID string, attachments []domain.UserAttachment) (string, error) {
 	turnID := fmt.Sprintf("turn-%d", time.Now().UnixNano())
+	if err := e.reserveSessionTurn(sessionID, turnID); err != nil {
+		return "", err
+	}
 	atts := append([]domain.UserAttachment(nil), attachments...)
 	// Reset session status to active so UI shows "运行中"
 	e.updateSessionStatus(sessionID, domain.SessionStatusActive)
 	go func() {
+		defer e.releaseSessionTurn(sessionID, turnID)
 		s, err := e.sessions.Get(ctx, sessionID)
 		if err != nil {
 			return
@@ -294,8 +308,19 @@ func (e *Engine) CancelTurn(ctx context.Context, turnID string) {
 	})
 }
 
-func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
+func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error {
+	t, err := e.turns.Get(ctx, turnID)
+	if err != nil {
+		return fmt.Errorf("load turn %s: %w", turnID, err)
+	}
+	if t.SessionID != sessionID {
+		return fmt.Errorf("turn %s belongs to session %s, not %s", turnID, t.SessionID, sessionID)
+	}
+	if err := e.reserveSessionTurn(sessionID, turnID); err != nil {
+		return err
+	}
 	go func() {
+		defer e.releaseSessionTurn(sessionID, turnID)
 		cfg := e.loadRunCfg(ctx)
 
 		s, err := e.sessions.Get(ctx, sessionID)
@@ -389,6 +414,28 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) {
 		e.turnLog.EndTurn(turnID, turnStatus(err, rep))
 		e.afterTurn(sessionID, turnID, agentPtr.ID, rep, err, nil, s.ModelID)
 	}()
+	return nil
+}
+
+func (e *Engine) reserveSessionTurn(sessionID, turnID string) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.activeTurns == nil {
+		e.activeTurns = make(map[string]string)
+	}
+	if activeTurnID := e.activeTurns[sessionID]; activeTurnID != "" {
+		return fmt.Errorf("%w: session %s is running turn %s", port.ErrSessionTurnRunning, sessionID, activeTurnID)
+	}
+	e.activeTurns[sessionID] = turnID
+	return nil
+}
+
+func (e *Engine) releaseSessionTurn(sessionID, turnID string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.activeTurns[sessionID] == turnID {
+		delete(e.activeTurns, sessionID)
+	}
 }
 
 func historyHasUserGoal(history []Message, goal string) bool {
@@ -410,6 +457,11 @@ func (e *Engine) RecoverRunning(ctx context.Context) {
 	for _, t := range runningTurns {
 		runningBySession[t.SessionID] = append(runningBySession[t.SessionID], t)
 	}
+	// If a crash left multiple parent turns running for one session, recover the
+	// newest one and fail older conflicts instead of starting concurrent replay.
+	sort.SliceStable(runningTurns, func(i, j int) bool {
+		return runningTurns[i].ID > runningTurns[j].ID
+	})
 
 	// 1. Expire stale approvals and publish decided events so UI hides old buttons.
 	pendingApprovals, err := e.approvals.ListByStatus(ctx, "pending")
@@ -463,7 +515,13 @@ func (e *Engine) RecoverRunning(ctx context.Context) {
 		}
 		log.Printf("[RecoverRunning] auto-resuming turn %s (session %s) from %d tool pair entr(y/ies)", t.ID, t.SessionID, len(entries))
 		resumedSessions[t.SessionID] = true
-		e.ResumeTurn(ctx, t.SessionID, t.ID)
+		if err := e.ResumeTurn(ctx, t.SessionID, t.ID); err != nil {
+			log.Printf("[RecoverRunning] cannot resume turn %s: %v", t.ID, err)
+			if errors.Is(err, port.ErrSessionTurnRunning) {
+				_ = e.turns.UpdateStatus(ctx, t.ID, domain.TurnFailed)
+				e.turnLog.EndTurn(t.ID, domain.TurnFailed)
+			}
+		}
 	}
 
 	// 3. Recover stuck sessions that were not auto-resumed.

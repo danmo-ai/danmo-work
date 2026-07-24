@@ -113,8 +113,8 @@ func (m *SessionManager) CancelTurn(ctx context.Context, turnID string) {
 	m.engine.CancelTurn(ctx, turnID)
 }
 
-func (m *SessionManager) ResumeTurn(ctx context.Context, sessionID, turnID string) {
-	m.engine.ResumeTurn(ctx, sessionID, turnID)
+func (m *SessionManager) ResumeTurn(ctx context.Context, sessionID, turnID string) error {
+	return m.engine.ResumeTurn(ctx, sessionID, turnID)
 }
 
 func (m *SessionManager) ListTurns(sessionID string) []domain.TurnLog {

@@ -265,7 +265,14 @@ func listTurns(h *Handler) gin.HandlerFunc {
 
 func resumeTurn(h *Handler) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		h.Sessions.ResumeTurn(c, c.Param("id"), c.Param("turnID"))
+		if err := h.Sessions.ResumeTurn(c, c.Param("id"), c.Param("turnID")); err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, port.ErrSessionTurnRunning) {
+				status = http.StatusConflict
+			}
+			c.JSON(status, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"status": "resumed"})
 	}
 }
@@ -523,7 +530,11 @@ func sendMessage(h *Handler) gin.HandlerFunc {
 		}
 		turnID, err := h.Sessions.StartTurn(c, c.Param("id"), req)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			status := http.StatusBadRequest
+			if errors.Is(err, port.ErrSessionTurnRunning) {
+				status = http.StatusConflict
+			}
+			c.JSON(status, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"turnId": turnID})
