@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
 )
 
 // TestRenderHTML_LaunchLive requires a local Chrome/Edge/Chromium.

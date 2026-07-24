@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/service"
+	"danmo-work/core/domain"
+	"danmo-work/core/service"
 )
 
 // ReadSkill reads a skill's instructions or its bundled resource files.

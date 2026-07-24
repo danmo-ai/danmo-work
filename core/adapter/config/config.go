@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/paths"
-	"danqing-teams/core/port"
+	"danmo-work/core/domain"
+	"danmo-work/core/paths"
+	"danmo-work/core/port"
 
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -17,7 +17,7 @@ import (
 var _ port.SearchConfigStore = (*Loader)(nil)
 var _ port.ConfigStore = (*Loader)(nil)
 
-// Loader reads and writes the user-editable ~/.dq-teams/config.yaml configuration.
+// Loader reads and writes the user-editable ~/.danmo-work/config.yaml configuration.
 // It is the source of truth for settings that should be readable and editable
 // by all entry points (server, cli, tui, desktop). Viper is used for loading,
 // defaults, and environment-variable binding; yaml.v3 is used for writing so
@@ -29,8 +29,8 @@ type Loader struct {
 }
 
 // NewLoader returns a config loader for the given path.
-// If path is empty, it defaults to ~/.dq-teams/config.yaml.
-// Relative data paths are resolved against ~/.dq-teams (not cwd).
+// If path is empty, it defaults to ~/.danmo-work/config.yaml.
+// Relative data paths are resolved against ~/.danmo-work (not cwd).
 func NewLoader(path string) *Loader {
 	paths.MigrateLegacyOnce()
 	if path == "" {
@@ -90,20 +90,20 @@ func setDefaults(v *viper.Viper) {
 }
 
 func bindEnv(v *viper.Viper) {
-	_ = v.BindEnv("data.dir", "TEAMS_DATA_DIR")
-	_ = v.BindEnv("data.database", "TEAMS_DB_PATH")
-	_ = v.BindEnv("data.store", "TEAMS_STORE")
-	_ = v.BindEnv("server.listen_addr", "TEAMS_ADDR")
-	_ = v.BindEnv("runtime.auto_approve", "TEAMS_AUTO_APPROVE")
-	_ = v.BindEnv("runtime.sandbox.enabled", "TEAMS_SANDBOX_ENABLED")
-	_ = v.BindEnv("runtime.sandbox.mode", "TEAMS_SANDBOX_MODE")
-	_ = v.BindEnv("runtime.sandbox.network", "TEAMS_SANDBOX_NETWORK")
-	_ = v.BindEnv("runtime.sandbox.backend", "TEAMS_SANDBOX_BACKEND")
-	_ = v.BindEnv("runtime.sandbox.shell", "TEAMS_SANDBOX_SHELL")
-	_ = v.BindEnv("runtime.browser.enabled", "TEAMS_BROWSER_ENABLED")
-	_ = v.BindEnv("runtime.browser.executable_path", "TEAMS_BROWSER_EXECUTABLE")
-	_ = v.BindEnv("runtime.browser.cdp_url", "TEAMS_BROWSER_CDP_URL")
-	_ = v.BindEnv("instance.id", "TEAMS_INSTANCE_ID")
+	_ = v.BindEnv("data.dir", "WORK_DATA_DIR")
+	_ = v.BindEnv("data.database", "WORK_DB_PATH")
+	_ = v.BindEnv("data.store", "WORK_STORE")
+	_ = v.BindEnv("server.listen_addr", "WORK_ADDR")
+	_ = v.BindEnv("runtime.auto_approve", "WORK_AUTO_APPROVE")
+	_ = v.BindEnv("runtime.sandbox.enabled", "WORK_SANDBOX_ENABLED")
+	_ = v.BindEnv("runtime.sandbox.mode", "WORK_SANDBOX_MODE")
+	_ = v.BindEnv("runtime.sandbox.network", "WORK_SANDBOX_NETWORK")
+	_ = v.BindEnv("runtime.sandbox.backend", "WORK_SANDBOX_BACKEND")
+	_ = v.BindEnv("runtime.sandbox.shell", "WORK_SANDBOX_SHELL")
+	_ = v.BindEnv("runtime.browser.enabled", "WORK_BROWSER_ENABLED")
+	_ = v.BindEnv("runtime.browser.executable_path", "WORK_BROWSER_EXECUTABLE")
+	_ = v.BindEnv("runtime.browser.cdp_url", "WORK_BROWSER_CDP_URL")
+	_ = v.BindEnv("instance.id", "WORK_INSTANCE_ID")
 }
 
 // Path returns the resolved config file path.
@@ -166,7 +166,7 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 }
 
 // defaultMarketSources returns built-in official Git market sources.
-// Users can disable, reorder, or add entries in ~/.dq-teams/config.yaml.
+// Users can disable, reorder, or add entries in ~/.danmo-work/config.yaml.
 func defaultMarketSources() []domain.MarketSource {
 	return []domain.MarketSource{
 		{
@@ -195,7 +195,7 @@ func defaultMarketSources() []domain.MarketSource {
 }
 
 // defaultLLMPresets returns the built-in provider presets for mainstream
-// model vendors. Users can override these in ~/.dq-teams/config.yaml.
+// model vendors. Users can override these in ~/.danmo-work/config.yaml.
 func defaultLLMPresets() []domain.LLMProviderPreset {
 	return []domain.LLMProviderPreset{
 		{ID: "openai", Name: "OpenAI", Provider: "openai", BaseURL: "https://api.openai.com/v1", Icon: "🟢", Description: "GPT 系列、o 系列推理模型"},

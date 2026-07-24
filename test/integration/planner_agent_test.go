@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/store/turnlog"
+	"danmo-work/core/domain"
+	"danmo-work/core/store/turnlog"
 )
 const agentPlanner = "planner"
 

@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 var defaultExcludeDirs = []string{

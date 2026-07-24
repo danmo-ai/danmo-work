@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 func testProjector(root string) func(string) string {

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 type memSkillRepo struct {

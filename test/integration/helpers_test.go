@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"danqing-teams/core/bootstrap"
-	"danqing-teams/core/domain"
-	apiv1 "danqing-teams/server/api/v1"
+	"danmo-work/core/bootstrap"
+	"danmo-work/core/domain"
+	apiv1 "danmo-work/server/api/v1"
 )
 
 const llmTimeout = 120 * time.Second
@@ -25,10 +25,10 @@ const llmTimeout = 120 * time.Second
 func setupCore(t *testing.T) (*bootstrap.Core, string) {
 	t.Helper()
 	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "teams.db")
-	copyDB(t, "data/teams.db", dbPath)
+	dbPath := filepath.Join(tmpDir, "work.db")
+	copyDB(t, "data/work.db", dbPath)
 	dataDir := filepath.Join(tmpDir, "data")
-	t.Setenv("TEAMS_DB_PATH", dbPath)
+	t.Setenv("WORK_DB_PATH", dbPath)
 	core := bootstrap.New(bootstrap.Config{AutoApprove: true, DataDir: dataDir})
 	return core, dataDir
 }
@@ -36,10 +36,10 @@ func setupCore(t *testing.T) (*bootstrap.Core, string) {
 func setupCoreWithAutoApprove(t *testing.T, autoApprove bool) (*bootstrap.Core, string) {
 	t.Helper()
 	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "teams.db")
-	copyDB(t, "data/teams.db", dbPath)
+	dbPath := filepath.Join(tmpDir, "work.db")
+	copyDB(t, "data/work.db", dbPath)
 	dataDir := filepath.Join(tmpDir, "data")
-	t.Setenv("TEAMS_DB_PATH", dbPath)
+	t.Setenv("WORK_DB_PATH", dbPath)
 	core := bootstrap.New(bootstrap.Config{AutoApprove: autoApprove, DataDir: dataDir})
 	return core, dataDir
 }
@@ -78,9 +78,9 @@ func copyDB(t *testing.T, src, dst string) {
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		t.Fatal(err)
 	}
-	candidates := []string{src, "data/teams.db", "../../data/teams.db"}
+	candidates := []string{src, "data/work.db", "../../data/work.db"}
 	if home, err := os.UserHomeDir(); err == nil {
-		candidates = append(candidates, filepath.Join(home, ".dq-teams", "teams.db"))
+		candidates = append(candidates, filepath.Join(home, ".danmo-work", "work.db"))
 	}
 	var chosen string
 	for _, c := range candidates {
@@ -99,7 +99,7 @@ func copyDB(t *testing.T, src, dst string) {
 		}
 	}
 	if chosen == "" {
-		t.Fatalf("copy db: no seed teams.db found (tried %v)", candidates)
+		t.Fatalf("copy db: no seed work.db found (tried %v)", candidates)
 	}
 	cmd := exec.Command("cp", chosen, dst)
 	if out, err := cmd.CombinedOutput(); err != nil {

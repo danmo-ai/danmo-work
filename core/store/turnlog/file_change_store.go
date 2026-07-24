@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 const maxFileChangeDiffBytes = 4096

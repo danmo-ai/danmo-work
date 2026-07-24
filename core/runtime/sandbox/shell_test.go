@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"testing"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 func TestResolveShellUnix(t *testing.T) {

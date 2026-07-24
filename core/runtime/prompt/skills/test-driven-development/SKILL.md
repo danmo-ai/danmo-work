@@ -4,7 +4,7 @@ description: RED-GREEN-REFACTOR before writing production code. Use when impleme
 license: MIT
 compatibility: Requires project test runner via exec_shell when available; implementer may write tests with write/edit only
 metadata:
-  author: danqing-teams
+  author: danmo-work
   version: "1.0"
   category: coding
   adapted_from: "https://github.com/obra/superpowers/tree/main/skills/test-driven-development"

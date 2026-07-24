@@ -4,7 +4,7 @@ description: Write file-level, bite-sized implementation plans before coding. Us
 license: MIT
 compatibility: Requires read_file, grep, glob; write for saving the plan when requested
 metadata:
-  author: danqing-teams
+  author: danmo-work
   version: "1.0"
   category: coding
   adapted_from: "https://github.com/obra/superpowers/tree/main/skills/writing-plans"

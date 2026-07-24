@@ -4,7 +4,7 @@ description: Clarify intent, requirements, and design before building. Use befor
 license: MIT
 compatibility: Requires read_file, grep, glob; web_search optional
 metadata:
-  author: danqing-teams
+  author: danmo-work
   version: "1.0"
   category: work
   adapted_from: "https://github.com/obra/superpowers/tree/main/skills/brainstorming"

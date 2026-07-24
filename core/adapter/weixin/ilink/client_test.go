@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"danqing-teams/core/adapter/weixin/ilink"
+	"danmo-work/core/adapter/weixin/ilink"
 )
 
 func TestBuildClientVersion(t *testing.T) {

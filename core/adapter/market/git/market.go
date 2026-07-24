@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
 )
 
 var _ port.Market = (*Market)(nil)
@@ -268,7 +268,7 @@ func (m *Market) httpGet(ctx context.Context, url string) ([]byte, error) {
 			req.Header.Set("Authorization", "token "+m.source.Token)
 		}
 	}
-	req.Header.Set("User-Agent", "danqing-teams-market")
+	req.Header.Set("User-Agent", "danmo-work-market")
 	resp, err := m.client.Do(req)
 	if err != nil {
 		return nil, err

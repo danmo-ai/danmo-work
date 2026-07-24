@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 func TestBuildSkillMetadataIncludesCategory(t *testing.T) {

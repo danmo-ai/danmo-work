@@ -15,14 +15,14 @@ export HARBOR_N_CONCURRENT=1
 export HARBOR_TIMEOUT_MULT="${HARBOR_TIMEOUT_MULT:-2}"
 export HARBOR_AGENT_TIMEOUT_MULT="${HARBOR_AGENT_TIMEOUT_MULT:-3}"
 
-if [[ -z "${TEAMS_API_KEY:-}" && -f "$HOME/.dq-teams/teams.db" ]]; then
-  export TEAMS_API_KEY="$(sqlite3 "$HOME/.dq-teams/teams.db" "SELECT api_key FROM llm_configs WHERE name='deepseek' LIMIT 1;")"
+if [[ -z "${WORK_API_KEY:-}" && -f "$HOME/.danmo-work/work.db" ]]; then
+  export WORK_API_KEY="$(sqlite3 "$HOME/.danmo-work/work.db" "SELECT api_key FROM llm_configs WHERE name='deepseek' LIMIT 1;")"
 fi
-export TEAMS_BASE_URL="${TEAMS_BASE_URL:-https://api.deepseek.com}"
-export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$TEAMS_API_KEY}"
-export OPENAI_API_KEY="${OPENAI_API_KEY:-$TEAMS_API_KEY}"
-export OPENAI_BASE_URL="${OPENAI_BASE_URL:-${TEAMS_BASE_URL%/}/v1}"
-export LLM_API_KEY="${LLM_API_KEY:-$TEAMS_API_KEY}"
+export WORK_BASE_URL="${WORK_BASE_URL:-https://api.deepseek.com}"
+export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$WORK_API_KEY}"
+export OPENAI_API_KEY="${OPENAI_API_KEY:-$WORK_API_KEY}"
+export OPENAI_BASE_URL="${OPENAI_BASE_URL:-${WORK_BASE_URL%/}/v1}"
+export LLM_API_KEY="${LLM_API_KEY:-$WORK_API_KEY}"
 export LLM_BASE_URL="${LLM_BASE_URL:-$OPENAI_BASE_URL}"
 
 # OpenCode: native deepseek provider

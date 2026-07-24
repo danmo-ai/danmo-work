@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 // mcpClient is a minimal MCP (Model Context Protocol) client that connects
@@ -92,7 +92,7 @@ func (c *mcpClient) discoverStdio(ctx context.Context) ([]domain.MCPToolDef, err
 	if err := sendRequest(stdin, 1, "initialize", map[string]any{
 		"protocolVersion": "2024-11-05",
 		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]any{"name": "danqing-teams", "version": "1.0.0"},
+		"clientInfo":      map[string]any{"name": "danmo-work", "version": "1.0.0"},
 	}); err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func (c *mcpClient) discoverHTTP(ctx context.Context) ([]domain.MCPToolDef, erro
 		"params": map[string]any{
 			"protocolVersion": "2024-11-05",
 			"capabilities":    map[string]any{},
-			"clientInfo":      map[string]any{"name": "danqing-teams", "version": "1.0.0"},
+			"clientInfo":      map[string]any{"name": "danmo-work", "version": "1.0.0"},
 		},
 	}
 	if err := c.httpPost(ctx, client, url, initReq); err != nil {

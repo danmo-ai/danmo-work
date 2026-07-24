@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 
 	"github.com/gin-gonic/gin"
 )

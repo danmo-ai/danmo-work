@@ -61,7 +61,7 @@ License: MIT (see repository NOTICE.md / LICENSE)
 
 **Default-installed** with the Windows desktop NSIS package:
 1. \`pack-windows-desktop\` downloads \`coreutils.exe\` into this folder (required).
-2. The installer copies it to \`%USERPROFILE%\\.dq-teams\\bin\\coreutils\\\` and runs
+2. The installer copies it to \`%USERPROFILE%\\.danmo-work\\bin\\coreutils\\\` and runs
    \`coreutils-manager refresh\` to create applet hardlinks (\`ls.exe\`, \`cat.exe\`, …).
 3. Desktop / backend prepend that \`bin\\\` directory to \`exec_shell\` PATH.
 

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/store/turnlog"
+	"danmo-work/core/domain"
+	"danmo-work/core/store/turnlog"
 )
 const agentDefault = "default"
 

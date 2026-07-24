@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"danqing-teams/core/port"
+	"danmo-work/core/port"
 )
 
 var _ port.LLMProvider = (*MockProvider)(nil)

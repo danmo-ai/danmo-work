@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"testing"
 
-	"danqing-teams/core/adapter/llm"
-	"danqing-teams/core/domain"
-	"danqing-teams/core/store/turnlog"
+	"danmo-work/core/adapter/llm"
+	"danmo-work/core/domain"
+	"danmo-work/core/store/turnlog"
 )
 
 func TestMergeFileChangesLastOpWins(t *testing.T) {

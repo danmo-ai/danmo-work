@@ -1,12 +1,12 @@
 # Danmo Work configuration file
-# Default location: ~/.dq-teams/config.yaml
+# Default location: ~/.danmo-work/config.yaml
 # All entry points (server, cli, tui, desktop) share this home directory.
-# Override with TEAMS_CONFIG / TEAMS_DATA_DIR / TEAMS_DB_PATH if needed.
+# Override with WORK_CONFIG / WORK_DATA_DIR / WORK_DB_PATH if needed.
 
-# Data and persistence paths (defaults resolve under ~/.dq-teams/).
+# Data and persistence paths (defaults resolve under ~/.danmo-work/).
 data:
-  dir: "data"                 # -> ~/.dq-teams/data
-  database: "teams.db"        # -> ~/.dq-teams/teams.db
+  dir: "data"                 # -> ~/.danmo-work/data
+  database: "work.db"        # -> ~/.danmo-work/work.db
   store: "sqlite"             # sqlite only today; memory backend reserved for future use.
 
 # HTTP API server settings.
@@ -27,7 +27,7 @@ runtime:
   # Shell (Windows host/win-token only): auto | bash | cmd
   # auto prefers bundled/system Microsoft Coreutils with cmd, then Git Bash, else cmd.
   # WSL2 always uses bash inside WSL.
-  # Windows desktop NSIS installs Coreutils by default into ~/.dq-teams/bin/coreutils/.
+  # Windows desktop NSIS installs Coreutils by default into ~/.danmo-work/bin/coreutils/.
   sandbox:
     enabled: true
     mode: "workspace-write"

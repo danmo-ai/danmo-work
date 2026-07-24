@@ -1,8 +1,8 @@
 package service
 
 import (
-	"danqing-teams/core/domain"
-	"danqing-teams/core/paths"
+	"danmo-work/core/domain"
+	"danmo-work/core/paths"
 )
 
 // ScanFilesystemSkills loads Agentskills-compliant skills from user and project

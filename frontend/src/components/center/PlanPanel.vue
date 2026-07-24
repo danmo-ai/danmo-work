@@ -146,7 +146,7 @@ function priorityColor(priority: TodoItem['priority']): string {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--teams-glass-bg);
+  background: var(--work-glass-bg);
   font-size: var(--dq-font-size-body);
 }
 

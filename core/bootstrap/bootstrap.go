@@ -5,21 +5,21 @@ import (
 	"os"
 	"path/filepath"
 
-	"danqing-teams/core/adapter/config"
-	"danqing-teams/core/adapter/feishu"
-	"danqing-teams/core/adapter/llm"
-	gitmarket "danqing-teams/core/adapter/market/git"
-	"danqing-teams/core/domain"
-	"danqing-teams/core/paths"
-	"danqing-teams/core/port"
-	dqruntime "danqing-teams/core/runtime"
-	dqbrowser "danqing-teams/core/runtime/browser"
-	"danqing-teams/core/runtime/prompt"
-	"danqing-teams/core/runtime/sandbox"
-	"danqing-teams/core/runtime/tool/builtin"
-	"danqing-teams/core/service"
-	sqlitestore "danqing-teams/core/store/sqlite"
-	"danqing-teams/core/store/turnlog"
+	"danmo-work/core/adapter/config"
+	"danmo-work/core/adapter/feishu"
+	"danmo-work/core/adapter/llm"
+	gitmarket "danmo-work/core/adapter/market/git"
+	"danmo-work/core/domain"
+	"danmo-work/core/paths"
+	"danmo-work/core/port"
+	dqruntime "danmo-work/core/runtime"
+	dqbrowser "danmo-work/core/runtime/browser"
+	"danmo-work/core/runtime/prompt"
+	"danmo-work/core/runtime/sandbox"
+	"danmo-work/core/runtime/tool/builtin"
+	"danmo-work/core/service"
+	sqlitestore "danmo-work/core/store/sqlite"
+	"danmo-work/core/store/turnlog"
 )
 
 type Config struct {
@@ -99,7 +99,7 @@ func New(cfg Config) *Core {
 		appCfg.Data.Database = paths.ResolveAgainstHome(appCfg.Data.Database)
 	}
 	if appCfg.Instance.ID == "" {
-		appCfg.Instance.ID = os.Getenv("TEAMS_INSTANCE_ID")
+		appCfg.Instance.ID = os.Getenv("WORK_INSTANCE_ID")
 		if appCfg.Instance.ID == "" {
 			appCfg.Instance.ID, _ = os.Hostname()
 		}

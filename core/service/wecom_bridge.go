@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"danqing-teams/core/adapter/wecom"
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
+	"danmo-work/core/adapter/wecom"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
 )
 
 // WecomPeerStore uses config project_id + generic channel_bindings table.

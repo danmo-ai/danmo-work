@@ -1,7 +1,7 @@
 package domain
 
 // ConfigFile is the full user-editable configuration that is persisted to
-// ~/.dq-teams/config.yaml. It mirrors the file layout so the API can expose and
+// ~/.danmo-work/config.yaml. It mirrors the file layout so the API can expose and
 // update sections independently.
 type ConfigFile struct {
 	Data      ConfigDataSection      `json:"data" mapstructure:"data"`

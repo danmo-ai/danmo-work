@@ -30,9 +30,9 @@ GH_TOKEN=$(gh auth token) make eval-harbor-sync-tb2
 make eval-harbor-bin
 
 # 4a) 冒烟：1 题 oracle + DanQing
-export TEAMS_MODEL=deepseek/deepseek-v4-flash
-export TEAMS_API_KEY=...          # 或从 ~/.dq-teams/teams.db 读 deepseek
-export TEAMS_BASE_URL=https://api.deepseek.com
+export WORK_MODEL=deepseek/deepseek-v4-flash
+export WORK_API_KEY=...          # 或从 ~/.danmo-work/work.db 读 deepseek
+export WORK_BASE_URL=https://api.deepseek.com
 make eval-harbor-smoke
 
 # 4b) 全量：oracle 再 DanQing（89 题，很久）
@@ -56,7 +56,7 @@ cat evals/dq_harbor/tasks/.tb2-synced
 ```bash
 # 需已 sync + base（OpenCode）+ bin（DanQing）
 ./evals/dq_harbor/run_suite.sh oracle
-./evals/dq_harbor/run_suite.sh dq_harbor.agent:DanQingAgent
+./evals/dq_harbor/run_suite.sh dq_harbor.agent:DanmoWorkAgent
 ./evals/dq_harbor/run_suite.sh opencode          # → OpenCodePrebuilt
 ./evals/dq_harbor/run_suite.sh openhands-sdk
 ```
@@ -68,7 +68,7 @@ cat evals/dq_harbor/tasks/.tb2-synced
 | `HARBOR_MAX_TASKS` | 只跑排序后前 N 题 | `HARBOR_MAX_TASKS=3 ./evals/dq_harbor/run_suite.sh oracle` |
 | `HARBOR_TASKS` | 指定题名（空格分隔） | `HARBOR_TASKS="fix-git openssl-selfsigned-cert" ./evals/dq_harbor/run_suite.sh oracle` |
 | `HARBOR_N_CONCURRENT` | 并发（默认 1） | `HARBOR_N_CONCURRENT=2 ./evals/dq_harbor/run_suite.sh oracle` |
-| `HARBOR_MODEL` / `TEAMS_MODEL` | 非 oracle 必填 | `deepseek/deepseek-v4-flash` |
+| `HARBOR_MODEL` / `WORK_MODEL` | 非 oracle 必填 | `deepseek/deepseek-v4-flash` |
 
 单题直接 Harbor：
 
@@ -85,7 +85,7 @@ harbor run --path "$TASK" --agent oracle --env docker --n-concurrent 1
 |--------|--------|
 | `make eval-harbor-base` | 构建 `dq-harbor-base:local` |
 | `make eval-harbor-sync-tb2` | 同步 89 题并改写 Dockerfile / 清 `docker_image` |
-| `make eval-harbor-bin` | `out/eval/danqing-teams-cli`（linux/`EVAL_GOARCH`） |
+| `make eval-harbor-bin` | `out/eval/danmo-work-cli`（linux/`EVAL_GOARCH`） |
 | `make eval-harbor-smoke` | sync + base + bin → 1 题 oracle + DanQing |
 | `make eval-harbor-suite` | sync + bin → 全量 oracle 再 DanQing |
 | `make eval-harbor-compare` | 对单一对比 agent 跑全套（默认 `opencode`） |

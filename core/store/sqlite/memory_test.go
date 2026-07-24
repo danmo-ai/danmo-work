@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 func TestMemoryRepoUpsertAndScopeIsolation(t *testing.T) {

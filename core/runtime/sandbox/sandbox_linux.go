@@ -11,8 +11,8 @@ import (
 	"strings"
 	"syscall"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
 )
 
 func selectBackend(cfg domain.ConfigSandboxSection) (domain.SandboxBackend, runner, bool, string, []string) {
@@ -129,8 +129,8 @@ func (landlockRunner) run(ctx context.Context, opts port.SandboxRunOptions, cfg 
 	cmd.Dir = workdir
 	env := append([]string{}, opts.Env...)
 	env = append(env,
-		"TEAMS_SB_WORKDIR="+workdir,
-		"TEAMS_SB_MODE="+string(cfg.Mode),
+		"WORK_SB_WORKDIR="+workdir,
+		"WORK_SB_MODE="+string(cfg.Mode),
 	)
 	cmd.Env = env
 	out, err := cmd.CombinedOutput()
@@ -147,10 +147,10 @@ func MaybeReexec() bool {
 	if len(os.Args) < 2 || os.Args[1] != reexecArg {
 		return false
 	}
-	workdir := os.Getenv("TEAMS_SB_WORKDIR")
-	mode := domain.SandboxMode(os.Getenv("TEAMS_SB_MODE"))
+	workdir := os.Getenv("WORK_SB_WORKDIR")
+	mode := domain.SandboxMode(os.Getenv("WORK_SB_MODE"))
 	if workdir == "" {
-		fmt.Fprintln(os.Stderr, "sandbox: missing TEAMS_SB_WORKDIR")
+		fmt.Fprintln(os.Stderr, "sandbox: missing WORK_SB_WORKDIR")
 		os.Exit(2)
 	}
 	dash := -1

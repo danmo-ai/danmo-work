@@ -4,7 +4,7 @@ description: Standard Git workflow operations including branching, committing, r
 license: MIT
 compatibility: Requires git CLI and access to the project repository
 metadata:
-  author: danqing-teams
+  author: danmo-work
   version: "1.1"
   category: coding
   adapted_from: "https://github.com/obra/superpowers/tree/main/skills/using-git-worktrees"

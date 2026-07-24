@@ -4,7 +4,7 @@ description: Create new skills, modify and improve existing skills for Danmo Wor
 license: Apache-2.0
 compatibility: Requires Danmo Work 1.0+
 metadata:
-  author: danqing-teams
+  author: danmo-work
   version: "1.0"
   category: general
   based_on: anthropics/skills skill-creator
@@ -35,11 +35,11 @@ Place a skill directory (with `SKILL.md`) under one of these roots. They are sca
 | Path | Scope |
 |------|-------|
 | `~/.agents/skills/` | User |
-| `~/.dq-teams/skills/` | User |
+| `~/.danmo-work/skills/` | User |
 | `<projectRoot>/.agents/skills/` | Project |
-| `<projectRoot>/.dq-teams/skills/` | Project |
+| `<projectRoot>/.danmo-work/skills/` | Project |
 
-Later paths override the same skill ID. Prefer project `.dq-teams/skills/` for repo-specific workflows.
+Later paths override the same skill ID. Prefer project `.danmo-work/skills/` for repo-specific workflows.
 
 ### SKILL.md Format
 

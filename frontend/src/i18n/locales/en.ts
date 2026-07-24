@@ -495,7 +495,7 @@ export default {
   desktop: {
     startingBackend: 'Starting backend…',
     backendStartTimeout:
-      'Backend failed to start in time. Quit and retry; if it persists, check ~/.dq-teams/backend.log',
+      'Backend failed to start in time. Quit and retry; if it persists, check ~/.danmo-work/backend.log',
     backendStartFailed: 'Failed to start backend',
   },
   updater: {

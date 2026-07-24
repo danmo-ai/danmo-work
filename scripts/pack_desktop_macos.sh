@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=out_paths.sh
 source "$SCRIPT_DIR/out_paths.sh"
 
-APP_NAME="${DQ_APP_NAME:-danqing-teams}"
+APP_NAME="${DQ_APP_NAME:-danmo-work}"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$DQ_DESKTOP_CARGO}"
 dq_ensure_out_layout
 
@@ -79,12 +79,12 @@ cp -R "$BUNDLE_SRC"/* "$DQ_DESKTOP_BUNDLE/"
 # Tauri 2 externalBin may not bundle correctly, so we do it manually
 APP_BUNDLE=$(find "$DQ_DESKTOP_BUNDLE" -name "*.app" -maxdepth 2 -type d 2>/dev/null | head -1)
 if [[ -n "$APP_BUNDLE" ]]; then
-  SIDECAR_BIN="$DQ_ROOT/desktop/src-tauri/bin/danqing-teams-backend-$(rustc -vV | sed -n 's|host: ||p')"
+  SIDECAR_BIN="$DQ_ROOT/desktop/src-tauri/bin/danmo-work-backend-$(rustc -vV | sed -n 's|host: ||p')"
   if [[ -f "$SIDECAR_BIN" ]]; then
     cp "$SIDECAR_BIN" "$APP_BUNDLE/Contents/MacOS/"
     echo "==> Injected sidecar: $(basename "$SIDECAR_BIN") -> $APP_BUNDLE/Contents/MacOS/"
     # Tauri externalBin also copies a sidecar without target triple; remove duplicate
-    rm -f "$APP_BUNDLE/Contents/MacOS/danqing-teams-backend"
+    rm -f "$APP_BUNDLE/Contents/MacOS/danmo-work-backend"
     echo "==> Removed duplicate sidecar without target triple"
     # Re-sign the .app after injecting sidecar (injection breaks code signature)
     codesign --force --deep --sign - "$APP_BUNDLE" 2>/dev/null && echo "==> Re-signed .app bundle" || echo "WARNING: codesign failed"

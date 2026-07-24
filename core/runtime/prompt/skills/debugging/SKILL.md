@@ -4,7 +4,7 @@ description: Systematic root-cause debugging before proposing fixes, plus eviden
 license: MIT
 compatibility: Requires read_file, grep, and usually exec_shell
 metadata:
-  author: danqing-teams
+  author: danmo-work
   version: "2.0"
   category: coding
   adapted_from: "https://github.com/obra/superpowers/tree/main/skills/systematic-debugging"

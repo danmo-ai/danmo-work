@@ -11,7 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 const (

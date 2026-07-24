@@ -4,11 +4,11 @@ Usage:
   make eval-harbor-bin
   make eval-harbor-sync-tb2
   PYTHONPATH=evals harbor run --path evals/dq_harbor/tasks/<task> \\
-    --agent dq_harbor.agent:DanQingAgent \\
+    --agent dq_harbor.agent:DanmoWorkAgent \\
     --model deepseek/deepseek-v4-flash \\
     --n-concurrent 1 \\
-    --ae TEAMS_API_KEY=$TEAMS_API_KEY \\
-    --ae TEAMS_BASE_URL=$TEAMS_BASE_URL
+    --ae WORK_API_KEY=$WORK_API_KEY \\
+    --ae WORK_BASE_URL=$WORK_BASE_URL
 """
 
 from __future__ import annotations
@@ -28,14 +28,14 @@ from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_HOST_BIN = REPO_ROOT / "out" / "eval" / "danqing-teams-cli"
-CONTAINER_BIN = "/usr/local/bin/danqing-teams-cli"
+DEFAULT_HOST_BIN = REPO_ROOT / "out" / "eval" / "danmo-work-cli"
+CONTAINER_BIN = "/usr/local/bin/danmo-work-cli"
 CONTAINER_CONFIG = "/installed-agent/config.yaml"
 CONTAINER_DATA = "/installed-agent/data"
 
 
-class DanQingAgent(BaseInstalledAgent):
-    """Runs danqing-teams-cli headless inside the Harbor task container."""
+class DanmoWorkAgent(BaseInstalledAgent):
+    """Runs danmo-work-cli headless inside the Harbor task container."""
 
     SUPPORTS_ATIF = False
 
@@ -81,7 +81,7 @@ class DanQingAgent(BaseInstalledAgent):
 # Generated for Harbor smoke eval — do not use as a product config.
 data:
   dir: "/installed-agent/data"
-  database: "/installed-agent/teams.db"
+  database: "/installed-agent/work.db"
   store: "sqlite"
 runtime:
   auto_approve: true
@@ -100,19 +100,19 @@ runtime:
 
     def _run_env(self) -> dict[str, str]:
         env: dict[str, str] = {
-            "TEAMS_CONFIG": CONTAINER_CONFIG,
-            "TEAMS_DATA_DIR": CONTAINER_DATA,
-            "TEAMS_DB_PATH": "/installed-agent/teams.db",
-            "TEAMS_AUTO_APPROVE": "true",
-            "TEAMS_EVAL_MODE": "1",
-            "TEAMS_SANDBOX_NETWORK": "allow",
+            "WORK_CONFIG": CONTAINER_CONFIG,
+            "WORK_DATA_DIR": CONTAINER_DATA,
+            "WORK_DB_PATH": "/installed-agent/work.db",
+            "WORK_AUTO_APPROVE": "true",
+            "WORK_EVAL_MODE": "1",
+            "WORK_SANDBOX_NETWORK": "allow",
         }
         # Forward common provider keys into the container.
         for key in (
-            "TEAMS_API_KEY",
-            "TEAMS_BASE_URL",
-            "TEAMS_MODEL",
-            "TEAMS_PROVIDER_TYPE",
+            "WORK_API_KEY",
+            "WORK_BASE_URL",
+            "WORK_MODEL",
+            "WORK_PROVIDER_TYPE",
             "OPENAI_API_KEY",
             "ANTHROPIC_API_KEY",
             "OPENAI_BASE_URL",
@@ -120,10 +120,10 @@ runtime:
             val = self._get_env(key)
             if val:
                 env[key] = val
-                if key == "OPENAI_BASE_URL" and "TEAMS_BASE_URL" not in env:
-                    env["TEAMS_BASE_URL"] = val
+                if key == "OPENAI_BASE_URL" and "WORK_BASE_URL" not in env:
+                    env["WORK_BASE_URL"] = val
         if self.model_name:
-            env["TEAMS_MODEL"] = self.model_name
+            env["WORK_MODEL"] = self.model_name
         return env
 
     @with_prompt_template
@@ -134,11 +134,11 @@ runtime:
         environment: BaseEnvironment,
         context: AgentContext,
     ) -> None:
-        model = self.model_name or self._get_env("TEAMS_MODEL") or ""
+        model = self.model_name or self._get_env("WORK_MODEL") or ""
         if not model:
             raise RuntimeError(
                 "No model configured. Pass --model provider/model "
-                "(e.g. deepseek/deepseek-chat) or set TEAMS_MODEL."
+                "(e.g. deepseek/deepseek-chat) or set WORK_MODEL."
             )
 
         report_path = "/logs/agent/report.json"
@@ -158,11 +158,11 @@ runtime:
             f"--report {shlex.quote(report_path)} "
             f"--logs-dir {shlex.quote(logs_dir)}"
         )
-        base_url = self._get_env("TEAMS_BASE_URL") or self._get_env("OPENAI_BASE_URL")
+        base_url = self._get_env("WORK_BASE_URL") or self._get_env("OPENAI_BASE_URL")
         if base_url:
             cmd += f" --base-url {shlex.quote(base_url)}"
         api_key = (
-            self._get_env("TEAMS_API_KEY")
+            self._get_env("WORK_API_KEY")
             or self._get_env("OPENAI_API_KEY")
             or self._get_env("ANTHROPIC_API_KEY")
         )

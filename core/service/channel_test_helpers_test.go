@@ -1,9 +1,9 @@
 package service_test
 
 import (
-	"danqing-teams/core/port"
-	"danqing-teams/core/service"
-	sqlitestore "danqing-teams/core/store/sqlite"
+	"danmo-work/core/port"
+	"danmo-work/core/service"
+	sqlitestore "danmo-work/core/store/sqlite"
 )
 
 func testIngress(st *sqlitestore.Store, sessions *service.SessionManager, pm *service.ProjectManager, cm *service.ConfigManager) *service.ChannelIngressService {

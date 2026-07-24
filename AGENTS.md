@@ -49,7 +49,7 @@ Backend **7801**, frontend **5801** (`78xx` / `58xx`, suffix `01` = Teams). See 
 
 ```
 out/frontend/dist/   # Vite production
-out/server/          # Go binaries (danqing-teams, danqing-teams-cli, danqing-teams-tui)
+out/server/          # Go binaries (danmo-work, danmo-work-cli, danmo-work-tui)
 out/desktop/bundle/  # Tauri installers
 out/desktop/cargo/   # Cargo intermediate
 out/dist/            # pack-linux-server tar.gz
@@ -60,21 +60,21 @@ out/run/             # dev PIDs, logs, wrappers (DQ_DEV markers)
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `TEAMS_CONFIG` | `~/.dq-teams/config.yaml` | YAML config path |
-| `TEAMS_DB_PATH` | `~/.dq-teams/teams.db` | SQLite database |
-| `TEAMS_DATA_DIR` | `~/.dq-teams/data` | Projects / turn logs |
+| `WORK_CONFIG` | `~/.danmo-work/config.yaml` | YAML config path |
+| `WORK_DB_PATH` | `~/.danmo-work/work.db` | SQLite database |
+| `WORK_DATA_DIR` | `~/.danmo-work/data` | Projects / turn logs |
 | `DQ_BACKEND_PORT` | `7801` | Injected by dev scripts |
 | `DQ_FRONTEND_PORT` | `5801` | Injected by dev scripts |
-| `DQ_APP_NAME` | `danqing-teams` | App name for build scripts |
+| `DQ_APP_NAME` | `danmo-work` | App name for build scripts |
 
-### User data (`~/.dq-teams/`)
+### User data (`~/.danmo-work/`)
 
 Server, CLI, TUI, and desktop all use the same home by default:
 
 ```
-~/.dq-teams/
+~/.danmo-work/
   config.yaml
-  teams.db
+  work.db
   data/          # projects, turn logs
   skills/        # optional user custom skills (scanned each turn)
   bin/           # desktop sidecar binary
@@ -83,7 +83,7 @@ Server, CLI, TUI, and desktop all use the same home by default:
 ```
 
 Custom skills (Agentskills layout) are also read from `~/.agents/skills/`,
-`<project>/.dq-teams/skills/`, and `<project>/.agents/skills/` on each new turn
+`<project>/.danmo-work/skills/`, and `<project>/.agents/skills/` on each new turn
 (memory only, not SQLite).
 
 Agent durable memories live in SQLite (`memories` table) via
@@ -91,7 +91,7 @@ Agent durable memories live in SQLite (`memories` table) via
 workspace **Memory** tab. Config: `runtime.memory.read_top_k`.
 
 On first launch, existing data may be migrated from
-`~/Library/Application Support/com.danqing.teams/` or `./data/teams.db`.
+`~/Library/Application Support/com.danmo.work/` or `./data/work.db`.
 
 ## Desktop (Tauri)
 
@@ -104,7 +104,7 @@ Builds Go backend as a Tauri sidecar binary (`scripts/build_sidecar.sh`), inject
 `.github/workflows/release.yml` builds on tag `v*` or `workflow_dispatch`:
 
 - macOS desktop → `out/desktop/bundle/**/*.dmg, *.app`
-- Linux server → `out/dist/danqing-teams-linux-*.tar.gz`
+- Linux server → `out/dist/danmo-work-linux-*.tar.gz`
 - Windows desktop → `out/desktop/bundle/**/*.exe`
 
 Checks out `danmo-ai/dq-ui` alongside the repo.

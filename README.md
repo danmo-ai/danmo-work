@@ -37,7 +37,7 @@ Or run from source (needs sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui)):
 make dev-web   # → http://localhost:5801/app/
 ```
 
-Add an LLM API key in the UI (or `~/.dq-teams/config.yaml`). See [Quick start](#quick-start) for the full flow.
+Add an LLM API key in the UI (or `~/.danmo-work/config.yaml`). See [Quick start](#quick-start) for the full flow.
 
 ## See it
 
@@ -271,8 +271,8 @@ make stop             # stop all DQ_DEV processes
 Copy and edit config on first run:
 
 ```bash
-mkdir -p ~/.dq-teams
-cp config.example.yaml ~/.dq-teams/config.yaml
+mkdir -p ~/.danmo-work
+cp config.example.yaml ~/.danmo-work/config.yaml
 # Add LLM provider API keys in the UI or config
 ```
 
@@ -292,7 +292,7 @@ make clean                  # rm -rf out/
 ```text
 out/
   frontend/dist/     # Vite production build (served at /app/)
-  server/            # danqing-teams, danqing-teams-cli, danqing-teams-tui
+  server/            # danmo-work, danmo-work-cli, danmo-work-tui
   desktop/bundle/    # Tauri installers
   desktop/cargo/     # Cargo intermediate
   dist/              # Linux server release tarball
@@ -319,7 +319,7 @@ make eval-harbor-base                                   # dq-harbor-base:local
 GH_TOKEN=$(gh auth token) make eval-harbor-sync-tb2     # → evals/dq_harbor/tasks/ (89, gitignored)
 make eval-harbor-bin
 
-export TEAMS_MODEL=deepseek/deepseek-v4-flash TEAMS_API_KEY=... TEAMS_BASE_URL=https://api.deepseek.com
+export WORK_MODEL=deepseek/deepseek-v4-flash WORK_API_KEY=... WORK_BASE_URL=https://api.deepseek.com
 make eval-harbor-smoke                                  # 1-task smoke
 # make eval-harbor-suite                                # full 89: oracle then DanQing
 ./evals/dq_harbor/compare_agents.sh                     # DanQing vs OpenCode vs OpenHands
@@ -329,14 +329,14 @@ make eval-harbor-smoke                                  # 1-task smoke
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `TEAMS_CONFIG` | `~/.dq-teams/config.yaml` | YAML config path |
-| `TEAMS_DB_PATH` | `~/.dq-teams/teams.db` | SQLite database |
-| `TEAMS_DATA_DIR` | `~/.dq-teams/data` | Projects / turn logs |
+| `WORK_CONFIG` | `~/.danmo-work/config.yaml` | YAML config path |
+| `WORK_DB_PATH` | `~/.danmo-work/work.db` | SQLite database |
+| `WORK_DATA_DIR` | `~/.danmo-work/data` | Projects / turn logs |
 | `DQ_BACKEND_PORT` | `7801` | Dev backend port |
 | `DQ_FRONTEND_PORT` | `5801` | Dev frontend port |
 | `VITE_API_BASE_URL` | `""` | Frontend API base (empty = same origin) |
 
-User data lives under `~/.dq-teams/` for server, CLI, TUI, and desktop. On first launch, data may migrate from `~/Library/Application Support/com.danqing.teams/` or `./data/teams.db`.
+User data lives under `~/.danmo-work/` for server, CLI, TUI, and desktop. On first launch, data may migrate from `~/Library/Application Support/com.danmo.work/` or `./data/work.db`.
 
 ### Custom skill directories
 
@@ -345,11 +345,11 @@ Each new turn scans these Agentskills directories (`skill-name/SKILL.md`) in mem
 | Path | Scope |
 |------|-------|
 | `~/.agents/skills/` | User |
-| `~/.dq-teams/skills/` | User |
+| `~/.danmo-work/skills/` | User |
 | `<projectRoot>/.agents/skills/` | Project |
-| `<projectRoot>/.dq-teams/skills/` | Project |
+| `<projectRoot>/.danmo-work/skills/` | Project |
 
-Later paths override earlier ones on skill ID collision (project `.dq-teams` wins). Disk changes apply on the next turn.
+Later paths override earlier ones on skill ID collision (project `.danmo-work` wins). Disk changes apply on the next turn.
 
 ## Desktop (Tauri)
 
@@ -368,7 +368,7 @@ SKIP_BACKEND=1 make dev-desktop
 | Job | Artifact |
 |-----|----------|
 | macOS desktop | `out/desktop/bundle/*.dmg`, `*.app` |
-| Linux server | `out/dist/danqing-teams-linux-*.tar.gz` |
+| Linux server | `out/dist/danmo-work-linux-*.tar.gz` |
 | Windows desktop | `out/desktop/bundle/*.exe` |
 
 Tag builds are attached to the GitHub Release.

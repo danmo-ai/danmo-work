@@ -1,8 +1,8 @@
 // Package paths provides the unified user-home data layout for Danmo Work.
 //
-//	~/.dq-teams/
+//	~/.danmo-work/
 //	  config.yaml   — runtime config
-//	  teams.db      — SQLite database
+//	  work.db       — SQLite database
 //	  data/         — projects, turn logs, checkpoints
 //	  bin/          — desktop sidecar binary (optional)
 //	  bin/coreutils/— Windows Microsoft Coreutils multi-call + applet hardlinks (optional)
@@ -15,9 +15,9 @@ import (
 	"path/filepath"
 )
 
-const DirName = ".dq-teams"
+const DirName = ".danmo-work"
 
-// Home returns ~/.dq-teams (absolute). Creates the directory if needed.
+// Home returns ~/.danmo-work (absolute). Creates the directory if needed.
 func Home() string {
 	h, err := os.UserHomeDir()
 	if err != nil || h == "" {
@@ -29,16 +29,16 @@ func Home() string {
 	return dir
 }
 
-// ConfigFile is ~/.dq-teams/config.yaml
+// ConfigFile is ~/.danmo-work/config.yaml
 func ConfigFile() string { return filepath.Join(Home(), "config.yaml") }
 
-// DataDir is ~/.dq-teams/data
+// DataDir is ~/.danmo-work/data
 func DataDir() string { return filepath.Join(Home(), "data") }
 
-// DatabaseFile is ~/.dq-teams/teams.db
-func DatabaseFile() string { return filepath.Join(Home(), "teams.db") }
+// DatabaseFile is ~/.danmo-work/work.db
+func DatabaseFile() string { return filepath.Join(Home(), "work.db") }
 
-// ResolveAgainstHome joins a relative path to ~/.dq-teams; absolute paths pass through.
+// ResolveAgainstHome joins a relative path to ~/.danmo-work; absolute paths pass through.
 func ResolveAgainstHome(p string) string {
 	if p == "" {
 		return ""
@@ -49,11 +49,11 @@ func ResolveAgainstHome(p string) string {
 	return filepath.Join(Home(), p)
 }
 
-// MigrateLegacyOnce copies data from older locations into ~/.dq-teams when the
+// MigrateLegacyOnce copies data from older locations into ~/.danmo-work when the
 // new home is empty. Safe to call repeatedly — never overwrites existing files.
 func MigrateLegacyOnce() {
 	home := Home()
-	dbDst := filepath.Join(home, "teams.db")
+	dbDst := filepath.Join(home, "work.db")
 	cfgDst := filepath.Join(home, "config.yaml")
 
 	if _, err := os.Stat(dbDst); os.IsNotExist(err) {
@@ -77,12 +77,18 @@ func legacyDBCandidates() []string {
 	var out []string
 	if h, err := os.UserHomeDir(); err == nil {
 		out = append(out,
+			// Pre-Danmo layout
+			filepath.Join(h, ".dq-teams", "teams.db"),
+			filepath.Join(h, ".dq-teams", "work.db"),
 			filepath.Join(h, "Library", "Application Support", "com.danqing.teams", "teams.db"),
 			filepath.Join(h, ".local", "share", "com.danqing.teams", "teams.db"),
 		)
 	}
 	if cwd, err := os.Getwd(); err == nil {
-		out = append(out, filepath.Join(cwd, "data", "teams.db"))
+		out = append(out,
+			filepath.Join(cwd, "data", "work.db"),
+			filepath.Join(cwd, "data", "teams.db"),
+		)
 	}
 	return out
 }
@@ -91,12 +97,16 @@ func legacyConfigCandidates() []string {
 	var out []string
 	if h, err := os.UserHomeDir(); err == nil {
 		out = append(out,
+			filepath.Join(h, ".dq-teams", "config.yaml"),
 			filepath.Join(h, "Library", "Application Support", "com.danqing.teams", "danqing-teams.yaml"),
 			filepath.Join(h, ".local", "share", "com.danqing.teams", "danqing-teams.yaml"),
 		)
 	}
 	if cwd, err := os.Getwd(); err == nil {
-		out = append(out, filepath.Join(cwd, ".dq-teams", "config.yaml"))
+		out = append(out,
+			filepath.Join(cwd, ".danmo-work", "config.yaml"),
+			filepath.Join(cwd, ".dq-teams", "config.yaml"),
+		)
 	}
 	return out
 }

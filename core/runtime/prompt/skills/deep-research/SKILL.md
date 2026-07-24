@@ -4,7 +4,7 @@ description: Disciplined multi-source research with triangulation, citations, an
 license: MIT
 compatibility: Requires web_search, web_fetch, write; read_file/grep for existing project context
 metadata:
-  author: danqing-teams
+  author: danmo-work
   version: "1.0"
   category: work
   adapted_from: "https://github.com/alirezarezvani/claude-skills/tree/main/research/deep-research/skills/deep-research"

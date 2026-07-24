@@ -75,7 +75,7 @@ func TestPrepareCoreutilsFromExe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(home, ".dq-teams", "bin", "coreutils", "bin")
+	want := filepath.Join(home, ".danmo-work", "bin", "coreutils", "bin")
 	if bin != want {
 		t.Fatalf("bin=%q want %q", bin, want)
 	}

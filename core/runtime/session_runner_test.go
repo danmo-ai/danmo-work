@@ -3,8 +3,8 @@ package runtime
 import (
 	"testing"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/runtime/tool/builtin"
+	"danmo-work/core/domain"
+	"danmo-work/core/runtime/tool/builtin"
 )
 
 func TestBuildTurnMessages_IncludesPreviousTurnMessages(t *testing.T) {

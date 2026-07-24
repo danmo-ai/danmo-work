@@ -619,8 +619,8 @@ watch(() => projects.projects.length, (len) => {
   height: 100%;
   min-height: 0;
   transition: width 0.2s ease;
-  border-right: 1px solid var(--teams-glass-border);
-  background: var(--teams-glass-bg);
+  border-right: 1px solid var(--work-glass-border);
+  background: var(--work-glass-bg);
 }
 
 .module-sidebar.is-collapsed {

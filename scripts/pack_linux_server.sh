@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=out_paths.sh
 source "$SCRIPT_DIR/out_paths.sh"
 
-APP_NAME="${DQ_APP_NAME:-danqing-teams}"
+APP_NAME="${DQ_APP_NAME:-danmo-work}"
 VERSION="${RELEASE_VERSION:-$(git -C "$DQ_ROOT" describe --tags --always --dirty 2>/dev/null || echo dev)}"
 ARCH="$(uname -m)"
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"

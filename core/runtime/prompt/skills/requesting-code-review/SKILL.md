@@ -4,7 +4,7 @@ description: Prepare a focused code-review package (scope, requirements, diff ev
 license: MIT
 compatibility: Requires read_file, grep, glob; git via exec_shell when available
 metadata:
-  author: danqing-teams
+  author: danmo-work
   version: "1.0"
   category: coding
   adapted_from: "https://github.com/obra/superpowers/tree/main/skills/requesting-code-review"

@@ -8,7 +8,7 @@
 
 !macro NSIS_HOOK_POSTINSTALL
   DetailPrint "Installing bundled Microsoft Coreutils for Windows..."
-  StrCpy $R1 "$PROFILE\.dq-teams\bin\coreutils"
+  StrCpy $R1 "$PROFILE\.danmo-work\bin\coreutils"
   CreateDirectory "$R1"
   CreateDirectory "$R1\bin"
 

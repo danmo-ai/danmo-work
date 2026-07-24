@@ -37,7 +37,7 @@ MIT · Web / 桌面 / CLI / TUI · 支持 Anthropic 与 OpenAI 兼容接口
 make dev-web   # → http://localhost:5801/app/
 ```
 
-在 UI 里填 LLM API Key（或编辑 `~/.dq-teams/config.yaml`）。完整步骤见 [快速开始](#快速开始)。
+在 UI 里填 LLM API Key（或编辑 `~/.danmo-work/config.yaml`）。完整步骤见 [快速开始](#快速开始)。
 
 ## 界面一览
 
@@ -271,8 +271,8 @@ make stop             # 停止所有 DQ_DEV 进程
 首次使用可复制并编辑配置：
 
 ```bash
-mkdir -p ~/.dq-teams
-cp config.example.yaml ~/.dq-teams/config.yaml
+mkdir -p ~/.danmo-work
+cp config.example.yaml ~/.danmo-work/config.yaml
 # 在 UI 或配置文件中填入 LLM Provider API Key
 ```
 
@@ -292,7 +292,7 @@ make clean                  # 删除 out/
 ```text
 out/
   frontend/dist/     # Vite 生产构建（挂载于 /app/）
-  server/            # danqing-teams / danqing-teams-cli / danqing-teams-tui
+  server/            # danmo-work / danmo-work-cli / danmo-work-tui
   desktop/bundle/    # Tauri 安装包
   desktop/cargo/     # Cargo 中间产物
   dist/              # Linux server 发布包
@@ -319,7 +319,7 @@ make eval-harbor-base                                   # dq-harbor-base:local
 GH_TOKEN=$(gh auth token) make eval-harbor-sync-tb2     # → evals/dq_harbor/tasks/（89 题，gitignore）
 make eval-harbor-bin
 
-export TEAMS_MODEL=deepseek/deepseek-v4-flash TEAMS_API_KEY=... TEAMS_BASE_URL=https://api.deepseek.com
+export WORK_MODEL=deepseek/deepseek-v4-flash WORK_API_KEY=... WORK_BASE_URL=https://api.deepseek.com
 make eval-harbor-smoke                                  # 1 题冒烟
 # make eval-harbor-suite                                # 全量 89：oracle 再 DanQing
 ./evals/dq_harbor/compare_agents.sh                     # DanQing / OpenCode / OpenHands
@@ -329,14 +329,14 @@ make eval-harbor-smoke                                  # 1 题冒烟
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
-| `TEAMS_CONFIG` | `~/.dq-teams/config.yaml` | YAML 配置文件路径 |
-| `TEAMS_DB_PATH` | `~/.dq-teams/teams.db` | SQLite 数据库 |
-| `TEAMS_DATA_DIR` | `~/.dq-teams/data` | 项目与 turn 日志目录 |
+| `WORK_CONFIG` | `~/.danmo-work/config.yaml` | YAML 配置文件路径 |
+| `WORK_DB_PATH` | `~/.danmo-work/work.db` | SQLite 数据库 |
+| `WORK_DATA_DIR` | `~/.danmo-work/data` | 项目与 turn 日志目录 |
 | `DQ_BACKEND_PORT` | `7801` | 开发后端端口 |
 | `DQ_FRONTEND_PORT` | `5801` | 开发前端端口 |
 | `VITE_API_BASE_URL` | `""` | 前端 API 基址（空 = 同源） |
 
-Server、CLI、TUI、桌面端默认共用 `~/.dq-teams/`。首次启动可能从 `~/Library/Application Support/com.danqing.teams/` 或 `./data/teams.db` 迁移已有数据。
+Server、CLI、TUI、桌面端默认共用 `~/.danmo-work/`。首次启动可能从 `~/Library/Application Support/com.danmo.work/` 或 `./data/work.db` 迁移已有数据。
 
 ### 自定义技能目录
 
@@ -345,11 +345,11 @@ Server、CLI、TUI、桌面端默认共用 `~/.dq-teams/`。首次启动可能�
 | 路径 | 范围 |
 |------|------|
 | `~/.agents/skills/` | 用户 |
-| `~/.dq-teams/skills/` | 用户 |
+| `~/.danmo-work/skills/` | 用户 |
 | `<项目根>/.agents/skills/` | 项目 |
-| `<项目根>/.dq-teams/skills/` | 项目 |
+| `<项目根>/.danmo-work/skills/` | 项目 |
 
-同名技能后者覆盖前者（项目 `.dq-teams` 优先最高）。改磁盘后下一 turn 生效。
+同名技能后者覆盖前者（项目 `.danmo-work` 优先最高）。改磁盘后下一 turn 生效。
 
 ## 桌面端（Tauri）
 
@@ -368,7 +368,7 @@ SKIP_BACKEND=1 make dev-desktop
 | Job | 产物 |
 |-----|------|
 | macOS desktop | `out/desktop/bundle/*.dmg`、`*.app` |
-| Linux server | `out/dist/danqing-teams-linux-*.tar.gz` |
+| Linux server | `out/dist/danmo-work-linux-*.tar.gz` |
 | Windows desktop | `out/desktop/bundle/*.exe` |
 
 Tag 触发时会将产物附加到 GitHub Release。

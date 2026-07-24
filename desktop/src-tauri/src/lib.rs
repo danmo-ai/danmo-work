@@ -19,13 +19,13 @@ struct SidecarState {
     _child: Mutex<Option<std::process::Child>>,
 }
 
-/// Unified user data root: ~/.dq-teams (same as server/cli/tui).
+/// Unified user data root: ~/.danmo-work (same as server/cli/tui).
 fn teams_home(app: &AppHandle) -> Result<PathBuf, String> {
     let home = app
         .path()
         .home_dir()
         .map_err(|e| format!("failed to resolve home dir: {e}"))?;
-    Ok(home.join(".dq-teams"))
+    Ok(home.join(".danmo-work"))
 }
 
 fn find_sidecar_binary() -> Result<PathBuf, String> {
@@ -41,7 +41,7 @@ fn find_sidecar_binary() -> Result<PathBuf, String> {
         "x86_64-pc-windows-msvc",
     ];
     for triple in &triples {
-        let candidate = exe_dir.join(format!("danqing-teams-backend-{triple}"));
+        let candidate = exe_dir.join(format!("danmo-work-backend-{triple}"));
         if candidate.exists() {
             return Ok(candidate);
         }
@@ -49,13 +49,13 @@ fn find_sidecar_binary() -> Result<PathBuf, String> {
     Err(format!("sidecar binary not found in {}", exe_dir.display()))
 }
 
-/// Copy sidecar out of the .app bundle into ~/.dq-teams/bin.
+/// Copy sidecar out of the .app bundle into ~/.danmo-work/bin.
 /// macOS App Translocation / Gatekeeper often kills helpers launched from a
 /// quarantined or translocated bundle path; running from the home data dir is stable.
 fn prepare_runtime_binary(bundled: &Path, home: &Path) -> Result<PathBuf, String> {
     let bin_dir = home.join("bin");
     fs::create_dir_all(&bin_dir).map_err(|e| format!("create bin dir: {e}"))?;
-    let runtime_bin = bin_dir.join("danqing-teams-backend");
+    let runtime_bin = bin_dir.join("danmo-work-backend");
     let need_copy = match (fs::metadata(bundled), fs::metadata(&runtime_bin)) {
         (Ok(src), Ok(dst)) => {
             src.len() != dst.len()
@@ -85,7 +85,7 @@ fn prepare_runtime_binary(bundled: &Path, home: &Path) -> Result<PathBuf, String
     Ok(runtime_bin)
 }
 
-/// Install bundled Microsoft Coreutils into ~/.dq-teams/bin/coreutils and create applet hardlinks.
+/// Install bundled Microsoft Coreutils into ~/.danmo-work/bin/coreutils and create applet hardlinks.
 /// Returns (coreutils.exe, bin_dir with ls.exe/…). Non-Windows builds return None.
 fn prepare_coreutils(app: &AppHandle, home: &Path) -> Option<(PathBuf, PathBuf)> {
     #[cfg(not(windows))]
@@ -183,7 +183,7 @@ fn prepare_coreutils(app: &AppHandle, home: &Path) -> Option<(PathBuf, PathBuf)>
 
 fn spawn_backend(app: &AppHandle) -> Result<(), String> {
     let home = teams_home(app)?;
-    fs::create_dir_all(&home).map_err(|e| format!("failed to create ~/.dq-teams: {e}"))?;
+    fs::create_dir_all(&home).map_err(|e| format!("failed to create ~/.danmo-work: {e}"))?;
     let work_dir = home.join("data");
     fs::create_dir_all(&work_dir).map_err(|e| format!("failed to create data dir: {e}"))?;
 
@@ -211,18 +211,18 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
 
     let mut cmd = std::process::Command::new(&binary);
     cmd.current_dir(&home)
-        .env("TEAMS_ADDR", BACKEND_ADDR)
+        .env("WORK_ADDR", BACKEND_ADDR)
         .env(
-            "TEAMS_DB_PATH",
-            home.join("teams.db").to_string_lossy().as_ref(),
+            "WORK_DB_PATH",
+            home.join("work.db").to_string_lossy().as_ref(),
         )
-        .env("TEAMS_CONFIG", config_path.to_string_lossy().as_ref())
-        .env("TEAMS_DATA_DIR", work_dir.to_string_lossy().as_ref())
+        .env("WORK_CONFIG", config_path.to_string_lossy().as_ref())
+        .env("WORK_DATA_DIR", work_dir.to_string_lossy().as_ref())
         .stdout(std::process::Stdio::from(log_file))
         .stderr(std::process::Stdio::from(log_err));
     if let Some((exe, bin)) = coreutils {
-        cmd.env("TEAMS_COREUTILS_EXE", exe.to_string_lossy().as_ref());
-        cmd.env("TEAMS_COREUTILS_BIN", bin.to_string_lossy().as_ref());
+        cmd.env("WORK_COREUTILS_EXE", exe.to_string_lossy().as_ref());
+        cmd.env("WORK_COREUTILS_BIN", bin.to_string_lossy().as_ref());
     }
     let mut child = cmd
         .spawn()

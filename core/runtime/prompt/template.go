@@ -5,7 +5,7 @@ import (
 	"io/fs"
 	"strings"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 
 	"gopkg.in/yaml.v3"
 )

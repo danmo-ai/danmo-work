@@ -54,5 +54,5 @@ Adapted skills in this product:
 
 Windows desktop builds may download and bundle `coreutils.exe` (multi-call binary)
 via `scripts/fetch_windows_coreutils.sh`, then install applet hardlinks under
-`~/.dq-teams/bin/coreutils/` for `exec_shell` PATH injection. This replaces the
+`~/.danmo-work/bin/coreutils/` for `exec_shell` PATH injection. This replaces the
 need for Git Bash to run POSIX utilities on Windows host / win-token backends.

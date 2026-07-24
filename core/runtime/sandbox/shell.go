@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"strings"
 
-	"danqing-teams/core/domain"
+	"danmo-work/core/domain"
 )
 
 // resolvedShell is the interpreter used for host / win-token exec_shell invocations.

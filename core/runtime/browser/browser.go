@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"danqing-teams/core/domain"
-	"danqing-teams/core/port"
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
 )
 
 var _ port.Browser = (*Manager)(nil)
@@ -115,7 +115,7 @@ func (m *Manager) RenderHTML(ctx context.Context, opts port.BrowserRenderOptions
 
 	userDataDir := ""
 	if st.Mode != "attach" {
-		dir, err := os.MkdirTemp("", "dq-teams-browser-*")
+		dir, err := os.MkdirTemp("", "danmo-work-browser-*")
 		if err != nil {
 			return "", "", fmt.Errorf("create browser user-data-dir: %w", err)
 		}

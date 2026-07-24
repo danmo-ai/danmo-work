@@ -4,7 +4,7 @@ description: Structure and produce long-form workplace documents (reports, RFCs,
 license: MIT
 compatibility: Requires write, edit, read_file
 metadata:
-  author: danqing-teams
+  author: danmo-work
   version: "1.0"
   category: work
   adapted_from: "https://github.com/alirezarezvani/claude-skills/tree/main/markdown-html/skills/md-document"

@@ -494,7 +494,7 @@ export default {
   },
   desktop: {
     startingBackend: '正在启动后端服务…',
-    backendStartTimeout: '后端服务启动超时。请退出应用后重试；若仍失败，请查看 ~/.dq-teams/backend.log',
+    backendStartTimeout: '后端服务启动超时。请退出应用后重试；若仍失败，请查看 ~/.danmo-work/backend.log',
     backendStartFailed: '后端服务启动失败',
   },
   updater: {

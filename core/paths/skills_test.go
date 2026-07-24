@@ -16,8 +16,8 @@ func TestUserSkillDirs(t *testing.T) {
 	if dirs[0] != filepath.Join(tmp, ".agents", "skills") {
 		t.Fatalf("agents = %q", dirs[0])
 	}
-	if dirs[1] != filepath.Join(tmp, ".dq-teams", "skills") {
-		t.Fatalf("dq-teams = %q", dirs[1])
+	if dirs[1] != filepath.Join(tmp, ".danmo-work", "skills") {
+		t.Fatalf("danmo-work = %q", dirs[1])
 	}
 }
 
@@ -30,8 +30,8 @@ func TestProjectSkillDirs(t *testing.T) {
 	if dirs[0] != filepath.Join(root, ".agents", "skills") {
 		t.Fatalf("agents = %q", dirs[0])
 	}
-	if dirs[1] != filepath.Join(root, ".dq-teams", "skills") {
-		t.Fatalf("dq-teams = %q", dirs[1])
+	if dirs[1] != filepath.Join(root, ".danmo-work", "skills") {
+		t.Fatalf("danmo-work = %q", dirs[1])
 	}
 	if ProjectSkillDirs("") != nil {
 		t.Fatal("empty workDir should return nil")
@@ -46,7 +46,7 @@ func TestAllSkillDirs(t *testing.T) {
 	if len(dirs) != 4 {
 		t.Fatalf("len=%d want 4", len(dirs))
 	}
-	wantLast := filepath.Join(work, ".dq-teams", "skills")
+	wantLast := filepath.Join(work, ".danmo-work", "skills")
 	if dirs[3] != wantLast {
 		t.Fatalf("last = %q want %q", dirs[3], wantLast)
 	}

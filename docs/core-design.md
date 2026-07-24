@@ -313,11 +313,11 @@ Doom-loop 检测、权限门禁、审批阻塞、`ask_user` 阻塞均在此层�
 | 路径 | 范围 |
 |------|------|
 | `~/.agents/skills/` | 用户 |
-| `~/.dq-teams/skills/` | 用户 |
+| `~/.danmo-work/skills/` | 用户 |
 | `<projectRoot>/.agents/skills/` | 项目（`WorkDir`） |
-| `<projectRoot>/.dq-teams/skills/` | 项目（`WorkDir`） |
+| `<projectRoot>/.danmo-work/skills/` | 项目（`WorkDir`） |
 
-同名 ID 覆盖顺序（后者赢）：绑定 DB → `~/.agents` → `~/.dq-teams` → 项目 `.agents` → 项目 `.dq-teams`。目录缺失或坏 `SKILL.md` 跳过。Skills 管理页仍只显示 DB（内置 / 手建 / 市场）。
+同名 ID 覆盖顺序（后者赢）：绑定 DB → `~/.agents` → `~/.danmo-work` → 项目 `.agents` → 项目 `.danmo-work`。目录缺失或坏 `SKILL.md` 跳过。Skills 管理页仍只显示 DB（内置 / 手建 / 市场）。
 
 按 Agent 挂载：
 
@@ -440,10 +440,10 @@ Tool:
 
 | 存储 | 路径 / 位置 | 内容 |
 |------|------------|------|
-| SQLite | `~/.dq-teams/teams.db` | agents, sessions, projects, turns, approvals, skills, knowledge, **memories**, mcp, llm_configs, stream_events |
+| SQLite | `~/.danmo-work/work.db` | agents, sessions, projects, turns, approvals, skills, knowledge, **memories**, mcp, llm_configs, stream_events |
 | Turn Log | `{dataDir}/{project}/sessions/{sessionID}/{turnID}.jsonl` | start / tool_call / tool_result / end |
 | Checkpoint | 同 Session 目录 `checkpoint_*.json` | 跨 Turn 压缩摘要 |
-| 配置 | `~/.dq-teams/config.yaml` | 运行时配置（含 `runtime.memory.read_top_k`） |
+| 配置 | `~/.danmo-work/config.yaml` | 运行时配置（含 `runtime.memory.read_top_k`） |
 
 ### 9.2 设计原则
 

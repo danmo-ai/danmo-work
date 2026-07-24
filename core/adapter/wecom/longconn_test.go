@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"danqing-teams/core/port"
+	"danmo-work/core/port"
 )
 
 func TestInboundFromCallbackText(t *testing.T) {
