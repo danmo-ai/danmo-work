@@ -31,6 +31,16 @@ Ship a **single HTML file** the user can open in a browser and present. Do not r
    - `@media print` → one slide per page
    - inlined CSS/JS; no React/Vue; optional CDN fonts only
 5. **Smoke check** — list controls in the delivery message; ensure ≥2 slides.
+6. **Stage** — keep the `.md` source for **Slides Stage** edit; the `.html` is for **Present** mode.
+
+## [office-edit] turns
+
+When the user message starts with `[office-edit]` and `kind: slides`:
+
+1. Prefer editing the Markdown source path (pages separated by `---`).
+2. If `page` is set, change only that slide fragment.
+3. Optionally regenerate the playable `.html` if it already exists beside the `.md`.
+4. SUMMARY: which slide(s) changed.
 
 ## Content rules
 

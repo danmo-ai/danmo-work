@@ -24,12 +24,23 @@ Produce clear long-form documents. Prefer Markdown as the source of truth; optio
 2. **Outline** — H1 title + H2 sections before drafting body prose.
 3. **Draft Markdown** — headings hierarchy, short paragraphs, tables where they clarify, fenced code with language tags, callouts as blockquotes when useful.
 4. **Self-edit** — remove filler; check consistency of terms; no TBD left behind.
-5. **Optional HTML** — if the user wants a shareable page, write one `.html` file with:
+5. **Optional HTML export** — if the user wants a shareable **read-only** page, write one `.html` file with:
    - inlined CSS
    - sticky or top TOC from H2+
    - readable typography
    - no framework runtime (vanilla HTML/CSS/JS only)
-6. **Deliver paths** — report written file paths.
+   - HTML is **not** the edit source; keep `.md` as the source of truth
+6. **Deliver paths** — report written file paths and note they open in **Doc Stage** (Files → click the `.md`).
+
+## [office-edit] turns
+
+When the user message starts with `[office-edit]` and `kind: doc`:
+
+1. `read_file` the given `path` (GFM Markdown).
+2. Apply `action` / `instruction` to the `selection` (or full doc if selection is the whole file).
+3. Prefer `edit` for local replacements; `write` only when replacing the whole file is clearer.
+4. Do **not** rewrite as HTML or invent a parallel JSON doc format.
+5. SUMMARY: describe what changed (sections / headings).
 
 ## Structure defaults
 

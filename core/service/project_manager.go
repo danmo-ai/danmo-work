@@ -327,6 +327,35 @@ func (m *ProjectManager) ReadFileContent(ctx context.Context, projectID, subPath
 	return fc, nil
 }
 
+// WriteFileContent writes UTF-8 text content to a project-relative path.
+// Parent directories are created as needed. Path must stay inside the project root.
+func (m *ProjectManager) WriteFileContent(ctx context.Context, projectID, subPath, content string) error {
+	root, err := m.resolveFilesRoot(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(subPath) == "" {
+		return fmt.Errorf("path is required")
+	}
+	if strings.Contains(subPath, "..") {
+		return fmt.Errorf("path escapes project directory")
+	}
+
+	target := filepath.Join(root, subPath)
+	target, err = filepath.Abs(target)
+	if err != nil {
+		return fmt.Errorf("invalid path")
+	}
+	if !strings.HasPrefix(target, root+string(os.PathSeparator)) && target != root {
+		return fmt.Errorf("path escapes project directory")
+	}
+
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(target, []byte(content), 0o644)
+}
+
 type GitFileChange struct {
 	Status   string `json:"status"`
 	File     string `json:"file"`

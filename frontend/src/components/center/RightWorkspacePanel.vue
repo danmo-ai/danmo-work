@@ -31,6 +31,7 @@ const rightTab = defineModel<RightTab>('tab', { required: true })
 
 const emit = defineEmits<{
   openInBrowser: [path: string]
+  openInOffice: [path: string]
 }>()
 
 const { t } = useI18n()
@@ -87,6 +88,7 @@ defineExpose({
           ref="fileTreeRef"
           :project-id="projectId"
           @open-in-browser="emit('openInBrowser', $event)"
+          @select-file="emit('openInOffice', $event)"
         />
         <div v-else class="right-workspace__empty">{{ t('sessions.noProjectLinked') }}</div>
       </template>
