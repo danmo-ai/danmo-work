@@ -622,7 +622,7 @@ type collectParams struct {
 	streamID    string
 }
 
-func (ing *ChannelIngressService) applyEvent(ev domain.StreamEvent, p collectParams, parts *[]string, toolLines *[]string, lastProgress *time.Time) (done bool) {
+func (ing *ChannelIngressService) applyEvent(ev domain.StreamEvent, p collectParams, parts *[]string, toolLines *[]string, lastProgress *time.Time, failed *bool) (done bool) {
 	if p.turnID != "" && ev.TurnID != "" && ev.TurnID != p.turnID {
 		return false
 	}
@@ -664,7 +664,12 @@ func (ing *ChannelIngressService) applyEvent(ev domain.StreamEvent, p collectPar
 		ing.handlePermissionAsk(ev, p)
 	case domain.EventAskUserPending:
 		ing.handleAskUserPending(ev, p)
-	case domain.EventTurnEnded, domain.EventTurnFailed, domain.EventError, domain.EventSessionCompleted:
+	case domain.EventTurnFailed, domain.EventError:
+		if failed != nil {
+			*failed = true
+		}
+		return true
+	case domain.EventTurnEnded, domain.EventSessionCompleted:
 		return true
 	}
 	return false
@@ -672,6 +677,10 @@ func (ing *ChannelIngressService) applyEvent(ev domain.StreamEvent, p collectPar
 
 func (ing *ChannelIngressService) emitProgress(p collectParams, parts, toolLines []string, status, headline string, last *time.Time, force bool) {
 	if p.streamID == "" {
+		return
+	}
+	// Keep approval / ask buttons stable on the progress card while waiting.
+	if p.msg != nil && (ing.hasPendingPerm(peerKey(*p.msg)) || ing.hasPendingAsk(peerKey(*p.msg))) {
 		return
 	}
 	now := time.Now()
@@ -751,6 +760,7 @@ func (ing *ChannelIngressService) handlePermissionAsk(ev domain.StreamEvent, p c
 		ToolName:   payload.Tool,
 		Summary:    strings.TrimSpace(payload.Description),
 		Scopes:     payload.ScopeOptions,
+		StreamID:   p.streamID,
 	}
 	if ask.Summary == "" {
 		ask.Summary = strings.TrimSpace(payload.Reason)
@@ -826,9 +836,10 @@ func (ing *ChannelIngressService) collectReplyFrom(ctx context.Context, p collec
 	var parts []string
 	var toolLines []string
 	var lastProgress time.Time
+	var failed bool
 	for _, ev := range ing.sessions.StreamEvents(p.sessionID, 0) {
-		if ing.applyEvent(ev, p, &parts, &toolLines, &lastProgress) {
-			return finalOutboundFromParts(parts)
+		if ing.applyEvent(ev, p, &parts, &toolLines, &lastProgress, &failed) {
+			return finalOutboundFromParts(parts, toolLines, failed)
 		}
 	}
 	deadline := time.After(10 * time.Minute)
@@ -839,23 +850,37 @@ func (ing *ChannelIngressService) collectReplyFrom(ctx context.Context, p collec
 	for {
 		select {
 		case <-ctx.Done():
-			return finalOutboundFromParts(parts)
+			return finalOutboundFromParts(parts, toolLines, failed)
 		case <-deadline:
-			if len(parts) == 0 {
+			if len(parts) == 0 && len(toolLines) == 0 {
 				return port.TextOutbound("处理超时，请稍后在桌面端查看。")
 			}
-			return finalOutboundFromParts(parts)
+			return finalOutboundFromParts(parts, toolLines, true)
 		case ev, ok := <-p.ch:
 			if !ok {
-				return finalOutboundFromParts(parts)
+				return finalOutboundFromParts(parts, toolLines, failed)
 			}
 			if _, dup := seen[ev.Seq]; dup {
 				continue
 			}
 			seen[ev.Seq] = struct{}{}
-			if ing.applyEvent(ev, p, &parts, &toolLines, &lastProgress) {
-				return finalOutboundFromParts(parts)
+			if ing.applyEvent(ev, p, &parts, &toolLines, &lastProgress, &failed) {
+				return finalOutboundFromParts(parts, toolLines, failed)
 			}
 		}
 	}
+}
+
+func (ing *ChannelIngressService) hasPendingPerm(key string) bool {
+	ing.askMu.Lock()
+	defer ing.askMu.Unlock()
+	_, ok := ing.pendingPerms[key]
+	return ok
+}
+
+func (ing *ChannelIngressService) hasPendingAsk(key string) bool {
+	ing.askMu.Lock()
+	defer ing.askMu.Unlock()
+	_, ok := ing.pendingAsks[key]
+	return ok
 }

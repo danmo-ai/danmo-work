@@ -9,7 +9,7 @@ import (
 
 func TestApplyQQGroupPolicyDenyTools(t *testing.T) {
 	msg := &port.InboundMessage{
-		Meta: map[string]string{"scene": "group", "group_openid": "g1", "receive_type": "group"},
+		Meta: map[string]string{"scene": "group", "group_openid": "g1", "receive_type": "group", "mentioned": "true"},
 	}
 	cfg := domain.ConfigQQChannel{
 		Group: domain.ConfigQQGroupPolicy{
@@ -49,5 +49,27 @@ func TestChannelToolDenied(t *testing.T) {
 	ok, _ = channelToolDenied(msg, "read_file")
 	if ok {
 		t.Fatal("read_file should pass")
+	}
+}
+
+func TestApplyQQGroupPolicyRequireMentionDrop(t *testing.T) {
+	msg := &port.InboundMessage{
+		Meta: map[string]string{"scene": "group", "receive_type": "group", "group_openid": "g1"},
+	}
+	cfg := domain.ConfigQQChannel{} // default require_mention=true
+	if applyQQGroupPolicy(cfg, msg) {
+		t.Fatal("unmentioned group message should be dropped")
+	}
+	msg.Meta["mentioned"] = "true"
+	if !applyQQGroupPolicy(cfg, msg) {
+		t.Fatal("mentioned group message should be accepted")
+	}
+	off := false
+	cfg.Group.RequireMention = &off
+	msg2 := &port.InboundMessage{
+		Meta: map[string]string{"scene": "group", "receive_type": "group"},
+	}
+	if !applyQQGroupPolicy(cfg, msg2) {
+		t.Fatal("require_mention=false should accept without mentioned")
 	}
 }

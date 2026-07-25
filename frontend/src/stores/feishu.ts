@@ -14,6 +14,7 @@ export interface FeishuStatus {
   appId?: string
   projectId?: string
   hasAppSecret?: boolean
+  richProgress?: boolean
 }
 
 export const useFeishuStore = defineStore('feishu', () => {
@@ -41,6 +42,7 @@ export const useFeishuStore = defineStore('feishu', () => {
     appId?: string
     appSecret?: string
     projectId?: string
+    richProgress?: boolean
   }) {
     saving.value = true
     try {

@@ -47,6 +47,11 @@ func (a *Adapter) config() domain.ConfigFeishuChannel {
 	return a.cfg
 }
 
+// RichProgressEnabled reports whether interactive progress cards are enabled (default true).
+func (a *Adapter) RichProgressEnabled() bool {
+	return a.config().FeishuRichProgressEnabled()
+}
+
 func (a *Adapter) AccountID() string {
 	cfg := a.config()
 	if cfg.AppID != "" {

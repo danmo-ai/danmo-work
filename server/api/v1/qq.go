@@ -10,14 +10,23 @@ import (
 )
 
 type qqConfigureRequest struct {
-	Enabled        bool     `json:"enabled"`
-	DefaultAgentID string   `json:"defaultAgentId"`
-	DefaultModelID string   `json:"defaultModelId,omitempty"`
-	AutoApprove    *bool    `json:"autoApprove,omitempty"`
-	AppID          string   `json:"appId,omitempty"`
-	ClientSecret   string   `json:"clientSecret,omitempty"`
-	ProjectID      string   `json:"projectId,omitempty"`
-	GroupDenyTools []string `json:"groupDenyTools,omitempty"`
+	Enabled         bool     `json:"enabled"`
+	DefaultAgentID  string   `json:"defaultAgentId"`
+	DefaultModelID  string   `json:"defaultModelId,omitempty"`
+	AutoApprove     *bool    `json:"autoApprove,omitempty"`
+	AppID           string   `json:"appId,omitempty"`
+	ClientSecret    string   `json:"clientSecret,omitempty"`
+	ProjectID       string   `json:"projectId,omitempty"`
+	GroupDenyTools  []string `json:"groupDenyTools,omitempty"`
+	RequireMention  *bool    `json:"requireMention,omitempty"`
+	NativeC2CStream *bool    `json:"nativeC2cStream,omitempty"`
+}
+
+func qqRequireMentionEnabled(qc domain.ConfigQQChannel) bool {
+	if qc.Group.RequireMention == nil {
+		return true
+	}
+	return *qc.Group.RequireMention
 }
 
 func qqStatusPayload(qc domain.ConfigQQChannel, running bool) gin.H {
@@ -31,6 +40,8 @@ func qqStatusPayload(qc domain.ConfigQQChannel, running bool) gin.H {
 		"projectId":       qc.ProjectID,
 		"hasClientSecret": qc.ClientSecret != "",
 		"groupDenyTools":  qc.Group.DenyTools,
+		"requireMention":  qqRequireMentionEnabled(qc),
+		"nativeC2cStream": qc.QQNativeC2CStreamEnabled(),
 	}
 }
 
@@ -95,6 +106,12 @@ func qqConfigure(h *Handler) gin.HandlerFunc {
 		}
 		if req.GroupDenyTools != nil {
 			qc.Group.DenyTools = req.GroupDenyTools
+		}
+		if req.RequireMention != nil {
+			qc.Group.RequireMention = req.RequireMention
+		}
+		if req.NativeC2CStream != nil {
+			qc.NativeC2CStream = req.NativeC2CStream
 		}
 		if req.Enabled {
 			if qc.DefaultAgentID == "" {

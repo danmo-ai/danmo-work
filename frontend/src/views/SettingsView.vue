@@ -52,11 +52,12 @@ const feishuForm = ref({
   enabled: false,
   defaultAgentId: '',
   defaultModelId: '',
-  autoApprove: true,
+  autoApprove: false,
   domain: 'feishu' as 'feishu' | 'lark',
   appId: '',
   appSecret: '',
   projectId: '',
+  richProgress: true,
 })
 const wecomForm = ref({
   enabled: false,
@@ -77,6 +78,8 @@ const qqForm = ref({
   clientSecret: '',
   projectId: '',
   groupDenyTools: '',
+  requireMention: true,
+  nativeC2cStream: true,
 })
 const {
   appVersion,
@@ -304,11 +307,12 @@ onMounted(async () => {
       enabled: feishu.status.enabled,
       defaultAgentId: feishu.status.defaultAgentId || sessions.agents[0]?.id || '',
       defaultModelId: feishu.status.defaultModelId || '',
-      autoApprove: feishu.status.autoApprove !== false,
+      autoApprove: !!feishu.status.autoApprove,
       domain: (feishu.status.domain === 'lark' ? 'lark' : 'feishu'),
       appId: feishu.status.appId || '',
       appSecret: '',
       projectId: feishu.status.projectId || projects.sortedProjects[0]?.id || '',
+      richProgress: feishu.status.richProgress !== false,
     }
   } else if (sessions.agents.length) {
     feishuForm.value.defaultAgentId = sessions.agents[0].id
@@ -343,6 +347,8 @@ onMounted(async () => {
       clientSecret: '',
       projectId: qq.status.projectId || projects.sortedProjects[0]?.id || '',
       groupDenyTools: (qq.status.groupDenyTools || []).join(', '),
+      requireMention: qq.status.requireMention !== false,
+      nativeC2cStream: qq.status.nativeC2cStream !== false,
     }
   } else if (sessions.agents.length) {
     qqForm.value.defaultAgentId = sessions.agents[0].id
@@ -405,6 +411,7 @@ async function handleSaveFeishu() {
       appId: feishuForm.value.appId || undefined,
       appSecret: feishuForm.value.appSecret || undefined,
       projectId: feishuForm.value.projectId || undefined,
+      richProgress: feishuForm.value.richProgress,
     })
     feishuForm.value.appSecret = ''
     toast.success(t('settings.feishuSaved'))
@@ -487,6 +494,8 @@ async function handleSaveQQ() {
       clientSecret: qqForm.value.clientSecret || undefined,
       projectId: qqForm.value.projectId || undefined,
       groupDenyTools: denyTools,
+      requireMention: qqForm.value.requireMention,
+      nativeC2cStream: qqForm.value.nativeC2cStream,
     })
     qqForm.value.clientSecret = ''
     toast.success(t('settings.qqSaved'))
@@ -1437,13 +1446,24 @@ const hasFooterActions = computed(() => {
               </DqSelect>
             </div>
             <label class="settings-field settings-field--switch">
-              <span class="settings-field__label">{{ $t('settings.weixinAutoApprove') }}</span>
+              <span class="settings-field__label">{{ $t('settings.channelAutoApprove') }}</span>
               <DqSwitch
                 :model-value="feishuForm.autoApprove"
                 size="small"
                 @update:model-value="(v: boolean) => feishuForm.autoApprove = v"
               />
             </label>
+            <p class="settings-form-group__desc">{{ $t('settings.channelAutoApproveHint') }}</p>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.feishuRichProgress') }}</span>
+              <DqSwitch
+                :model-value="feishuForm.richProgress"
+                size="small"
+                @update:model-value="(v: boolean) => feishuForm.richProgress = v"
+              />
+            </label>
+            <p class="settings-form-group__desc">{{ $t('settings.feishuRichProgressHint') }}</p>
+            <p class="settings-form-group__desc">{{ $t('settings.channelProjectHint') }}</p>
           </div>
 
           <div class="settings-form-group">
@@ -1527,13 +1547,32 @@ const hasFooterActions = computed(() => {
               </DqSelect>
             </div>
             <label class="settings-field settings-field--switch">
-              <span class="settings-field__label">{{ $t('settings.weixinAutoApprove') }}</span>
+              <span class="settings-field__label">{{ $t('settings.channelAutoApprove') }}</span>
               <DqSwitch
                 :model-value="qqForm.autoApprove"
                 size="small"
                 @update:model-value="(v: boolean) => qqForm.autoApprove = v"
               />
             </label>
+            <p class="settings-form-group__desc">{{ $t('settings.channelAutoApproveHint') }}</p>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.qqNativeC2cStream') }}</span>
+              <DqSwitch
+                :model-value="qqForm.nativeC2cStream"
+                size="small"
+                @update:model-value="(v: boolean) => qqForm.nativeC2cStream = v"
+              />
+            </label>
+            <p class="settings-form-group__desc">{{ $t('settings.qqNativeC2cStreamHint') }}</p>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.qqRequireMention') }}</span>
+              <DqSwitch
+                :model-value="qqForm.requireMention"
+                size="small"
+                @update:model-value="(v: boolean) => qqForm.requireMention = v"
+              />
+            </label>
+            <p class="settings-form-group__desc">{{ $t('settings.qqRequireMentionHint') }}</p>
             <label class="settings-field">
               <span class="settings-field__label">{{ $t('settings.qqGroupDenyTools') }}</span>
               <DqInput
@@ -1542,6 +1581,7 @@ const hasFooterActions = computed(() => {
               />
             </label>
             <p class="settings-form-group__desc">{{ $t('settings.qqGroupDenyToolsHint') }}</p>
+            <p class="settings-form-group__desc">{{ $t('settings.channelProjectHint') }}</p>
           </div>
 
           <div class="settings-form-group">

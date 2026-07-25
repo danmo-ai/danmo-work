@@ -130,6 +130,7 @@ func NormalizeDispatch(accountID string, t string, raw json.RawMessage) (msg *po
 				"message_id":   m.ID,
 				"receive_id":   m.GroupOpenID,
 				"receive_type": "group",
+				"mentioned":    "true", // GROUP_AT_MESSAGE_CREATE is always @-gated
 			},
 		}, nil, ""
 	case "INTERACTION_CREATE":

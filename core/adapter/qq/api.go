@@ -50,6 +50,11 @@ func (a *Adapter) config() domain.ConfigQQChannel {
 	return a.cfg
 }
 
+// NativeC2CStreamEnabled reports whether C2C stream_messages should be used (default true).
+func (a *Adapter) NativeC2CStreamEnabled() bool {
+	return a.config().QQNativeC2CStreamEnabled()
+}
+
 func (a *Adapter) AccountID() string {
 	cfg := a.config()
 	if cfg.AppID != "" {

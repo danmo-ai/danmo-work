@@ -31,6 +31,23 @@ func TestFormatAskTextAndResolve(t *testing.T) {
 	}
 }
 
+func TestFinalOutboundFromPartsIncludesToolsAndFailure(t *testing.T) {
+	out := finalOutboundFromParts([]string{"done"}, []string{"✓ read", "✓ write"}, false)
+	if out.Meta["headline"] != "已完成" || out.Meta["status"] != "done" {
+		t.Fatalf("meta=%v", out.Meta)
+	}
+	if !strings.Contains(out.Text, "✓ read") || !strings.Contains(out.Text, "done") {
+		t.Fatalf("text=%q", out.Text)
+	}
+	if out.Meta["tool_lines"] == "" || out.Meta["agent_text"] != "done" {
+		t.Fatalf("meta=%v", out.Meta)
+	}
+	fail := finalOutboundFromParts(nil, []string{"✗ shell"}, true)
+	if fail.Meta["headline"] != "失败" || fail.Title != "失败" {
+		t.Fatalf("fail=%+v", fail)
+	}
+}
+
 func TestPreferOutboundKind(t *testing.T) {
 	rich := port.ChannelCapabilities{RichCards: true}
 	plain := port.ChannelCapabilities{}

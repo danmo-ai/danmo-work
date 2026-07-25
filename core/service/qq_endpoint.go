@@ -52,6 +52,9 @@ func (e *QQEndpoint) Deliver(ctx context.Context, in *port.InboundMessage, msg p
 }
 
 func (e *QQEndpoint) useNativeC2C(in *port.InboundMessage) bool {
+	if e.adapter != nil && !e.adapter.NativeC2CStreamEnabled() {
+		return false
+	}
 	if in == nil || in.Meta == nil {
 		return true
 	}
@@ -128,6 +131,15 @@ func (e *QQEndpoint) FinishStream(ctx context.Context, in *port.InboundMessage, 
 	text := strings.TrimSpace(final.Text)
 	if text == "" {
 		text = "（无文本回复）"
+	}
+	headline := strings.TrimSpace(final.Title)
+	if final.Meta != nil {
+		if h := strings.TrimSpace(final.Meta["headline"]); h != "" {
+			headline = h
+		}
+	}
+	if headline != "" && !strings.HasPrefix(text, "**"+headline) {
+		text = "**" + headline + "**\n\n" + text
 	}
 	if streamID != "" {
 		e.mu.Lock()

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"danmo-work/core/adapter/feishu"
 	"danmo-work/core/port"
@@ -12,10 +13,16 @@ import (
 // StreamSender + ChannelInteractor + ChannelApprover + ProgressUpdater.
 type FeishuEndpoint struct {
 	adapter *feishu.Adapter
+
+	mu       sync.Mutex
+	progress map[string]port.ProgressSnapshot // streamID → last snapshot
 }
 
 func NewFeishuEndpoint(adapter *feishu.Adapter) *FeishuEndpoint {
-	return &FeishuEndpoint{adapter: adapter}
+	return &FeishuEndpoint{
+		adapter:  adapter,
+		progress: make(map[string]port.ProgressSnapshot),
+	}
 }
 
 func (e *FeishuEndpoint) Type() port.ChannelType { return port.ChannelFeishu }
@@ -30,6 +37,35 @@ func (e *FeishuEndpoint) Capabilities() port.ChannelCapabilities {
 	}
 }
 
+func (e *FeishuEndpoint) richProgress() bool {
+	if e.adapter == nil {
+		return true
+	}
+	return e.adapter.RichProgressEnabled()
+}
+
+func (e *FeishuEndpoint) rememberProgress(streamID string, snap port.ProgressSnapshot) {
+	if strings.TrimSpace(streamID) == "" {
+		return
+	}
+	e.mu.Lock()
+	e.progress[streamID] = snap
+	e.mu.Unlock()
+}
+
+func (e *FeishuEndpoint) takeProgress(streamID string) (port.ProgressSnapshot, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	snap, ok := e.progress[streamID]
+	return snap, ok
+}
+
+func (e *FeishuEndpoint) clearProgress(streamID string) {
+	e.mu.Lock()
+	delete(e.progress, streamID)
+	e.mu.Unlock()
+}
+
 func (e *FeishuEndpoint) Deliver(ctx context.Context, in *port.InboundMessage, msg port.OutboundMessage) error {
 	if e.adapter == nil {
 		return nil
@@ -41,7 +77,14 @@ func (e *FeishuEndpoint) StartStream(ctx context.Context, in *port.InboundMessag
 	if e.adapter == nil {
 		return "", nil
 	}
-	card := feishu.BuildProgressCard("执行中…", channelProcessingMsg, nil)
+	if !e.richProgress() {
+		tres, err := e.adapter.SendTextMessage(ctx, in, channelProcessingMsg)
+		if err != nil {
+			return "", err
+		}
+		return tres.MessageID, nil
+	}
+	card := feishu.BuildProgressCard("执行中…", channelProcessingMsg, nil, nil)
 	res, err := e.adapter.SendInteractiveCard(ctx, in, card)
 	if err != nil {
 		// Degrade to text placeholder.
@@ -51,6 +94,11 @@ func (e *FeishuEndpoint) StartStream(ctx context.Context, in *port.InboundMessag
 		}
 		return tres.MessageID, nil
 	}
+	e.rememberProgress(res.MessageID, port.ProgressSnapshot{
+		Status:   "running",
+		Headline: "执行中…",
+		TextBody: channelProcessingMsg,
+	})
 	return res.MessageID, nil
 }
 
@@ -66,13 +114,16 @@ func (e *FeishuEndpoint) UpdateProgress(ctx context.Context, in *port.InboundMes
 	if e.adapter == nil || strings.TrimSpace(streamID) == "" {
 		return nil
 	}
+	e.rememberProgress(streamID, progress)
 	headline := strings.TrimSpace(progress.Headline)
 	if headline == "" {
 		headline = "执行中…"
 	}
-	card := feishu.BuildProgressCard(headline, progress.TextBody, progress.Lines)
-	if err := e.adapter.UpdateInteractiveCard(ctx, streamID, card); err == nil {
-		return nil
+	if e.richProgress() {
+		card := feishu.BuildProgressCard(headline, progress.TextBody, progress.Lines, nil)
+		if err := e.adapter.UpdateInteractiveCard(ctx, streamID, card); err == nil {
+			return nil
+		}
 	}
 	// Degrade to text patch.
 	text := strings.TrimSpace(progress.TextBody)
@@ -91,14 +142,34 @@ func (e *FeishuEndpoint) UpdateProgress(ctx context.Context, in *port.InboundMes
 }
 
 func (e *FeishuEndpoint) FinishStream(ctx context.Context, in *port.InboundMessage, streamID string, final port.OutboundMessage) error {
+	defer e.clearProgress(streamID)
 	text := strings.TrimSpace(final.Text)
 	if text == "" {
 		text = "（无文本回复）"
 	}
+	headline := "已完成"
+	agentText := text
+	var toolLines []string
+	if final.Meta != nil {
+		if h := strings.TrimSpace(final.Meta["headline"]); h != "" {
+			headline = h
+		}
+		if a := strings.TrimSpace(final.Meta["agent_text"]); a != "" {
+			agentText = a
+		}
+		if raw := strings.TrimSpace(final.Meta["tool_lines"]); raw != "" {
+			toolLines = strings.Split(raw, "\n")
+		}
+	}
+	if strings.TrimSpace(final.Title) != "" && headline == "已完成" {
+		headline = strings.TrimSpace(final.Title)
+	}
 	if strings.TrimSpace(streamID) != "" {
-		card := feishu.BuildProgressCard("已完成", text, nil)
-		if err := e.adapter.UpdateInteractiveCard(ctx, streamID, card); err == nil {
-			return nil
+		if e.richProgress() {
+			card := feishu.BuildProgressCard(headline, agentText, toolLines, nil)
+			if err := e.adapter.UpdateInteractiveCard(ctx, streamID, card); err == nil {
+				return nil
+			}
 		}
 		if err := e.adapter.UpdateTextMessage(ctx, streamID, text); err == nil {
 			return nil
@@ -135,16 +206,39 @@ func (e *FeishuEndpoint) PresentAsk(ctx context.Context, in *port.InboundMessage
 }
 
 func (e *FeishuEndpoint) PresentPermission(ctx context.Context, in *port.InboundMessage, ask port.PermissionPrompt) (bool, error) {
+	actions := permissionActions(ask.ApprovalID)
 	text := formatPermissionText(ask)
-	body := text
+	// Prefer same progress card when StreamID is available (Phase A §4.3).
+	if e.adapter != nil && e.richProgress() && strings.TrimSpace(ask.StreamID) != "" {
+		snap, ok := e.takeProgress(ask.StreamID)
+		headline := "等待授权"
+		body := text
+		var lines []string
+		if ok {
+			if strings.TrimSpace(snap.TextBody) != "" {
+				body = strings.TrimSpace(snap.TextBody) + "\n\n" + text
+			}
+			lines = snap.Lines
+		}
+		card := feishu.BuildProgressCard(headline, body, lines, actions)
+		if err := e.adapter.UpdateInteractiveCard(ctx, ask.StreamID, card); err == nil {
+			e.rememberProgress(ask.StreamID, port.ProgressSnapshot{
+				Status:   "awaiting_perm",
+				Headline: headline,
+				Lines:    lines,
+				TextBody: body,
+			})
+			return true, nil
+		}
+	}
 	msg := port.OutboundMessage{
 		Kind:  port.OutboundKindCard,
 		Title: "工具授权",
 		Text:  text,
 		Card: &port.OutboundCard{
 			Title:   "工具授权",
-			Body:    body,
-			Actions: permissionActions(ask.ApprovalID),
+			Body:    text,
+			Actions: actions,
 		},
 	}
 	if err := e.Deliver(ctx, in, msg); err != nil {

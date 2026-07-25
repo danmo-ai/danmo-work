@@ -152,14 +152,42 @@ func preferOutboundKind(caps port.ChannelCapabilities, want port.OutboundKind) p
 }
 
 // finalOutboundFromParts joins collected agent message parts into an OutboundMessage.
-func finalOutboundFromParts(parts []string) port.OutboundMessage {
-	text := strings.TrimSpace(strings.Join(parts, "\n"))
+// toolLines and failed enrich Meta so endpoints can render progress-card end states.
+func finalOutboundFromParts(parts, toolLines []string, failed bool) port.OutboundMessage {
+	agentText := strings.TrimSpace(strings.Join(parts, "\n"))
+	var b strings.Builder
+	if len(toolLines) > 0 {
+		b.WriteString(strings.Join(toolLines, "\n"))
+		if agentText != "" {
+			b.WriteString("\n\n")
+		}
+	}
+	b.WriteString(agentText)
+	text := strings.TrimSpace(b.String())
 	if text == "" {
 		text = "（无文本回复）"
 	}
+	headline := "已完成"
+	status := "done"
+	if failed {
+		headline = "失败"
+		status = "error"
+	}
+	meta := map[string]string{
+		"status":   status,
+		"headline": headline,
+	}
+	if len(toolLines) > 0 {
+		meta["tool_lines"] = strings.Join(toolLines, "\n")
+	}
+	if agentText != "" {
+		meta["agent_text"] = agentText
+	}
 	return port.OutboundMessage{
-		Kind: port.OutboundKindMarkdown,
-		Text: text,
+		Kind:  port.OutboundKindMarkdown,
+		Title: headline,
+		Text:  text,
+		Meta:  meta,
 	}
 }
 

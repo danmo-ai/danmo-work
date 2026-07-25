@@ -28,6 +28,14 @@ type ConfigQQChannel struct {
 	Group ConfigQQGroupPolicy `json:"group,omitempty" mapstructure:"group" yaml:"group,omitempty"`
 }
 
+// QQNativeC2CStreamEnabled reports whether C2C stream_messages should be used (default true).
+func (c ConfigQQChannel) QQNativeC2CStreamEnabled() bool {
+	if c.NativeC2CStream == nil {
+		return true
+	}
+	return *c.NativeC2CStream
+}
+
 // ConfigQQGroupPolicy controls QQ group chat behavior.
 type ConfigQQGroupPolicy struct {
 	// RequireMention defaults true: only @-mention group messages are accepted
@@ -72,6 +80,16 @@ type ConfigFeishuChannel struct {
 	Domain string `json:"domain,omitempty" mapstructure:"domain" yaml:"domain,omitempty"`
 	// ProjectID binds inbound Feishu peers to one Teams project.
 	ProjectID string `json:"projectId,omitempty" mapstructure:"project_id" yaml:"project_id,omitempty"`
+	// RichProgress enables interactive progress cards (default true). When false, fall back to text PATCH.
+	RichProgress *bool `json:"richProgress,omitempty" mapstructure:"rich_progress" yaml:"rich_progress,omitempty"`
+}
+
+// FeishuRichProgressEnabled reports whether interactive progress cards are on (default true).
+func (c ConfigFeishuChannel) FeishuRichProgressEnabled() bool {
+	if c.RichProgress == nil {
+		return true
+	}
+	return *c.RichProgress
 }
 
 // ConfigWeixinChannel configures the Weixin iLink bridge.

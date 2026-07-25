@@ -38,14 +38,22 @@ func applyQQGroupPolicy(cfg domain.ConfigQQChannel, msg *port.InboundMessage) bo
 			}
 		}
 	}
-	// QQ only delivers GROUP_AT_MESSAGE_CREATE today; require_mention default true.
+	// Default true: only @-mention group messages (Meta["mentioned"]=="true").
+	// Today QQ delivers GROUP_AT_MESSAGE_CREATE which always sets mentioned;
+	// non-@ group events (if subscribed later) are dropped when require_mention is on.
 	requireMention := true
 	if policy.RequireMention != nil {
 		requireMention = *policy.RequireMention
 	}
 	if requireMention {
-		// Already @-gated by event type; keep for future always-on group events.
-		_ = requireMention
+		mentioned := false
+		if msg.Meta != nil {
+			v := strings.ToLower(strings.TrimSpace(msg.Meta["mentioned"]))
+			mentioned = v == "true" || v == "1" || v == "yes"
+		}
+		if !mentioned {
+			return false
+		}
 	}
 	if msg.Meta == nil {
 		msg.Meta = map[string]string{}

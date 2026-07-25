@@ -174,6 +174,9 @@ type PermissionPrompt struct {
 	ToolName   string
 	Summary    string
 	Scopes     []string // e.g. once, session (deny is always offered)
+	// StreamID, when set, lets endpoints patch the live progress card/stream
+	// with approval buttons instead of sending a separate message.
+	StreamID string
 }
 
 // ChannelInteractor is an optional ChannelEndpoint extension for ask_user.

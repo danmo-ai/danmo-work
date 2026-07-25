@@ -12,6 +12,8 @@ export interface QQStatus {
   projectId?: string
   hasClientSecret?: boolean
   groupDenyTools?: string[]
+  requireMention?: boolean
+  nativeC2cStream?: boolean
 }
 
 export const useQQStore = defineStore('qq', () => {
@@ -39,6 +41,8 @@ export const useQQStore = defineStore('qq', () => {
     clientSecret?: string
     projectId?: string
     groupDenyTools?: string[]
+    requireMention?: boolean
+    nativeC2cStream?: boolean
   }) {
     saving.value = true
     try {

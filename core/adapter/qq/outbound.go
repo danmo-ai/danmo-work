@@ -17,6 +17,13 @@ func nextMsgSeq() int64 {
 
 // DeliverOutbound maps OutboundMessage onto QQ C2C/group send APIs.
 func (a *Adapter) DeliverOutbound(ctx context.Context, in *port.InboundMessage, msg port.OutboundMessage) error {
+	// Optional local file notice via Meta (path-notice contract; binary upload TBD).
+	if msg.Meta != nil {
+		if path := strings.TrimSpace(msg.Meta["file_path"]); path != "" {
+			name := strings.TrimSpace(msg.Meta["file_name"])
+			return a.SendLocalFile(ctx, in, path, name)
+		}
+	}
 	text := strings.TrimSpace(msg.Text)
 	title := strings.TrimSpace(msg.Title)
 	var actions []port.OutboundAction

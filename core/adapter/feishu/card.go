@@ -77,7 +77,7 @@ func BuildInteractiveCard(title, body string, actions []port.OutboundAction) map
 	return map[string]any{
 		"schema": "2.0",
 		"header": map[string]any{
-			"template": "blue",
+			"template": headerTemplate(title),
 			"title":    map[string]any{"tag": "plain_text", "content": title},
 		},
 		"body": map[string]any{
@@ -86,8 +86,23 @@ func BuildInteractiveCard(title, body string, actions []port.OutboundAction) map
 	}
 }
 
-// BuildProgressCard builds a progress / status interactive card (no buttons).
-func BuildProgressCard(headline, textBody string, toolLines []string) map[string]any {
+func headerTemplate(title string) string {
+	lower := strings.ToLower(strings.TrimSpace(title))
+	switch {
+	case strings.Contains(lower, "失败") || strings.Contains(lower, "出错") || strings.Contains(lower, "error") || strings.Contains(lower, "fail"):
+		return "red"
+	case strings.Contains(lower, "等待") || strings.Contains(lower, "审批") || strings.Contains(lower, "确认"):
+		return "orange"
+	case strings.Contains(lower, "完成") || strings.Contains(lower, "done") || strings.Contains(lower, "授权"):
+		return "green"
+	default:
+		return "blue"
+	}
+}
+
+// BuildProgressCard builds a progress / status interactive card.
+// actions may attach approval / ask buttons on the same card (Phase A same-card prefer).
+func BuildProgressCard(headline, textBody string, toolLines []string, actions []port.OutboundAction) map[string]any {
 	var b strings.Builder
 	if h := strings.TrimSpace(headline); h != "" {
 		b.WriteString("**")
@@ -105,7 +120,7 @@ func BuildProgressCard(headline, textBody string, toolLines []string) map[string
 	if body == "" {
 		body = "正在处理…"
 	}
-	return BuildInteractiveCard(headline, body, nil)
+	return BuildInteractiveCard(headline, body, actions)
 }
 
 // CallbackTokenFromActionValue extracts our dw|… token from a card action value map.
