@@ -41,7 +41,19 @@ make dev-web   # → http://localhost:5801/app/
 
 ## 界面一览
 
-三栏工作台：项目侧栏 · Agent 执行日志 · 右侧面板（计划 / 文件 / **记忆** / 变更 / 终端 / 浏览器）。
+三栏工作台：项目侧栏 · Agent 执行 Stream · 右侧面板（计划 / 文件 / **记忆** / 变更 / 终端 / 浏览器）。中间画布按文件类型切换 **浏览器** 或 **Document Stage**。
+
+### Document Stage — 文档 / 幻灯片 / 表格在线编辑 + AI
+
+从 Files 打开项目里的 `.md`、幻灯片 Markdown、`.csv` → **Document Stage** 占据中间画布（通用 `.html` 仍走浏览器）。分格式编辑器；AI 润色/修改走普通 **session turn**（不是独立 `/office/ai` API）。
+
+| 类型 | 真相源 | 编辑器 |
+|------|--------|--------|
+| **Doc** | GFM `.md` | TipTap（编辑会话内 MD ↔ HTML） |
+| **Slides** | 以 `---` 分页的 Markdown | 编辑 Markdown + 播放 HTML |
+| **Sheet** | `.csv` / `.danmo-sheet.json` | 表格网格 |
+
+工具栏组装 `[office-edit]` prompt → `POST /sessions/:id/turns`。AI 前自动保存脏内容；作用域可为选区 / 全文 / 当前页 / 整表。Turn 结束后 Stage 重载文件并恢复滚动（幻灯片保留页码）。Stream 仍可见，用于跟踪 AI 进度。
 
 ### 点选页面，直接说改哪里
 
@@ -86,7 +98,7 @@ make dev-web   # → http://localhost:5801/app/
 
 - **专家团** — 本地 + 市场 Agent；概览 / 提示词 / 技能 / 工具 / 知识库
 - **技能库** — 内置与自定义 Agentskills；指令、文件、工具绑定
-- **运行时** — Turn 循环上限、最大委派深度、记忆 TopK、OS 沙箱与网络策略
+- **运行时** — Turn 循环上限、**本地 Tool 输出硬上限**（`runtime.tools.max_output_chars`，默认 50k）、最大委派深度、记忆 TopK、OS 沙箱与网络策略
 
 ## 设计哲学
 
@@ -241,12 +253,12 @@ server/   cli/   tui/    frontend/ (Vue 3 + Vite)
 | 运行时 | `core/runtime/` | Session/Turn Runner、Prompt、压缩、权限、Tool 执行 |
 | 领域 | `core/domain/` | Agent、Session、Project、Skill、Knowledge、Memory、Turn 等 |
 | 端口 | `core/port/` | Engine、LLMProvider、Repository、Stream 接口 |
-| 适配 | `core/adapter/` | LLM 提供者、配置加载器 |
+| 适配 | `core/adapter/` | LLM 提供者、IM 通道（飞书 / QQ / 微信 / 企微）、配置加载器 |
 | 存储 | `core/store/` | SQLite 持久化、Turn Log |
 
 ## 前置条件
 
-- Go 1.25+
+- Go 1.26+
 - Node.js 20+（前端 / 桌面）
 - 同级目录的 [`dq-ui`](https://github.com/danmo-ai/dq-ui) 仓库（前端依赖 `file:../../dq-ui/packages/*`）
 
@@ -378,7 +390,8 @@ Tag 触发时会将产物附加到 GitHub Release。
 
 | 文档 | 说明 |
 |------|------|
-| [docs/core-design.md](docs/core-design.md) | 核心设计：统一 Agent 架构与引擎 |
+| [docs/core-design.md](docs/core-design.md) | 核心设计：统一 Agent 架构、通道、Document Stage |
+| [docs/channel-qq-feishu-plan.md](docs/channel-qq-feishu-plan.md) | QQ / 飞书 / 微信通道方案（Phase A–C 已落地） |
 | [docs/launch-posts.md](docs/launch-posts.md) | 社区发帖稿（可直接复制） |
 | [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor Terminal-Bench 2.0 评测与 Agent 对比 |
 | [AGENTS.md](AGENTS.md) | 贡献者 / Agent 速查 |
