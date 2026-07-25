@@ -188,10 +188,13 @@ Danmo-Work/
 │   ├── port/               # Engine / LLM / Repository 接口
 │   ├── service/            # SessionManager、AgentManager、…
 │   ├── runtime/            # SessionRunner、TurnRunner、Tool、Permission、Compaction
-│   ├── adapter/            # LLM providers、config loader
+│   ├── adapter/            # LLM providers、IM 通道、config loader
+│   │   ├── llm/            # Anthropic / OpenAI-compat / Mock + tool-args JSON repair
+│   │   ├── feishu/ qq/ weixin/ wecom/
+│   │   └── config/
 │   ├── store/              # SQLite + turnlog
 │   └── paths/              # 用户数据目录
-├── frontend/               # Vue 3 + Vite
+├── frontend/               # Vue 3 + Vite（含 Document Stage / office surfaces）
 ├── desktop/                # Tauri 薄壳
 ├── scripts/
 ├── docs/
@@ -212,12 +215,12 @@ server/api  →  core/service  →  core/port
 |----|------|------|
 | Entry | `server/` `cli/` `tui/` | HTTP / CLI / TUI |
 | Bootstrap | `core/bootstrap/` | DI 装配 |
-| Services | `core/service/` | 会话、项目、Agent、技能、审批、MCP、配置 |
-| Runtime | `core/runtime/` | Agent Loop、Tool 执行、权限、压缩 |
+| Services | `core/service/` | 会话、项目、Agent、技能、审批、MCP、配置、**ChannelIngress** |
+| Runtime | `core/runtime/` | Agent Loop、Tool 执行、权限、压缩、输出硬上限 |
 | Domain | `core/domain/` | 实体与值对象 |
-| Ports | `core/port/` | Engine、LLM、Repository、Stream |
-| Adapters | `core/adapter/` | Anthropic / Mock LLM、配置加载 |
-| Store | `core/store/` | SQLite 元数据、Turn Log、Checkpoint |
+| Ports | `core/port/` | Engine、LLM、Repository、Stream、**Channel*** |
+| Adapters | `core/adapter/` | LLM、IM 通道（飞书 / QQ / 微信 / 企微）、配置加载 |
+| Store | `core/store/` | SQLite 元数据、Turn Log、Checkpoint、channel_bindings |
 
 ---
 
@@ -259,11 +262,26 @@ Step 循环 1..MaxSteps (Agent.Steps 或默认 20):
   2. LLM Chat（含 function calling）
   3. 无 tool call → 最终文本报告，结束
   4. 有 tool call → 权限门禁 → 审批等待（如需）→ 执行 Tool
-  5. Tool Result 注入 messages，进入下一步
+  5. 立即 hard-cap Tool Result（见 6.3.1）→ 注入 messages / Stream / Turn Log
   末步强制 toolChoice=none + 最大步数提醒
 ```
 
 Doom-loop 检测、权限门禁、审批阻塞、`ask_user` 阻塞均在此层完成。
+
+#### 6.3.1 本地 Tool 输出硬上限
+
+`exec_shell` / MCP 等可能一次吐出超大文本；若等到 Session/Turn 压缩才截断，首轮就可能撑爆 context。
+
+| 项 | 行为 |
+|----|------|
+| 配置 | `runtime.tools.max_output_chars`（默认 **50000**） |
+| 时机 | `Execute` 之后、进入 LLM context / UI stream / Turn Log **之前** |
+| UI | Settings → Runtime → Local Tools 滑条（5k–200k） |
+| 与压缩关系 | 硬上限是**首道闸**；compaction 的渐进截断仍作用于后续 steps |
+
+#### 6.3.2 Tool-call 参数 JSON 修复
+
+OpenAI-compat 路径上，模型常把 `write`/`edit` 等内容里的未转义引号、裸换行写进 `arguments`，严格 `encoding/json` 会整次 Chat 失败。`core/adapter/llm` 在 `parseArgs` 严格解析失败后走 best-effort `repairJSONObject`（转义字符串内裸引号/控制字符、去尾逗号、补全截断括号），再失败才报错。
 
 ### 6.4 核心服务（`core/service/`）
 
@@ -272,7 +290,7 @@ Doom-loop 检测、权限门禁、审批阻塞、`ask_user` 阻塞均在此层�
 | `SessionManager` | Session CRUD，触发 Engine 启动/续聊 |
 | `TurnManager` | Turn 元数据（SQLite） |
 | `TurnLogManager` | 文件系统 Turn Log |
-| `ProjectManager` | Project + 数据目录解析 |
+| `ProjectManager` | Project + 数据目录解析；Stage 文件 `PUT .../files/content` |
 | `AgentManager` | Agent CRUD + 内置模板 |
 | `SkillManager` | Skill 与 Skill 文件 |
 | `ApprovalManager` | 审批记录 |
@@ -280,6 +298,8 @@ Doom-loop 检测、权限门禁、审批阻塞、`ask_user` 阻塞均在此层�
 | `MCPManager` | MCP Server 配置 |
 | `KnowledgeManager` | 知识库 |
 | `ConfigManager` | YAML 配置 |
+| `ChannelIngress` | IM 入站 → Session Turn → 经 `ChannelEndpoint` 出站；`HandleInteraction` |
+| `*Bridge` / `*Endpoint` | 各平台连接与差异化投递（飞书 / QQ / 微信 / 企微） |
 
 装配入口：`core/bootstrap/bootstrap.go` → `bootstrap.Core`。
 
@@ -472,6 +492,8 @@ RecoverRunning:
 
 ### 10.1 Turn 内压缩（`TurnRunner.compactMessages`）
 
+Tool 刚执行完时已按 `runtime.tools.max_output_chars` 做硬上限（§6.3.1）。压缩是后续 steps 的二次治理：
+
 ```
 每 Step（step > 1，且 compaction.enabled）:
   1. 去重: 同 tool+input → 保留最新，旧结果摘要
@@ -529,19 +551,106 @@ Zone C — Scratch:  当前 Turn 的 user + Step 消息
 | 压缩 | `context.compacted` |
 | Session / Turn | 开始、完成、失败 |
 
-历史事件可经 API 查询；Turn Log 提供完整可审计轨迹。
+历史事件可经 API 查询；Turn Log 提供完整可审计轨迹。IM 通道通过 `ProgressUpdater` / `StreamSender` 将同类进度映射为平台卡片或流式气泡（见 §12）。
 
 ---
 
-## 12. 产品形态与价值
+## 12. IM 通道（ChannelEndpoint）
 
-工作台右侧 Tab：计划 / 文件 / **记忆** / 变更 / 终端 / 浏览器。记忆 Tab 展示当前可见作用域下的持久记忆条目。
+手机 IM 与桌面共用同一套 Agent Loop；差异收敛在 Endpoint，**Ingress 无平台业务分支**。契约见 `core/port/channel.go`；规划与落地状态见 [`channel-qq-feishu-plan.md`](channel-qq-feishu-plan.md)。
+
+### 12.1 编排
+
+```
+平台事件 / 长连接
+  → Adapter 归一化为 InboundMessage | InteractionEvent
+  → ChannelIngress.HandleInbound / HandleInteraction
+       → 解析 peer 项目绑定（meta.project_id → channel 默认 project）
+       → 启动/续聊 Session Turn（工具仍在本机）
+       → StreamEvent → ProgressUpdater / StreamSender
+       → 终态 OutboundMessage → ChannelEndpoint.Deliver
+```
+
+| 接口 | 职责 |
+|------|------|
+| `ChannelEndpoint` | `Capabilities` + `Deliver(OutboundMessage)` |
+| `StreamSender` | 渐进流：Start → Update* → Finish |
+| `ProgressUpdater` | 更富的 tool/进度卡片（优先于纯文本 Update） |
+| `ChannelInteractor` | 通道内呈现 `ask_user`（卡片 / 键盘 / 编号菜单） |
+| `ChannelApprover` | 通道内工具审批（once / session / deny） |
+| `HandleInteraction` | 按钮/键盘回调 → ResolveAskUser / DecideApproval / `/project`；**不新建 Turn** |
+
+会话键：`(channel, account, peer)`。多通道绑同一项目**不串会话**。入站媒体落盘到 `data/channels/...`。
+
+### 12.2 能力分化（现状）
+
+| 通道 | 连接 | 渐进流 | 审批 / ask | 备注 |
+|------|------|--------|------------|------|
+| **飞书** | 出站长连接 | 进度卡 PATCH（可挂审批按钮） | schema 2.0 交互卡片 / 表单 | `auto_approve` 默认 false |
+| **QQ** | Gateway WS | `native_c2c_stream` | Keyboard | 群 `require_mention` / `deny_tools` |
+| **企微** | 出站 WS | 原生 `msgtype: stream` | 流内文字菜单 | ~5s 占位规则 |
+| **微信** | iLink 长轮询 | 「正在处理…」→ 终态（无中途编辑） | 回复 `1/2/3` 文字菜单 | peer `/project` 覆盖账号默认项目 |
+
+出站统一为 `OutboundMessage`（text / markdown / card）；Endpoint 按 `Capabilities` 降级（如微信 card → 编号文本）。
+
+### 12.3 非目标（通道层）
+
+独立原生 App / 小程序、非官方 QQ 协议、用 IM 复刻完整桌面 Trace/Memory/Settings、完整二进制出站上传、微信原生卡片（iLink 无）。
+
+---
+
+## 13. Document Stage（办公画布）
+
+中间画布除 Browser 外增加 **Document Stage**：按文件类型打开文档 / 幻灯片 / 表格的在线编辑面；AI 改稿走**普通 session turn**，不另开 `/office/ai`。
+
+### 13.1 路由与格式
+
+Files 树点击 → `routeOfficeFile`（`frontend/src/utils/office-route.ts`）：
+
+| Kind | 真相源（SoT） | Surface | 默认模式 |
+|------|---------------|---------|----------|
+| `doc` | GFM `.md` | TipTap（编辑会话 MD ↔ HTML） | edit |
+| `slides` | Markdown `---` 分页；`*-slides.html` 可播放 | 编辑 Markdown / present HTML | edit 或 present |
+| `sheet` | `.csv` / `.danmo-sheet.json` | 网格编辑 | edit |
+| （非 Stage） | 通用 `.html` | 仍走 Browser | — |
+
+布局：`DocFocus` / `Immersive` 时 Stage 占中心；Stream 仍可见以跟踪 AI turn。
+
+### 13.2 AI 编辑回合
+
+```
+Stage 工具栏（润色 / 修改 / …）
+  → 若 dirty：先 auto-save（失败则确认）——避免 Agent 读到旧盘、reload 冲掉未保存编辑
+  → buildOfficeEditPrompt → [office-edit] 块（action / path / kind / scope / selection）
+  → POST /sessions/:id/turns
+  → Document Agent + document-writing / playable-slides / sheet-writing skills
+  → Turn 完成后 Stage reload；恢复 scroll 与 slides pageIndex
+```
+
+| Scope | 含义 |
+|-------|------|
+| `selection` | 当前选区 |
+| `document` | 全文 |
+| `slide` | 当前幻灯片页 |
+| `sheet` | 整表 |
+
+保存 API：`PUT /api/v1/projects/:id/files/content`。
+
+### 13.3 非目标（本阶段）
+
+OOXML 作 SoT / OfficeCLI 导出、独立 Office AI 端点、Yjs 协同。
+
+---
+
+## 14. 产品形态与价值
+
+工作台：侧栏 · Stream · 右侧 Tab（计划 / 文件 / **记忆** / 变更 / 终端 / 浏览器）· 中心 **Browser 或 Document Stage**。记忆 Tab 展示当前可见作用域下的持久记忆条目。IM 通道是同一 Agent Loop 的远端输入面。
 
 | 层级 | 价值 |
 |------|------|
 | 基础 | Agent 自动执行任务 |
 | 进阶 | 可视化审计，可解释 |
-| 核心 | 人机实时协作，共同决策 |
+| 核心 | 人机实时协作，共同决策（桌面 Stage + IM 审批 / ask） |
 | 壁垒 | 工作流即知识，可沉淀、复用、分享；Agent 记忆跨会话延续 |
 
 **架构优势**：
@@ -551,10 +660,11 @@ Zone C — Scratch:  当前 Turn 的 user + Step 消息
 3. **弹性**：异常可恢复，错误可纠正，状态不丢失
 4. **动态**：模型自主规划，自适应任务复杂度
 5. **沉淀**：成功轨迹可复用为模板与自动化
+6. **多入口**：Web / 桌面 / CLI / TUI / IM 共用同一引擎
 
 ---
 
-## 13. 参考项目设计借鉴
+## 15. 参考项目设计借鉴
 
 | 设计点 | 参考来源 | 借鉴 |
 |--------|---------|------|
@@ -563,13 +673,15 @@ Zone C — Scratch:  当前 Turn 的 user + Step 消息
 | 三区 KV cache | CodeWhale | Zone A frozen + Zone B append |
 | 切点算法 | pi (findCutPoint) | 逆向累计，禁止切 tool_result |
 | 压缩摘要 | opencode + pi | Checkpoint JSON + 增量合并 |
-| Tool result 治理 | DeepCode + CodeWhale | 去重 / 截断 / 配对 / 头尾截断 |
+| Tool result 治理 | DeepCode + CodeWhale | 硬上限 + 去重 / 截断 / 配对 / 头尾截断 |
 | 分层架构 | Ports & Adapters | service → port ← runtime / store |
 | 显式 Memory Tool | Cursor / Claude Memory | `memory_update` / `memory_read` + 三级作用域 |
+| IM 出站长连接 | 飞书 / 企微 / QQ Bot | ChannelEndpoint + Capabilities 降级 |
+| 文档 SoT = Markdown | 常见 MD-first 编辑器 | Document Stage；AI 走 session turn |
 
 ---
 
-## 14. 总结
+## 16. 总结
 
 > **在「一切皆工具，模型驱动一切，日志原生持久化」的架构下，Code 和 Work 是伪区分。**
 >
@@ -584,7 +696,8 @@ Zone C — Scratch:  当前 Turn 的 user + Step 消息
 | **人机关系** | 人下指令，机器执行 | 人进入思维流，共同迭代 |
 | **调试** | 外部干预，改代码重跑 | 原生能力，改数据 / 审批继续 |
 | **信任** | 预设规则限制 | 完全透明，随时纠正 |
+| **入口** | 多为单一 Chat / IDE | Web · 桌面 · CLI · TUI · IM 通道 · Document Stage |
 
 ---
 
-*架构版本：v2.1（Session / Turn / Tool 统一模型 + durable Memory）*
+*架构版本：v2.2（Session / Turn / Tool + Memory + ChannelEndpoint + Document Stage + tool-output hard cap）*

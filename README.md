@@ -41,7 +41,19 @@ Add an LLM API key in the UI (or `~/.danmo-work/config.yaml`). See [Quick start]
 
 ## See it
 
-Three-pane workspace: project sidebar · agent execution log · right panel (Plan / Files / **Memory** / Changes / Terminal / Browser).
+Three-pane workspace: project sidebar · agent execution Stream · right panel (Plan / Files / **Memory** / Changes / Terminal / Browser). Center canvas hosts **Browser** or **Document Stage** depending on the file.
+
+### Document Stage — edit docs, slides, and sheets with AI
+
+Open a project `.md` / slides markdown / `.csv` from Files → the **Document Stage** takes the center canvas (Browser keeps generic `.html`). Format-specific editors; AI polish/modify runs as a normal **session turn** (not a separate API).
+
+| Kind | Source of truth | Editor |
+|------|-----------------|--------|
+| **Doc** | GFM `.md` | TipTap (MD ↔ HTML for the edit session) |
+| **Slides** | Markdown with `---` pages | Edit markdown + present playable HTML |
+| **Sheet** | `.csv` / `.danmo-sheet.json` | Grid editor |
+
+Toolbar builds an `[office-edit]` prompt → `POST /sessions/:id/turns`. Dirty content auto-saves before AI; scope can be selection / full document / this slide / whole sheet. After the turn, the Stage reloads the file and restores scroll (and slides page index). Stream stays visible for turn progress.
 
 ### Point at the page — don't describe it
 
@@ -86,7 +98,7 @@ Edit agent prompts, Agentskills (`SKILL.md`), and sandbox / delegation limits in
 
 - **Experts** — local + market agents; overview / prompt / skills / tools / knowledge
 - **Skills** — built-in & custom Agentskills; instructions, files, tool bindings
-- **Runtime** — turn loop limits, max delegation depth, memory TopK, OS sandbox & network policy
+- **Runtime** — turn loop limits, **tool output hard cap** (`runtime.tools.max_output_chars`, default 50k), max delegation depth, memory TopK, OS sandbox & network policy
 
 ## Design philosophy
 
@@ -241,12 +253,12 @@ server/   cli/   tui/    frontend/ (Vue 3 + Vite)
 | Runtime | `core/runtime/` | Session/Turn runners, prompt, compaction, permission, tools |
 | Domain | `core/domain/` | Agent, Session, Project, Skill, Knowledge, Memory, Turn, … |
 | Ports | `core/port/` | Engine, LLMProvider, Repository, Stream |
-| Adapters | `core/adapter/` | LLM providers, config loader |
+| Adapters | `core/adapter/` | LLM providers, IM channels (Feishu / QQ / Weixin / WeCom), config loader |
 | Store | `core/store/` | SQLite + Turn Log |
 
 ## Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - Node.js 20+ (frontend / desktop)
 - Sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui) repo (frontend depends on `file:../../dq-ui/packages/*`)
 
@@ -378,7 +390,8 @@ Tag builds are attached to the GitHub Release.
 
 | Doc | Description |
 |-----|-------------|
-| [docs/core-design.md](docs/core-design.md) | Core design: unified agent architecture & engine |
+| [docs/core-design.md](docs/core-design.md) | Core design: unified agent architecture, channels, Document Stage |
+| [docs/channel-qq-feishu-plan.md](docs/channel-qq-feishu-plan.md) | QQ / Feishu / Weixin channel plan (Phase A–C landed) |
 | [docs/launch-posts.md](docs/launch-posts.md) | Community launch post drafts (copy-paste) |
 | [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor Terminal-Bench 2.0 eval & agent compare |
 | [AGENTS.md](AGENTS.md) | Contributor / agent quick reference |

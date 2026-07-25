@@ -361,21 +361,23 @@ stateDiagram-v2
 
 ---
 
-## 实施状态（已落地）
+## 实施状态（已落地 · main）
 
-Phase A + B + C 已实现于本分支（含验收缺口补齐）：
+Phase A + B + C 已合入 main（含验收缺口补齐；见 PR #3 / #6）：
 
-- 共享 Ingress：权限呈现（含 `StreamID` 同卡审批）、`HandleInteraction`、`/project`、peer `project_id`、进度事件、终态保留 tool 行/失败态、入站媒体落盘、群工具拒绝
+- 共享 Ingress：`ChannelEndpoint` 编排、权限呈现（含 `StreamID` 同卡审批）、`HandleInteraction`、`/project`、peer `project_id`、进度事件、终态保留 tool 行/失败态、入站媒体落盘、群工具拒绝
 - 飞书：schema 2.0 交互卡片/表单、长连接 `card.action.trigger`、进度卡（可挂审批按钮）、`rich_progress` 开关、`auto_approve` 默认 false、图片/文件入站下载
 - QQ：Gateway WS、`native_c2c_stream` 开关、C2C stream、keyboard 审批/ask、附件入站、群 `require_mention` 丢弃未 @、群 `deny_tools`、出站文件路径通知（`Meta.file_path`）、主动消息/频控错误提示、设置页与 API
 - 非目标仍跳过：多维表格/文档链、STT、完整二进制出站上传
 
-### 微信通道对齐（本分支续作）
+### 微信通道对齐（已合入）
 
 - peer `meta.project_id` 持久化（`weixin_bindings.meta_json`），`/project` 真正覆盖账号默认项目
 - `InteractiveApprove` + 编号菜单审批；`auto_approve` 新启用默认 false
 - 入站图片/文件/语音（无 ASR 时）CDN 下载解密 → `data/channels/weixin/...`
 - FinishStream 附带失败标题；无中途气泡编辑（iLink 限制）
+
+架构说明见 [`core-design.md`](core-design.md) §12。
 
 ---
 
