@@ -18,12 +18,14 @@ import AskUserBlock, { type AskUserFormField } from '@/components/center/AskUser
 import { groupConsecutiveToolCards, useTurnCollapse, type StreamTurn, type ToolCard, type UserImageAttachment } from '@/composables/useStreamTurns'
 import RightWorkspacePanel from '@/components/center/RightWorkspacePanel.vue'
 import ElementAnnotatePopover from '@/components/center/ElementAnnotatePopover.vue'
+import DocumentStage from '@/components/office/DocumentStage.vue'
 import { renderMarkdown } from '@/utils/markdown-render'
 import { toast } from '@/utils/feedback'
 import { apiBaseUrl, saveBlobAs } from '@/utils/desktop'
 import { fromInspectPayload, type InspectElementPayload } from '@/types/element-attachment'
 import { fetchJSON } from '@/api/client'
 import { formatTokenCount, useSessionContextUsage } from '@/composables/useSessionContextUsage'
+import { routeOfficeFile } from '@/utils/office-route'
 
 import type { StreamEvent, TurnLog } from '@/types/mission'
 
@@ -31,7 +33,7 @@ const router = useRouter()
 const { t } = useI18n()
 const sessions = useSessionsStore()
 const workspaceUi = useWorkspaceUiStore()
-const { rightTab } = storeToRefs(workspaceUi)
+const { rightTab, stage, layoutMode } = storeToRefs(workspaceUi)
 const rightPanelRef = ref<InstanceType<typeof RightWorkspacePanel> | null>(null)
 const { tokensForTurn } = useSessionContextUsage()
 const isEditingTitle = ref(false)
@@ -145,19 +147,41 @@ function toProxyUrl(rawUrl: string): string {
   }
 }
 
+async function openFileInOffice(filePath: string) {
+  if (!sessions.selectedProjectId) return
+  let contentHint: string | undefined
+  try {
+    if (/\.(md|markdown|html?)$/i.test(filePath)) {
+      const fc = await fetchJSON<{ content: string }>(
+        `/projects/${sessions.selectedProjectId}/files/content?path=${encodeURIComponent(filePath)}`,
+      )
+      contentHint = fc.content
+    }
+  } catch {
+    /* routing can proceed without hint */
+  }
+  const routed = routeOfficeFile(filePath, contentHint)
+  if (routed === 'browser' || routed == null) {
+    openFileInBrowser(filePath)
+    return
+  }
+  workspaceUi.openStage(routed)
+}
+
 function openFileInBrowser(filePath: string) {
   if (!sessions.selectedProjectId) return
+  // Office formats open in Document Stage, not Browser.
+  if (/\.(md|markdown|csv|danmo-sheet\.json)$/i.test(filePath) || /-slides\.html$/i.test(filePath)) {
+    void openFileInOffice(filePath)
+    return
+  }
   const apiPath = `/api/v1/projects/${sessions.selectedProjectId}/raw/${encodeURIComponent(filePath)}`
   const base = apiBaseUrl()
   const url = `${base}${apiPath}`
   browserUrl.value = url
   browserUrlInput.value = url
   rightTab.value = 'browser'
-  if (isMdUrl(filePath)) {
-    loadMdContent(apiPath)
-  } else {
-    browserMdHtml.value = ''
-  }
+  browserMdHtml.value = ''
 }
 
 function startElementSelect() {
@@ -1486,8 +1510,18 @@ function onTitleKeydown(e: KeyboardEvent) {
       </div>
     </header>
 
-    <div ref="bodyRef" class="session-workspace__body" :style="{ gridTemplateColumns: `${splitPercent}% 8px 1fr` }">
-      <div class="session-workspace__stream">
+    <div
+      ref="bodyRef"
+      class="session-workspace__body"
+      :class="{
+        'session-workspace__body--doc': layoutMode === 'doc' && !!stage,
+        'session-workspace__body--immersive': layoutMode === 'immersive' && !!stage,
+      }"
+      :style="layoutMode === 'chat' || !stage
+        ? { gridTemplateColumns: `${splitPercent}% 8px 1fr` }
+        : undefined"
+    >
+      <div v-show="layoutMode !== 'immersive'" class="session-workspace__stream">
       <div
         ref="scrollAreaRef"
         class="session-workspace__scroll"
@@ -1653,9 +1687,24 @@ function onTitleKeydown(e: KeyboardEvent) {
       
       </div>
 
-      <div class="session-workspace__split" @pointerdown="onSplitResizePointerDown" />
+      <div
+        v-show="layoutMode === 'chat' || !stage"
+        class="session-workspace__split"
+        @pointerdown="onSplitResizePointerDown"
+      />
 
-      <div class="session-workspace__right">
+      <DocumentStage
+        v-if="stage && sessions.selectedProjectId"
+        class="session-workspace__stage"
+        :project-id="sessions.selectedProjectId"
+      />
+
+      <div
+        v-show="layoutMode === 'doc' && !!stage"
+        class="session-workspace__split session-workspace__split--static"
+      />
+
+      <div v-show="layoutMode !== 'immersive'" class="session-workspace__right">
         <RightWorkspacePanel
           ref="rightPanelRef"
           v-model:tab="rightTab"
@@ -1665,6 +1714,7 @@ function onTitleKeydown(e: KeyboardEvent) {
           :changes-count="workspaceUi.changesCount"
           :agent-id="sessions.selectedAgentId"
           @open-in-browser="openFileInBrowser"
+          @open-in-office="openFileInOffice"
         >
           <template #browser>
 <div class="session-workspace__browser">
@@ -1814,6 +1864,24 @@ function onTitleKeydown(e: KeyboardEvent) {
   min-height: 0;
   display: grid;
   overflow: hidden;
+}
+
+.session-workspace__body--doc {
+  grid-template-columns: minmax(200px, 26%) 1fr minmax(200px, 24%);
+}
+
+.session-workspace__body--immersive {
+  grid-template-columns: 1fr;
+}
+
+.session-workspace__stage {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.session-workspace__split--static {
+  display: none;
 }
 
 .session-workspace__stream {

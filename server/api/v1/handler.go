@@ -89,6 +89,7 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/projects/:id/sessions", listProjectSessions(h))
 	api.GET("/projects/:id/files", listProjectFiles(h))
 	api.GET("/projects/:id/files/content", readProjectFile(h))
+	api.PUT("/projects/:id/files/content", writeProjectFile(h))
 	api.GET("/projects/:id/raw/*filepath", serveProjectFile(h))
 	api.GET("/proxy/*target", proxyDevServer(h))
 	api.GET("/projects/:id/git-changes", getProjectGitChanges(h))
@@ -906,6 +907,28 @@ func readProjectFile(h *Handler) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, fc)
+	}
+}
+
+func writeProjectFile(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Path    string `json:"path"`
+			Content string `json:"content"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+			return
+		}
+		if strings.TrimSpace(req.Path) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "path is required"})
+			return
+		}
+		if err := h.Projects.WriteFileContent(c, c.Param("id"), req.Path, req.Content); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "path": req.Path})
 	}
 }
 
