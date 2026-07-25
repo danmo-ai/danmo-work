@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '@/api/client'
 import { apiBaseUrl } from '@/utils/desktop'
 import { toast } from '@/utils/feedback'
+import type { OfficeEditScope } from '@/utils/office-route'
 
 const props = defineProps<{
   projectId: string
@@ -26,6 +27,10 @@ const source = ref('')
 const pages = ref<string[]>([])
 const pageIndex = ref(0)
 const dirty = ref(false)
+const editorRef = ref<HTMLTextAreaElement | null>(null)
+const thumbsRef = ref<HTMLElement | null>(null)
+const editorScrollTop = ref(0)
+const thumbsScrollTop = ref(0)
 
 const isHtmlPresent = computed(() => /\.html?$/i.test(props.path))
 const presentUrl = computed(() => {
@@ -49,13 +54,28 @@ function joinSlides(parts: string[]): string {
   return parts.map((p) => p.trimEnd()).join('\n\n---\n\n') + '\n'
 }
 
-async function load() {
+function captureScroll() {
+  if (editorRef.value) editorScrollTop.value = editorRef.value.scrollTop
+  if (thumbsRef.value) thumbsScrollTop.value = thumbsRef.value.scrollTop
+}
+
+async function restoreScroll() {
+  await nextTick()
+  if (editorRef.value) editorRef.value.scrollTop = editorScrollTop.value
+  if (thumbsRef.value) thumbsRef.value.scrollTop = thumbsScrollTop.value
+}
+
+async function load(opts?: { resetPage?: boolean }) {
   if (!props.projectId || !props.path) return
+  captureScroll()
+  const keepPage = opts?.resetPage ? 0 : pageIndex.value
   loading.value = true
   try {
     if (isHtmlPresent.value) {
       source.value = ''
       pages.value = []
+      pageIndex.value = 0
+      emit('updatePageIndex', 0)
       return
     }
     const fc = await fetchJSON<{ content: string }>(
@@ -63,10 +83,11 @@ async function load() {
     )
     source.value = fc.content || ''
     pages.value = splitSlides(source.value)
-    if (pageIndex.value >= pages.value.length) pageIndex.value = 0
+    pageIndex.value = Math.min(keepPage, Math.max(0, pages.value.length - 1))
     dirty.value = false
     emit('dirty', false)
     emit('updatePageIndex', pageIndex.value)
+    await restoreScroll()
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('office.loadFailed'))
   } finally {
@@ -74,7 +95,7 @@ async function load() {
   }
 }
 
-async function save() {
+async function save(opts?: { quiet?: boolean }) {
   if (isHtmlPresent.value || !props.projectId) return
   saving.value = true
   try {
@@ -87,9 +108,10 @@ async function save() {
     dirty.value = false
     emit('dirty', false)
     emit('saved')
-    toast.success(t('office.saved'))
+    if (!opts?.quiet) toast.success(t('office.saved'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('office.saveFailed'))
+    throw e
   } finally {
     saving.value = false
   }
@@ -98,6 +120,10 @@ async function save() {
 function selectPage(i: number) {
   pageIndex.value = i
   emit('updatePageIndex', i)
+  editorScrollTop.value = 0
+  void nextTick(() => {
+    if (editorRef.value) editorRef.value.scrollTop = 0
+  })
 }
 
 function onPageEdit(e: Event) {
@@ -109,18 +135,27 @@ function onPageEdit(e: Event) {
   emit('dirty', true)
 }
 
+function getEditScope(): OfficeEditScope {
+  return 'slide'
+}
+
 function getSelectionMarkdown(): string {
   if (isHtmlPresent.value) return ''
   return pages.value[pageIndex.value] || ''
 }
 
 watch(
-  () => [props.projectId, props.path, props.reloadToken] as const,
-  () => load(),
+  () => [props.projectId, props.path] as const,
+  () => load({ resetPage: true }),
   { immediate: true },
 )
 
-defineExpose({ save, getSelectionMarkdown, dirty, saving, loading, pageIndex })
+watch(
+  () => props.reloadToken,
+  () => load({ resetPage: false }),
+)
+
+defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading, pageIndex })
 </script>
 
 <template>
@@ -135,7 +170,7 @@ defineExpose({ save, getSelectionMarkdown, dirty, saving, loading, pageIndex })
     />
 
     <div v-else-if="!isHtmlPresent" class="slides-surface__edit">
-      <aside class="slides-surface__thumbs">
+      <aside ref="thumbsRef" class="slides-surface__thumbs">
         <button
           v-for="(p, i) in pages"
           :key="i"
@@ -148,6 +183,7 @@ defineExpose({ save, getSelectionMarkdown, dirty, saving, loading, pageIndex })
         </button>
       </aside>
       <textarea
+        ref="editorRef"
         class="slides-surface__editor"
         :value="pages[pageIndex] || ''"
         :readonly="mode === 'view' || turnRunning"
@@ -229,13 +265,5 @@ defineExpose({ save, getSelectionMarkdown, dirty, saving, loading, pageIndex })
   outline: none;
   background: transparent;
   color: inherit;
-}
-.slides-surface__linkish {
-  margin-left: 8px;
-  border: 0;
-  background: none;
-  color: var(--dq-accent, #2563eb);
-  cursor: pointer;
-  text-decoration: underline;
 }
 </style>

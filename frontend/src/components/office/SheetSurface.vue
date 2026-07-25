@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
+import type { OfficeEditScope } from '@/utils/office-route'
 
 const props = defineProps<{
   projectId: string
@@ -22,6 +23,9 @@ const loading = ref(false)
 const saving = ref(false)
 const rows = ref<string[][]>([['']])
 const dirty = ref(false)
+const gridRef = ref<HTMLElement | null>(null)
+const scrollTop = ref(0)
+const scrollLeft = ref(0)
 const isJson = () => props.path.toLowerCase().endsWith('.danmo-sheet.json')
 
 function parseCsv(text: string): string[][] {
@@ -67,8 +71,15 @@ function toCsv(table: string[][]): string {
   )
 }
 
-async function load() {
+async function load(opts?: { resetScroll?: boolean }) {
   if (!props.projectId || !props.path) return
+  if (opts?.resetScroll) {
+    scrollTop.value = 0
+    scrollLeft.value = 0
+  } else if (gridRef.value) {
+    scrollTop.value = gridRef.value.scrollTop
+    scrollLeft.value = gridRef.value.scrollLeft
+  }
   loading.value = true
   try {
     const fc = await fetchJSON<{ content: string }>(
@@ -84,6 +95,11 @@ async function load() {
     }
     dirty.value = false
     emit('dirty', false)
+    await nextTick()
+    if (gridRef.value) {
+      gridRef.value.scrollTop = scrollTop.value
+      gridRef.value.scrollLeft = scrollLeft.value
+    }
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('office.loadFailed'))
   } finally {
@@ -91,7 +107,7 @@ async function load() {
   }
 }
 
-async function save() {
+async function save(opts?: { quiet?: boolean }) {
   if (!props.projectId) return
   saving.value = true
   try {
@@ -105,9 +121,10 @@ async function save() {
     dirty.value = false
     emit('dirty', false)
     emit('saved')
-    toast.success(t('office.saved'))
+    if (!opts?.quiet) toast.success(t('office.saved'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('office.saveFailed'))
+    throw e
   } finally {
     saving.value = false
   }
@@ -136,6 +153,10 @@ function addCol() {
   emit('dirty', true)
 }
 
+function getEditScope(): OfficeEditScope {
+  return 'sheet'
+}
+
 function getSelectionMarkdown(): string {
   const header = rows.value[0] || []
   const body = rows.value.slice(1)
@@ -145,12 +166,21 @@ function getSelectionMarkdown(): string {
 }
 
 watch(
-  () => [props.projectId, props.path, props.reloadToken] as const,
-  () => load(),
+  () => [props.projectId, props.path] as const,
+  () => {
+    void load({ resetScroll: true })
+  },
   { immediate: true },
 )
 
-defineExpose({ save, getSelectionMarkdown, dirty, saving, loading })
+watch(
+  () => props.reloadToken,
+  () => {
+    void load({ resetScroll: false })
+  },
+)
+
+defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading })
 </script>
 
 <template>
@@ -165,7 +195,7 @@ defineExpose({ save, getSelectionMarkdown, dirty, saving, loading })
           {{ t('office.addCol') }}
         </button>
       </div>
-      <div class="sheet-surface__grid-wrap">
+      <div ref="gridRef" class="sheet-surface__grid-wrap">
         <table class="sheet-surface__grid">
           <tbody>
             <tr v-for="(row, ri) in rows" :key="ri">

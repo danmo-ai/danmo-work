@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
@@ -8,6 +8,7 @@ import { fetchJSON } from '@/api/client'
 import { htmlToMarkdown, markdownToEditorHTML } from '@/utils/md-bridge'
 import { toast } from '@/utils/feedback'
 import { useI18n } from 'vue-i18n'
+import type { OfficeEditScope } from '@/utils/office-route'
 
 const props = defineProps<{
   projectId: string
@@ -20,13 +21,20 @@ const props = defineProps<{
 const emit = defineEmits<{
   dirty: [value: boolean]
   saved: []
+  scope: [value: OfficeEditScope]
 }>()
 
 const { t } = useI18n()
+const rootRef = ref<HTMLElement | null>(null)
 const loading = ref(false)
 const saving = ref(false)
 const sourceMarkdown = ref('')
 const dirty = ref(false)
+const scrollTop = ref(0)
+
+function publishScope(empty: boolean) {
+  emit('scope', empty ? 'document' : 'selection')
+}
 
 const editor = useEditor({
   extensions: [
@@ -39,6 +47,9 @@ const editor = useEditor({
   onUpdate: () => {
     dirty.value = true
     emit('dirty', true)
+  },
+  onSelectionUpdate: ({ editor: ed }) => {
+    publishScope(ed.state.selection.empty)
   },
 })
 
@@ -56,8 +67,10 @@ watch(
   },
 )
 
-async function load() {
+async function load(opts?: { resetScroll?: boolean }) {
   if (!props.projectId || !props.path) return
+  if (opts?.resetScroll) scrollTop.value = 0
+  else if (rootRef.value) scrollTop.value = rootRef.value.scrollTop
   loading.value = true
   try {
     const fc = await fetchJSON<{ content: string; binary?: boolean }>(
@@ -68,6 +81,9 @@ async function load() {
     editor.value?.commands.setContent(markdownToEditorHTML(sourceMarkdown.value), false)
     dirty.value = false
     emit('dirty', false)
+    publishScope(editor.value?.state.selection.empty ?? true)
+    await nextTick()
+    if (rootRef.value) rootRef.value.scrollTop = scrollTop.value
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('office.loadFailed'))
   } finally {
@@ -75,7 +91,7 @@ async function load() {
   }
 }
 
-async function save() {
+async function save(opts?: { quiet?: boolean }) {
   if (!editor.value || !props.projectId) return
   saving.value = true
   try {
@@ -88,12 +104,23 @@ async function save() {
     dirty.value = false
     emit('dirty', false)
     emit('saved')
-    toast.success(t('office.saved'))
+    if (!opts?.quiet) toast.success(t('office.saved'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('office.saveFailed'))
+    throw e
   } finally {
     saving.value = false
   }
+}
+
+function hasTextSelection(): boolean {
+  const ed = editor.value
+  if (!ed) return false
+  return !ed.state.selection.empty
+}
+
+function getEditScope(): OfficeEditScope {
+  return hasTextSelection() ? 'selection' : 'document'
 }
 
 function getSelectionMarkdown(): string {
@@ -107,26 +134,29 @@ function getSelectionMarkdown(): string {
 }
 
 watch(
-  () => [props.projectId, props.path, props.reloadToken] as const,
+  () => [props.projectId, props.path] as const,
   () => {
-    load()
+    void load({ resetScroll: true })
   },
   { immediate: true },
 )
 
-onMounted(() => {
-  /* editor created by useEditor */
-})
+watch(
+  () => props.reloadToken,
+  () => {
+    void load({ resetScroll: false })
+  },
+)
 
 onBeforeUnmount(() => {
   editor.value?.destroy()
 })
 
-defineExpose({ save, getSelectionMarkdown, dirty, saving, loading })
+defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading })
 </script>
 
 <template>
-  <div class="doc-surface" :class="{ 'is-readonly': mode !== 'edit' || turnRunning }">
+  <div ref="rootRef" class="doc-surface" :class="{ 'is-readonly': mode !== 'edit' || turnRunning }">
     <div v-if="loading" class="doc-surface__status">{{ t('office.loading') }}</div>
     <EditorContent v-else :editor="editor" class="doc-surface__editor dq-prose" />
   </div>

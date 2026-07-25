@@ -8,6 +8,8 @@ import DocSurface from '@/components/office/DocSurface.vue'
 import SlidesSurface from '@/components/office/SlidesSurface.vue'
 import SheetSurface from '@/components/office/SheetSurface.vue'
 import OfficeAiToolbar from '@/components/office/OfficeAiToolbar.vue'
+import { confirm, toast } from '@/utils/feedback'
+import type { OfficeEditScope } from '@/utils/office-route'
 
 const props = defineProps<{
   projectId: string
@@ -23,6 +25,7 @@ const slidesRef = ref<InstanceType<typeof SlidesSurface> | null>(null)
 const sheetRef = ref<InstanceType<typeof SheetSurface> | null>(null)
 const dirty = ref(false)
 const pageIndex = ref(0)
+const editScope = ref<OfficeEditScope>('document')
 
 const turnRunning = computed(() => {
   const id = sessions.runningTurnId
@@ -43,10 +46,47 @@ function getSelectionMarkdown(): string {
   return surface?.getSelectionMarkdown?.() || ''
 }
 
-async function save() {
-  const surface = activeSurface.value?.value
-  await surface?.save?.()
+function getEditScope(): OfficeEditScope {
+  return editScope.value
 }
+
+async function save(opts?: { quiet?: boolean }) {
+  const surface = activeSurface.value?.value
+  await surface?.save?.(opts)
+}
+
+/** Flush dirty edits to disk before AI reads the file. Auto-saves; confirms if save fails. */
+async function ensureSaved(): Promise<boolean> {
+  const surface = activeSurface.value?.value
+  if (!surface || !dirty.value) return true
+  try {
+    await surface.save?.({ quiet: true })
+    if (dirty.value) throw new Error('still dirty')
+    toast.success(t('office.autoSaved'))
+    return true
+  } catch {
+    try {
+      await confirm(t('office.dirtyConfirmBody'), t('office.dirtyConfirmTitle'), {
+        type: 'warning',
+        confirmButtonText: t('office.save'),
+      })
+      await surface.save?.()
+      return !dirty.value
+    } catch {
+      return false
+    }
+  }
+}
+
+watch(
+  () => stage.value?.kind,
+  (kind) => {
+    if (kind === 'slides') editScope.value = 'slide'
+    else if (kind === 'sheet') editScope.value = 'sheet'
+    else editScope.value = 'document'
+  },
+  { immediate: true },
+)
 
 function close() {
   workspaceUi.closeStage()
@@ -119,7 +159,7 @@ defineExpose({ save })
             Slides
           </button>
         </div>
-        <button class="document-stage__btn" :disabled="!dirty || turnRunning" @click="save">
+        <button class="document-stage__btn" :disabled="!dirty || turnRunning" @click="() => save()">
           {{ t('office.save') }}
         </button>
         <button
@@ -139,6 +179,9 @@ defineExpose({ save })
         :page-index="pageIndex"
         :disabled="turnRunning"
         :get-selection-markdown="getSelectionMarkdown"
+        :get-edit-scope="getEditScope"
+        :ensure-saved="ensureSaved"
+        :scope="editScope"
       />
     </div>
 
@@ -151,6 +194,7 @@ defineExpose({ save })
       :reload-token="stageReloadToken"
       :turn-running="turnRunning"
       @dirty="dirty = $event"
+      @scope="editScope = $event"
     />
     <SlidesSurface
       v-else-if="stage.kind === 'slides'"

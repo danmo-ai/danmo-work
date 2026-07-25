@@ -1,5 +1,7 @@
 export type OfficeKind = 'doc' | 'slides' | 'sheet'
 export type OfficeMode = 'view' | 'edit' | 'present'
+/** What the AI turn will target given current UI selection. */
+export type OfficeEditScope = 'selection' | 'document' | 'slide' | 'sheet'
 
 export interface OfficeRoute {
   kind: OfficeKind
@@ -62,6 +64,7 @@ export function buildOfficeEditPrompt(opts: {
   selection: string
   instruction?: string
   pageIndex?: number
+  scope?: OfficeEditScope
 }): string {
   const lines = [
     '[office-edit]',
@@ -69,6 +72,7 @@ export function buildOfficeEditPrompt(opts: {
     `path: ${opts.path}`,
     `kind: ${opts.kind}`,
   ]
+  if (opts.scope) lines.push(`scope: ${opts.scope}`)
   if (opts.pageIndex != null) lines.push(`page: ${opts.pageIndex}`)
   lines.push('selection:')
   lines.push('<<<')
