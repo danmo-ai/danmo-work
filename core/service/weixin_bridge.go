@@ -275,8 +275,9 @@ func (b *WeixinBridge) monitorAccount(ctx context.Context, acc domain.WeixinAcco
 				continue
 			}
 			text := ilink.TextFromMessage(msg)
-			if text == "" {
-				_ = b.client.SendText(ctx, ilAcc, peer, "暂时只支持文本消息。", msg.ContextToken, "")
+			media := b.downloadInboundMedia(ctx, acc.AccountID, fmt.Sprintf("%v", msg.MessageID), msg)
+			if text == "" && len(media) == 0 {
+				_ = b.client.SendText(ctx, ilAcc, peer, "未能识别该消息内容（可发送文字、图片或文件）。", msg.ContextToken, "")
 				continue
 			}
 			meta := map[string]string{}
@@ -292,6 +293,7 @@ func (b *WeixinBridge) monitorAccount(ctx context.Context, acc domain.WeixinAcco
 				Text:      text,
 				MessageID: fmt.Sprintf("%v", msg.MessageID),
 				Meta:      meta,
+				Media:     media,
 			}
 			reply, err := b.ingress.HandleInbound(ctx, inbound)
 			if err != nil {
@@ -311,6 +313,35 @@ func (b *WeixinBridge) monitorAccount(ctx context.Context, acc domain.WeixinAcco
 			}
 		}
 	}
+}
+
+// downloadInboundMedia pulls CDN attachments into data/channels/weixin/...
+func (b *WeixinBridge) downloadInboundMedia(ctx context.Context, accountID, messageID string, msg ilink.Message) []port.InboundMedia {
+	refs := ilink.CollectMediaRefs(msg)
+	if len(refs) == 0 || b.client == nil {
+		return nil
+	}
+	out := make([]port.InboundMedia, 0, len(refs))
+	for _, ref := range refs {
+		data, err := b.client.DownloadMediaRef(ctx, ref)
+		if err != nil {
+			log.Printf("[weixin] media download kind=%s name=%s: %v", ref.Kind, ref.Name, err)
+			continue
+		}
+		path, err := SaveChannelMedia(port.ChannelWeixin, accountID, messageID, ref.Name, data)
+		if err != nil {
+			log.Printf("[weixin] media save kind=%s: %v", ref.Kind, err)
+			continue
+		}
+		out = append(out, port.InboundMedia{
+			Name:     ref.Name,
+			Path:     path,
+			MimeType: ref.MimeType,
+			Kind:     ref.Kind,
+			Key:      ref.Media.EncryptQueryParam,
+		})
+	}
+	return out
 }
 
 // activateAfterLogin restarts monitors when the channel is already fully configured.

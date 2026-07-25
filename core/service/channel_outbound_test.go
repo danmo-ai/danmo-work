@@ -76,8 +76,11 @@ func TestEndpointCapabilitiesDiffer(t *testing.T) {
 	if !qq.Capabilities().RichCards || !qq.Capabilities().InteractiveApprove {
 		t.Fatal("qq should support rich cards and interactive approve")
 	}
-	if !fs.Capabilities().InteractiveApprove {
-		t.Fatal("feishu should support interactive approve")
+	if !fs.Capabilities().InteractiveApprove || !wx.Capabilities().InteractiveApprove {
+		t.Fatal("feishu/weixin should support interactive approve")
+	}
+	if !wx.Capabilities().NativeMedia {
+		t.Fatal("weixin should support native media")
 	}
 	if !fs.Capabilities().ProgressiveStream || !wx.Capabilities().ProgressiveStream || !wc.Capabilities().ProgressiveStream {
 		t.Fatal("all three should support progressive stream (native or emulated)")

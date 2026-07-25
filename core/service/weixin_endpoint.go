@@ -23,9 +23,11 @@ func (e *WeixinEndpoint) Type() port.ChannelType { return port.ChannelWeixin }
 
 func (e *WeixinEndpoint) Capabilities() port.ChannelCapabilities {
 	return port.ChannelCapabilities{
-		ProgressiveStream: true, // emulated: placeholder + final (UpdateStream no-op)
-		RichCards:         false,
-		InteractiveAsk:    true, // numbered text menu
+		ProgressiveStream:  true, // emulated: placeholder + final (UpdateStream no-op)
+		RichCards:          false,
+		InteractiveAsk:     true, // numbered text menu
+		InteractiveApprove: true, // numbered text menu (1/2/3)
+		NativeMedia:        true,
 	}
 }
 
@@ -46,16 +48,38 @@ func (e *WeixinEndpoint) UpdateStream(ctx context.Context, in *port.InboundMessa
 	return nil
 }
 
+func (e *WeixinEndpoint) UpdateProgress(ctx context.Context, in *port.InboundMessage, streamID string, progress port.ProgressSnapshot) error {
+	// No mid-turn edit; tool lines are included on FinishStream via final.Meta/Text.
+	return nil
+}
+
 func (e *WeixinEndpoint) FinishStream(ctx context.Context, in *port.InboundMessage, streamID string, final port.OutboundMessage) error {
 	text := strings.TrimSpace(final.Text)
 	if text == "" {
 		text = "（无文本回复）"
+	}
+	headline := strings.TrimSpace(final.Title)
+	if final.Meta != nil {
+		if mh := strings.TrimSpace(final.Meta["headline"]); mh != "" {
+			headline = mh
+		}
+	}
+	// Surface non-success end states; tool lines already live in final.Text.
+	if headline != "" && headline != "已完成" && !strings.Contains(text, headline) {
+		text = headline + "\n\n" + text
 	}
 	return e.sendText(ctx, in, text)
 }
 
 func (e *WeixinEndpoint) PresentAsk(ctx context.Context, in *port.InboundMessage, ask port.AskPrompt) (bool, error) {
 	if err := e.sendText(ctx, in, formatAskText(ask)); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (e *WeixinEndpoint) PresentPermission(ctx context.Context, in *port.InboundMessage, ask port.PermissionPrompt) (bool, error) {
+	if err := e.sendText(ctx, in, formatPermissionText(ask)); err != nil {
 		return false, err
 	}
 	return true, nil

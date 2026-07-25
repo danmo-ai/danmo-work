@@ -452,6 +452,7 @@ type weixinBindingModel struct {
 	PeerUserID   string    `gorm:"column:peer_user_id;uniqueIndex:idx_weixin_peer"`
 	SessionID    string    `gorm:"column:session_id;index"`
 	ContextToken string    `gorm:"column:context_token"`
+	MetaJSON     string    `gorm:"column:meta_json;type:text"`
 	CreatedAt    time.Time `gorm:"column:created_at"`
 	UpdatedAt    time.Time `gorm:"column:updated_at"`
 }
@@ -465,6 +466,7 @@ func weixinBindingToDomain(m weixinBindingModel) domain.WeixinBinding {
 		PeerUserID:   m.PeerUserID,
 		SessionID:    m.SessionID,
 		ContextToken: m.ContextToken,
+		Meta:         unmarshalMap(m.MetaJSON),
 		CreatedAt:    m.CreatedAt,
 		UpdatedAt:    m.UpdatedAt,
 	}

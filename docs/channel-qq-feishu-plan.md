@@ -370,6 +370,13 @@ Phase A + B + C 已实现于本分支（含验收缺口补齐）：
 - QQ：Gateway WS、`native_c2c_stream` 开关、C2C stream、keyboard 审批/ask、附件入站、群 `require_mention` 丢弃未 @、群 `deny_tools`、出站文件路径通知（`Meta.file_path`）、主动消息/频控错误提示、设置页与 API
 - 非目标仍跳过：多维表格/文档链、STT、完整二进制出站上传
 
+### 微信通道对齐（本分支续作）
+
+- peer `meta.project_id` 持久化（`weixin_bindings.meta_json`），`/project` 真正覆盖账号默认项目
+- `InteractiveApprove` + 编号菜单审批；`auto_approve` 新启用默认 false
+- 入站图片/文件/语音（无 ASR 时）CDN 下载解密 → `data/channels/weixin/...`
+- FinishStream 附带失败标题；无中途气泡编辑（iLink 限制）
+
 ---
 
 ## 11. 关键代码锚点

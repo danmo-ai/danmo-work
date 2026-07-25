@@ -119,13 +119,14 @@ type WeixinAccount struct {
 
 // WeixinBinding maps one Weixin peer to one Teams session (1:1).
 type WeixinBinding struct {
-	ID           string    `json:"id"`
-	AccountID    string    `json:"accountId"`
-	PeerUserID   string    `json:"peerUserId"`
-	SessionID    string    `json:"sessionId"`
-	ContextToken string    `json:"contextToken,omitempty"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ID           string            `json:"id"`
+	AccountID    string            `json:"accountId"`
+	PeerUserID   string            `json:"peerUserId"`
+	SessionID    string            `json:"sessionId"`
+	ContextToken string            `json:"contextToken,omitempty"`
+	Meta         map[string]string `json:"meta,omitempty"` // peer overrides e.g. project_id
+	CreatedAt    time.Time         `json:"createdAt"`
+	UpdatedAt    time.Time         `json:"updatedAt"`
 }
 
 type WeixinLoginStartResult struct {

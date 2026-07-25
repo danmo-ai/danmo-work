@@ -42,7 +42,7 @@ const weixinForm = ref({
   enabled: false,
   defaultAgentId: '',
   defaultModelId: '',
-  autoApprove: true,
+  autoApprove: false,
 })
 const weixinLoginProjectId = ref('')
 const weixinPolling = ref(false)
@@ -297,7 +297,7 @@ onMounted(async () => {
       enabled: weixin.status.enabled,
       defaultAgentId: weixin.status.defaultAgentId || sessions.agents[0]?.id || '',
       defaultModelId: weixin.status.defaultModelId || '',
-      autoApprove: weixin.status.autoApprove !== false,
+      autoApprove: !!weixin.status.autoApprove,
     }
   } else if (sessions.agents.length) {
     weixinForm.value.defaultAgentId = sessions.agents[0].id
@@ -1303,13 +1303,15 @@ const hasFooterActions = computed(() => {
               </DqSelect>
             </div>
             <label class="settings-field settings-field--switch">
-              <span class="settings-field__label">{{ $t('settings.weixinAutoApprove') }}</span>
+              <span class="settings-field__label">{{ $t('settings.channelAutoApprove') }}</span>
               <DqSwitch
                 :model-value="weixinForm.autoApprove"
                 size="sm"
                 @update:model-value="(v: boolean) => weixinForm.autoApprove = v"
               />
             </label>
+            <p class="settings-form-group__desc">{{ $t('settings.channelAutoApproveHint') }}</p>
+            <p class="settings-form-group__desc">{{ $t('settings.weixinProjectHint') }}</p>
             <p v-if="weixin.status" class="weixin-meta">
               <span :class="['weixin-meta__dot', weixin.status.running ? 'is-on' : 'is-off']" />
               {{ weixin.status.running ? $t('settings.weixinRunningOn') : $t('settings.weixinRunningOff') }}
