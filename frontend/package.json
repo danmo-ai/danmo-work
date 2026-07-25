@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "vue-tsc --noEmit",
+    "check-i18n": "NODE_ENV=production node --experimental-strip-types scripts/check-i18n.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
