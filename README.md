@@ -64,9 +64,9 @@ Chat with the same Agent Loop from IM — tools still run on your machine; Turn 
 | Channel | How it connects | Setup |
 |---------|-----------------|-------|
 | **WeChat** | Chat from your phone WeChat | One WeChat account can cover **multiple projects** (add links in Settings; each link maps to a project) |
-| **Feishu** | Outbound WebSocket (no public URL) | Open Platform → long-connection events/card callbacks → Settings → Feishu; interactive approvals, progress cards, `/project` |
+| **Feishu** | Outbound WebSocket (no public URL) | Long-connection events/card callbacks; interactive cards/forms, approvals, progress, inbound image/file, `/project` |
 | **WeCom** | Outbound WebSocket (`openws.work.weixin.qq.com`) | Admin → Smart Robot long connection → Settings → WeCom (Bot ID / Secret) |
-| **QQ** | Outbound Gateway WebSocket (no public URL) | q.qq.com bot → Settings → QQ; keyboard approvals, C2C stream, `/project` |
+| **QQ** | Outbound Gateway WebSocket (no public URL) | Keyboard approvals, C2C stream, inbound attachments, group deny-tools, `/project` |
 
 | Desktop (WeChat-tagged session) | Phone (WeChat chat) |
 |---------------------------------|---------------------|

@@ -363,12 +363,12 @@ stateDiagram-v2
 
 ## 实施状态（已落地）
 
-Phase A + B 已实现于本分支：
+Phase A + B + C 已实现于本分支：
 
-- 共享 Ingress：权限呈现、`HandleInteraction`、`/project`、peer `project_id`、进度事件
-- 飞书：schema 2.0 交互卡片、长连接 `card.action.trigger`、进度卡更新、审批/ask 按钮
-- QQ：Gateway WS、C2C stream、keyboard 审批/ask、设置页与 API
-- Phase C（群策略细粒度、富媒体入站、ask 表单字段）仍待后续
+- 共享 Ingress：权限呈现、`HandleInteraction`、`/project`、peer `project_id`、进度事件、入站媒体落盘、群工具拒绝
+- 飞书：schema 2.0 交互卡片/表单、长连接 `card.action.trigger`、进度卡、审批/ask、图片/文件入站下载
+- QQ：Gateway WS、C2C stream、keyboard 审批/ask、附件入站、群 `deny_tools`、主动消息/频控错误提示、设置页与 API
+- 非目标仍跳过：多维表格/文档链、STT、完整二进制出站上传（出站文件以路径 Markdown 告知）
 
 ---
 
