@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Danmo Work",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "identifier": "com.danmo.work",
   "build": {
     "beforeDevCommand": "cd ../frontend && npm run dev",
@@ -34,7 +34,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["bin/danmo-work-backend"]
+    "externalBin": [
+      "bin/danmo-work-backend"
+    ]
   },
   "plugins": {
     "updater": {
