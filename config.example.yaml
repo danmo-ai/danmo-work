@@ -44,6 +44,10 @@ runtime:
     doom_loop_threshold: 10  # fail after N consecutive identical tool calls (resets when tool/args change)
     max_steps_default: 200   # used when agent.steps is 0 / unset
     max_llm_failures: 3      # fail turn after N consecutive LLM Chat errors (independent of max_steps)
+  tools:
+    # Hard cap on a single local tool result (chars) before it enters the LLM
+    # context / UI / turn log. Protects against oversized shell or MCP output.
+    max_output_chars: 50000
   team:
     max_delegation_depth: 3  # maximum sub-agent delegation chain length
   memory:

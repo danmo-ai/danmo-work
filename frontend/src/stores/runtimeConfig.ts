@@ -17,6 +17,7 @@ export interface RuntimeForm {
   doomLoopThreshold: number
   maxStepsDefault: number
   maxLLMFailures: number
+  maxToolOutputChars: number
   maxDelegationDepth: number
   readTopK: number
   searchTopK: number
@@ -45,6 +46,7 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     doomLoopThreshold: rt.turn.doomLoopThreshold,
     maxStepsDefault: rt.turn.maxStepsDefault,
     maxLLMFailures: rt.turn.maxLLMFailures ?? 3,
+    maxToolOutputChars: rt.tools?.maxOutputChars ?? 50000,
     maxDelegationDepth: rt.team.maxDelegationDepth,
     readTopK: rt.memory.readTopK,
     searchTopK: rt.knowledge.searchTopK,
@@ -115,6 +117,9 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
           doomLoopThreshold: form.doomLoopThreshold,
           maxStepsDefault: form.maxStepsDefault,
           maxLLMFailures: form.maxLLMFailures,
+        },
+        tools: {
+          maxOutputChars: form.maxToolOutputChars,
         },
         team: {
           maxDelegationDepth: form.maxDelegationDepth,

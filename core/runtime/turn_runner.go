@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
@@ -15,12 +16,13 @@ import (
 )
 
 const (
-	turnToolTextMaxChars     = 2000
-	turnHugeResultThreshold  = 60000
-	turnTokenEstimateDivisor = 4
-	doomPatternWindow        = 8
-	doomDescribeMaxLen       = 200
-	toolErrorHint            = "\n[Analyze the error above and try a different approach.]"
+	turnToolTextMaxChars      = 2000
+	turnHugeResultThreshold   = 60000
+	defaultMaxToolOutputChars = 50000
+	turnTokenEstimateDivisor  = 4
+	doomPatternWindow         = 8
+	doomDescribeMaxLen        = 200
+	toolErrorHint             = "\n[Analyze the error above and try a different approach.]"
 )
 
 const maxStepsPrompt = `<system-reminder>
@@ -185,6 +187,7 @@ type turnRunCfg struct {
 	doomLoopThreshold      int
 	maxStepsDefault        int
 	maxLLMFailures         int
+	maxToolOutputChars     int
 	compactionEnabled      bool
 	compactionMaxTokens    int
 	compactionTriggerRatio float64
@@ -203,6 +206,7 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 		doomLoopThreshold:      10,
 		maxStepsDefault:        200,
 		maxLLMFailures:         3,
+		maxToolOutputChars:     defaultMaxToolOutputChars,
 		compactionMaxTokens:    128000,
 		compactionTriggerRatio: 0.85,
 	}
@@ -218,6 +222,9 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 			}
 			if rt.Turn.MaxLLMFailures > 0 {
 				cfg.maxLLMFailures = rt.Turn.MaxLLMFailures
+			}
+			if rt.Tools.MaxOutputChars > 0 {
+				cfg.maxToolOutputChars = rt.Tools.MaxOutputChars
 			}
 			cfg.compactionEnabled = rt.Compaction.Enabled
 			cfg.compactionMaxTokens = rt.Compaction.MaxTokens
@@ -506,7 +513,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 
 			result, err := handler.Execute(ctx, args)
 			if err != nil {
-				errContent := err.Error() + toolErrorHint
+				errContent := limitToolOutput(err.Error()+toolErrorHint, cfg.maxToolOutputChars)
 				errLabel := err.Error()
 				if errors.Is(err, context.Canceled) || ctx.Err() != nil {
 					errLabel = "cancelled"
@@ -526,6 +533,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 				continue
 			}
 
+			result.Content = limitToolOutput(result.Content, cfg.maxToolOutputChars)
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolCompleted, domain.ToolPart{
 				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolCompleted, Output: result.Content,
 			})
@@ -760,15 +768,29 @@ func (p *TurnRunner) truncateToolResults(messages []Message) []Message {
 		if isHugeResult(content) {
 			limit = turnHugeResultThreshold
 		}
-		if len(content) > limit {
-			result[i].Content = content[:limit] + fmt.Sprintf("\n...[truncated, %d total chars]", len(content))
-		}
+		result[i].Content = limitToolOutput(content, limit)
 	}
 	return result
 }
 
 func isHugeResult(content string) bool {
 	return len(content) > turnHugeResultThreshold
+}
+
+// limitToolOutput hard-caps tool result text at maxChars bytes, backing up to
+// a valid UTF-8 boundary so truncated content stays well-formed.
+func limitToolOutput(content string, maxChars int) string {
+	if maxChars <= 0 || len(content) <= maxChars {
+		return content
+	}
+	cut := maxChars
+	for cut > 0 && !utf8.ValidString(content[:cut]) {
+		cut--
+	}
+	if cut <= 0 {
+		cut = maxChars
+	}
+	return content[:cut] + fmt.Sprintf("\n...[truncated, %d total chars]", len(content))
 }
 
 func (p *TurnRunner) enforceToolPairing(messages []Message) []Message {

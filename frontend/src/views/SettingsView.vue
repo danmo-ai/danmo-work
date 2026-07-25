@@ -160,6 +160,7 @@ const runtimeForm = ref({
   doomLoopThreshold: 10,
   maxStepsDefault: 200,
   maxLLMFailures: 3,
+  maxToolOutputChars: 50000,
   maxDelegationDepth: 3,
   readTopK: 10,
   searchTopK: 3,
@@ -990,6 +991,18 @@ const hasFooterActions = computed(() => {
                   <DqSlider v-model="runtimeForm.searchTopK" :min="1" :max="20" :step="1" />
                   <span class="slider-row__value">{{ runtimeForm.searchTopK }}</span>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-form-group">
+            <h3 class="settings-form-group__title">{{ $t('settings.runtimeTools') }}</h3>
+            <p class="settings-form-group__desc">{{ $t('settings.runtimeToolsDesc') }}</p>
+            <div class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.maxToolOutputChars') }}</span>
+              <div class="slider-row">
+                <DqSlider v-model="runtimeForm.maxToolOutputChars" :min="5000" :max="200000" :step="5000" />
+                <span class="slider-row__value">{{ runtimeForm.maxToolOutputChars }}</span>
               </div>
             </div>
           </div>
