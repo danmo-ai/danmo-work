@@ -58,9 +58,10 @@ func (s *FeishuPeerStore) UpdateBindingMeta(ctx context.Context, channel port.Ch
 
 // FeishuBridge runs Feishu outbound WebSocket and routes messages through ChannelIngress.
 type FeishuBridge struct {
-	config  *ConfigManager
-	adapter *feishu.Adapter
-	ingress port.ChannelIngress
+	config   *ConfigManager
+	adapter  *feishu.Adapter
+	ingress  port.ChannelIngress
+	endpoint *FeishuEndpoint
 
 	mu      sync.Mutex
 	running bool
@@ -69,8 +70,16 @@ type FeishuBridge struct {
 }
 
 func NewFeishuBridge(config *ConfigManager, adapter *feishu.Adapter, ingress port.ChannelIngress) *FeishuBridge {
-	return &FeishuBridge{config: config, adapter: adapter, ingress: ingress}
+	ep := NewFeishuEndpoint(adapter)
+	b := &FeishuBridge{config: config, adapter: adapter, ingress: ingress, endpoint: ep}
+	if ingress != nil {
+		ingress.RegisterEndpoint(ep)
+	}
+	return b
 }
+
+// Endpoint returns the registered ChannelEndpoint (tests / diagnostics).
+func (b *FeishuBridge) Endpoint() port.ChannelEndpoint { return b.endpoint }
 
 func (b *FeishuBridge) Type() port.ChannelType { return port.ChannelFeishu }
 
@@ -181,11 +190,18 @@ func (b *FeishuBridge) handleInbound(ctx context.Context, msg port.InboundMessag
 	reply, err := b.ingress.HandleInbound(ctx, msg)
 	if err != nil {
 		log.Printf("[feishu] handle inbound peer=%s: %v", msg.PeerID, err)
-		reply = "处理消息时出错：" + err.Error()
+		// Ingress owns delivery when endpoint is registered; still try to surface errors.
+		errText := "处理消息时出错：" + err.Error()
+		if b.endpoint != nil {
+			_ = b.endpoint.Deliver(ctx, &msg, port.TextOutbound(errText))
+			return err
+		}
+		reply = errText
 	}
 	if strings.TrimSpace(reply) == "" {
 		return nil
 	}
+	// Backward-compatible path when endpoint was not registered.
 	if serr := b.adapter.SendReply(ctx, &msg, port.OutboundReply{Content: reply}); serr != nil {
 		log.Printf("[feishu] send reply peer=%s: %v", msg.PeerID, serr)
 		return serr

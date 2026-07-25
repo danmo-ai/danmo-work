@@ -42,7 +42,7 @@ type weixinLoginSession struct {
 }
 
 func NewWeixinBridge(store port.Repository, sessions *SessionManager, projects *ProjectManager, config *ConfigManager, ingress port.ChannelIngress) *WeixinBridge {
-	return &WeixinBridge{
+	b := &WeixinBridge{
 		client:   ilink.NewClient(),
 		store:    store,
 		sessions: sessions,
@@ -51,6 +51,10 @@ func NewWeixinBridge(store port.Repository, sessions *SessionManager, projects *
 		ingress:  ingress,
 		logins:   make(map[string]*weixinLoginSession),
 	}
+	if ingress != nil {
+		ingress.RegisterEndpoint(NewWeixinEndpoint(b))
+	}
+	return b
 }
 
 func (b *WeixinBridge) Type() port.ChannelType { return port.ChannelWeixin }
@@ -294,6 +298,7 @@ func (b *WeixinBridge) monitorAccount(ctx context.Context, acc domain.WeixinAcco
 				log.Printf("[weixin] handle inbound peer=%s: %v", peer, err)
 				reply = "处理消息时出错：" + err.Error()
 			}
+			// Ingress delivers via WeixinEndpoint when registered; reply is a fallback.
 			if strings.TrimSpace(reply) == "" {
 				continue
 			}
