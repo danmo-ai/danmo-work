@@ -6,9 +6,12 @@ import { useProjectsStore } from '@/stores/projects'
 import { useLLMStore } from '@/stores/llm'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import ComposerAttachmentTray from '@/components/composer/ComposerAttachmentTray.vue'
+import ComposerSkillChips from '@/components/composer/ComposerSkillChips.vue'
+import ComposerSkillPicker from '@/components/composer/ComposerSkillPicker.vue'
 import ContextUsageBar from '@/components/center/ContextUsageBar.vue'
-import { fetchJSON } from '@/api/client'
+import { asArray, fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
+import type { AvailableSkill } from '@/types'
 import type { LLMModel } from '@/types/mission'
 import type { ElementAttachment } from '@/types/element-attachment'
 import {
@@ -19,6 +22,11 @@ import {
   type ComposerAttachment,
   type ElementComposerAttachment,
 } from '@/types/composer-attachment'
+import {
+  detectAtSkillQuery,
+  prependSkillSummon,
+  removeAtSkillQuery,
+} from '@/types/composer-skills'
 
 const { t } = useI18n()
 const content = ref('')
@@ -30,6 +38,14 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const dragOver = ref(false)
 const gitBranch = ref('')
 const gitError = ref('')
+const availableSkills = ref<AvailableSkill[]>([])
+const availableSkillsLoading = ref(false)
+const selectedSkillIds = ref<string[]>([])
+const buttonPickerOpen = ref(false)
+const atMenuOpen = ref(false)
+const atQuery = ref('')
+const atStart = ref(-1)
+const skillPickerRef = ref<{ onKeydown: (e: KeyboardEvent) => void } | null>(null)
 const sessions = useSessionsStore()
 const projects = useProjectsStore()
 const llm = useLLMStore()
@@ -97,11 +113,20 @@ const placeholder = computed(() =>
   sessions.composingNew ? t('composer.placeholderNew') : t('composer.placeholderContinue'),
 )
 
+const selectedSkills = computed(() => {
+  const map = new Map(availableSkills.value.map((s) => [s.id, s]))
+  return selectedSkillIds.value
+    .map((id) => map.get(id))
+    .filter((s): s is AvailableSkill => Boolean(s))
+})
+
+const skillPickerOpen = computed(() => buttonPickerOpen.value || atMenuOpen.value)
+
 const hasPendingApproval = computed(() => workspaceUi.pendingApprovals > 0)
 
 const canSend = computed(
   () =>
-    Boolean(content.value.trim() || attachments.value.length) &&
+    Boolean(content.value.trim() || attachments.value.length || selectedSkillIds.value.length) &&
     !sessions.loading &&
     !hasPendingApproval.value,
 )
@@ -124,12 +149,22 @@ const showTray = computed(
     Boolean(gitDisplay.value),
 )
 
-/** Few primary agents → segmented toggle; many → dropdown. */
+/** Few primary agents → mode chips with hover hints; many → dropdown. */
 const useAgentSegmented = computed(() => primaryAgents.value.length > 0 && primaryAgents.value.length <= 4)
 
-const agentOptions = computed(() =>
-  primaryAgents.value.map((a) => ({ label: a.name, value: a.id })),
-)
+function agentModeLabel(id: string, fallback: string) {
+  if (id === 'default' || id === 'team' || id === 'planner') {
+    return t(`composer.agentMode.${id}`)
+  }
+  return fallback
+}
+
+function agentModeHint(id: string, description?: string) {
+  if (id === 'default' || id === 'team' || id === 'planner') {
+    return t(`composer.agentModeHint.${id}`)
+  }
+  return description?.trim() || t('composer.agentModeHint.custom')
+}
 
 function clearGitStatus() {
   gitBranch.value = ''
@@ -173,11 +208,14 @@ onMounted(async () => {
   await llm.loadModels()
   sessions.syncModelSelection(llm.models, oldIds)
   void loadGitBranch()
+  void loadAvailableSkills()
   document.addEventListener('visibilitychange', onVisibilityRefresh)
+  document.addEventListener('mousedown', onDocPointerDown)
 })
 
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', onVisibilityRefresh)
+  document.removeEventListener('mousedown', onDocPointerDown)
 })
 
 function onVisibilityRefresh() {
@@ -186,7 +224,15 @@ function onVisibilityRefresh() {
 
 watch(() => sessions.selectedProjectId, () => {
   void loadGitBranch()
+  void loadAvailableSkills()
 })
+
+watch(
+  () => sessions.selectedAgentId,
+  () => {
+    void loadAvailableSkills()
+  },
+)
 
 watch(() => workspaceUi.rightTab, (tab, prev) => {
   if (prev === 'changes' || tab === 'changes') void loadGitBranch()
@@ -278,6 +324,107 @@ function clearComposer() {
   attachments.value = []
   editingId.value = null
   editingAnnotation.value = ''
+  selectedSkillIds.value = []
+  closeSkillPickers()
+}
+
+function getTextarea(): HTMLTextAreaElement | null {
+  return inputWrap.value?.querySelector('textarea') ?? null
+}
+
+function closeSkillPickers() {
+  buttonPickerOpen.value = false
+  atMenuOpen.value = false
+  atQuery.value = ''
+  atStart.value = -1
+}
+
+function onDocPointerDown(e: MouseEvent) {
+  if (!skillPickerOpen.value) return
+  const root = (e.target as HTMLElement | null)?.closest?.('.composer-skill-pop, .composer-tool-btn--skill')
+  if (!root) closeSkillPickers()
+}
+
+async function loadAvailableSkills() {
+  const agentId = sessions.selectedAgentId
+  if (!agentId) {
+    availableSkills.value = []
+    selectedSkillIds.value = []
+    return
+  }
+  availableSkillsLoading.value = true
+  try {
+    const projectId = sessions.selectedProjectId || ''
+    const q = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
+    const list = asArray(
+      await fetchJSON<AvailableSkill[]>(`/agents/${encodeURIComponent(agentId)}/available-skills${q}`),
+    )
+    availableSkills.value = list
+    const allowed = new Set(list.map((s) => s.id))
+    selectedSkillIds.value = selectedSkillIds.value.filter((id) => allowed.has(id))
+  } catch {
+    availableSkills.value = []
+  } finally {
+    availableSkillsLoading.value = false
+  }
+}
+
+function syncAtMenuFromCaret() {
+  if (hasPendingApproval.value || isTurnRunning.value) {
+    atMenuOpen.value = false
+    return
+  }
+  const ta = getTextarea()
+  if (!ta) {
+    atMenuOpen.value = false
+    return
+  }
+  const detected = detectAtSkillQuery(content.value, ta.selectionStart ?? 0)
+  if (!detected) {
+    atMenuOpen.value = false
+    atQuery.value = ''
+    atStart.value = -1
+    return
+  }
+  buttonPickerOpen.value = false
+  atMenuOpen.value = true
+  atQuery.value = detected.query
+  atStart.value = detected.start
+}
+
+watch(content, () => {
+  void nextTick(() => syncAtMenuFromCaret())
+})
+
+function toggleButtonSkillPicker() {
+  if (hasPendingApproval.value || isTurnRunning.value) return
+  atMenuOpen.value = false
+  buttonPickerOpen.value = !buttonPickerOpen.value
+}
+
+function onPickSkill(sk: AvailableSkill) {
+  if (atMenuOpen.value && atStart.value >= 0) {
+    const ta = getTextarea()
+    const caret = ta?.selectionStart ?? content.value.length
+    content.value = removeAtSkillQuery(content.value, atStart.value, caret)
+    atMenuOpen.value = false
+    atQuery.value = ''
+    atStart.value = -1
+    if (!selectedSkillIds.value.includes(sk.id)) {
+      selectedSkillIds.value = [...selectedSkillIds.value, sk.id]
+    }
+    void nextTick(() => focusInput())
+    return
+  }
+  if (selectedSkillIds.value.includes(sk.id)) {
+    selectedSkillIds.value = selectedSkillIds.value.filter((id) => id !== sk.id)
+  } else {
+    selectedSkillIds.value = [...selectedSkillIds.value, sk.id]
+  }
+}
+
+function removeSelectedSkill(id: string) {
+  selectedSkillIds.value = selectedSkillIds.value.filter((x) => x !== id)
 }
 
 function openFilePicker() {
@@ -317,7 +464,16 @@ async function send() {
     toast.warning(t('sessions.pendingApprovalHint'))
     return
   }
-  const text = buildComposerUserInput(content.value, attachments.value)
+  if (skillPickerOpen.value && atMenuOpen.value) {
+    closeSkillPickers()
+  }
+  let text = buildComposerUserInput(content.value, attachments.value)
+  text = prependSkillSummon(
+    text,
+    selectedSkills.value,
+    (name) => t('composer.useSkillLine', { name }),
+    t('composer.readSkillHint'),
+  )
   let imageAtts = toApiImageAttachments(attachments.value)
   if (imageAtts.length && !selectedModel.value?.vision) {
     toast.warning(t('composer.modelNoVision'))
@@ -359,6 +515,14 @@ async function stop() {
 }
 
 function onKeydown(e: KeyboardEvent) {
+  if (skillPickerOpen.value && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape')) {
+    skillPickerRef.value?.onKeydown(e)
+    return
+  }
+  if (skillPickerOpen.value && e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+    skillPickerRef.value?.onKeydown(e)
+    return
+  }
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
     e.preventDefault()
     if (isTurnRunning.value) void stop()
@@ -480,16 +644,42 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
         @update:editing-annotation="editingAnnotation = $event"
       />
 
-      <div ref="inputWrap" class="composer-float__body">
-        <DqInput
-          v-model="content"
-          type="textarea"
-          :rows="2"
-          class="composer-float__input"
-          :placeholder="placeholder"
-          @keydown="onKeydown"
-          @paste="onPaste"
-        />
+      <ComposerSkillChips
+        :skills="selectedSkills"
+        @remove="removeSelectedSkill"
+      />
+
+      <div class="composer-float__input-stack">
+        <div
+          v-if="skillPickerOpen"
+          class="composer-skill-pop"
+          :class="{ 'composer-skill-pop--button': buttonPickerOpen }"
+        >
+          <ComposerSkillPicker
+            ref="skillPickerRef"
+            :skills="availableSkills"
+            :selected-ids="selectedSkillIds"
+            :query="atMenuOpen ? atQuery : ''"
+            :show-search="buttonPickerOpen"
+            :loading="availableSkillsLoading"
+            @select="onPickSkill"
+            @close="closeSkillPickers"
+          />
+        </div>
+
+        <div ref="inputWrap" class="composer-float__body">
+          <DqInput
+            v-model="content"
+            type="textarea"
+            :rows="2"
+            class="composer-float__input"
+            :placeholder="placeholder"
+            @keydown="onKeydown"
+            @paste="onPaste"
+            @click="syncAtMenuFromCaret"
+            @keyup="syncAtMenuFromCaret"
+          />
+        </div>
       </div>
 
       <input
@@ -513,6 +703,20 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M12 5v14" />
               <path d="M5 12h14" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="composer-tool-btn composer-tool-btn--skill"
+            :class="{ 'is-active': buttonPickerOpen || selectedSkillIds.length }"
+            :title="t('composer.selectSkill')"
+            :aria-label="t('composer.selectSkill')"
+            :aria-expanded="buttonPickerOpen"
+            :disabled="isTurnRunning"
+            @click="toggleButtonSkillPicker"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3l1.8 4.8L19 9.5l-4 3.2L16.2 18 12 15.2 7.8 18l1.2-5.3-4-3.2 5.2-1.7L12 3z" />
             </svg>
           </button>
           <span
@@ -610,14 +814,26 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
           </DqSelect>
         </div>
 
-        <DqSegmented
+        <div
           v-if="showAgentSelect && useAgentSegmented"
-          v-model="sessions.selectedAgentId"
-          size="sm"
-          class="composer-agent-seg composer-agent-seg--compact"
-          :options="agentOptions"
+          class="composer-agent-modes"
+          role="radiogroup"
           :aria-label="t('composer.selectAgent')"
-        />
+        >
+          <button
+            v-for="a in primaryAgents"
+            :key="a.id"
+            type="button"
+            role="radio"
+            class="composer-agent-mode"
+            :class="{ 'is-active': sessions.selectedAgentId === a.id }"
+            :aria-checked="sessions.selectedAgentId === a.id"
+            :title="agentModeHint(a.id, a.description)"
+            @click="sessions.selectedAgentId = a.id"
+          >
+            {{ agentModeLabel(a.id, a.name) }}
+          </button>
+        </div>
         <div
           v-else-if="showAgentSelect"
           class="composer-select composer-select--agent"
@@ -632,7 +848,8 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
               v-for="a in primaryAgents"
               :key="a.id"
               :value="a.id"
-              :label="a.name"
+              :label="agentModeLabel(a.id, a.name)"
+              :title="agentModeHint(a.id, a.description)"
             />
           </DqSelect>
         </div>
@@ -1007,6 +1224,75 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
 .composer-tool-btn:hover {
   background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
   color: var(--dq-label-primary);
+}
+
+.composer-tool-btn.is-active {
+  color: var(--dq-accent);
+  background: color-mix(in srgb, var(--dq-accent) 12%, transparent);
+}
+
+.composer-tool-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.composer-float__input-stack {
+  position: relative;
+}
+
+.composer-skill-pop {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% - 4px);
+  z-index: 5;
+  display: flex;
+  justify-content: flex-start;
+  pointer-events: none;
+}
+
+.composer-skill-pop > * {
+  pointer-events: auto;
+}
+
+.composer-skill-pop--button {
+  left: 10px;
+  right: auto;
+}
+
+.composer-agent-modes {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
+}
+
+.composer-agent-mode {
+  appearance: none;
+  margin: 0;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dq-label-secondary, inherit);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.composer-agent-mode:hover {
+  color: var(--dq-label-primary, inherit);
+}
+
+.composer-agent-mode.is-active {
+  background: var(--dq-glass-popover-bg, #fff);
+  color: var(--dq-label-primary, inherit);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .composer-send {

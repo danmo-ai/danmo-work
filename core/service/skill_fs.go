@@ -1,9 +1,26 @@
 package service
 
 import (
+	"context"
+
 	"danmo-work/core/domain"
 	"danmo-work/core/paths"
 )
+
+// SkillSourceBound is a skill from the agent's configured skillIds (DB).
+const SkillSourceBound = "bound"
+
+// SkillSourceFilesystem is a skill discovered via user/project directory scan.
+const SkillSourceFilesystem = "filesystem"
+
+// SkillSourceBoth is present in both agent bindings and filesystem scan.
+const SkillSourceBoth = "both"
+
+// AvailableSkill is a skill usable for an agent turn, with provenance for UI.
+type AvailableSkill struct {
+	domain.Skill
+	Source string `json:"source"`
+}
 
 // ScanFilesystemSkills loads Agentskills-compliant skills from user and project
 // directories. Missing directories and invalid SKILL.md entries are skipped.
@@ -73,4 +90,60 @@ func MergeSkillsByID(layers ...[]domain.Skill) []domain.Skill {
 		out = append(out, byID[id])
 	}
 	return out
+}
+
+// BoundDBSkills returns skills from the library that are listed on the agent.
+func BoundDBSkills(all []domain.Skill, agent domain.Agent) []domain.Skill {
+	if len(agent.SkillIDs) == 0 {
+		return nil
+	}
+	wanted := make(map[string]struct{}, len(agent.SkillIDs))
+	for _, id := range agent.SkillIDs {
+		wanted[id] = struct{}{}
+	}
+	var result []domain.Skill
+	for _, sk := range all {
+		if _, ok := wanted[sk.ID]; ok {
+			result = append(result, sk)
+		}
+	}
+	return result
+}
+
+// ListAvailableSkillsForAgent merges agent-bound DB skills with filesystem
+// skills for workDir — same composition as runtime resolveAgentSkills.
+// Body is cleared on returned skills (picker/metadata only).
+func ListAvailableSkillsForAgent(ctx context.Context, skills *SkillManager, agent domain.Agent, workDir string) ([]AvailableSkill, error) {
+	_ = ctx
+	all, err := skills.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bound := BoundDBSkills(all, agent)
+	fsSkills, _ := ScanFilesystemSkills(workDir)
+
+	boundIDs := make(map[string]struct{}, len(bound))
+	for _, sk := range bound {
+		boundIDs[sk.ID] = struct{}{}
+	}
+	fsIDs := make(map[string]struct{}, len(fsSkills))
+	for _, sk := range fsSkills {
+		fsIDs[sk.ID] = struct{}{}
+	}
+
+	merged := MergeSkillsByID(bound, fsSkills)
+	out := make([]AvailableSkill, 0, len(merged))
+	for _, sk := range merged {
+		_, inBound := boundIDs[sk.ID]
+		_, inFS := fsIDs[sk.ID]
+		source := SkillSourceBound
+		if inBound && inFS {
+			source = SkillSourceBoth
+		} else if inFS {
+			source = SkillSourceFilesystem
+		}
+		sk.Body = ""
+		out = append(out, AvailableSkill{Skill: sk, Source: source})
+	}
+	return out, nil
 }

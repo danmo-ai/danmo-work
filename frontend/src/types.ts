@@ -61,6 +61,13 @@ export interface Skill {
   templateDiverged?: boolean
 }
 
+/** Skill usable for an agent turn (bound ∪ filesystem), from available-skills API. */
+export type AvailableSkillSource = 'bound' | 'filesystem' | 'both'
+
+export interface AvailableSkill extends Skill {
+  source: AvailableSkillSource
+}
+
 export interface ToolBinding {
   toolId: string
   mcpServer?: string
