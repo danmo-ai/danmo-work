@@ -181,7 +181,8 @@ func weixinConfigure(h *Handler) gin.HandlerFunc {
 		if req.AutoApprove != nil {
 			wx.AutoApprove = *req.AutoApprove
 		} else if req.Enabled {
-			wx.AutoApprove = true
+			// Prefer in-chat numbered approval for new Weixin setups.
+			wx.AutoApprove = false
 		}
 		if req.Enabled {
 			if wx.DefaultAgentID == "" {

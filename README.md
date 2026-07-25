@@ -12,7 +12,7 @@ General-purpose **AI Work Agent** (with coding capability). Built for **long-hor
 
 **Design:** everything is a Tool; the model drives everything. Sub-agents are Tools (`delegate_agent`). Humans join via `ask_user` tool — **co-thinking**.
 
-**Runtime:** every Tool Call is logged — **resume**, **replay**, and **visualize** the model’s thinking through ultra-long runs. Self-hosted. MIT. **Channels:** WeChat, **Feishu**, and **WeCom** (outbound WebSocket, no public URL) — same Agent Loop on your machine.
+**Runtime:** every Tool Call is logged — **resume**, **replay**, and **visualize** the model’s thinking through ultra-long runs. Self-hosted. MIT. **Channels:** WeChat, **Feishu**, **WeCom**, and **QQ** (outbound WebSocket / Gateway, no public URL) — same Agent Loop on your machine.
 
 | Pillar | What it means |
 |--------|----------------|
@@ -57,23 +57,24 @@ In the built-in Browser, click a DOM element, write a short note, confirm into C
 - **Interactive demo** — step-by-step demo with playback controls
 - **Mini-game** — generate a playable page, then iterate via **element annotate** (above)
 
-### Channels (WeChat · Feishu · WeCom)
+### Channels (WeChat · Feishu · WeCom · QQ)
 
 Chat with the same Agent Loop from IM — tools still run on your machine; Turn Log stays in Teams. Sessions are keyed by `(channel, account, peer)`, so binding multiple channels to one project does **not** mix conversations.
 
 | Channel | How it connects | Setup |
 |---------|-----------------|-------|
-| **WeChat** | Chat from your phone WeChat | One WeChat account can cover **multiple projects** (add links in Settings; each link maps to a project) |
-| **Feishu** | Outbound WebSocket (no public URL) | Open Platform → long-connection events → Settings → Feishu (App ID / Secret) |
+| **WeChat** | Chat from your phone WeChat (iLink long-poll) | Account default project + in-chat `/project` override; text-menu approvals; inbound image/file |
+| **Feishu** | Outbound WebSocket (no public URL) | Long-connection events/card callbacks; interactive cards/forms, approvals, progress, inbound image/file, `/project` |
 | **WeCom** | Outbound WebSocket (`openws.work.weixin.qq.com`) | Admin → Smart Robot long connection → Settings → WeCom (Bot ID / Secret) |
+| **QQ** | Outbound Gateway WebSocket (no public URL) | Keyboard approvals, C2C stream, inbound attachments, group deny-tools, `/project` |
 
 | Desktop (WeChat-tagged session) | Phone (WeChat chat) |
 |---------------------------------|---------------------|
 | ![WeChat session in Teams](docs/screenshots/wx1.png) | ![DQ-Teams AI in WeChat](docs/screenshots/wx2.png) |
 
-**WeChat** — use your everyday WeChat: open another chat for another project. History syncs with the desktop. Changing a link’s project does not move past conversations.
+**WeChat** — use your everyday WeChat. Account binding is the default project; send `/project` in chat to override per peer. With auto-approve off, reply `1/2/3` to authorize tools. Inbound images/files are saved for the agent. History syncs with the desktop.
 
-**Feishu / WeCom** — intranet-friendly: the app dials out, so no callback URL or tunnel. Pick Agent, model, and project in Settings, then enable. WeCom sends a stream placeholder within ~5s, then replaces it with the final answer.
+**Feishu / WeCom / QQ** — intranet-friendly: the app dials out, so no callback URL or tunnel. Pick Agent, model, and project in Settings, then enable. Feishu/QQ support in-chat tool approval and `/project` switching; WeCom sends a stream placeholder within ~5s, then replaces it with the final answer.
 
 ### Experts, skills & runtime
 

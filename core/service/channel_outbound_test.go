@@ -31,6 +31,23 @@ func TestFormatAskTextAndResolve(t *testing.T) {
 	}
 }
 
+func TestFinalOutboundFromPartsIncludesToolsAndFailure(t *testing.T) {
+	out := finalOutboundFromParts([]string{"done"}, []string{"✓ read", "✓ write"}, false)
+	if out.Meta["headline"] != "已完成" || out.Meta["status"] != "done" {
+		t.Fatalf("meta=%v", out.Meta)
+	}
+	if !strings.Contains(out.Text, "✓ read") || !strings.Contains(out.Text, "done") {
+		t.Fatalf("text=%q", out.Text)
+	}
+	if out.Meta["tool_lines"] == "" || out.Meta["agent_text"] != "done" {
+		t.Fatalf("meta=%v", out.Meta)
+	}
+	fail := finalOutboundFromParts(nil, []string{"✗ shell"}, true)
+	if fail.Meta["headline"] != "失败" || fail.Title != "失败" {
+		t.Fatalf("fail=%+v", fail)
+	}
+}
+
 func TestPreferOutboundKind(t *testing.T) {
 	rich := port.ChannelCapabilities{RichCards: true}
 	plain := port.ChannelCapabilities{}
@@ -49,11 +66,21 @@ func TestEndpointCapabilitiesDiffer(t *testing.T) {
 	fs := NewFeishuEndpoint(nil)
 	wx := NewWeixinEndpoint(nil)
 	wc := NewWecomEndpoint()
+	qq := NewQQEndpoint(nil)
 	if !fs.Capabilities().RichCards {
 		t.Fatal("feishu should support rich cards")
 	}
 	if wx.Capabilities().RichCards || wc.Capabilities().RichCards {
 		t.Fatal("weixin/wecom should not claim rich cards")
+	}
+	if !qq.Capabilities().RichCards || !qq.Capabilities().InteractiveApprove {
+		t.Fatal("qq should support rich cards and interactive approve")
+	}
+	if !fs.Capabilities().InteractiveApprove || !wx.Capabilities().InteractiveApprove {
+		t.Fatal("feishu/weixin should support interactive approve")
+	}
+	if !wx.Capabilities().NativeMedia {
+		t.Fatal("weixin should support native media")
 	}
 	if !fs.Capabilities().ProgressiveStream || !wx.Capabilities().ProgressiveStream || !wc.Capabilities().ProgressiveStream {
 		t.Fatal("all three should support progressive stream (native or emulated)")

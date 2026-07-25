@@ -796,9 +796,14 @@ func (r *weixinBindingRepo) Upsert(ctx context.Context, b domain.WeixinBinding) 
 		b.CreatedAt = now
 	}
 	b.UpdatedAt = now
+	metaJSON, _ := json.Marshal(b.Meta)
+	if b.Meta == nil {
+		metaJSON = []byte("{}")
+	}
 	m := weixinBindingModel{
 		ID: b.ID, AccountID: b.AccountID, PeerUserID: b.PeerUserID,
 		SessionID: b.SessionID, ContextToken: b.ContextToken,
+		MetaJSON: string(metaJSON),
 		CreatedAt: b.CreatedAt, UpdatedAt: b.UpdatedAt,
 	}
 	var existing weixinBindingModel
@@ -806,6 +811,10 @@ func (r *weixinBindingRepo) Upsert(ctx context.Context, b domain.WeixinBinding) 
 	if err == nil {
 		m.ID = existing.ID
 		m.CreatedAt = existing.CreatedAt
+		// Preserve prior meta when caller omits it.
+		if b.Meta == nil && existing.MetaJSON != "" {
+			m.MetaJSON = existing.MetaJSON
+		}
 		return r.s.db.WithContext(ctx).Save(&m).Error
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {

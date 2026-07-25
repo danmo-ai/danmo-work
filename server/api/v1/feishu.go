@@ -18,6 +18,7 @@ type feishuConfigureRequest struct {
 	AppID          string `json:"appId,omitempty"`
 	AppSecret      string `json:"appSecret,omitempty"`
 	ProjectID      string `json:"projectId,omitempty"`
+	RichProgress   *bool  `json:"richProgress,omitempty"`
 }
 
 func feishuStatusPayload(fs domain.ConfigFeishuChannel, running bool) gin.H {
@@ -35,6 +36,7 @@ func feishuStatusPayload(fs domain.ConfigFeishuChannel, running bool) gin.H {
 		"appId":          fs.AppID,
 		"projectId":      fs.ProjectID,
 		"hasAppSecret":   fs.AppSecret != "",
+		"richProgress":   fs.FeishuRichProgressEnabled(),
 	}
 }
 
@@ -85,7 +87,8 @@ func feishuConfigure(h *Handler) gin.HandlerFunc {
 		if req.AutoApprove != nil {
 			fs.AutoApprove = *req.AutoApprove
 		} else if req.Enabled {
-			fs.AutoApprove = true
+			// Prefer in-chat card approval for new Feishu setups (Phase A).
+			fs.AutoApprove = false
 		}
 		if req.Domain != "" {
 			fs.Domain = req.Domain
@@ -98,6 +101,9 @@ func feishuConfigure(h *Handler) gin.HandlerFunc {
 		}
 		if req.ProjectID != "" {
 			fs.ProjectID = req.ProjectID
+		}
+		if req.RichProgress != nil {
+			fs.RichProgress = req.RichProgress
 		}
 		if req.Enabled {
 			if fs.DefaultAgentID == "" {

@@ -2,30 +2,29 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchJSON } from '@/api/client'
 
-export type FeishuDomain = 'feishu' | 'lark'
-
-export interface FeishuStatus {
+export interface QQStatus {
   enabled: boolean
   running: boolean
-  domain?: FeishuDomain | string
   defaultAgentId?: string
   defaultModelId?: string
   autoApprove: boolean
   appId?: string
   projectId?: string
-  hasAppSecret?: boolean
-  richProgress?: boolean
+  hasClientSecret?: boolean
+  groupDenyTools?: string[]
+  requireMention?: boolean
+  nativeC2cStream?: boolean
 }
 
-export const useFeishuStore = defineStore('feishu', () => {
-  const status = ref<FeishuStatus | null>(null)
+export const useQQStore = defineStore('qq', () => {
+  const status = ref<QQStatus | null>(null)
   const loading = ref(false)
   const saving = ref(false)
 
   async function refreshStatus() {
     loading.value = true
     try {
-      status.value = await fetchJSON<FeishuStatus>('/channels/feishu/status')
+      status.value = await fetchJSON<QQStatus>('/channels/qq/status')
     } catch {
       status.value = null
     } finally {
@@ -38,15 +37,16 @@ export const useFeishuStore = defineStore('feishu', () => {
     defaultAgentId: string
     defaultModelId?: string
     autoApprove?: boolean
-    domain?: FeishuDomain
     appId?: string
-    appSecret?: string
+    clientSecret?: string
     projectId?: string
-    richProgress?: boolean
+    groupDenyTools?: string[]
+    requireMention?: boolean
+    nativeC2cStream?: boolean
   }) {
     saving.value = true
     try {
-      status.value = await fetchJSON<FeishuStatus>('/channels/feishu', {
+      status.value = await fetchJSON<QQStatus>('/channels/qq', {
         method: 'PUT',
         body: JSON.stringify(payload),
       })

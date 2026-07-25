@@ -67,6 +67,24 @@ func (a *Adapter) SendPostMessage(ctx context.Context, in *port.InboundMessage, 
 
 // UpdateTextMessage patches an existing message to plain text (progressive stream emulation).
 func (a *Adapter) UpdateTextMessage(ctx context.Context, messageID, text string) error {
+	return a.patchMessage(ctx, messageID, "text", map[string]string{"text": text})
+}
+
+// SendInteractiveCard sends a schema 2.0 interactive card.
+func (a *Adapter) SendInteractiveCard(ctx context.Context, in *port.InboundMessage, card map[string]any) (sendResult, error) {
+	if card == nil {
+		return sendResult{}, nil
+	}
+	receiveID, receiveType := a.resolveReceive(in)
+	return a.sendRaw(ctx, receiveID, receiveType, "interactive", card)
+}
+
+// UpdateInteractiveCard patches an existing message to an interactive card.
+func (a *Adapter) UpdateInteractiveCard(ctx context.Context, messageID string, card map[string]any) error {
+	return a.patchMessage(ctx, messageID, "interactive", card)
+}
+
+func (a *Adapter) patchMessage(ctx context.Context, messageID, msgType string, content any) error {
 	messageID = strings.TrimSpace(messageID)
 	if messageID == "" {
 		return fmt.Errorf("feishu update: message_id required")
@@ -75,9 +93,16 @@ func (a *Adapter) UpdateTextMessage(ctx context.Context, messageID, text string)
 	if err != nil {
 		return err
 	}
+	contentStr := ""
+	switch c := content.(type) {
+	case string:
+		contentStr = c
+	default:
+		contentStr = string(mustJSON(c))
+	}
 	payload, _ := json.Marshal(map[string]any{
-		"msg_type": "text",
-		"content":  string(mustJSON(map[string]string{"text": text})),
+		"msg_type": msgType,
+		"content":  contentStr,
 	})
 	url := fmt.Sprintf("%s/im/v1/messages/%s", OpenAPIBase(a.config().Domain), messageID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewReader(payload))
@@ -160,6 +185,7 @@ func (a *Adapter) DeliverOutbound(ctx context.Context, in *port.InboundMessage, 
 	case port.OutboundKindCard, port.OutboundKindMarkdown:
 		title := strings.TrimSpace(msg.Title)
 		body := text
+		var actions []port.OutboundAction
 		if msg.Card != nil {
 			if title == "" {
 				title = msg.Card.Title
@@ -167,26 +193,32 @@ func (a *Adapter) DeliverOutbound(ctx context.Context, in *port.InboundMessage, 
 			if strings.TrimSpace(msg.Card.Body) != "" {
 				body = msg.Card.Body
 			}
-			if len(msg.Card.Actions) > 0 {
-				var lines []string
-				if body != "" {
-					lines = append(lines, body, "")
-				}
-				for i, act := range msg.Card.Actions {
-					label := act.Label
-					if label == "" {
-						label = act.ID
-					}
-					lines = append(lines, fmt.Sprintf("%d. %s", i+1, label))
-				}
-				body = strings.Join(lines, "\n")
+			actions = msg.Card.Actions
+		}
+		// Prefer true interactive cards when buttons are present.
+		if len(actions) > 0 {
+			card := BuildInteractiveCard(title, body, actions)
+			if _, err := a.SendInteractiveCard(ctx, in, card); err == nil {
+				return nil
 			}
+			// Fall through to numbered post/text when interactive is rejected.
+			var lines []string
+			if body != "" {
+				lines = append(lines, body, "")
+			}
+			for i, act := range actions {
+				label := act.Label
+				if label == "" {
+					label = act.ID
+				}
+				lines = append(lines, fmt.Sprintf("%d. %s", i+1, label))
+			}
+			body = strings.Join(lines, "\n")
 		}
 		if title != "" || looksLikeMarkdown(body) {
 			if _, err := a.SendPostMessage(ctx, in, title, body); err == nil {
 				return nil
 			}
-			// Degrade to plain text when post is rejected by the tenant.
 			text = body
 			if title != "" && body != "" {
 				text = title + "\n\n" + body

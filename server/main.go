@@ -39,6 +39,7 @@ func main() {
 		Weixin:     core.Weixin,
 		Feishu:     core.Feishu,
 		Wecom:      core.Wecom,
+		QQ:         core.QQ,
 		Channels:   core.Channels,
 		Sandbox:    core.Sandbox,
 		Browser:    core.Browser,

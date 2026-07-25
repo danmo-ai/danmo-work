@@ -2,6 +2,8 @@ package port
 
 import (
 	"context"
+
+	"danmo-work/core/domain"
 )
 
 // ChannelType identifies an external chat platform.
@@ -11,7 +13,19 @@ const (
 	ChannelWeixin ChannelType = "weixin"
 	ChannelFeishu ChannelType = "feishu"
 	ChannelWecom  ChannelType = "wecom"
+	ChannelQQ     ChannelType = "qq"
 )
+
+// InboundMedia is an attachment on an inbound IM message.
+// Before ingress, adapters fill Path (local) or URL/Key for download.
+type InboundMedia struct {
+	Name     string // original filename
+	Path     string // absolute local path under data/channels/...
+	URL      string // remote download URL (QQ)
+	Key      string // platform resource key (Feishu image_key / file_key)
+	MimeType string
+	Kind     string // image | file | audio | video
+}
 
 // InboundMessage is the normalized inbound chat message (WeKnora-style).
 type InboundMessage struct {
@@ -23,6 +37,30 @@ type InboundMessage struct {
 	Text      string
 	MessageID string
 	Meta      map[string]string // e.g. context_token, req_id, stream_id, receive_id
+	Media     []InboundMedia
+}
+
+// InteractionKind classifies button / keyboard callbacks from IM platforms.
+type InteractionKind string
+
+const (
+	InteractionAsk        InteractionKind = "ask"
+	InteractionPermission InteractionKind = "perm"
+	InteractionProject    InteractionKind = "project"
+)
+
+// InteractionEvent is a normalized card/keyboard callback (no new turn).
+type InteractionEvent struct {
+	Type      ChannelType
+	AccountID string
+	PeerID    string
+	ChatID    string
+	MessageID string
+	Kind      InteractionKind
+	TargetID  string // askID / approvalID / projectID
+	Option    string // option label, once|session|deny, etc.
+	Raw       string // original platform payload
+	Meta      map[string]string
 }
 
 // OutboundKind selects the richest delivery shape an endpoint may use.
@@ -45,7 +83,7 @@ type OutboundMessage struct {
 	Meta  map[string]string
 }
 
-// OutboundCard is a lightweight interactive card model (Feishu-oriented).
+// OutboundCard is a lightweight interactive card model (Feishu/QQ-oriented).
 type OutboundCard struct {
 	Title   string
 	Body    string
@@ -53,6 +91,7 @@ type OutboundCard struct {
 }
 
 // OutboundAction is a button / option on a card (or text menu).
+// ID should be a compact callback token (see service.EncodeCallback) when interactive.
 type OutboundAction struct {
 	ID    string // stable id for callbacks; empty → use Label
 	Label string
@@ -80,6 +119,10 @@ type ChannelCapabilities struct {
 	// InteractiveAsk: can present ask_user options and await a peer reply
 	// (card buttons or text menu) instead of auto-stubbing.
 	InteractiveAsk bool
+	// InteractiveApprove: can present tool-permission buttons in-channel.
+	InteractiveApprove bool
+	// NativeMedia: can accept non-text inbound (images/files) meaningfully.
+	NativeMedia bool
 }
 
 // ChannelEndpoint is the platform-facing delivery surface registered with ingress.
@@ -102,12 +145,38 @@ type StreamSender interface {
 	FinishStream(ctx context.Context, in *InboundMessage, streamID string, final OutboundMessage) error
 }
 
+// ProgressSnapshot is a mid-turn status view for richer IM progress UIs.
+type ProgressSnapshot struct {
+	Status   string   // running | tool | done | error
+	Headline string
+	Lines    []string // recent tool summaries
+	TextBody string   // accumulated agent.message
+}
+
+// ProgressUpdater is an optional richer progressive surface (cards / stream markdown).
+// When implemented, ingress prefers it over plain UpdateStream for tool+text progress.
+type ProgressUpdater interface {
+	UpdateProgress(ctx context.Context, in *InboundMessage, streamID string, progress ProgressSnapshot) error
+}
+
 // AskPrompt is the normalized ask_user presentation for IM channels.
 type AskPrompt struct {
 	AskID      string
 	Question   string
 	Options    []string
 	DefaultOpt string
+	FormFields []domain.AskUserFormField
+}
+
+// PermissionPrompt is the normalized tool-permission presentation for IM channels.
+type PermissionPrompt struct {
+	ApprovalID string
+	ToolName   string
+	Summary    string
+	Scopes     []string // e.g. once, session (deny is always offered)
+	// StreamID, when set, lets endpoints patch the live progress card/stream
+	// with approval buttons instead of sending a separate message.
+	StreamID string
 }
 
 // ChannelInteractor is an optional ChannelEndpoint extension for ask_user.
@@ -116,6 +185,11 @@ type AskPrompt struct {
 // auto-stubbing.
 type ChannelInteractor interface {
 	PresentAsk(ctx context.Context, in *InboundMessage, ask AskPrompt) (handled bool, err error)
+}
+
+// ChannelApprover is an optional ChannelEndpoint extension for tool permissions.
+type ChannelApprover interface {
+	PresentPermission(ctx context.Context, in *InboundMessage, ask PermissionPrompt) (handled bool, err error)
 }
 
 // ChannelDefaults are channel-level agent/model/auto-approve settings.
@@ -165,4 +239,5 @@ type ChannelRuntime interface {
 type ChannelIngress interface {
 	RegisterEndpoint(ep ChannelEndpoint)
 	HandleInbound(ctx context.Context, msg InboundMessage) (reply string, err error)
+	HandleInteraction(ctx context.Context, ev InteractionEvent) error
 }

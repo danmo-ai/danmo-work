@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -53,7 +54,11 @@ func (s *FeishuPeerStore) UpsertBinding(ctx context.Context, channel port.Channe
 }
 
 func (s *FeishuPeerStore) UpdateBindingMeta(ctx context.Context, channel port.ChannelType, accountID, peerID string, meta map[string]string) error {
-	return s.store.ChannelBindings().UpdateMeta(ctx, string(channel), accountID, peerID, meta)
+	_, existing, err := s.GetBinding(ctx, channel, accountID, peerID)
+	if err != nil {
+		return err
+	}
+	return s.store.ChannelBindings().UpdateMeta(ctx, string(channel), accountID, peerID, mergeStringMap(existing, meta))
 }
 
 // FeishuBridge runs Feishu outbound WebSocket and routes messages through ChannelIngress.
@@ -152,7 +157,7 @@ func (b *FeishuBridge) runWSLoop(ctx context.Context, fs domain.ConfigFeishuChan
 		if ctx.Err() != nil {
 			return
 		}
-		lc := feishu.NewLongConn(fs, b.handleInbound)
+		lc := feishu.NewLongConn(fs, b.handleInbound).WithCardAction(b.handleCardAction)
 		err := lc.Run(ctx)
 		if ctx.Err() != nil {
 			return
@@ -187,6 +192,11 @@ func (b *FeishuBridge) handleInbound(ctx context.Context, msg port.InboundMessag
 	if b.ingress == nil {
 		return fmt.Errorf("feishu ingress not configured")
 	}
+	if b.adapter != nil && len(msg.Media) > 0 {
+		if err := b.adapter.EnrichInboundMedia(ctx, &msg); err != nil {
+			log.Printf("[feishu] media download peer=%s: %v", msg.PeerID, err)
+		}
+	}
 	reply, err := b.ingress.HandleInbound(ctx, msg)
 	if err != nil {
 		log.Printf("[feishu] handle inbound peer=%s: %v", msg.PeerID, err)
@@ -207,6 +217,31 @@ func (b *FeishuBridge) handleInbound(ctx context.Context, msg port.InboundMessag
 		return serr
 	}
 	return nil
+}
+
+func (b *FeishuBridge) handleCardAction(ctx context.Context, msg port.InboundMessage, token string, formValue map[string]any) error {
+	if b.ingress == nil {
+		return fmt.Errorf("feishu ingress not configured")
+	}
+	ev, ok := InteractionFromCallback(msg, token)
+	if !ok {
+		log.Printf("[feishu] card action: unrecognized token %q", token)
+		return nil
+	}
+	if len(formValue) > 0 && ev.Kind == port.InteractionAsk {
+		// Stash form JSON in Meta for ingress to format against pending fields.
+		if ev.Meta == nil {
+			ev.Meta = map[string]string{}
+		}
+		ev.Meta["form_json"] = string(mustJSONMap(formValue))
+		ev.Option = "form"
+	}
+	return b.ingress.HandleInteraction(ctx, ev)
+}
+
+func mustJSONMap(v map[string]any) []byte {
+	b, _ := json.Marshal(v)
+	return b
 }
 
 func (b *FeishuBridge) Stop() {

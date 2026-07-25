@@ -13,6 +13,7 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
+	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 )
@@ -20,11 +21,16 @@ import (
 // InboundHandler is called for each normalized inbound Feishu message.
 type InboundHandler func(ctx context.Context, msg port.InboundMessage) error
 
+// CardActionHandler handles card.action.trigger callbacks (dw|… token already extracted).
+// formValue carries schema 2.0 form field values when the user submitted a form.
+type CardActionHandler func(ctx context.Context, msg port.InboundMessage, token string, formValue map[string]any) error
+
 // LongConn runs the Feishu outbound WebSocket event client (no public URL).
 type LongConn struct {
-	cfg     domain.ConfigFeishuChannel
-	onMsg   InboundHandler
-	account string
+	cfg      domain.ConfigFeishuChannel
+	onMsg    InboundHandler
+	onCard   CardActionHandler
+	account  string
 }
 
 func NewLongConn(cfg domain.ConfigFeishuChannel, onMsg InboundHandler) *LongConn {
@@ -33,6 +39,12 @@ func NewLongConn(cfg domain.ConfigFeishuChannel, onMsg InboundHandler) *LongConn
 		acc = "feishu-default"
 	}
 	return &LongConn{cfg: cfg, onMsg: onMsg, account: acc}
+}
+
+// WithCardAction sets the interactive card callback handler.
+func (lc *LongConn) WithCardAction(h CardActionHandler) *LongConn {
+	lc.onCard = h
+	return lc
 }
 
 // OpenAPIBase returns the Open API host for the configured domain.
@@ -59,6 +71,29 @@ func (lc *LongConn) Run(ctx context.Context) error {
 				log.Printf("[feishu] inbound handler: %v", err)
 			}
 			return nil
+		}).
+		OnP2CardActionTrigger(func(ctx context.Context, event *callback.CardActionTriggerEvent) (*callback.CardActionTriggerResponse, error) {
+			if lc.onCard == nil || event == nil || event.Event == nil {
+				return &callback.CardActionTriggerResponse{}, nil
+			}
+			msg := InboundFromCardAction(lc.account, event)
+			token := ""
+			var formValue map[string]any
+			if event.Event.Action != nil {
+				token = CallbackTokenFromActionValue(event.Event.Action.Value)
+				if event.Event.Action.FormValue != nil {
+					formValue = event.Event.Action.FormValue
+				}
+			}
+			if err := lc.onCard(ctx, msg, token, formValue); err != nil {
+				log.Printf("[feishu] card action: %v", err)
+				return &callback.CardActionTriggerResponse{
+					Toast: &callback.Toast{Type: "error", Content: "处理失败"},
+				}, nil
+			}
+			return &callback.CardActionTriggerResponse{
+				Toast: &callback.Toast{Type: "info", Content: "已处理"},
+			}, nil
 		})
 
 	opts := []larkws.ClientOption{
@@ -101,7 +136,8 @@ func InboundFromP2Message(accountID string, event *larkim.P2MessageReceiveV1) *p
 		content = *m.Content
 	}
 	text := extractTextContent(content, msgType)
-	if text == "" {
+	media := extractMediaDescriptors(content, msgType)
+	if text == "" && len(media) == 0 {
 		return nil
 	}
 	peer := ""
@@ -139,6 +175,72 @@ func InboundFromP2Message(accountID string, event *larkim.P2MessageReceiveV1) *p
 		ChatID:    chatID,
 		ThreadID:  threadID,
 		Text:      text,
+		MessageID: messageID,
+		Media:     media,
+		Meta: map[string]string{
+			"chat_id":      chatID,
+			"message_id":   messageID,
+			"receive_id":   chatID,
+			"receive_type": "chat_id",
+		},
+	}
+}
+
+func extractMediaDescriptors(contentJSON, msgType string) []port.InboundMedia {
+	msgType = strings.ToLower(strings.TrimSpace(msgType))
+	switch msgType {
+	case "image":
+		var c struct {
+			ImageKey string `json:"image_key"`
+		}
+		if json.Unmarshal([]byte(contentJSON), &c) != nil || c.ImageKey == "" {
+			return nil
+		}
+		return []port.InboundMedia{{Kind: "image", Key: c.ImageKey, Name: c.ImageKey + ".png", MimeType: "image/png"}}
+	case "file", "audio", "media":
+		var c struct {
+			FileKey  string `json:"file_key"`
+			FileName string `json:"file_name"`
+		}
+		if json.Unmarshal([]byte(contentJSON), &c) != nil || c.FileKey == "" {
+			return nil
+		}
+		kind := "file"
+		if msgType == "audio" {
+			kind = "audio"
+		}
+		name := c.FileName
+		if name == "" {
+			name = c.FileKey
+		}
+		return []port.InboundMedia{{Kind: kind, Key: c.FileKey, Name: name}}
+	default:
+		return nil
+	}
+}
+
+// InboundFromCardAction builds a peer context from a card action trigger.
+func InboundFromCardAction(accountID string, event *callback.CardActionTriggerEvent) port.InboundMessage {
+	peer := ""
+	chatID := ""
+	messageID := ""
+	if event != nil && event.Event != nil {
+		if event.Event.Operator != nil && event.Event.Operator.OpenID != "" {
+			peer = event.Event.Operator.OpenID
+		}
+		if event.Event.Context != nil {
+			chatID = event.Event.Context.OpenChatID
+			messageID = event.Event.Context.OpenMessageID
+		}
+	}
+	if peer == "" {
+		peer = chatID
+	}
+	return port.InboundMessage{
+		Type:      port.ChannelFeishu,
+		AccountID: accountID,
+		PeerID:    peer,
+		ChatID:    chatID,
 		MessageID: messageID,
 		Meta: map[string]string{
 			"chat_id":      chatID,

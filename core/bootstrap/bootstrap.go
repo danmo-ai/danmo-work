@@ -8,6 +8,7 @@ import (
 	"danmo-work/core/adapter/config"
 	"danmo-work/core/adapter/feishu"
 	"danmo-work/core/adapter/llm"
+	"danmo-work/core/adapter/qq"
 	gitmarket "danmo-work/core/adapter/market/git"
 	"danmo-work/core/domain"
 	"danmo-work/core/paths"
@@ -54,6 +55,7 @@ type Core struct {
 	Weixin        *service.WeixinBridge
 	Feishu        *service.FeishuBridge
 	Wecom         *service.WecomBridge
+	QQ            *service.QQBridge
 	Channels      *service.ChannelManager
 }
 
@@ -191,10 +193,12 @@ func New(cfg Config) *Core {
 	weixinPeer := service.NewWeixinPeerStore(st)
 	feishuPeer := service.NewFeishuPeerStore(st, configManager)
 	wecomPeer := service.NewWecomPeerStore(st, configManager)
+	qqPeer := service.NewQQPeerStore(st, configManager)
 	peers := service.NewMultiplexPeerStore(map[port.ChannelType]port.ChannelPeerStore{
 		port.ChannelWeixin: weixinPeer,
 		port.ChannelFeishu: feishuPeer,
 		port.ChannelWecom:  wecomPeer,
+		port.ChannelQQ:     qqPeer,
 	})
 	defaults := service.NewConfigChannelDefaults(configManager)
 	ingress := service.NewChannelIngress(sessions, pm, peers, defaults)
@@ -209,6 +213,10 @@ func New(cfg Config) *Core {
 
 	wecomBridge := service.NewWecomBridge(configManager, ingress)
 	channels.RegisterRuntime(wecomBridge)
+
+	qqAdapter := qq.NewAdapter(appCfg.Channels.QQ)
+	qqBridge := service.NewQQBridge(configManager, qqAdapter, ingress)
+	channels.RegisterRuntime(qqBridge)
 
 	if err := channels.SyncAll(context.Background()); err != nil {
 		// Non-fatal: channels may be disabled or incomplete.
@@ -236,6 +244,7 @@ func New(cfg Config) *Core {
 		Channels:      channels,
 		Feishu:        feishuBridge,
 		Wecom:         wecomBridge,
+		QQ:            qqBridge,
 	}
 }
 

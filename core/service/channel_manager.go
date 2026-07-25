@@ -38,6 +38,9 @@ func (s *WeixinPeerStore) GetBinding(ctx context.Context, channel port.ChannelTy
 		return "", nil, err
 	}
 	meta := map[string]string{}
+	for k, v := range b.Meta {
+		meta[k] = v
+	}
 	if b.ContextToken != "" {
 		meta["context_token"] = b.ContextToken
 	}
@@ -48,15 +51,29 @@ func (s *WeixinPeerStore) UpsertBinding(ctx context.Context, channel port.Channe
 	if channel != port.ChannelWeixin {
 		return fmt.Errorf("weixin peer store: unsupported channel %s", channel)
 	}
+	existing, err := s.store.WeixinBindings().GetByPeer(ctx, accountID, peerID)
+	merged := map[string]string{}
+	if err == nil {
+		merged = mergeStringMap(existing.Meta, meta)
+		if sessionID == "" {
+			sessionID = existing.SessionID
+		}
+	} else {
+		merged = mergeStringMap(nil, meta)
+	}
 	tok := ""
-	if meta != nil {
-		tok = meta["context_token"]
+	if merged != nil {
+		tok = merged["context_token"]
+	}
+	if tok == "" && err == nil {
+		tok = existing.ContextToken
 	}
 	return s.store.WeixinBindings().Upsert(ctx, domain.WeixinBinding{
 		AccountID:    accountID,
 		PeerUserID:   peerID,
 		SessionID:    sessionID,
 		ContextToken: tok,
+		Meta:         merged,
 	})
 }
 
@@ -67,10 +84,25 @@ func (s *WeixinPeerStore) UpdateBindingMeta(ctx context.Context, channel port.Ch
 	if meta == nil {
 		return nil
 	}
-	if tok, ok := meta["context_token"]; ok {
-		return s.store.WeixinBindings().UpdateContextToken(ctx, accountID, peerID, tok)
+	existing, err := s.store.WeixinBindings().GetByPeer(ctx, accountID, peerID)
+	if err != nil {
+		// No row yet — create a meta-only binding.
+		return s.UpsertBinding(ctx, channel, accountID, peerID, "", meta)
 	}
-	return nil
+	merged := mergeStringMap(existing.Meta, meta)
+	tok := existing.ContextToken
+	if v, ok := meta["context_token"]; ok {
+		tok = v
+	}
+	return s.store.WeixinBindings().Upsert(ctx, domain.WeixinBinding{
+		ID:           existing.ID,
+		AccountID:    accountID,
+		PeerUserID:   peerID,
+		SessionID:    existing.SessionID,
+		ContextToken: tok,
+		Meta:         merged,
+		CreatedAt:    existing.CreatedAt,
+	})
 }
 
 // MultiplexPeerStore routes ChannelPeerStore calls by channel type.
@@ -89,7 +121,6 @@ func (m *MultiplexPeerStore) store(ch port.ChannelType) (port.ChannelPeerStore, 
 	}
 	return s, nil
 }
-
 func (m *MultiplexPeerStore) GetProjectID(ctx context.Context, channel port.ChannelType, accountID string) (string, error) {
 	s, err := m.store(channel)
 	if err != nil {
@@ -157,6 +188,13 @@ func (d *ConfigChannelDefaults) ChannelDefaults(ctx context.Context, channel por
 			AgentID:     wc.DefaultAgentID,
 			ModelID:     wc.DefaultModelID,
 			AutoApprove: wc.AutoApprove,
+		}, nil
+	case port.ChannelQQ:
+		qc := cfg.Channels.QQ
+		return port.ChannelDefaults{
+			AgentID:     qc.DefaultAgentID,
+			ModelID:     qc.DefaultModelID,
+			AutoApprove: qc.AutoApprove,
 		}, nil
 	default:
 		return port.ChannelDefaults{}, fmt.Errorf("unknown channel %s", channel)

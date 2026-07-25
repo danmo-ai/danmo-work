@@ -9,6 +9,49 @@ type ConfigChannelsSection struct {
 	Weixin ConfigWeixinChannel `json:"weixin" mapstructure:"weixin" yaml:"weixin"`
 	Feishu ConfigFeishuChannel `json:"feishu" mapstructure:"feishu" yaml:"feishu"`
 	Wecom  ConfigWecomChannel  `json:"wecom" mapstructure:"wecom" yaml:"wecom"`
+	QQ     ConfigQQChannel     `json:"qq" mapstructure:"qq" yaml:"qq"`
+}
+
+// ConfigQQChannel configures the QQ Bot channel via outbound WebSocket Gateway.
+type ConfigQQChannel struct {
+	Enabled        bool   `json:"enabled" mapstructure:"enabled" yaml:"enabled"`
+	DefaultAgentID string `json:"defaultAgentId" mapstructure:"default_agent_id" yaml:"default_agent_id"`
+	DefaultModelID string `json:"defaultModelId" mapstructure:"default_model_id" yaml:"default_model_id"`
+	AutoApprove    bool   `json:"autoApprove" mapstructure:"auto_approve" yaml:"auto_approve"`
+	AppID          string `json:"appId" mapstructure:"app_id" yaml:"app_id"`
+	ClientSecret   string `json:"clientSecret,omitempty" mapstructure:"client_secret" yaml:"client_secret,omitempty"`
+	// ProjectID binds inbound QQ peers to one Teams project (overridable per-peer via /project).
+	ProjectID string `json:"projectId,omitempty" mapstructure:"project_id" yaml:"project_id,omitempty"`
+	// NativeC2CStream uses QQ C2C stream_messages API when true (default).
+	NativeC2CStream *bool `json:"nativeC2cStream,omitempty" mapstructure:"native_c2c_stream" yaml:"native_c2c_stream,omitempty"`
+	// Group configures group-chat policy (C2C unaffected).
+	Group ConfigQQGroupPolicy `json:"group,omitempty" mapstructure:"group" yaml:"group,omitempty"`
+}
+
+// QQNativeC2CStreamEnabled reports whether C2C stream_messages should be used (default true).
+func (c ConfigQQChannel) QQNativeC2CStreamEnabled() bool {
+	if c.NativeC2CStream == nil {
+		return true
+	}
+	return *c.NativeC2CStream
+}
+
+// ConfigQQGroupPolicy controls QQ group chat behavior.
+type ConfigQQGroupPolicy struct {
+	// RequireMention defaults true: only @-mention group messages are accepted
+	// (QQ already gates via GROUP_AT_MESSAGE_CREATE; kept for config clarity / future events).
+	RequireMention *bool `json:"requireMention,omitempty" mapstructure:"require_mention" yaml:"require_mention,omitempty"`
+	// DenyTools lists tool names rejected for group turns when they request approval
+	// (e.g. exec_shell). Matching tools are auto-denied in-channel.
+	DenyTools []string `json:"denyTools,omitempty" mapstructure:"deny_tools" yaml:"deny_tools,omitempty"`
+	// Groups optional per-group_openid overrides.
+	Groups map[string]ConfigQQGroupOverride `json:"groups,omitempty" mapstructure:"groups" yaml:"groups,omitempty"`
+}
+
+// ConfigQQGroupOverride overrides group policy for one group openid.
+type ConfigQQGroupOverride struct {
+	RequireMention *bool    `json:"requireMention,omitempty" mapstructure:"require_mention" yaml:"require_mention,omitempty"`
+	DenyTools      []string `json:"denyTools,omitempty" mapstructure:"deny_tools" yaml:"deny_tools,omitempty"`
 }
 
 // ConfigWecomChannel configures WeCom (企业微信) AI Bot via outbound WebSocket.
@@ -37,6 +80,16 @@ type ConfigFeishuChannel struct {
 	Domain string `json:"domain,omitempty" mapstructure:"domain" yaml:"domain,omitempty"`
 	// ProjectID binds inbound Feishu peers to one Teams project.
 	ProjectID string `json:"projectId,omitempty" mapstructure:"project_id" yaml:"project_id,omitempty"`
+	// RichProgress enables interactive progress cards (default true). When false, fall back to text PATCH.
+	RichProgress *bool `json:"richProgress,omitempty" mapstructure:"rich_progress" yaml:"rich_progress,omitempty"`
+}
+
+// FeishuRichProgressEnabled reports whether interactive progress cards are on (default true).
+func (c ConfigFeishuChannel) FeishuRichProgressEnabled() bool {
+	if c.RichProgress == nil {
+		return true
+	}
+	return *c.RichProgress
 }
 
 // ConfigWeixinChannel configures the Weixin iLink bridge.
@@ -66,13 +119,14 @@ type WeixinAccount struct {
 
 // WeixinBinding maps one Weixin peer to one Teams session (1:1).
 type WeixinBinding struct {
-	ID           string    `json:"id"`
-	AccountID    string    `json:"accountId"`
-	PeerUserID   string    `json:"peerUserId"`
-	SessionID    string    `json:"sessionId"`
-	ContextToken string    `json:"contextToken,omitempty"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ID           string            `json:"id"`
+	AccountID    string            `json:"accountId"`
+	PeerUserID   string            `json:"peerUserId"`
+	SessionID    string            `json:"sessionId"`
+	ContextToken string            `json:"contextToken,omitempty"`
+	Meta         map[string]string `json:"meta,omitempty"` // peer overrides e.g. project_id
+	CreatedAt    time.Time         `json:"createdAt"`
+	UpdatedAt    time.Time         `json:"updatedAt"`
 }
 
 type WeixinLoginStartResult struct {
