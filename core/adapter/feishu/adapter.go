@@ -69,58 +69,8 @@ func extractTextContent(contentJSON, msgType string) string {
 }
 
 func (a *Adapter) SendReply(ctx context.Context, in *port.InboundMessage, reply port.OutboundReply) error {
-	if strings.TrimSpace(reply.Content) == "" {
-		return nil
-	}
-	receiveID := ""
-	receiveType := "chat_id"
-	if in.Meta != nil {
-		receiveID = in.Meta["receive_id"]
-		if t := in.Meta["receive_type"]; t != "" {
-			receiveType = t
-		}
-	}
-	if receiveID == "" {
-		receiveID = in.ChatID
-	}
-	if receiveID == "" {
-		receiveID = in.PeerID
-		receiveType = "open_id"
-	}
-	token, err := a.tenantToken(ctx)
-	if err != nil {
-		return err
-	}
-	payload, _ := json.Marshal(map[string]any{
-		"receive_id": receiveID,
-		"msg_type":   "text",
-		"content":    string(mustJSON(map[string]string{"text": reply.Content})),
-	})
-	url := fmt.Sprintf("%s/im/v1/messages?receive_id_type=%s", OpenAPIBase(a.config().Domain), receiveType)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("feishu send: HTTP %d: %s", resp.StatusCode, string(body))
-	}
-	var out struct {
-		Code int    `json:"code"`
-		Msg  string `json:"msg"`
-	}
-	_ = json.Unmarshal(body, &out)
-	if out.Code != 0 {
-		return fmt.Errorf("feishu send: code=%d msg=%s", out.Code, out.Msg)
-	}
-	return nil
+	_, err := a.SendTextMessage(ctx, in, reply.Content)
+	return err
 }
 
 func (a *Adapter) tenantToken(ctx context.Context) (string, error) {

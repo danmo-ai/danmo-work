@@ -58,8 +58,9 @@ func (s *WecomPeerStore) UpdateBindingMeta(ctx context.Context, channel port.Cha
 
 // WecomBridge runs WeCom AI Bot WebSocket and routes messages through ChannelIngress.
 type WecomBridge struct {
-	config  *ConfigManager
-	ingress port.ChannelIngress
+	config   *ConfigManager
+	ingress  port.ChannelIngress
+	endpoint *WecomEndpoint
 
 	mu      sync.Mutex
 	running bool
@@ -68,8 +69,16 @@ type WecomBridge struct {
 }
 
 func NewWecomBridge(config *ConfigManager, ingress port.ChannelIngress) *WecomBridge {
-	return &WecomBridge{config: config, ingress: ingress}
+	ep := NewWecomEndpoint()
+	b := &WecomBridge{config: config, ingress: ingress, endpoint: ep}
+	if ingress != nil {
+		ingress.RegisterEndpoint(ep)
+	}
+	return b
 }
+
+// Endpoint returns the registered ChannelEndpoint (tests / diagnostics).
+func (b *WecomBridge) Endpoint() port.ChannelEndpoint { return b.endpoint }
 
 func (b *WecomBridge) Type() port.ChannelType { return port.ChannelWecom }
 
@@ -141,9 +150,15 @@ func (b *WecomBridge) runWSLoop(ctx context.Context, wc domain.ConfigWecomChanne
 		}
 		var lc *wecom.LongConn
 		lc = wecom.NewLongConn(wc, func(msgCtx context.Context, msg port.InboundMessage) error {
-			return b.handleInbound(msgCtx, lc, msg)
+			return b.handleInbound(msgCtx, msg)
 		})
+		if b.endpoint != nil {
+			b.endpoint.SetConn(lc)
+		}
 		err := lc.Run(ctx)
+		if b.endpoint != nil {
+			b.endpoint.ClearConn(lc)
+		}
 		if ctx.Err() != nil {
 			return
 		}
@@ -172,35 +187,25 @@ func (b *WecomBridge) runWSLoop(ctx context.Context, wc domain.ConfigWecomChanne
 	}
 }
 
-func (b *WecomBridge) handleInbound(ctx context.Context, lc *wecom.LongConn, msg port.InboundMessage) error {
-	reqID := ""
-	streamID := ""
-	if msg.Meta != nil {
-		reqID = msg.Meta["req_id"]
-		streamID = msg.Meta["stream_id"]
-	}
-	finish := func(content string) {
-		if lc == nil || reqID == "" || streamID == "" {
-			return
-		}
-		if strings.TrimSpace(content) == "" {
-			content = "（无文本回复）"
-		}
-		if err := lc.ReplyStream(reqID, streamID, content, true); err != nil {
-			log.Printf("[wecom] reply finish: %v", err)
-		}
-	}
+func (b *WecomBridge) handleInbound(ctx context.Context, msg port.InboundMessage) error {
 	if b.ingress == nil {
-		finish("企业微信通道未就绪")
+		if b.endpoint != nil {
+			_ = b.endpoint.Deliver(ctx, &msg, port.TextOutbound("企业微信通道未就绪"))
+		}
 		return fmt.Errorf("wecom ingress not configured")
 	}
 	reply, err := b.ingress.HandleInbound(ctx, msg)
 	if err != nil {
 		log.Printf("[wecom] handle inbound peer=%s: %v", msg.PeerID, err)
-		finish("处理消息时出错：" + err.Error())
+		if b.endpoint != nil {
+			_ = b.endpoint.Deliver(ctx, &msg, port.TextOutbound("处理消息时出错："+err.Error()))
+		}
 		return err
 	}
-	finish(reply)
+	// Ingress delivers via endpoint; reply non-empty only if endpoint missing.
+	if strings.TrimSpace(reply) != "" && b.endpoint != nil {
+		_ = b.endpoint.Deliver(ctx, &msg, port.TextOutbound(reply))
+	}
 	return nil
 }
 
