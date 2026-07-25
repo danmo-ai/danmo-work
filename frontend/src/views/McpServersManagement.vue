@@ -251,17 +251,23 @@ function onKeydown(e: KeyboardEvent) {
     <template #rail>
       <div v-if="mcp.catalog.length" class="mcp-catalog">
         <div class="mcp-catalog__title">{{ $t('connectors.catalog') }}</div>
-        <button
-          v-for="entry in mcp.catalog"
-          :key="entry.id"
-          type="button"
-          class="mcp-catalog__row"
-          :disabled="installingCatalogId === entry.id"
-          @click="installFromCatalog(entry.id)"
-        >
-          <span class="mcp-catalog__name">{{ entry.name }}</span>
-          <span class="mcp-catalog__action">{{ $t('connectors.installCatalog') }}</span>
-        </button>
+        <nav class="mcp-catalog__list" :aria-label="$t('connectors.catalog')">
+          <button
+            v-for="entry in mcp.catalog"
+            :key="entry.id"
+            type="button"
+            class="resource-rail__row mcp-catalog__row"
+            :disabled="installingCatalogId === entry.id"
+            @click="installFromCatalog(entry.id)"
+          >
+            <span class="resource-rail__avatar">{{ initial(entry.name) }}</span>
+            <span class="resource-rail__meta">
+              <span class="resource-rail__name">{{ entry.name }}</span>
+              <span class="resource-rail__desc">{{ entry.description || entry.transport }}</span>
+            </span>
+            <span class="resource-rail__tag is-accent">{{ $t('connectors.installCatalog') }}</span>
+          </button>
+        </nav>
       </div>
       <DqEmpty v-if="!sortedServers.length" class="resource-rail__empty" :description="$t('connectors.noServers')" />
       <nav v-else class="resource-rail__list" :aria-label="$t('connectors.serverList')">
@@ -419,40 +425,36 @@ function onKeydown(e: KeyboardEvent) {
 
 <style scoped>
 .mcp-catalog {
-  padding: 8px 10px 4px;
-  border-bottom: 1px solid var(--dq-border, rgba(0, 0, 0, 0.08));
-  margin-bottom: 4px;
-}
-.mcp-catalog__title {
-  font-size: 12px;
-  opacity: 0.7;
+  padding: 4px 0 8px;
+  border-bottom: 1px solid var(--dq-separator-light);
   margin-bottom: 6px;
 }
-.mcp-catalog__row {
+
+.mcp-catalog__title {
+  padding: 8px 12px 4px;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dq-label-tertiary);
+  line-height: 1.3;
+}
+
+.mcp-catalog__list {
   display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 8px;
-  margin-bottom: 4px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
+  flex-direction: column;
 }
-.mcp-catalog__row:hover {
-  background: var(--dq-fill-muted, rgba(0, 0, 0, 0.04));
+
+.mcp-catalog__row:disabled {
+  opacity: 0.55;
+  cursor: wait;
 }
-.mcp-catalog__name {
-  font-size: 13px;
-  flex: 1;
-  min-width: 0;
-}
-.mcp-catalog__action {
-  font-size: 12px;
-  opacity: 0.75;
-  white-space: nowrap;
+
+.mcp-catalog__row .resource-rail__desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow: hidden;
 }
 </style>
