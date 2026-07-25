@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -291,6 +292,11 @@ func ensureBuiltinSkills(skills *service.SkillManager) {
 	ctx := context.Background()
 	templates, err := prompt.LoadSkillTemplates()
 	if err != nil {
+		log.Printf("[bootstrap] load builtin skill templates: %v", err)
+		return
+	}
+	if len(templates) == 0 {
+		log.Printf("[bootstrap] no builtin skill templates embedded")
 		return
 	}
 	for _, tmpl := range templates {
@@ -298,18 +304,29 @@ func ensureBuiltinSkills(skills *service.SkillManager) {
 		skill.Builtin = true
 		if existing, err := skills.Get(ctx, skill.ID); err == nil && existing != nil {
 			// Preserve user edits; only backfill the builtin flag if missing.
+			// Builtin is also computed at read time from the embedded template.
 			if !existing.Builtin {
 				existing.Builtin = true
-				_ = skills.Upsert(ctx, *existing)
+				if err := skills.Upsert(ctx, *existing); err != nil {
+					log.Printf("[bootstrap] backfill builtin skill %q: %v", skill.ID, err)
+				}
 			}
 		} else {
-			_ = skills.Upsert(ctx, skill)
+			if err := skills.Upsert(ctx, skill); err != nil {
+				log.Printf("[bootstrap] seed builtin skill %q: %v", skill.ID, err)
+			}
 		}
 		// Seed missing resource files only — never overwrite existing ones
 		// (same seed-if-missing policy as skill metadata / body).
-		files, _ := prompt.LoadBuiltinSkillFiles(skill.ID)
+		files, err := prompt.LoadBuiltinSkillFiles(skill.ID)
+		if err != nil {
+			log.Printf("[bootstrap] load builtin skill files %q: %v", skill.ID, err)
+			continue
+		}
 		for _, f := range files {
-			_ = skills.EnsureFile(ctx, f)
+			if err := skills.EnsureFile(ctx, f); err != nil {
+				log.Printf("[bootstrap] seed builtin skill file %q %s: %v", skill.ID, f.Path, err)
+			}
 		}
 	}
 }

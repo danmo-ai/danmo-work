@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -11,6 +12,10 @@ import (
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
 )
+
+// ErrBuiltinSkill is returned when a caller tries to delete a template-backed
+// or otherwise builtin skill from the library.
+var ErrBuiltinSkill = errors.New("cannot delete builtin skill")
 
 // ValidSkillResourcePrefixes are the allowed top-level dirs for skill resource files.
 var ValidSkillResourcePrefixes = []string{"scripts/", "references/", "assets/"}
@@ -68,7 +73,7 @@ func (m *SkillManager) List(ctx context.Context) ([]domain.Skill, error) {
 		m.mu.RUnlock()
 		out := make([]domain.Skill, len(result))
 		copy(out, result)
-		m.enrichTemplateStatusBatch(ctx, out)
+		m.enrichBatch(ctx, out)
 		return out, nil
 	}
 	m.mu.RUnlock()
@@ -82,7 +87,7 @@ func (m *SkillManager) List(ctx context.Context) ([]domain.Skill, error) {
 	m.mu.Unlock()
 	out := make([]domain.Skill, len(list))
 	copy(out, list)
-	m.enrichTemplateStatusBatch(ctx, out)
+	m.enrichBatch(ctx, out)
 	return out, nil
 }
 
@@ -91,7 +96,7 @@ func (m *SkillManager) Get(ctx context.Context, id string) (*domain.Skill, error
 	if s, ok := m.cache[id]; ok {
 		m.mu.RUnlock()
 		cp := *s
-		m.enrichTemplateStatus(ctx, &cp)
+		m.enrich(ctx, &cp)
 		return &cp, nil
 	}
 	m.mu.RUnlock()
@@ -103,13 +108,17 @@ func (m *SkillManager) Get(ctx context.Context, id string) (*domain.Skill, error
 	m.cache[id] = &sk
 	m.mu.Unlock()
 	cp := sk
-	m.enrichTemplateStatus(ctx, &cp)
+	m.enrich(ctx, &cp)
 	return &cp, nil
 }
 
 func (m *SkillManager) Upsert(ctx context.Context, s domain.Skill) error {
-	// Never clear builtin via a partial client update.
+	// Never clear builtin via a partial client update, and treat any skill that
+	// still has an embedded template as builtin (same rule as AgentManager).
 	if existing, err := m.store.Get(ctx, s.ID); err == nil && existing.Builtin {
+		s.Builtin = true
+	}
+	if m.hasTemplate(s.ID) {
 		s.Builtin = true
 	}
 	s.TemplateDiverged = false
@@ -124,6 +133,12 @@ func (m *SkillManager) Upsert(ctx context.Context, s domain.Skill) error {
 }
 
 func (m *SkillManager) Delete(ctx context.Context, id string) error {
+	if m.hasTemplate(id) {
+		return fmt.Errorf("%w %q", ErrBuiltinSkill, id)
+	}
+	if existing, err := m.store.Get(ctx, id); err == nil && existing.Builtin {
+		return fmt.Errorf("%w %q", ErrBuiltinSkill, id)
+	}
 	if err := m.store.Delete(ctx, id); err != nil {
 		return err
 	}
@@ -132,6 +147,11 @@ func (m *SkillManager) Delete(ctx context.Context, id string) error {
 	m.cachedList = false
 	m.mu.Unlock()
 	return nil
+}
+
+// HasTemplate reports whether an embedded builtin template exists for id.
+func (m *SkillManager) HasTemplate(id string) bool {
+	return m.hasTemplate(id)
 }
 
 func (m *SkillManager) Files(ctx context.Context, skillID string) ([]domain.SkillFile, error) {
@@ -228,18 +248,31 @@ func (m *SkillManager) ResetFromTemplate(ctx context.Context, id string) (*domai
 	return tmpl, nil
 }
 
-func (m *SkillManager) enrichTemplateStatusBatch(ctx context.Context, skills []domain.Skill) {
+func (m *SkillManager) enrichBatch(ctx context.Context, skills []domain.Skill) {
 	for i := range skills {
-		m.enrichTemplateStatus(ctx, &skills[i])
+		m.enrich(ctx, &skills[i])
 	}
 }
 
-func (m *SkillManager) enrichTemplateStatus(ctx context.Context, sk *domain.Skill) {
+func (m *SkillManager) hasTemplate(id string) bool {
+	if m.templateLoader == nil || id == "" {
+		return false
+	}
+	_, err := m.templateLoader(id)
+	return err == nil
+}
+
+// enrich marks template-backed skills as builtin (read-time, like AgentManager)
+// and computes template drift for the library UI.
+func (m *SkillManager) enrich(ctx context.Context, sk *domain.Skill) {
 	if sk == nil {
 		return
 	}
 	if sk.MarketSource == "" && sk.Metadata != nil {
 		sk.MarketSource = sk.Metadata["market.source"]
+	}
+	if m.hasTemplate(sk.ID) {
+		sk.Builtin = true
 	}
 	if !sk.Builtin {
 		return

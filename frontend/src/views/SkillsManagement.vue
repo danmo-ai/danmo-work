@@ -63,11 +63,13 @@ function emptySkill(): Skill {
 const sortedSkills = computed(() =>
   [...store.items].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
 )
+// Builtin = has embedded template (server marks builtin at read time). Keep
+// those in the Built-in group even if a market overwrite set marketSource.
 const builtinSkills = computed(() =>
-  sortedSkills.value.filter((s) => s.builtin && !s.marketSource),
+  sortedSkills.value.filter((s) => s.builtin),
 )
 const marketSkills = computed(() =>
-  sortedSkills.value.filter((s) => !!s.marketSource),
+  sortedSkills.value.filter((s) => !!s.marketSource && !s.builtin),
 )
 const customSkills = computed(() =>
   sortedSkills.value.filter((s) => !s.builtin && !s.marketSource),
@@ -717,7 +719,7 @@ function formatSize(bytes: number): string {
           <DqButton v-if="isCreating" @click="isCreating = false; selectedId = null">{{ $t('common.cancel') }}</DqButton>
           <DqButton v-if="!isCreating && selectedSkill" @click="exportSelected">{{ $t('skills.export') }}</DqButton>
           <DqButton v-if="!isCreating && selectedSkill?.builtin" @click="resetSelected">{{ $t('common.reset') }}</DqButton>
-          <DqButton v-if="!isCreating" @click="removeSelected">{{ $t('common.delete') }}</DqButton>
+          <DqButton v-if="!isCreating && !selectedSkill?.builtin" @click="removeSelected">{{ $t('common.delete') }}</DqButton>
           <DqButton type="primary" :disabled="saving" @click="save">
             {{ isCreating ? $t('common.create') : $t('common.save') }}
           </DqButton>
