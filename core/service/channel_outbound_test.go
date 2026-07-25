@@ -49,11 +49,18 @@ func TestEndpointCapabilitiesDiffer(t *testing.T) {
 	fs := NewFeishuEndpoint(nil)
 	wx := NewWeixinEndpoint(nil)
 	wc := NewWecomEndpoint()
+	qq := NewQQEndpoint(nil)
 	if !fs.Capabilities().RichCards {
 		t.Fatal("feishu should support rich cards")
 	}
 	if wx.Capabilities().RichCards || wc.Capabilities().RichCards {
 		t.Fatal("weixin/wecom should not claim rich cards")
+	}
+	if !qq.Capabilities().RichCards || !qq.Capabilities().InteractiveApprove {
+		t.Fatal("qq should support rich cards and interactive approve")
+	}
+	if !fs.Capabilities().InteractiveApprove {
+		t.Fatal("feishu should support interactive approve")
 	}
 	if !fs.Capabilities().ProgressiveStream || !wx.Capabilities().ProgressiveStream || !wc.Capabilities().ProgressiveStream {
 		t.Fatal("all three should support progressive stream (native or emulated)")

@@ -36,6 +36,7 @@ type Handler struct {
 	Weixin        *service.WeixinBridge
 	Feishu        *service.FeishuBridge
 	Wecom         *service.WecomBridge
+	QQ            *service.QQBridge
 	Channels      *service.ChannelManager
 	Sandbox       port.Sandbox
 	Browser       port.Browser
@@ -119,6 +120,8 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.PUT("/channels/feishu", feishuConfigure(h))
 	api.GET("/channels/wecom/status", wecomStatus(h))
 	api.PUT("/channels/wecom", wecomConfigure(h))
+	api.GET("/channels/qq/status", qqStatus(h))
+	api.PUT("/channels/qq", qqConfigure(h))
 	api.GET("/sandbox/status", getSandboxStatus(h))
 	api.GET("/browser/status", getBrowserStatus(h))
 	api.GET("/model-configs", getModelConfigs(h))

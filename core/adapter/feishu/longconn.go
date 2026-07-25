@@ -13,6 +13,7 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
+	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 )
@@ -20,11 +21,15 @@ import (
 // InboundHandler is called for each normalized inbound Feishu message.
 type InboundHandler func(ctx context.Context, msg port.InboundMessage) error
 
+// CardActionHandler handles card.action.trigger callbacks (dw|… token already extracted).
+type CardActionHandler func(ctx context.Context, msg port.InboundMessage, token string) error
+
 // LongConn runs the Feishu outbound WebSocket event client (no public URL).
 type LongConn struct {
-	cfg     domain.ConfigFeishuChannel
-	onMsg   InboundHandler
-	account string
+	cfg      domain.ConfigFeishuChannel
+	onMsg    InboundHandler
+	onCard   CardActionHandler
+	account  string
 }
 
 func NewLongConn(cfg domain.ConfigFeishuChannel, onMsg InboundHandler) *LongConn {
@@ -33,6 +38,12 @@ func NewLongConn(cfg domain.ConfigFeishuChannel, onMsg InboundHandler) *LongConn
 		acc = "feishu-default"
 	}
 	return &LongConn{cfg: cfg, onMsg: onMsg, account: acc}
+}
+
+// WithCardAction sets the interactive card callback handler.
+func (lc *LongConn) WithCardAction(h CardActionHandler) *LongConn {
+	lc.onCard = h
+	return lc
 }
 
 // OpenAPIBase returns the Open API host for the configured domain.
@@ -59,6 +70,25 @@ func (lc *LongConn) Run(ctx context.Context) error {
 				log.Printf("[feishu] inbound handler: %v", err)
 			}
 			return nil
+		}).
+		OnP2CardActionTrigger(func(ctx context.Context, event *callback.CardActionTriggerEvent) (*callback.CardActionTriggerResponse, error) {
+			if lc.onCard == nil || event == nil || event.Event == nil {
+				return &callback.CardActionTriggerResponse{}, nil
+			}
+			msg := InboundFromCardAction(lc.account, event)
+			token := ""
+			if event.Event.Action != nil {
+				token = CallbackTokenFromActionValue(event.Event.Action.Value)
+			}
+			if err := lc.onCard(ctx, msg, token); err != nil {
+				log.Printf("[feishu] card action: %v", err)
+				return &callback.CardActionTriggerResponse{
+					Toast: &callback.Toast{Type: "error", Content: "处理失败"},
+				}, nil
+			}
+			return &callback.CardActionTriggerResponse{
+				Toast: &callback.Toast{Type: "info", Content: "已处理"},
+			}, nil
 		})
 
 	opts := []larkws.ClientOption{
@@ -139,6 +169,38 @@ func InboundFromP2Message(accountID string, event *larkim.P2MessageReceiveV1) *p
 		ChatID:    chatID,
 		ThreadID:  threadID,
 		Text:      text,
+		MessageID: messageID,
+		Meta: map[string]string{
+			"chat_id":      chatID,
+			"message_id":   messageID,
+			"receive_id":   chatID,
+			"receive_type": "chat_id",
+		},
+	}
+}
+
+// InboundFromCardAction builds a peer context from a card action trigger.
+func InboundFromCardAction(accountID string, event *callback.CardActionTriggerEvent) port.InboundMessage {
+	peer := ""
+	chatID := ""
+	messageID := ""
+	if event != nil && event.Event != nil {
+		if event.Event.Operator != nil && event.Event.Operator.OpenID != "" {
+			peer = event.Event.Operator.OpenID
+		}
+		if event.Event.Context != nil {
+			chatID = event.Event.Context.OpenChatID
+			messageID = event.Event.Context.OpenMessageID
+		}
+	}
+	if peer == "" {
+		peer = chatID
+	}
+	return port.InboundMessage{
+		Type:      port.ChannelFeishu,
+		AccountID: accountID,
+		PeerID:    peer,
+		ChatID:    chatID,
 		MessageID: messageID,
 		Meta: map[string]string{
 			"chat_id":      chatID,

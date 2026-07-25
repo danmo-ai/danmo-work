@@ -26,6 +26,21 @@ func formatAskText(ask port.AskPrompt) string {
 	return b.String()
 }
 
+// formatPermissionText builds a numbered menu for tool permission.
+func formatPermissionText(ask port.PermissionPrompt) string {
+	var b strings.Builder
+	b.WriteString("需要授权工具执行\n")
+	if strings.TrimSpace(ask.ToolName) != "" {
+		b.WriteString(fmt.Sprintf("\n工具：%s", ask.ToolName))
+	}
+	if strings.TrimSpace(ask.Summary) != "" {
+		b.WriteString(fmt.Sprintf("\n%s", strings.TrimSpace(ask.Summary)))
+	}
+	b.WriteString("\n\n1. 允许一次\n2. 本会话允许\n3. 拒绝")
+	b.WriteString("\n\n请回复序号，或点击按钮。")
+	return b.String()
+}
+
 // resolveAskAnswer maps a peer reply to an option label when it looks like an index.
 func resolveAskAnswer(text string, options []string) string {
 	text = strings.TrimSpace(text)
@@ -44,6 +59,21 @@ func resolveAskAnswer(text string, options []string) string {
 		return options[n-1]
 	}
 	return text
+}
+
+// resolvePermissionReply maps text to approved/scope.
+func resolvePermissionReply(text string) (approved bool, scope string, ok bool) {
+	t := strings.ToLower(strings.TrimSpace(text))
+	switch t {
+	case "1", "once", "允许一次", "allow", "yes", "y", "允许":
+		return true, "once", true
+	case "2", "session", "本会话允许", "always", "本会话":
+		return true, "session", true
+	case "3", "deny", "拒绝", "no", "n":
+		return false, "once", true
+	default:
+		return false, "", false
+	}
 }
 
 // preferOutboundKind picks the richest kind the endpoint can deliver.
@@ -70,4 +100,33 @@ func finalOutboundFromParts(parts []string) port.OutboundMessage {
 		Kind: port.OutboundKindMarkdown,
 		Text: text,
 	}
+}
+
+func permissionActions(approvalID string) []port.OutboundAction {
+	return []port.OutboundAction{
+		{ID: EncodeCallback(port.InteractionPermission, approvalID, "once"), Label: "允许一次"},
+		{ID: EncodeCallback(port.InteractionPermission, approvalID, "session"), Label: "本会话允许"},
+		{ID: EncodeCallback(port.InteractionPermission, approvalID, "deny"), Label: "拒绝"},
+	}
+}
+
+func askActions(ask port.AskPrompt) []port.OutboundAction {
+	actions := make([]port.OutboundAction, 0, len(ask.Options))
+	for _, opt := range ask.Options {
+		actions = append(actions, port.OutboundAction{
+			ID:    EncodeCallback(port.InteractionAsk, ask.AskID, opt),
+			Label: opt,
+		})
+	}
+	return actions
+}
+
+func isProjectCommand(text string) bool {
+	t := strings.TrimSpace(text)
+	if t == "" {
+		return false
+	}
+	lower := strings.ToLower(t)
+	return lower == "/project" || lower == "/projects" || lower == "/bot-project" ||
+		strings.HasPrefix(lower, "/project ") || strings.HasPrefix(lower, "/bot-project ")
 }

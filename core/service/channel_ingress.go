@@ -20,6 +20,9 @@ const (
 	channelBusyReply     = "上一条消息还在处理中，请稍后再试。"
 	channelProcessingMsg = "正在处理…"
 	channelAskAckMsg     = "已收到。"
+	channelPermAckMsg    = "已处理授权。"
+	maxProgressLines     = 6
+	progressMinInterval  = 800 * time.Millisecond
 )
 
 // ChannelIngressService orchestrates IM → Session turns.
@@ -33,10 +36,10 @@ type ChannelIngressService struct {
 	mu        sync.RWMutex
 	endpoints map[port.ChannelType]port.ChannelEndpoint
 
-	// In-memory pending ask_user waits keyed by channel|account|peer.
-	// Kept here (not binding meta) so Weixin — which only stores context_token — works too.
-	askMu       sync.Mutex
-	pendingAsks map[string]pendingAsk
+	// In-memory pending ask_user / permission waits keyed by channel|account|peer.
+	askMu        sync.Mutex
+	pendingAsks  map[string]pendingAsk
+	pendingPerms map[string]pendingPerm
 }
 
 type pendingAsk struct {
@@ -44,14 +47,19 @@ type pendingAsk struct {
 	Options []string
 }
 
+type pendingPerm struct {
+	ApprovalID string
+}
+
 func NewChannelIngress(sessions *SessionManager, projects *ProjectManager, peers port.ChannelPeerStore, defaults port.ChannelDefaultsSource) *ChannelIngressService {
 	return &ChannelIngressService{
-		sessions:    sessions,
-		projects:    projects,
-		peers:       peers,
-		defaults:    defaults,
-		endpoints:   make(map[port.ChannelType]port.ChannelEndpoint),
-		pendingAsks: make(map[string]pendingAsk),
+		sessions:     sessions,
+		projects:     projects,
+		peers:        peers,
+		defaults:     defaults,
+		endpoints:    make(map[port.ChannelType]port.ChannelEndpoint),
+		pendingAsks:  make(map[string]pendingAsk),
+		pendingPerms: make(map[string]pendingPerm),
 	}
 }
 
@@ -82,24 +90,34 @@ func (ing *ChannelIngressService) HandleInbound(ctx context.Context, msg port.In
 		return "", fmt.Errorf("accountId and peerId required")
 	}
 
-	// Pending ask_user answer takes priority over a new turn.
+	// Button-style tokens pasted as text.
+	if ev, ok := InteractionFromCallback(msg, strings.TrimSpace(msg.Text)); ok {
+		return "", ing.HandleInteraction(ctx, ev)
+	}
+
 	if ing.sessions != nil {
 		if handled, err := ing.tryResolvePendingAsk(ctx, msg); handled || err != nil {
 			return "", err
 		}
+		if handled, err := ing.tryResolvePendingPerm(ctx, msg); handled || err != nil {
+			return "", err
+		}
 	}
 
-	projectID, err := ing.peers.GetProjectID(ctx, msg.Type, msg.AccountID)
+	if isProjectCommand(msg.Text) {
+		return ing.handleProjectCommand(ctx, msg)
+	}
+
+	projectID, bindMeta, err := ing.resolvePeerProject(ctx, msg)
 	if err != nil {
 		return "", err
 	}
-	projectID = strings.TrimSpace(projectID)
 	channelLabel := channelDisplayName(msg.Type)
 	if projectID == "" {
-		return ing.deliverOrReturn(ctx, &msg, fmt.Sprintf("请先在 Teams 设置 → %s 中为该账号绑定一个项目。", channelLabel))
+		return ing.deliverOrReturn(ctx, &msg, fmt.Sprintf("请先在 Teams 设置 → %s 中绑定默认项目，或发送 /project 选择项目。", channelLabel))
 	}
 	if _, err := ing.projects.Get(ctx, projectID); err != nil {
-		return ing.deliverOrReturn(ctx, &msg, fmt.Sprintf("绑定的项目不存在或已删除，请在设置 → %s 中重新绑定项目。", channelLabel))
+		return ing.deliverOrReturn(ctx, &msg, fmt.Sprintf("绑定的项目不存在或已删除，请发送 /project 重新选择，或在设置 → %s 中绑定。", channelLabel))
 	}
 
 	defs, err := ing.defaults.ChannelDefaults(ctx, msg.Type)
@@ -117,6 +135,9 @@ func (ing *ChannelIngressService) HandleInbound(ctx context.Context, msg port.In
 	sessionID, meta, err := ing.peers.GetBinding(ctx, msg.Type, msg.AccountID, msg.PeerID)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", err
+	}
+	if meta == nil {
+		meta = bindMeta
 	}
 	newSession := errors.Is(err, gorm.ErrRecordNotFound) || sessionID == ""
 
@@ -139,8 +160,16 @@ func (ing *ChannelIngressService) HandleInbound(ctx context.Context, msg port.In
 		}
 		sessionID = s.ID
 		bindMeta := map[string]string{}
+		if meta != nil {
+			for k, v := range meta {
+				bindMeta[k] = v
+			}
+		}
 		if contextToken != "" {
 			bindMeta["context_token"] = contextToken
+		}
+		if projectID != "" {
+			bindMeta["project_id"] = projectID
 		}
 		if uerr := ing.peers.UpsertBinding(ctx, msg.Type, msg.AccountID, msg.PeerID, sessionID, bindMeta); uerr != nil {
 			return "", uerr
@@ -149,6 +178,12 @@ func (ing *ChannelIngressService) HandleInbound(ctx context.Context, msg port.In
 		defer ing.sessions.Unsubscribe(sessionID, ch)
 		turnID := ing.waitLatestTurnID(sessionID, 2*time.Second)
 		return ing.runTurnPipeline(ctx, &msg, sessionID, ch, turnID, defs.AutoApprove)
+	}
+
+	// Existing session bound to a different project → start a fresh session.
+	if s, gerr := ing.sessions.Get(ctx, sessionID); gerr == nil && strings.TrimSpace(s.ProjectID) != "" && s.ProjectID != projectID {
+		_ = ing.peers.UpsertBinding(ctx, msg.Type, msg.AccountID, msg.PeerID, "", mergeStringMap(meta, map[string]string{"project_id": projectID}))
+		return ing.HandleInbound(ctx, msg)
 	}
 
 	if contextToken != "" {
@@ -175,7 +210,185 @@ func (ing *ChannelIngressService) HandleInbound(ctx context.Context, msg port.In
 	return ing.runTurnPipeline(ctx, &msg, sessionID, ch, turnID, defs.AutoApprove)
 }
 
-// tryResolvePendingAsk routes a peer reply to a waiting ask_user.
+// HandleInteraction routes card/keyboard callbacks without starting a new turn.
+func (ing *ChannelIngressService) HandleInteraction(ctx context.Context, ev port.InteractionEvent) error {
+	if ev.PeerID == "" || ev.AccountID == "" {
+		return fmt.Errorf("interaction: accountId and peerId required")
+	}
+	msg := port.InboundMessage{
+		Type:      ev.Type,
+		AccountID: ev.AccountID,
+		PeerID:    ev.PeerID,
+		ChatID:    ev.ChatID,
+		MessageID: ev.MessageID,
+		Meta:      ev.Meta,
+	}
+	switch ev.Kind {
+	case port.InteractionAsk:
+		if ev.TargetID == "" {
+			return nil
+		}
+		answer := ev.Option
+		if answer == "" {
+			answer = ev.Raw
+		}
+		if err := ing.sessions.ResolveAskUser(ev.TargetID, answer); err != nil {
+			log.Printf("[channel] interaction ask %s: %v", ev.TargetID, err)
+		}
+		ing.clearPendingAsk(peerKey(msg), ev.TargetID)
+		_, _ = ing.deliverOrReturn(ctx, &msg, channelAskAckMsg)
+		return nil
+	case port.InteractionPermission:
+		if ev.TargetID == "" || ing.sessions == nil {
+			return nil
+		}
+		approved := true
+		scope := "once"
+		switch strings.TrimSpace(ev.Option) {
+		case "deny", "reject":
+			approved = false
+			scope = "once"
+		case "session":
+			approved = true
+			scope = "session"
+		case "once", "":
+			approved = true
+			scope = "once"
+		default:
+			approved = true
+			scope = "once"
+		}
+		if err := ing.sessions.DecideApproval(ctx, ev.TargetID, approved, scope); err != nil {
+			log.Printf("[channel] interaction perm %s: %v", ev.TargetID, err)
+		}
+		ing.clearPendingPerm(peerKey(msg), ev.TargetID)
+		_, _ = ing.deliverOrReturn(ctx, &msg, channelPermAckMsg)
+		return nil
+	case port.InteractionProject:
+		return ing.applyProjectSelection(ctx, msg, ev.TargetID)
+	default:
+		return nil
+	}
+}
+
+func (ing *ChannelIngressService) resolvePeerProject(ctx context.Context, msg port.InboundMessage) (string, map[string]string, error) {
+	_, meta, err := ing.peers.GetBinding(ctx, msg.Type, msg.AccountID, msg.PeerID)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", nil, err
+	}
+	if meta != nil {
+		if pid := strings.TrimSpace(meta["project_id"]); pid != "" {
+			return pid, meta, nil
+		}
+	}
+	projectID, err := ing.peers.GetProjectID(ctx, msg.Type, msg.AccountID)
+	if err != nil {
+		return "", meta, err
+	}
+	return strings.TrimSpace(projectID), meta, nil
+}
+
+func (ing *ChannelIngressService) handleProjectCommand(ctx context.Context, msg port.InboundMessage) (string, error) {
+	parts := strings.Fields(strings.TrimSpace(msg.Text))
+	if len(parts) >= 2 {
+		arg := strings.TrimSpace(parts[1])
+		// Resolve by id or name.
+		projects, err := ing.projects.List(ctx)
+		if err != nil {
+			return "", err
+		}
+		var match string
+		for _, p := range projects {
+			if p.ID == arg || strings.EqualFold(p.Name, arg) {
+				match = p.ID
+				break
+			}
+		}
+		if match == "" {
+			return ing.deliverOrReturn(ctx, &msg, "未找到项目："+arg+"\n发送 /project 查看列表。")
+		}
+		if err := ing.applyProjectSelection(ctx, msg, match); err != nil {
+			return "", err
+		}
+		return "", nil
+	}
+	return ing.presentProjectPicker(ctx, msg)
+}
+
+func (ing *ChannelIngressService) presentProjectPicker(ctx context.Context, msg port.InboundMessage) (string, error) {
+	projects, err := ing.projects.List(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(projects) == 0 {
+		return ing.deliverOrReturn(ctx, &msg, "还没有项目，请先在桌面端创建。")
+	}
+	cur, _, _ := ing.resolvePeerProject(ctx, msg)
+	var b strings.Builder
+	b.WriteString("选择项目（回复 /project <名称或ID>，或点击按钮）：\n")
+	actions := make([]port.OutboundAction, 0, len(projects))
+	for i, p := range projects {
+		mark := ""
+		if p.ID == cur {
+			mark = " ← 当前"
+		}
+		b.WriteString(fmt.Sprintf("\n%d. %s (%s)%s", i+1, p.Name, p.ID, mark))
+		actions = append(actions, port.OutboundAction{
+			ID:    EncodeCallback(port.InteractionProject, p.ID, ""),
+			Label: p.Name,
+		})
+	}
+	out := port.OutboundMessage{
+		Kind:  port.OutboundKindCard,
+		Title: "切换项目",
+		Text:  b.String(),
+		Card: &port.OutboundCard{
+			Title:   "切换项目",
+			Body:    strings.TrimSpace(b.String()),
+			Actions: actions,
+		},
+	}
+	return ing.deliverOrReturn(ctx, &msg, out.Text, out)
+}
+
+func (ing *ChannelIngressService) applyProjectSelection(ctx context.Context, msg port.InboundMessage, projectID string) error {
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return nil
+	}
+	if _, err := ing.projects.Get(ctx, projectID); err != nil {
+		_, _ = ing.deliverOrReturn(ctx, &msg, "项目不存在："+projectID)
+		return nil
+	}
+	_, meta, err := ing.peers.GetBinding(ctx, msg.Type, msg.AccountID, msg.PeerID)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	meta = mergeStringMap(meta, map[string]string{"project_id": projectID})
+	// Clear session so the next message opens a turn in the new project.
+	if err := ing.peers.UpsertBinding(ctx, msg.Type, msg.AccountID, msg.PeerID, "", meta); err != nil {
+		return err
+	}
+	p, _ := ing.projects.Get(ctx, projectID)
+	name := p.Name
+	if name == "" {
+		name = projectID
+	}
+	_, _ = ing.deliverOrReturn(ctx, &msg, fmt.Sprintf("已切换到项目「%s」。下一条消息将在新会话中处理。", name))
+	return nil
+}
+
+func mergeStringMap(base, patch map[string]string) map[string]string {
+	out := map[string]string{}
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range patch {
+		out[k] = v
+	}
+	return out
+}
+
 func (ing *ChannelIngressService) tryResolvePendingAsk(ctx context.Context, msg port.InboundMessage) (handled bool, err error) {
 	key := peerKey(msg)
 	ing.askMu.Lock()
@@ -187,21 +400,11 @@ func (ing *ChannelIngressService) tryResolvePendingAsk(ctx context.Context, msg 
 	answer := resolveAskAnswer(msg.Text, pending.Options)
 	if rerr := ing.sessions.ResolveAskUser(pending.AskID, answer); rerr != nil {
 		log.Printf("[channel] resolve ask_user %s: %v", pending.AskID, rerr)
-		// Drop stale pending so the peer is not stuck; fall through to a new turn.
-		ing.askMu.Lock()
-		if cur, still := ing.pendingAsks[key]; still && cur.AskID == pending.AskID {
-			delete(ing.pendingAsks, key)
-		}
-		ing.askMu.Unlock()
+		ing.clearPendingAsk(key, pending.AskID)
 		return false, nil
 	}
-	ing.askMu.Lock()
-	if cur, still := ing.pendingAsks[key]; still && cur.AskID == pending.AskID {
-		delete(ing.pendingAsks, key)
-	}
-	ing.askMu.Unlock()
+	ing.clearPendingAsk(key, pending.AskID)
 	ep := ing.endpoint(msg.Type)
-	// WeCom already opened a stream for this inbound — finish it with a short ack.
 	if sender, ok := ep.(port.StreamSender); ok && ep != nil {
 		caps := ep.Capabilities()
 		if caps.ProgressiveStream {
@@ -224,6 +427,44 @@ func (ing *ChannelIngressService) tryResolvePendingAsk(ctx context.Context, msg 
 	return true, nil
 }
 
+func (ing *ChannelIngressService) tryResolvePendingPerm(ctx context.Context, msg port.InboundMessage) (handled bool, err error) {
+	key := peerKey(msg)
+	ing.askMu.Lock()
+	pending, ok := ing.pendingPerms[key]
+	ing.askMu.Unlock()
+	if !ok || pending.ApprovalID == "" {
+		return false, nil
+	}
+	approved, scope, ok := resolvePermissionReply(msg.Text)
+	if !ok {
+		return false, nil
+	}
+	if rerr := ing.sessions.DecideApproval(ctx, pending.ApprovalID, approved, scope); rerr != nil {
+		log.Printf("[channel] resolve permission %s: %v", pending.ApprovalID, rerr)
+		ing.clearPendingPerm(key, pending.ApprovalID)
+		return false, nil
+	}
+	ing.clearPendingPerm(key, pending.ApprovalID)
+	_, _ = ing.deliverOrReturn(ctx, &msg, channelPermAckMsg)
+	return true, nil
+}
+
+func (ing *ChannelIngressService) clearPendingAsk(key, askID string) {
+	ing.askMu.Lock()
+	defer ing.askMu.Unlock()
+	if cur, still := ing.pendingAsks[key]; still && (askID == "" || cur.AskID == askID) {
+		delete(ing.pendingAsks, key)
+	}
+}
+
+func (ing *ChannelIngressService) clearPendingPerm(key, approvalID string) {
+	ing.askMu.Lock()
+	defer ing.askMu.Unlock()
+	if cur, still := ing.pendingPerms[key]; still && (approvalID == "" || cur.ApprovalID == approvalID) {
+		delete(ing.pendingPerms, key)
+	}
+}
+
 // runTurnPipeline watches session stream events, optionally progressive-streams,
 // handles ask_user / permissions, and delivers the final outbound via the endpoint.
 func (ing *ChannelIngressService) runTurnPipeline(ctx context.Context, msg *port.InboundMessage, sessionID string, ch <-chan domain.StreamEvent, turnID string, autoApprove bool) (string, error) {
@@ -234,6 +475,7 @@ func (ing *ChannelIngressService) runTurnPipeline(ctx context.Context, msg *port
 	}
 
 	var sender port.StreamSender
+	var progress port.ProgressUpdater
 	streamID := ""
 	if s, ok := ep.(port.StreamSender); ok && caps.ProgressiveStream {
 		sender = s
@@ -245,6 +487,9 @@ func (ing *ChannelIngressService) runTurnPipeline(ctx context.Context, msg *port
 			streamID = ""
 		}
 	}
+	if p, ok := ep.(port.ProgressUpdater); ok {
+		progress = p
+	}
 
 	final := ing.collectReplyFrom(ctx, collectParams{
 		sessionID:   sessionID,
@@ -255,13 +500,13 @@ func (ing *ChannelIngressService) runTurnPipeline(ctx context.Context, msg *port
 		ep:          ep,
 		caps:        caps,
 		sender:      sender,
+		progress:    progress,
 		streamID:    streamID,
 	})
 
 	if sender != nil && streamID != "" {
 		if err := sender.FinishStream(ctx, msg, streamID, final); err != nil {
 			log.Printf("[channel] FinishStream %s: %v", msg.Type, err)
-			// Fall back to Deliver so the user still gets a reply.
 			return ing.deliverOrReturn(ctx, msg, final.Text)
 		}
 		if ep != nil {
@@ -300,6 +545,8 @@ func channelDisplayName(t port.ChannelType) string {
 		return "飞书"
 	case port.ChannelWecom:
 		return "企业微信"
+	case port.ChannelQQ:
+		return "QQ"
 	default:
 		return string(t)
 	}
@@ -347,10 +594,11 @@ type collectParams struct {
 	ep          port.ChannelEndpoint
 	caps        port.ChannelCapabilities
 	sender      port.StreamSender
+	progress    port.ProgressUpdater
 	streamID    string
 }
 
-func (ing *ChannelIngressService) applyEvent(ev domain.StreamEvent, p collectParams, parts *[]string) (done bool) {
+func (ing *ChannelIngressService) applyEvent(ev domain.StreamEvent, p collectParams, parts *[]string, toolLines *[]string, lastProgress *time.Time) (done bool) {
 	if p.turnID != "" && ev.TurnID != "" && ev.TurnID != p.turnID {
 		return false
 	}
@@ -359,26 +607,148 @@ func (ing *ChannelIngressService) applyEvent(ev domain.StreamEvent, p collectPar
 		var payload domain.AgentMessagePayload
 		if json.Unmarshal(ev.Payload, &payload) == nil && strings.TrimSpace(payload.Text) != "" {
 			*parts = append(*parts, strings.TrimSpace(payload.Text))
-			if p.sender != nil && p.streamID != "" {
-				full := strings.Join(*parts, "\n")
-				if err := p.sender.UpdateStream(context.Background(), p.msg, p.streamID, full); err != nil {
-					log.Printf("[channel] UpdateStream %s: %v", p.msg.Type, err)
-				}
+			ing.emitProgress(p, *parts, *toolLines, "running", "执行中…", lastProgress, true)
+		}
+	case domain.EventToolRunning, domain.EventToolPending:
+		var tp domain.ToolPart
+		if json.Unmarshal(ev.Payload, &tp) == nil {
+			line := "⟳ " + strings.TrimSpace(tp.Name)
+			if d := strings.TrimSpace(tp.Description); d != "" {
+				line += " · " + truncateRunes(d, 80)
 			}
+			*toolLines = appendToolLine(*toolLines, line)
+			ing.emitProgress(p, *parts, *toolLines, "tool", "执行中…", lastProgress, false)
+		}
+	case domain.EventToolCompleted:
+		var tp domain.ToolPart
+		if json.Unmarshal(ev.Payload, &tp) == nil {
+			line := "✓ " + strings.TrimSpace(tp.Name)
+			*toolLines = appendToolLine(*toolLines, line)
+			ing.emitProgress(p, *parts, *toolLines, "tool", "执行中…", lastProgress, false)
+		}
+	case domain.EventToolError:
+		var tp domain.ToolPart
+		if json.Unmarshal(ev.Payload, &tp) == nil {
+			line := "✗ " + strings.TrimSpace(tp.Name)
+			if e := strings.TrimSpace(tp.Error); e != "" {
+				line += " · " + truncateRunes(e, 60)
+			}
+			*toolLines = appendToolLine(*toolLines, line)
+			ing.emitProgress(p, *parts, *toolLines, "error", "工具出错", lastProgress, true)
 		}
 	case domain.EventPermissionAsk:
-		if p.autoApprove {
-			var payload domain.PermissionAskPayload
-			if json.Unmarshal(ev.Payload, &payload) == nil && payload.ApprovalID != "" {
-				_ = ing.sessions.DecideApproval(context.Background(), payload.ApprovalID, true, "once")
-			}
-		}
+		ing.handlePermissionAsk(ev, p)
 	case domain.EventAskUserPending:
 		ing.handleAskUserPending(ev, p)
 	case domain.EventTurnEnded, domain.EventTurnFailed, domain.EventError, domain.EventSessionCompleted:
 		return true
 	}
 	return false
+}
+
+func (ing *ChannelIngressService) emitProgress(p collectParams, parts, toolLines []string, status, headline string, last *time.Time, force bool) {
+	if p.streamID == "" {
+		return
+	}
+	now := time.Now()
+	if !force && last != nil && !last.IsZero() && now.Sub(*last) < progressMinInterval {
+		return
+	}
+	if last != nil {
+		*last = now
+	}
+	full := strings.Join(parts, "\n")
+	if p.progress != nil {
+		if err := p.progress.UpdateProgress(context.Background(), p.msg, p.streamID, port.ProgressSnapshot{
+			Status:   status,
+			Headline: headline,
+			Lines:    append([]string(nil), toolLines...),
+			TextBody: full,
+		}); err != nil {
+			log.Printf("[channel] UpdateProgress %s: %v", p.msg.Type, err)
+		}
+		return
+	}
+	if p.sender != nil {
+		body := full
+		if len(toolLines) > 0 {
+			progressText := strings.Join(toolLines, "\n")
+			if body != "" {
+				body = progressText + "\n\n" + body
+			} else {
+				body = progressText
+			}
+		}
+		if strings.TrimSpace(body) == "" {
+			body = channelProcessingMsg
+		}
+		if err := p.sender.UpdateStream(context.Background(), p.msg, p.streamID, body); err != nil {
+			log.Printf("[channel] UpdateStream %s: %v", p.msg.Type, err)
+		}
+	}
+}
+
+func appendToolLine(lines []string, line string) []string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return lines
+	}
+	lines = append(lines, line)
+	if len(lines) > maxProgressLines {
+		lines = lines[len(lines)-maxProgressLines:]
+	}
+	return lines
+}
+
+func truncateRunes(s string, n int) string {
+	r := []rune(strings.TrimSpace(s))
+	if len(r) <= n {
+		return string(r)
+	}
+	return string(r[:n]) + "…"
+}
+
+func (ing *ChannelIngressService) handlePermissionAsk(ev domain.StreamEvent, p collectParams) {
+	var payload domain.PermissionAskPayload
+	if json.Unmarshal(ev.Payload, &payload) != nil || payload.ApprovalID == "" {
+		return
+	}
+	if p.autoApprove {
+		_ = ing.sessions.DecideApproval(context.Background(), payload.ApprovalID, true, "once")
+		return
+	}
+	ask := port.PermissionPrompt{
+		ApprovalID: payload.ApprovalID,
+		ToolName:   payload.Tool,
+		Summary:    strings.TrimSpace(payload.Description),
+		Scopes:     payload.ScopeOptions,
+	}
+	if ask.Summary == "" {
+		ask.Summary = strings.TrimSpace(payload.Reason)
+	}
+	handled := false
+	if p.caps.InteractiveApprove && p.ep != nil {
+		if approver, ok := p.ep.(port.ChannelApprover); ok {
+			okHandled, err := approver.PresentPermission(context.Background(), p.msg, ask)
+			if err != nil {
+				log.Printf("[channel] PresentPermission %s: %v", p.msg.Type, err)
+			} else {
+				handled = okHandled
+			}
+		}
+	}
+	if !handled && p.caps.InteractiveApprove {
+		_, _ = ing.deliverOrReturn(context.Background(), p.msg, formatPermissionText(ask))
+		handled = true
+	}
+	if handled {
+		ing.askMu.Lock()
+		ing.pendingPerms[peerKey(*p.msg)] = pendingPerm{ApprovalID: ask.ApprovalID}
+		ing.askMu.Unlock()
+		return
+	}
+	// No in-channel approve: leave pending for desktop (do not auto-stub deny).
+	_, _ = ing.deliverOrReturn(context.Background(), p.msg, fmt.Sprintf("（%s通道需要桌面端授权工具「%s」，或在设置中开启自动批准）", channelDisplayName(p.msg.Type), ask.ToolName))
 }
 
 func (ing *ChannelIngressService) handleAskUserPending(ev domain.StreamEvent, p collectParams) {
@@ -405,7 +775,6 @@ func (ing *ChannelIngressService) handleAskUserPending(ev domain.StreamEvent, p 
 		}
 	}
 	if !handled && p.caps.InteractiveAsk {
-		// Generic text-menu fallback when endpoint claims InteractiveAsk but has no interactor.
 		_, _ = ing.deliverOrReturn(context.Background(), p.msg, formatAskText(ask))
 		handled = true
 	}
@@ -415,15 +784,16 @@ func (ing *ChannelIngressService) handleAskUserPending(ev domain.StreamEvent, p 
 		ing.askMu.Unlock()
 		return
 	}
-	// Channels without interactive ask: stub so the turn can continue on desktop later.
 	stub := fmt.Sprintf("（%s通道暂不支持交互提问，请在桌面端继续）", channelDisplayName(p.msg.Type))
 	_ = ing.sessions.ResolveAskUser(ask.AskID, stub)
 }
 
 func (ing *ChannelIngressService) collectReplyFrom(ctx context.Context, p collectParams) port.OutboundMessage {
 	var parts []string
+	var toolLines []string
+	var lastProgress time.Time
 	for _, ev := range ing.sessions.StreamEvents(p.sessionID, 0) {
-		if ing.applyEvent(ev, p, &parts) {
+		if ing.applyEvent(ev, p, &parts, &toolLines, &lastProgress) {
 			return finalOutboundFromParts(parts)
 		}
 	}
@@ -449,7 +819,7 @@ func (ing *ChannelIngressService) collectReplyFrom(ctx context.Context, p collec
 				continue
 			}
 			seen[ev.Seq] = struct{}{}
-			if ing.applyEvent(ev, p, &parts) {
+			if ing.applyEvent(ev, p, &parts, &toolLines, &lastProgress) {
 				return finalOutboundFromParts(parts)
 			}
 		}

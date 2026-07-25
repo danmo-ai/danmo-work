@@ -53,7 +53,11 @@ func (s *FeishuPeerStore) UpsertBinding(ctx context.Context, channel port.Channe
 }
 
 func (s *FeishuPeerStore) UpdateBindingMeta(ctx context.Context, channel port.ChannelType, accountID, peerID string, meta map[string]string) error {
-	return s.store.ChannelBindings().UpdateMeta(ctx, string(channel), accountID, peerID, meta)
+	_, existing, err := s.GetBinding(ctx, channel, accountID, peerID)
+	if err != nil {
+		return err
+	}
+	return s.store.ChannelBindings().UpdateMeta(ctx, string(channel), accountID, peerID, mergeStringMap(existing, meta))
 }
 
 // FeishuBridge runs Feishu outbound WebSocket and routes messages through ChannelIngress.
@@ -152,7 +156,7 @@ func (b *FeishuBridge) runWSLoop(ctx context.Context, fs domain.ConfigFeishuChan
 		if ctx.Err() != nil {
 			return
 		}
-		lc := feishu.NewLongConn(fs, b.handleInbound)
+		lc := feishu.NewLongConn(fs, b.handleInbound).WithCardAction(b.handleCardAction)
 		err := lc.Run(ctx)
 		if ctx.Err() != nil {
 			return
@@ -207,6 +211,18 @@ func (b *FeishuBridge) handleInbound(ctx context.Context, msg port.InboundMessag
 		return serr
 	}
 	return nil
+}
+
+func (b *FeishuBridge) handleCardAction(ctx context.Context, msg port.InboundMessage, token string) error {
+	if b.ingress == nil {
+		return fmt.Errorf("feishu ingress not configured")
+	}
+	ev, ok := InteractionFromCallback(msg, token)
+	if !ok {
+		log.Printf("[feishu] card action: unrecognized token %q", token)
+		return nil
+	}
+	return b.ingress.HandleInteraction(ctx, ev)
 }
 
 func (b *FeishuBridge) Stop() {

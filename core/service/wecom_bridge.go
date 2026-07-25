@@ -53,7 +53,18 @@ func (s *WecomPeerStore) UpsertBinding(ctx context.Context, channel port.Channel
 }
 
 func (s *WecomPeerStore) UpdateBindingMeta(ctx context.Context, channel port.ChannelType, accountID, peerID string, meta map[string]string) error {
-	return s.store.ChannelBindings().UpdateMeta(ctx, string(channel), accountID, peerID, meta)
+	_, existing, err := s.GetBinding(ctx, channel, accountID, peerID)
+	if err != nil {
+		return err
+	}
+	merged := map[string]string{}
+	for k, v := range existing {
+		merged[k] = v
+	}
+	for k, v := range meta {
+		merged[k] = v
+	}
+	return s.store.ChannelBindings().UpdateMeta(ctx, string(channel), accountID, peerID, merged)
 }
 
 // WecomBridge runs WeCom AI Bot WebSocket and routes messages through ChannelIngress.

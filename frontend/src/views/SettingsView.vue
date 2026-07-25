@@ -10,6 +10,7 @@ import { useModelConfigStore } from '@/stores/modelLimits'
 import { useWeixinStore } from '@/stores/weixin'
 import { useFeishuStore } from '@/stores/feishu'
 import { useWecomStore } from '@/stores/wecom'
+import { useQQStore } from '@/stores/qq'
 import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
 import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
@@ -20,7 +21,7 @@ import { useAppUpdater } from '@/composables/useAppUpdater'
 import { isTauriRuntime } from '@/utils/desktop'
 import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider, ModelConfig, ConfigMarketSection, MarketSourceConfig } from '@/types/mission'
 
-type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'market' | 'weixin' | 'feishu' | 'wecom' | 'appearance' | 'about'
+type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'market' | 'weixin' | 'feishu' | 'wecom' | 'qq' | 'appearance' | 'about'
 
 const { t } = useI18n()
 const activeTab = ref<SettingsTab>('models')
@@ -32,6 +33,7 @@ const modelConfig = useModelConfigStore()
 const weixin = useWeixinStore()
 const feishu = useFeishuStore()
 const wecom = useWecomStore()
+const qq = useQQStore()
 const sessions = useSessionsStore()
 const projects = useProjectsStore()
 const themeStore = useThemeStore()
@@ -64,6 +66,15 @@ const wecomForm = ref({
   botId: '',
   secret: '',
   wsUrl: '',
+  projectId: '',
+})
+const qqForm = ref({
+  enabled: false,
+  defaultAgentId: '',
+  defaultModelId: '',
+  autoApprove: false,
+  appId: '',
+  clientSecret: '',
   projectId: '',
 })
 const {
@@ -250,6 +261,7 @@ onMounted(async () => {
     weixin.refreshStatus(),
     feishu.refreshStatus(),
     wecom.refreshStatus(),
+    qq.refreshStatus(),
   ])
   if (!weixinLoginProjectId.value && projects.sortedProjects.length) {
     weixinLoginProjectId.value = projects.sortedProjects[0].id
@@ -318,6 +330,22 @@ onMounted(async () => {
     wecomForm.value.defaultAgentId = sessions.agents[0].id
     if (!wecomForm.value.projectId && projects.sortedProjects.length) {
       wecomForm.value.projectId = projects.sortedProjects[0].id
+    }
+  }
+  if (qq.status) {
+    qqForm.value = {
+      enabled: qq.status.enabled,
+      defaultAgentId: qq.status.defaultAgentId || sessions.agents[0]?.id || '',
+      defaultModelId: qq.status.defaultModelId || '',
+      autoApprove: !!qq.status.autoApprove,
+      appId: qq.status.appId || '',
+      clientSecret: '',
+      projectId: qq.status.projectId || projects.sortedProjects[0]?.id || '',
+    }
+  } else if (sessions.agents.length) {
+    qqForm.value.defaultAgentId = sessions.agents[0].id
+    if (!qqForm.value.projectId && projects.sortedProjects.length) {
+      qqForm.value.projectId = projects.sortedProjects[0].id
     }
   }
 })
@@ -419,6 +447,44 @@ async function handleSaveWecom() {
     toast.success(t('settings.wecomSaved'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('settings.wecomSaveFailed'))
+  }
+}
+
+async function handleSaveQQ() {
+  if (qqForm.value.enabled && !qqForm.value.defaultAgentId) {
+    toast.warning(t('settings.qqAgentRequired'))
+    return
+  }
+  if (qqForm.value.enabled && !qqForm.value.defaultModelId) {
+    toast.warning(t('settings.qqModelRequired'))
+    return
+  }
+  if (qqForm.value.enabled && !qqForm.value.projectId) {
+    toast.warning(t('settings.qqProjectRequired'))
+    return
+  }
+  if (qqForm.value.enabled && !qqForm.value.appId) {
+    toast.warning(t('settings.qqAppRequired'))
+    return
+  }
+  if (qqForm.value.enabled && !qqForm.value.clientSecret && !qq.status?.hasClientSecret) {
+    toast.warning(t('settings.qqSecretRequired'))
+    return
+  }
+  try {
+    await qq.configure({
+      enabled: qqForm.value.enabled,
+      defaultAgentId: qqForm.value.defaultAgentId,
+      defaultModelId: qqForm.value.defaultModelId,
+      autoApprove: qqForm.value.autoApprove,
+      appId: qqForm.value.appId || undefined,
+      clientSecret: qqForm.value.clientSecret || undefined,
+      projectId: qqForm.value.projectId || undefined,
+    })
+    qqForm.value.clientSecret = ''
+    toast.success(t('settings.qqSaved'))
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('settings.qqSaveFailed'))
   }
 }
 
@@ -818,6 +884,7 @@ const menuItems = computed(() => [
   { id: 'weixin' as SettingsTab, label: t('settings.weixin'), icon: Monitor },
   { id: 'feishu' as SettingsTab, label: t('settings.feishu'), icon: Monitor },
   { id: 'wecom' as SettingsTab, label: t('settings.wecom'), icon: Monitor },
+  { id: 'qq' as SettingsTab, label: t('settings.qq'), icon: Monitor },
   { id: 'market' as SettingsTab, label: t('settings.market'), icon: Search },
   { id: 'appearance' as SettingsTab, label: t('settings.appearance'), icon: Brush },
   { id: 'about' as SettingsTab, label: t('settings.about'), icon: Monitor },
@@ -857,7 +924,7 @@ const updaterStatusText = computed(() => {
 })
 
 const hasFooterActions = computed(() => {
-  return ['runtime', 'search', 'market', 'models', 'modelConfig', 'weixin', 'feishu', 'wecom'].includes(activeTab.value)
+  return ['runtime', 'search', 'market', 'models', 'modelConfig', 'weixin', 'feishu', 'wecom', 'qq'].includes(activeTab.value)
 })
 </script>
 
@@ -1392,6 +1459,96 @@ const hasFooterActions = computed(() => {
         </div>
       </div>
 
+      <div v-else-if="activeTab === 'qq'" class="settings-section">
+        <header class="settings-section__head">
+          <h2>{{ $t('settings.qq') }}</h2>
+          <p>{{ $t('settings.qqDesc') }}</p>
+        </header>
+
+        <div v-if="qq.loading && !qq.status" class="settings-empty settings-empty--skeleton">
+          <Skeleton variant="title" width="30%" />
+          <Skeleton variant="card" width="100%" />
+        </div>
+
+        <div v-else class="settings-form">
+          <div class="settings-form-group">
+            <h3 class="settings-form-group__title">{{ $t('settings.qqChannel') }}</h3>
+            <p class="settings-form-group__desc">{{ $t('settings.qqChannelDesc') }}</p>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.qqEnable') }}</span>
+              <DqSwitch
+                :model-value="qqForm.enabled"
+                size="small"
+                @update:model-value="(v: boolean) => qqForm.enabled = v"
+              />
+            </label>
+            <div v-if="qq.status" class="settings-sandbox-status">
+              <span class="settings-field__label">{{ $t('settings.qqRunning') }}</span>
+              <span class="settings-sandbox-status__value">{{ qq.status.running ? $t('common.yes') : $t('common.no') }}</span>
+            </div>
+            <div class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.weixinDefaultAgent') }}</span>
+              <DqSelect v-model="qqForm.defaultAgentId" :placeholder="$t('settings.weixinSelectAgent')">
+                <DqOption
+                  v-for="a in sessions.agents"
+                  :key="a.id"
+                  :value="a.id"
+                  :label="a.name || a.id"
+                />
+              </DqSelect>
+            </div>
+            <div class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.weixinDefaultModel') }}</span>
+              <DqSelect v-model="qqForm.defaultModelId" :placeholder="$t('settings.weixinSelectModel')">
+                <DqOption
+                  v-for="m in llm.models"
+                  :key="m.id"
+                  :value="m.id"
+                  :label="m.id"
+                />
+              </DqSelect>
+            </div>
+            <div class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.qqProject') }}</span>
+              <DqSelect v-model="qqForm.projectId" :placeholder="$t('settings.weixinSelectProject')">
+                <DqOption
+                  v-for="p in projects.sortedProjects"
+                  :key="p.id"
+                  :value="p.id"
+                  :label="p.name"
+                />
+              </DqSelect>
+            </div>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.weixinAutoApprove') }}</span>
+              <DqSwitch
+                :model-value="qqForm.autoApprove"
+                size="small"
+                @update:model-value="(v: boolean) => qqForm.autoApprove = v"
+              />
+            </label>
+          </div>
+
+          <div class="settings-form-group">
+            <h3 class="settings-form-group__title">{{ $t('settings.qqCredentials') }}</h3>
+            <p class="settings-form-group__desc">{{ $t('settings.qqCredentialsDesc') }}</p>
+            <label class="settings-field">
+              <span class="settings-field__label">App ID</span>
+              <DqInput v-model="qqForm.appId" placeholder="102xxxxx" />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">Client Secret</span>
+              <DqInput
+                v-model="qqForm.clientSecret"
+                type="password"
+                :placeholder="qq.status?.hasClientSecret ? $t('settings.qqSecretKept') : ''"
+              />
+            </label>
+            <p class="settings-form-group__desc">{{ $t('settings.qqWebsocketHint') }}</p>
+          </div>
+        </div>
+      </div>
+
       <div v-else-if="activeTab === 'wecom'" class="settings-section">
         <header class="settings-section__head">
           <h2>{{ $t('settings.wecom') }}</h2>
@@ -1845,6 +2002,9 @@ const hasFooterActions = computed(() => {
           </DqButton>
           <DqButton v-else-if="activeTab === 'wecom'" type="primary" :disabled="wecom.saving" @click="handleSaveWecom">
             {{ wecom.saving ? $t('common.saving') : $t('common.save_') }}
+          </DqButton>
+          <DqButton v-else-if="activeTab === 'qq'" type="primary" :disabled="qq.saving" @click="handleSaveQQ">
+            {{ qq.saving ? $t('common.saving') : $t('common.save_') }}
           </DqButton>
           <DqButton v-else-if="activeTab === 'search'" type="primary" :disabled="searchConfig.saving" @click="handleSaveSearch">
             {{ searchConfig.saving ? $t('common.saving') : $t('common.save_') }}

@@ -158,6 +158,13 @@ func (d *ConfigChannelDefaults) ChannelDefaults(ctx context.Context, channel por
 			ModelID:     wc.DefaultModelID,
 			AutoApprove: wc.AutoApprove,
 		}, nil
+	case port.ChannelQQ:
+		qc := cfg.Channels.QQ
+		return port.ChannelDefaults{
+			AgentID:     qc.DefaultAgentID,
+			ModelID:     qc.DefaultModelID,
+			AutoApprove: qc.AutoApprove,
+		}, nil
 	default:
 		return port.ChannelDefaults{}, fmt.Errorf("unknown channel %s", channel)
 	}

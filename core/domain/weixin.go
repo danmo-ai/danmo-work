@@ -9,6 +9,21 @@ type ConfigChannelsSection struct {
 	Weixin ConfigWeixinChannel `json:"weixin" mapstructure:"weixin" yaml:"weixin"`
 	Feishu ConfigFeishuChannel `json:"feishu" mapstructure:"feishu" yaml:"feishu"`
 	Wecom  ConfigWecomChannel  `json:"wecom" mapstructure:"wecom" yaml:"wecom"`
+	QQ     ConfigQQChannel     `json:"qq" mapstructure:"qq" yaml:"qq"`
+}
+
+// ConfigQQChannel configures the QQ Bot channel via outbound WebSocket Gateway.
+type ConfigQQChannel struct {
+	Enabled        bool   `json:"enabled" mapstructure:"enabled" yaml:"enabled"`
+	DefaultAgentID string `json:"defaultAgentId" mapstructure:"default_agent_id" yaml:"default_agent_id"`
+	DefaultModelID string `json:"defaultModelId" mapstructure:"default_model_id" yaml:"default_model_id"`
+	AutoApprove    bool   `json:"autoApprove" mapstructure:"auto_approve" yaml:"auto_approve"`
+	AppID          string `json:"appId" mapstructure:"app_id" yaml:"app_id"`
+	ClientSecret   string `json:"clientSecret,omitempty" mapstructure:"client_secret" yaml:"client_secret,omitempty"`
+	// ProjectID binds inbound QQ peers to one Teams project (overridable per-peer via /project).
+	ProjectID string `json:"projectId,omitempty" mapstructure:"project_id" yaml:"project_id,omitempty"`
+	// NativeC2CStream uses QQ C2C stream_messages API when true (default).
+	NativeC2CStream *bool `json:"nativeC2cStream,omitempty" mapstructure:"native_c2c_stream" yaml:"native_c2c_stream,omitempty"`
 }
 
 // ConfigWecomChannel configures WeCom (企业微信) AI Bot via outbound WebSocket.
