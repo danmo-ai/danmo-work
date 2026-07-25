@@ -222,7 +222,13 @@ func (r *skillRepo) Upsert(ctx context.Context, sk domain.Skill) error {
 	if err != nil {
 		return r.s.db.WithContext(ctx).Create(&m).Error
 	}
-	return r.s.db.WithContext(ctx).Model(&existing).Updates(&m).Error
+	// Select all columns so zero values (and builtin=true/false) always persist.
+	// Plain Updates() skips zero fields and can leave stale builtin/metadata.
+	return r.s.db.WithContext(ctx).Model(&existing).Select(
+		"Name", "Description", "License", "Compatibility", "MetadataJSON",
+		"AllowedTools", "KeywordsJSON", "ToolIDsJSON", "SystemHint", "Body",
+		"SourcePath", "Builtin",
+	).Updates(&m).Error
 }
 
 func (r *skillRepo) Delete(ctx context.Context, id string) error {

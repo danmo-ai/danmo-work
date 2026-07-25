@@ -335,6 +335,14 @@ func (m *MarketManager) Uninstall(ctx context.Context, req domain.UninstallMarke
 		if sk.MarketSource == "" {
 			return fmt.Errorf("skill %q was not installed from the market", req.ID)
 		}
+		// Template-backed skills must return to the builtin pack instead of
+		// disappearing from the library until the next process restart.
+		if m.skills.HasTemplate(req.ID) {
+			if _, err := m.skills.ResetFromTemplate(ctx, req.ID); err != nil {
+				return err
+			}
+			break
+		}
 		if err := m.skills.Delete(ctx, req.ID); err != nil {
 			return err
 		}

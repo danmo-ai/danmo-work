@@ -11,16 +11,17 @@ func TestLoadSkillTemplatesIncludesAdaptedPack(t *testing.T) {
 	}
 
 	want := map[string]string{
-		"debugging":                "coding",
-		"git-workflow":             "coding",
-		"test-driven-development":  "coding",
-		"writing-plans":            "coding",
-		"requesting-code-review":   "coding",
-		"brainstorming":            "work",
-		"deep-research":            "work",
-		"document-writing":         "work",
-		"playable-slides":          "work",
-		"skill-creator":            "general",
+		"debugging":               "coding",
+		"git-workflow":            "coding",
+		"test-driven-development": "coding",
+		"writing-plans":           "coding",
+		"requesting-code-review":  "coding",
+		"brainstorming":           "work",
+		"deep-research":           "work",
+		"document-writing":        "work",
+		"playable-slides":         "work",
+		"sheet-writing":           "work",
+		"skill-creator":           "general",
 	}
 
 	got := make(map[string]string, len(templates))

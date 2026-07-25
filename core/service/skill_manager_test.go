@@ -249,3 +249,53 @@ func TestUpsertPreservesBuiltin(t *testing.T) {
 		t.Fatalf("body not updated: %q", got.Body)
 	}
 }
+
+func TestEnrichMarksBuiltinFromTemplate(t *testing.T) {
+	ctx := context.Background()
+	repo := newMemSkillRepo()
+	// Simulate a legacy row: template-backed id but builtin flag never seeded.
+	repo.byID["debugging"] = domain.Skill{
+		ID: "debugging", Name: "debugging", Body: "local", Builtin: false,
+		Metadata: map[string]string{"market.source": "some-market"},
+	}
+	skills := NewSkillManager(repo, newMemSkillFileRepo())
+	skills.SetTemplateLoader(func(id string) (*domain.Skill, error) {
+		if id != "debugging" {
+			return nil, errors.New("not found")
+		}
+		return &domain.Skill{ID: "debugging", Name: "debugging", Body: "tmpl"}, nil
+	})
+	got, err := skills.Get(ctx, "debugging")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Builtin {
+		t.Fatal("template-backed skill must be marked builtin at read time")
+	}
+	if got.MarketSource != "some-market" {
+		t.Fatalf("marketSource = %q, want some-market", got.MarketSource)
+	}
+	list, err := skills.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || !list[0].Builtin {
+		t.Fatalf("list builtin enrich failed: %+v", list)
+	}
+}
+
+func TestDeleteRejectsBuiltinSkill(t *testing.T) {
+	ctx := context.Background()
+	skills := NewSkillManager(newMemSkillRepo(), newMemSkillFileRepo())
+	skills.SetTemplateLoader(func(id string) (*domain.Skill, error) {
+		return &domain.Skill{ID: id, Name: id}, nil
+	})
+	_ = skills.Upsert(ctx, domain.Skill{ID: "debugging", Name: "debugging"})
+	err := skills.Delete(ctx, "debugging")
+	if !errors.Is(err, ErrBuiltinSkill) {
+		t.Fatalf("Delete error = %v, want ErrBuiltinSkill", err)
+	}
+	if _, err := skills.Get(ctx, "debugging"); err != nil {
+		t.Fatal("builtin skill must remain after rejected delete")
+	}
+}

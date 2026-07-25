@@ -147,6 +147,50 @@ func TestMarketManagerInstallLocal(t *testing.T) {
 	}
 }
 
+func TestMarketUninstallRestoresBuiltinSkill(t *testing.T) {
+	ctx := context.Background()
+	cfgStore := &memConfigStore{cfg: &domain.ConfigFile{}}
+	configMgr := NewConfigManager(cfgStore)
+	skills := NewSkillManager(newMemSkillRepo(), newMemSkillFileRepo())
+	skills.SetTemplateLoader(func(id string) (*domain.Skill, error) {
+		if id != "debugging" {
+			return nil, os.ErrNotExist
+		}
+		return &domain.Skill{ID: "debugging", Name: "debugging", Body: "builtin-body", Builtin: true}, nil
+	})
+	skills.SetFileTemplateLoader(func(id string) ([]domain.SkillFile, error) {
+		return nil, nil
+	})
+	agents := NewAgentManager(newMemAgentRepo())
+	mgr := NewMarketManager(configMgr, &fakeRegistry{}, skills, agents)
+
+	_ = skills.Upsert(ctx, domain.Skill{
+		ID: "debugging", Name: "debugging", Body: "market-body",
+		MarketSource: "local",
+		Metadata:     map[string]string{"market.source": "local"},
+	})
+
+	if err := mgr.Uninstall(ctx, domain.UninstallMarketRequest{
+		Kind: "skill",
+		ID:   "debugging",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := skills.Get(ctx, "debugging")
+	if err != nil {
+		t.Fatal("builtin skill should remain after market uninstall")
+	}
+	if got.Body != "builtin-body" {
+		t.Fatalf("body = %q, want builtin-body", got.Body)
+	}
+	if got.MarketSource != "" {
+		t.Fatalf("marketSource = %q, want empty after restore", got.MarketSource)
+	}
+	if !got.Builtin {
+		t.Fatal("restored skill should be builtin")
+	}
+}
+
 type memAgentRepo struct {
 	byID map[string]domain.Agent
 }

@@ -156,7 +156,7 @@ func LoadSkillTemplates() ([]SkillTemplate, error) {
 			continue
 		}
 		skill, err := parseSkill(string(data), entry.Name())
-		if err != nil {
+		if err != nil || skill == nil {
 			continue
 		}
 		result = append(result, SkillTemplate{Skill: *skill, Source: entry.Name()})
@@ -216,13 +216,13 @@ func parseSkill(content, dirName string) (*domain.Skill, error) {
 	var fm skillFrontmatter
 	parts := strings.SplitN(content, "---", 3)
 	if len(parts) < 3 {
-		return nil, nil
+		return nil, fmt.Errorf("skill %q: missing YAML frontmatter", dirName)
 	}
 	if err := yaml.Unmarshal([]byte(strings.TrimSpace(parts[1])), &fm); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("skill %q: parse frontmatter: %w", dirName, err)
 	}
 	if fm.Name == "" {
-		return nil, nil
+		return nil, fmt.Errorf("skill %q: frontmatter name is required", dirName)
 	}
 	return &domain.Skill{
 		ID:            fm.Name,
