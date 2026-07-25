@@ -3,7 +3,9 @@ package runtime
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"danmo-work/core/domain"
 )
@@ -269,5 +271,34 @@ func TestTruncateToolResults_BySizeNotName(t *testing.T) {
 	}
 	if out[1].Content != "short" {
 		t.Fatalf("short content should be unchanged, got %q", out[1].Content)
+	}
+}
+
+func TestLimitToolOutput_HardCap(t *testing.T) {
+	short := "hello"
+	if got := limitToolOutput(short, 10); got != short {
+		t.Fatalf("short content should be unchanged, got %q", got)
+	}
+	if got := limitToolOutput(short, 0); got != short {
+		t.Fatalf("maxChars<=0 should be a no-op, got %q", got)
+	}
+
+	long := strings.Repeat("a", 100)
+	got := limitToolOutput(long, 20)
+	if !strings.HasPrefix(got, strings.Repeat("a", 20)) {
+		t.Fatalf("expected 20-char prefix, got %q", got[:min(40, len(got))])
+	}
+	if !strings.Contains(got, "truncated, 100 total chars") {
+		t.Fatalf("expected truncation marker, got %q", got)
+	}
+
+	// Multi-byte rune near the cut boundary must stay valid UTF-8.
+	utf := "你好世界你好世界" // each rune is 3 bytes
+	got = limitToolOutput(utf, 5)
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncated UTF-8 content must stay valid, got %q", got)
+	}
+	if !strings.Contains(got, "truncated") {
+		t.Fatalf("expected truncation marker for UTF-8 cut, got %q", got)
 	}
 }

@@ -4,14 +4,14 @@ package domain
 // ~/.danmo-work/config.yaml. It mirrors the file layout so the API can expose and
 // update sections independently.
 type ConfigFile struct {
-	Data      ConfigDataSection      `json:"data" mapstructure:"data"`
-	Server    ConfigServerSection    `json:"server" mapstructure:"server"`
-	Instance  ConfigInstanceSection  `json:"instance" mapstructure:"instance"`
-	Runtime   ConfigRuntimeSection   `json:"runtime" mapstructure:"runtime"`
-	Search    SearchConfig           `json:"search" mapstructure:"search"`
-	LLM       ConfigLLMSection       `json:"llm" mapstructure:"llm"`
-	Market    ConfigMarketSection    `json:"market" mapstructure:"market"`
-	Channels  ConfigChannelsSection  `json:"channels" mapstructure:"channels"`
+	Data     ConfigDataSection     `json:"data" mapstructure:"data"`
+	Server   ConfigServerSection   `json:"server" mapstructure:"server"`
+	Instance ConfigInstanceSection `json:"instance" mapstructure:"instance"`
+	Runtime  ConfigRuntimeSection  `json:"runtime" mapstructure:"runtime"`
+	Search   SearchConfig          `json:"search" mapstructure:"search"`
+	LLM      ConfigLLMSection      `json:"llm" mapstructure:"llm"`
+	Market   ConfigMarketSection   `json:"market" mapstructure:"market"`
+	Channels ConfigChannelsSection `json:"channels" mapstructure:"channels"`
 }
 
 type ConfigLLMSection struct {
@@ -34,25 +34,26 @@ type ConfigInstanceSection struct {
 }
 
 type ConfigRuntimeSection struct {
-	AutoApprove bool                      `json:"autoApprove" mapstructure:"auto_approve"`
-	Sandbox     ConfigSandboxSection      `json:"sandbox" mapstructure:"sandbox"`
-	Browser     ConfigBrowserSection      `json:"browser" mapstructure:"browser"`
-	Turn        ConfigTurnSection         `json:"turn" mapstructure:"turn"`
-	Team        ConfigTeamSection         `json:"team" mapstructure:"team"`
-	Memory      ConfigMemorySection       `json:"memory" mapstructure:"memory"`
-	Knowledge   ConfigKnowledgeSection    `json:"knowledge" mapstructure:"knowledge"`
-	Compaction  ConfigCompactionSection   `json:"compaction" mapstructure:"compaction"`
+	AutoApprove bool                    `json:"autoApprove" mapstructure:"auto_approve"`
+	Sandbox     ConfigSandboxSection    `json:"sandbox" mapstructure:"sandbox"`
+	Browser     ConfigBrowserSection    `json:"browser" mapstructure:"browser"`
+	Turn        ConfigTurnSection       `json:"turn" mapstructure:"turn"`
+	Team        ConfigTeamSection       `json:"team" mapstructure:"team"`
+	Tools       ConfigToolsSection      `json:"tools" mapstructure:"tools"`
+	Memory      ConfigMemorySection     `json:"memory" mapstructure:"memory"`
+	Knowledge   ConfigKnowledgeSection  `json:"knowledge" mapstructure:"knowledge"`
+	Compaction  ConfigCompactionSection `json:"compaction" mapstructure:"compaction"`
 }
 
 type ConfigCompactionSection struct {
-	Enabled      bool   `json:"enabled" mapstructure:"enabled"`
-	Model        string `json:"model" mapstructure:"model"`
-	MaxTokens    int    `json:"maxTokens" mapstructure:"max_tokens"`
+	Enabled      bool    `json:"enabled" mapstructure:"enabled"`
+	Model        string  `json:"model" mapstructure:"model"`
+	MaxTokens    int     `json:"maxTokens" mapstructure:"max_tokens"`
 	TriggerRatio float64 `json:"triggerRatio" mapstructure:"trigger_ratio"`
-	CutTokens    int    `json:"cutTokens" mapstructure:"cut_tokens"`
-	TurnInterval int    `json:"turnInterval" mapstructure:"turn_interval"`
-	SubInterval  int    `json:"subInterval" mapstructure:"sub_interval"`
-	ToolTruncate int    `json:"toolTruncate" mapstructure:"tool_truncate"`
+	CutTokens    int     `json:"cutTokens" mapstructure:"cut_tokens"`
+	TurnInterval int     `json:"turnInterval" mapstructure:"turn_interval"`
+	SubInterval  int     `json:"subInterval" mapstructure:"sub_interval"`
+	ToolTruncate int     `json:"toolTruncate" mapstructure:"tool_truncate"`
 }
 
 type ConfigTurnSection struct {
@@ -61,6 +62,14 @@ type ConfigTurnSection struct {
 	// MaxLLMFailures is consecutive LLM Chat errors before the turn fails
 	// (independent of max_steps). Resets after any successful Chat response.
 	MaxLLMFailures int `json:"maxLLMFailures" mapstructure:"max_llm_failures"`
+}
+
+// ConfigToolsSection controls local tool execution safeguards.
+type ConfigToolsSection struct {
+	// MaxOutputChars hard-caps a single tool result before it enters the
+	// LLM context, UI stream, and turn log. Prevents oversized shell/MCP
+	// outputs from blowing the context window.
+	MaxOutputChars int `json:"maxOutputChars" mapstructure:"max_output_chars"`
 }
 
 type ConfigTeamSection struct {

@@ -205,6 +205,9 @@ export interface ConfigFile {
       maxStepsDefault: number
       maxLLMFailures: number
     }
+    tools?: {
+      maxOutputChars: number
+    }
     team: {
       maxDelegationDepth: number
     }
@@ -323,6 +326,7 @@ export interface RuntimeConfigForm {
   doomLoopThreshold: number
   maxStepsDefault: number
   maxLLMFailures: number
+  maxToolOutputChars: number
   maxDelegationDepth: number
   readTopK: number
   searchTopK: number

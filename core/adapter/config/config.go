@@ -65,6 +65,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("runtime.turn.doom_loop_threshold", 10)
 	v.SetDefault("runtime.turn.max_steps_default", 200)
 	v.SetDefault("runtime.turn.max_llm_failures", 3)
+	v.SetDefault("runtime.tools.max_output_chars", 50000)
 	v.SetDefault("runtime.team.max_delegation_depth", 3)
 	v.SetDefault("runtime.memory.read_top_k", 10)
 	v.SetDefault("runtime.knowledge.search_top_k", 3)

@@ -14,9 +14,10 @@ import (
 )
 
 type mockToolHandler struct {
-	name  string
-	risk  domain.RiskLevel
-	calls int
+	name    string
+	risk    domain.RiskLevel
+	calls   int
+	content string
 }
 
 func (h *mockToolHandler) Name() string                        { return h.name }
@@ -32,7 +33,82 @@ func (h *mockToolHandler) Schema() domain.ToolSchema {
 }
 func (h *mockToolHandler) Execute(_ context.Context, _ map[string]any) (domain.ToolResult, error) {
 	h.calls++
-	return domain.ToolResult{Content: "ok"}, nil
+	content := h.content
+	if content == "" {
+		content = "ok"
+	}
+	return domain.ToolResult{Content: content}, nil
+}
+
+func TestTurnRunnerHardCapsToolOutput(t *testing.T) {
+	const maxChars = 1000
+	mockLLM := llm.NewMock().
+		AddToolCall("exec_shell", map[string]any{"command": "yes"}).
+		AddText("done")
+
+	stream := NewStreamEventManager(nil)
+	perm := permission.NewGate(nil)
+	reg := tool.NewRegistry()
+	reg.Register(&mockToolHandler{
+		name:    "exec_shell",
+		risk:    domain.RiskLow,
+		content: strings.Repeat("X", maxChars+5000),
+	})
+
+	configStore := &testConfigStore{
+		cfg: &domain.ConfigFile{
+			Runtime: domain.ConfigRuntimeSection{
+				Turn: domain.ConfigTurnSection{
+					DoomLoopThreshold: 10,
+					MaxStepsDefault:   20,
+				},
+				Tools: domain.ConfigToolsSection{
+					MaxOutputChars: maxChars,
+				},
+			},
+		},
+	}
+
+	tr := NewTurnRunner(mockLLM, stream, perm, reg, configStore)
+	rep, msgs, err := tr.Run(context.Background(), TurnContext{
+		SessionID: "test-session",
+		TurnID:    "turn-tool-cap",
+		Agent:     domain.Agent{ID: "test-agent", Steps: 20},
+		Model:     "test-model",
+		MaxSteps:  20,
+		WorkDir:   "/tmp",
+		Messages: []Message{
+			{Role: RoleSystem, Content: "You are a test assistant"},
+			{Role: RoleUser, Content: "run something huge"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rep.Status != domain.ReportDone {
+		t.Fatalf("expected ReportDone, got %v: %s", rep.Status, rep.Summary)
+	}
+
+	var toolMsg *Message
+	for i := range msgs {
+		if msgs[i].Role == RoleTool && msgs[i].Name == "exec_shell" {
+			toolMsg = &msgs[i]
+			break
+		}
+	}
+	if toolMsg == nil {
+		t.Fatal("expected tool message")
+	}
+	if !strings.Contains(toolMsg.Content, "truncated") {
+		t.Fatalf("expected truncated tool output, len=%d", len(toolMsg.Content))
+	}
+	if !strings.HasPrefix(toolMsg.Content, strings.Repeat("X", maxChars)) {
+		t.Fatal("truncated prefix mismatch")
+	}
+	// Marker adds overhead; ensure we did not keep the full payload.
+	if len(toolMsg.Content) >= maxChars+5000 {
+		t.Fatalf("tool output was not capped, len=%d", len(toolMsg.Content))
+	}
 }
 
 func TestTrackDoomConsecutiveNotCumulative(t *testing.T) {
