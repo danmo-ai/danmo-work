@@ -221,6 +221,8 @@ func marshalArgs(args map[string]any) string {
 
 // parseArgs parses tool call arguments from an OpenAI-compatible API response.
 // arguments may be a JSON string or a JSON object; both are handled.
+// When the model damages JSON structure (unescaped quotes / raw newlines inside
+// string values), a best-effort repair is attempted before failing.
 func parseArgs(raw json.RawMessage) (map[string]any, error) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil, fmt.Errorf("arguments is null")
@@ -232,7 +234,13 @@ func parseArgs(raw json.RawMessage) (map[string]any, error) {
 	}
 	var args map[string]any
 	if err := json.Unmarshal(raw, &args); err != nil {
-		return nil, err
+		repaired, rerr := repairJSONObject(raw)
+		if rerr != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(repaired, &args); err != nil {
+			return nil, err
+		}
 	}
 	if args == nil {
 		return nil, fmt.Errorf("arguments parsed to nil")

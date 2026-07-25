@@ -144,6 +144,51 @@ func TestHTTPProviderToolCallNullArguments(t *testing.T) {
 	t.Logf("got expected error: %v", err)
 }
 
+func TestHTTPProviderToolCallRepairsUnescapedQuotes(t *testing.T) {
+	// Simulate provider returning arguments as a JSON string that itself contains
+	// unescaped quotes (common LLM damage for write/edit content).
+	brokenInner := `{"path":"note.txt","content":"quote "x" here"}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]any{
+						"tool_calls": []map[string]any{
+							{
+								"id": "call_repair",
+								"function": map[string]any{
+									"name":      "write_file",
+									"arguments": brokenInner,
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	p := NewHTTPProvider(server.URL, "")
+	resp, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "test"}, "")
+	if err != nil {
+		t.Fatalf("chat: %v", err)
+	}
+	if len(resp.ToolCalls) != 1 {
+		t.Fatalf("expected 1 tool call, got %d", len(resp.ToolCalls))
+	}
+	tc := resp.ToolCalls[0]
+	if tc.Name != "write_file" {
+		t.Errorf("name: got %q", tc.Name)
+	}
+	if tc.Arguments["path"] != "note.txt" {
+		t.Errorf("path: got %#v", tc.Arguments["path"])
+	}
+	if tc.Arguments["content"] != `quote "x" here` {
+		t.Errorf("content: got %#v", tc.Arguments["content"])
+	}
+}
+
 func TestHTTPProviderToolCallEmptyStringArguments(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
