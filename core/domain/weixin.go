@@ -24,6 +24,26 @@ type ConfigQQChannel struct {
 	ProjectID string `json:"projectId,omitempty" mapstructure:"project_id" yaml:"project_id,omitempty"`
 	// NativeC2CStream uses QQ C2C stream_messages API when true (default).
 	NativeC2CStream *bool `json:"nativeC2cStream,omitempty" mapstructure:"native_c2c_stream" yaml:"native_c2c_stream,omitempty"`
+	// Group configures group-chat policy (C2C unaffected).
+	Group ConfigQQGroupPolicy `json:"group,omitempty" mapstructure:"group" yaml:"group,omitempty"`
+}
+
+// ConfigQQGroupPolicy controls QQ group chat behavior.
+type ConfigQQGroupPolicy struct {
+	// RequireMention defaults true: only @-mention group messages are accepted
+	// (QQ already gates via GROUP_AT_MESSAGE_CREATE; kept for config clarity / future events).
+	RequireMention *bool `json:"requireMention,omitempty" mapstructure:"require_mention" yaml:"require_mention,omitempty"`
+	// DenyTools lists tool names rejected for group turns when they request approval
+	// (e.g. exec_shell). Matching tools are auto-denied in-channel.
+	DenyTools []string `json:"denyTools,omitempty" mapstructure:"deny_tools" yaml:"deny_tools,omitempty"`
+	// Groups optional per-group_openid overrides.
+	Groups map[string]ConfigQQGroupOverride `json:"groups,omitempty" mapstructure:"groups" yaml:"groups,omitempty"`
+}
+
+// ConfigQQGroupOverride overrides group policy for one group openid.
+type ConfigQQGroupOverride struct {
+	RequireMention *bool    `json:"requireMention,omitempty" mapstructure:"require_mention" yaml:"require_mention,omitempty"`
+	DenyTools      []string `json:"denyTools,omitempty" mapstructure:"deny_tools" yaml:"deny_tools,omitempty"`
 }
 
 // ConfigWecomChannel configures WeCom (企业微信) AI Bot via outbound WebSocket.

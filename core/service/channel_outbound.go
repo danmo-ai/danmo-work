@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"danmo-work/core/domain"
 	"danmo-work/core/port"
 )
 
@@ -11,6 +12,37 @@ import (
 func formatAskText(ask port.AskPrompt) string {
 	var b strings.Builder
 	b.WriteString(strings.TrimSpace(ask.Question))
+	if len(ask.FormFields) > 0 {
+		b.WriteString("\n\n请按下列格式逐行回复（字段名可省略，按顺序填写也可）：")
+		for _, f := range ask.FormFields {
+			label := strings.TrimSpace(f.Label)
+			if label == "" {
+				label = f.Name
+			}
+			line := fmt.Sprintf("\n- %s", label)
+			if f.Required {
+				line += "（必填）"
+			}
+			if f.Type == "select" && len(f.Options) > 0 {
+				line += " 选项：" + strings.Join(f.Options, " / ")
+			}
+			if f.Type == "boolean" {
+				line += "（是/否）"
+			}
+			if ph := strings.TrimSpace(f.Placeholder); ph != "" {
+				line += " 例：" + ph
+			}
+			b.WriteString(line)
+		}
+		b.WriteString("\n\n格式示例：\n字段A: 值1\n字段B: 值2")
+		if len(ask.Options) > 0 {
+			b.WriteString("\n\n或选择：")
+			for i, opt := range ask.Options {
+				b.WriteString(fmt.Sprintf("\n%d. %s", i+1, opt))
+			}
+		}
+		return b.String()
+	}
 	if len(ask.Options) == 0 {
 		b.WriteString("\n\n请直接回复答案。")
 		return b.String()
@@ -24,6 +56,35 @@ func formatAskText(ask port.AskPrompt) string {
 	}
 	b.WriteString("\n\n请回复选项序号或原文。")
 	return b.String()
+}
+
+// formatFormAnswer mirrors desktop AskUserBlock: "label: value" lines.
+func formatFormAnswer(fields []domain.AskUserFormField, values map[string]any) string {
+	if len(fields) == 0 || values == nil {
+		return ""
+	}
+	var lines []string
+	for _, f := range fields {
+		raw, ok := values[f.Name]
+		if !ok {
+			continue
+		}
+		label := strings.TrimSpace(f.Label)
+		if label == "" {
+			label = f.Name
+		}
+		val := strings.TrimSpace(fmt.Sprint(raw))
+		if f.Type == "boolean" {
+			switch strings.ToLower(val) {
+			case "true", "1", "yes", "y", "是":
+				val = "是"
+			case "false", "0", "no", "n", "否":
+				val = "否"
+			}
+		}
+		lines = append(lines, label+": "+val)
+	}
+	return strings.Join(lines, "\n")
 }
 
 // formatPermissionText builds a numbered menu for tool permission.
@@ -129,4 +190,22 @@ func isProjectCommand(text string) bool {
 	lower := strings.ToLower(t)
 	return lower == "/project" || lower == "/projects" || lower == "/bot-project" ||
 		strings.HasPrefix(lower, "/project ") || strings.HasPrefix(lower, "/bot-project ")
+}
+
+// channelToolDenied checks Meta["deny_tools"] (comma-separated) against a tool name.
+func channelToolDenied(msg *port.InboundMessage, toolName string) (bool, string) {
+	if msg == nil || msg.Meta == nil {
+		return false, ""
+	}
+	raw := strings.TrimSpace(msg.Meta["deny_tools"])
+	if raw == "" {
+		return false, ""
+	}
+	toolName = strings.TrimSpace(toolName)
+	for _, part := range strings.Split(raw, ",") {
+		if strings.EqualFold(strings.TrimSpace(part), toolName) {
+			return true, fmt.Sprintf("群策略禁止工具「%s」，已自动拒绝。", toolName)
+		}
+	}
+	return false, ""
 }

@@ -22,7 +22,8 @@ import (
 type InboundHandler func(ctx context.Context, msg port.InboundMessage) error
 
 // CardActionHandler handles card.action.trigger callbacks (dw|… token already extracted).
-type CardActionHandler func(ctx context.Context, msg port.InboundMessage, token string) error
+// formValue carries schema 2.0 form field values when the user submitted a form.
+type CardActionHandler func(ctx context.Context, msg port.InboundMessage, token string, formValue map[string]any) error
 
 // LongConn runs the Feishu outbound WebSocket event client (no public URL).
 type LongConn struct {
@@ -77,10 +78,14 @@ func (lc *LongConn) Run(ctx context.Context) error {
 			}
 			msg := InboundFromCardAction(lc.account, event)
 			token := ""
+			var formValue map[string]any
 			if event.Event.Action != nil {
 				token = CallbackTokenFromActionValue(event.Event.Action.Value)
+				if event.Event.Action.FormValue != nil {
+					formValue = event.Event.Action.FormValue
+				}
 			}
-			if err := lc.onCard(ctx, msg, token); err != nil {
+			if err := lc.onCard(ctx, msg, token, formValue); err != nil {
 				log.Printf("[feishu] card action: %v", err)
 				return &callback.CardActionTriggerResponse{
 					Toast: &callback.Toast{Type: "error", Content: "处理失败"},
@@ -131,7 +136,8 @@ func InboundFromP2Message(accountID string, event *larkim.P2MessageReceiveV1) *p
 		content = *m.Content
 	}
 	text := extractTextContent(content, msgType)
-	if text == "" {
+	media := extractMediaDescriptors(content, msgType)
+	if text == "" && len(media) == 0 {
 		return nil
 	}
 	peer := ""
@@ -170,12 +176,46 @@ func InboundFromP2Message(accountID string, event *larkim.P2MessageReceiveV1) *p
 		ThreadID:  threadID,
 		Text:      text,
 		MessageID: messageID,
+		Media:     media,
 		Meta: map[string]string{
 			"chat_id":      chatID,
 			"message_id":   messageID,
 			"receive_id":   chatID,
 			"receive_type": "chat_id",
 		},
+	}
+}
+
+func extractMediaDescriptors(contentJSON, msgType string) []port.InboundMedia {
+	msgType = strings.ToLower(strings.TrimSpace(msgType))
+	switch msgType {
+	case "image":
+		var c struct {
+			ImageKey string `json:"image_key"`
+		}
+		if json.Unmarshal([]byte(contentJSON), &c) != nil || c.ImageKey == "" {
+			return nil
+		}
+		return []port.InboundMedia{{Kind: "image", Key: c.ImageKey, Name: c.ImageKey + ".png", MimeType: "image/png"}}
+	case "file", "audio", "media":
+		var c struct {
+			FileKey  string `json:"file_key"`
+			FileName string `json:"file_name"`
+		}
+		if json.Unmarshal([]byte(contentJSON), &c) != nil || c.FileKey == "" {
+			return nil
+		}
+		kind := "file"
+		if msgType == "audio" {
+			kind = "audio"
+		}
+		name := c.FileName
+		if name == "" {
+			name = c.FileKey
+		}
+		return []port.InboundMedia{{Kind: kind, Key: c.FileKey, Name: name}}
+	default:
+		return nil
 	}
 }
 

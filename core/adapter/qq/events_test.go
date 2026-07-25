@@ -38,3 +38,11 @@ func TestBuildKeyboard(t *testing.T) {
 		t.Fatal("expected keyboard")
 	}
 }
+
+func TestNormalizeC2CWithAttachment(t *testing.T) {
+	raw := json.RawMessage(`{"id":"m2","content":"see","author":{"user_openid":"u1"},"attachments":[{"url":"//cdn.example/a.png","content_type":"image/png","filename":"a.png"}]}`)
+	msg, _, _ := NormalizeDispatch("app1", "C2C_MESSAGE_CREATE", raw)
+	if msg == nil || len(msg.Media) != 1 || msg.Media[0].Kind != "image" || msg.Media[0].URL == "" {
+		t.Fatalf("got %+v", msg)
+	}
+}

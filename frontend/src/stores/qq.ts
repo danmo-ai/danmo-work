@@ -11,6 +11,7 @@ export interface QQStatus {
   appId?: string
   projectId?: string
   hasClientSecret?: boolean
+  groupDenyTools?: string[]
 }
 
 export const useQQStore = defineStore('qq', () => {
@@ -37,6 +38,7 @@ export const useQQStore = defineStore('qq', () => {
     appId?: string
     clientSecret?: string
     projectId?: string
+    groupDenyTools?: string[]
   }) {
     saving.value = true
     try {

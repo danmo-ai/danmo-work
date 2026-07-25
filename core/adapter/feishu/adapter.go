@@ -73,6 +73,69 @@ func (a *Adapter) SendReply(ctx context.Context, in *port.InboundMessage, reply 
 	return err
 }
 
+// DownloadMessageResource downloads an image/file resource attached to a message.
+// resourceType is "image" or "file".
+func (a *Adapter) DownloadMessageResource(ctx context.Context, messageID, fileKey, resourceType string) ([]byte, error) {
+	messageID = strings.TrimSpace(messageID)
+	fileKey = strings.TrimSpace(fileKey)
+	resourceType = strings.TrimSpace(resourceType)
+	if messageID == "" || fileKey == "" {
+		return nil, fmt.Errorf("feishu download: message_id and file_key required")
+	}
+	if resourceType == "" {
+		resourceType = "file"
+	}
+	token, err := a.tenantToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	url := fmt.Sprintf("%s/im/v1/messages/%s/resources/%s?type=%s",
+		OpenAPIBase(a.config().Domain), messageID, fileKey, resourceType)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("feishu download: HTTP %d: %s", resp.StatusCode, string(body))
+	}
+	return body, nil
+}
+
+// EnrichInboundMedia downloads Feishu image/file keys into local channel media paths.
+func (a *Adapter) EnrichInboundMedia(ctx context.Context, msg *port.InboundMessage) error {
+	if a == nil || msg == nil || len(msg.Media) == 0 {
+		return nil
+	}
+	for i := range msg.Media {
+		m := &msg.Media[i]
+		if m.Path != "" || m.Key == "" || msg.MessageID == "" {
+			continue
+		}
+		resType := "file"
+		if m.Kind == "image" {
+			resType = "image"
+		}
+		data, err := a.DownloadMessageResource(ctx, msg.MessageID, m.Key, resType)
+		if err != nil {
+			return err
+		}
+		// Save via service helper would create import cycle; write here with same layout.
+		path, err := saveFeishuMedia(msg.AccountID, msg.MessageID, m.Name, data)
+		if err != nil {
+			return err
+		}
+		m.Path = path
+	}
+	return nil
+}
+
 func (a *Adapter) tenantToken(ctx context.Context) (string, error) {
 	a.mu.Lock()
 	if a.token != "" && time.Now().Before(a.expiry) {

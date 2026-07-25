@@ -26,6 +26,7 @@ func (e *FeishuEndpoint) Capabilities() port.ChannelCapabilities {
 		RichCards:          true,
 		InteractiveAsk:     true,
 		InteractiveApprove: true,
+		NativeMedia:        true,
 	}
 }
 
@@ -108,6 +109,14 @@ func (e *FeishuEndpoint) FinishStream(ctx context.Context, in *port.InboundMessa
 }
 
 func (e *FeishuEndpoint) PresentAsk(ctx context.Context, in *port.InboundMessage, ask port.AskPrompt) (bool, error) {
+	if len(ask.FormFields) > 0 && e.adapter != nil {
+		token := EncodeCallback(port.InteractionAsk, ask.AskID, "form")
+		card := feishu.BuildAskFormCard("需要你的确认", ask.Question, ask.FormFields, token)
+		if _, err := e.adapter.SendInteractiveCard(ctx, in, card); err == nil {
+			return true, nil
+		}
+		// Fall through to text/options card.
+	}
 	text := formatAskText(ask)
 	msg := port.OutboundMessage{
 		Kind:  port.OutboundKindCard,

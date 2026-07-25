@@ -21,20 +21,30 @@ type DispatchPayload struct {
 	D  json.RawMessage `json:"d"`
 }
 
+type qqAttachment struct {
+	URL         string `json:"url"`
+	ContentType string `json:"content_type"`
+	Filename    string `json:"filename"`
+	FileName    string `json:"file_name"`
+	Size        int64  `json:"size"`
+}
+
 type c2cMessage struct {
-	ID        string `json:"id"`
-	Content   string `json:"content"`
-	Timestamp string `json:"timestamp"`
-	Author    struct {
+	ID          string         `json:"id"`
+	Content     string         `json:"content"`
+	Timestamp   string         `json:"timestamp"`
+	Attachments []qqAttachment `json:"attachments"`
+	Author      struct {
 		UserOpenID string `json:"user_openid"`
 	} `json:"author"`
 }
 
 type groupAtMessage struct {
-	ID           string `json:"id"`
-	Content      string `json:"content"`
-	GroupOpenID  string `json:"group_openid"`
-	Timestamp    string `json:"timestamp"`
+	ID           string         `json:"id"`
+	Content      string         `json:"content"`
+	GroupOpenID  string         `json:"group_openid"`
+	Timestamp    string         `json:"timestamp"`
+	Attachments  []qqAttachment `json:"attachments"`
 	Author       struct {
 		MemberOpenID string `json:"member_openid"`
 	} `json:"author"`
@@ -71,7 +81,8 @@ func NormalizeDispatch(accountID string, t string, raw json.RawMessage) (msg *po
 			return nil, nil, ""
 		}
 		text := strings.TrimSpace(m.Content)
-		if text == "" || m.Author.UserOpenID == "" {
+		media := attachmentsToMedia(m.Attachments)
+		if (text == "" && len(media) == 0) || m.Author.UserOpenID == "" {
 			return nil, nil, ""
 		}
 		return &port.InboundMessage{
@@ -81,6 +92,7 @@ func NormalizeDispatch(accountID string, t string, raw json.RawMessage) (msg *po
 			ChatID:    m.Author.UserOpenID,
 			Text:      text,
 			MessageID: m.ID,
+			Media:     media,
 			Meta: map[string]string{
 				"scene":        "c2c",
 				"openid":       m.Author.UserOpenID,
@@ -99,7 +111,8 @@ func NormalizeDispatch(accountID string, t string, raw json.RawMessage) (msg *po
 		if peer == "" {
 			peer = m.GroupOpenID
 		}
-		if text == "" || peer == "" {
+		media := attachmentsToMedia(m.Attachments)
+		if (text == "" && len(media) == 0) || peer == "" {
 			return nil, nil, ""
 		}
 		return &port.InboundMessage{
@@ -109,6 +122,7 @@ func NormalizeDispatch(accountID string, t string, raw json.RawMessage) (msg *po
 			ChatID:    m.GroupOpenID,
 			Text:      text,
 			MessageID: m.ID,
+			Media:     media,
 			Meta: map[string]string{
 				"scene":        "group",
 				"openid":       peer,
@@ -193,4 +207,39 @@ func stripAtBot(s string) string {
 		}
 	}
 	return s
+}
+
+func attachmentsToMedia(atts []qqAttachment) []port.InboundMedia {
+	if len(atts) == 0 {
+		return nil
+	}
+	out := make([]port.InboundMedia, 0, len(atts))
+	for _, a := range atts {
+		url := strings.TrimSpace(a.URL)
+		if url == "" {
+			continue
+		}
+		name := strings.TrimSpace(a.Filename)
+		if name == "" {
+			name = strings.TrimSpace(a.FileName)
+		}
+		mime := strings.TrimSpace(a.ContentType)
+		kind := "file"
+		lower := strings.ToLower(mime + " " + name)
+		switch {
+		case strings.Contains(lower, "image") || strings.HasSuffix(lower, ".png") || strings.HasSuffix(lower, ".jpg") || strings.HasSuffix(lower, ".jpeg") || strings.HasSuffix(lower, ".gif") || strings.HasSuffix(lower, ".webp"):
+			kind = "image"
+		case strings.Contains(lower, "audio") || strings.HasSuffix(lower, ".silk") || strings.HasSuffix(lower, ".mp3") || strings.HasSuffix(lower, ".wav"):
+			kind = "audio"
+		case strings.Contains(lower, "video") || strings.HasSuffix(lower, ".mp4"):
+			kind = "video"
+		}
+		out = append(out, port.InboundMedia{
+			Name:     name,
+			URL:      url,
+			MimeType: mime,
+			Kind:     kind,
+		})
+	}
+	return out
 }

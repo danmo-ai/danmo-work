@@ -43,8 +43,9 @@ type ChannelIngressService struct {
 }
 
 type pendingAsk struct {
-	AskID   string
-	Options []string
+	AskID      string
+	Options    []string
+	FormFields []domain.AskUserFormField
 }
 
 type pendingPerm struct {
@@ -83,11 +84,18 @@ func peerKey(msg port.InboundMessage) string {
 }
 
 func (ing *ChannelIngressService) HandleInbound(ctx context.Context, msg port.InboundMessage) (string, error) {
-	if strings.TrimSpace(msg.Text) == "" {
+	if strings.TrimSpace(msg.Text) == "" && len(msg.Media) == 0 {
 		return "", nil
 	}
 	if msg.PeerID == "" || msg.AccountID == "" {
 		return "", fmt.Errorf("accountId and peerId required")
+	}
+	msg.Text = FormatMediaUserText(msg.Text, msg.Media)
+	if note := strings.TrimSpace(msg.Meta["policy_note"]); note != "" {
+		msg.Text = strings.TrimSpace(msg.Text + "\n\n" + note)
+	}
+	if strings.TrimSpace(msg.Text) == "" {
+		return "", nil
 	}
 
 	// Button-style tokens pasted as text.
@@ -154,6 +162,7 @@ func (ing *ChannelIngressService) HandleInbound(ctx context.Context, msg port.In
 			ModelID:       modelID,
 			Title:         channelSessionTitle(msg.Type, msg.Text),
 			SkipAutoTitle: true,
+			Attachments:   MediaToVisionAttachments(msg.Media),
 		})
 		if cerr != nil {
 			return "", cerr
@@ -200,9 +209,10 @@ func (ing *ChannelIngressService) HandleInbound(ctx context.Context, msg port.In
 	ch := ing.sessions.Subscribe(sessionID)
 	defer ing.sessions.Unsubscribe(sessionID, ch)
 	turnID, serr := ing.sessions.StartTurn(ctx, sessionID, domain.SendMessageRequest{
-		UserInput: msg.Text,
-		AgentID:   defs.AgentID,
-		ModelID:   modelID,
+		UserInput:   msg.Text,
+		AgentID:     defs.AgentID,
+		ModelID:     modelID,
+		Attachments: MediaToVisionAttachments(msg.Media),
 	})
 	if serr != nil {
 		return "", serr
@@ -229,7 +239,21 @@ func (ing *ChannelIngressService) HandleInteraction(ctx context.Context, ev port
 			return nil
 		}
 		answer := ev.Option
-		if answer == "" {
+		if answer == "" || answer == "form" {
+			key := peerKey(msg)
+			ing.askMu.Lock()
+			pending := ing.pendingAsks[key]
+			ing.askMu.Unlock()
+			if ev.Meta != nil && ev.Meta["form_json"] != "" && len(pending.FormFields) > 0 {
+				var values map[string]any
+				if json.Unmarshal([]byte(ev.Meta["form_json"]), &values) == nil {
+					if formatted := formatFormAnswer(pending.FormFields, values); formatted != "" {
+						answer = formatted
+					}
+				}
+			}
+		}
+		if answer == "" || answer == "form" {
 			answer = ev.Raw
 		}
 		if err := ing.sessions.ResolveAskUser(ev.TargetID, answer); err != nil {
@@ -713,6 +737,11 @@ func (ing *ChannelIngressService) handlePermissionAsk(ev domain.StreamEvent, p c
 	if json.Unmarshal(ev.Payload, &payload) != nil || payload.ApprovalID == "" {
 		return
 	}
+	if denied, reason := channelToolDenied(p.msg, payload.Tool); denied {
+		_ = ing.sessions.DecideApproval(context.Background(), payload.ApprovalID, false, "once")
+		_, _ = ing.deliverOrReturn(context.Background(), p.msg, reason)
+		return
+	}
 	if p.autoApprove {
 		_ = ing.sessions.DecideApproval(context.Background(), payload.ApprovalID, true, "once")
 		return
@@ -761,6 +790,7 @@ func (ing *ChannelIngressService) handleAskUserPending(ev domain.StreamEvent, p 
 		Question:   payload.Question,
 		Options:    payload.Options,
 		DefaultOpt: payload.DefaultOpt,
+		FormFields: payload.FormFields,
 	}
 
 	handled := false
@@ -780,7 +810,11 @@ func (ing *ChannelIngressService) handleAskUserPending(ev domain.StreamEvent, p 
 	}
 	if handled {
 		ing.askMu.Lock()
-		ing.pendingAsks[peerKey(*p.msg)] = pendingAsk{AskID: ask.AskID, Options: append([]string(nil), ask.Options...)}
+		ing.pendingAsks[peerKey(*p.msg)] = pendingAsk{
+			AskID:      ask.AskID,
+			Options:    append([]string(nil), ask.Options...),
+			FormFields: append([]domain.AskUserFormField(nil), ask.FormFields...),
+		}
 		ing.askMu.Unlock()
 		return
 	}

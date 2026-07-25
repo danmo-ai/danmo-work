@@ -51,12 +51,32 @@ func TestInboundFromP2Message(t *testing.T) {
 	}
 }
 
-func TestInboundFromP2MessageNonText(t *testing.T) {
+func TestInboundFromP2MessageImage(t *testing.T) {
 	event := &larkim.P2MessageReceiveV1{
 		Event: &larkim.P2MessageReceiveV1Data{
 			Message: &larkim.EventMessage{
+				MessageId:   strPtr("om_img"),
 				MessageType: strPtr("image"),
-				Content:     strPtr(`{"image_key":"x"}`),
+				Content:     strPtr(`{"image_key":"img_key_1"}`),
+				ChatId:      strPtr("oc_chat"),
+			},
+			Sender: &larkim.EventSender{
+				SenderId: &larkim.UserId{OpenId: strPtr("ou_user")},
+			},
+		},
+	}
+	msg := feishu.InboundFromP2Message("cli_x", event)
+	if msg == nil || len(msg.Media) != 1 || msg.Media[0].Key != "img_key_1" || msg.Media[0].Kind != "image" {
+		t.Fatalf("expected image media, got %+v", msg)
+	}
+}
+
+func TestInboundFromP2MessageStickerIgnored(t *testing.T) {
+	event := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Message: &larkim.EventMessage{
+				MessageType: strPtr("sticker"),
+				Content:     strPtr(`{"file_key":"x"}`),
 				ChatId:      strPtr("oc_chat"),
 			},
 			Sender: &larkim.EventSender{
@@ -65,6 +85,6 @@ func TestInboundFromP2MessageNonText(t *testing.T) {
 		},
 	}
 	if msg := feishu.InboundFromP2Message("cli_x", event); msg != nil {
-		t.Fatalf("expected nil, got %+v", msg)
+		t.Fatalf("expected nil for sticker, got %+v", msg)
 	}
 }

@@ -240,3 +240,4 @@ func (a *Adapter) AckInteraction(ctx context.Context, interactionID string) erro
 	_, err := a.doJSON(ctx, http.MethodPut, "/interactions/"+interactionID, map[string]any{"code": 0})
 	return err
 }
+

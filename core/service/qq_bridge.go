@@ -191,10 +191,24 @@ func (b *QQBridge) handleInbound(msg port.InboundMessage) error {
 		return fmt.Errorf("qq ingress not configured")
 	}
 	ctx := context.Background()
+	cfg, _ := b.config.Get(ctx)
+	qc := domain.ConfigQQChannel{}
+	if cfg != nil {
+		qc = cfg.Channels.QQ
+	}
+	if !applyQQGroupPolicy(qc, &msg) {
+		return nil
+	}
+	if b.adapter != nil && len(msg.Media) > 0 {
+		b.adapter.EnrichInboundMedia(&msg)
+	}
 	reply, err := b.ingress.HandleInbound(ctx, msg)
 	if err != nil {
 		log.Printf("[qq] handle inbound peer=%s: %v", msg.PeerID, err)
 		errText := "处理消息时出错：" + err.Error()
+		if hint := qqSendErrorHint(err); hint != "" {
+			errText += "\n" + hint
+		}
 		if b.endpoint != nil {
 			_ = b.endpoint.Deliver(ctx, &msg, port.TextOutbound(errText))
 			return err
@@ -204,7 +218,28 @@ func (b *QQBridge) handleInbound(msg port.InboundMessage) error {
 	if strings.TrimSpace(reply) == "" {
 		return nil
 	}
-	return b.adapter.DeliverOutbound(ctx, &msg, port.TextOutbound(reply))
+	if err := b.adapter.DeliverOutbound(ctx, &msg, port.TextOutbound(reply)); err != nil {
+		if hint := qqSendErrorHint(err); hint != "" {
+			log.Printf("[qq] send hint: %s", hint)
+		}
+		return err
+	}
+	return nil
+}
+
+func qqSendErrorHint(err error) string {
+	if err == nil {
+		return ""
+	}
+	s := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(s, "proactive") || strings.Contains(s, "主动") || strings.Contains(s, "msg_reject") || strings.Contains(s, "40054005"):
+		return "提示：用户可能关闭了机器人主动消息，或被动回复窗口已过期；请让用户再发一条消息后重试。"
+	case strings.Contains(s, "429") || strings.Contains(s, "rate") || strings.Contains(s, "freq") || strings.Contains(s, "quota"):
+		return "提示：QQ 接口频控/配额可能已触达，请稍后重试。"
+	default:
+		return ""
+	}
 }
 
 func (b *QQBridge) handleInteraction(ev port.InteractionEvent, interactionID string) error {

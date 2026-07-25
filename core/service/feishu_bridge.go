@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -191,6 +192,11 @@ func (b *FeishuBridge) handleInbound(ctx context.Context, msg port.InboundMessag
 	if b.ingress == nil {
 		return fmt.Errorf("feishu ingress not configured")
 	}
+	if b.adapter != nil && len(msg.Media) > 0 {
+		if err := b.adapter.EnrichInboundMedia(ctx, &msg); err != nil {
+			log.Printf("[feishu] media download peer=%s: %v", msg.PeerID, err)
+		}
+	}
 	reply, err := b.ingress.HandleInbound(ctx, msg)
 	if err != nil {
 		log.Printf("[feishu] handle inbound peer=%s: %v", msg.PeerID, err)
@@ -213,7 +219,7 @@ func (b *FeishuBridge) handleInbound(ctx context.Context, msg port.InboundMessag
 	return nil
 }
 
-func (b *FeishuBridge) handleCardAction(ctx context.Context, msg port.InboundMessage, token string) error {
+func (b *FeishuBridge) handleCardAction(ctx context.Context, msg port.InboundMessage, token string, formValue map[string]any) error {
 	if b.ingress == nil {
 		return fmt.Errorf("feishu ingress not configured")
 	}
@@ -222,7 +228,20 @@ func (b *FeishuBridge) handleCardAction(ctx context.Context, msg port.InboundMes
 		log.Printf("[feishu] card action: unrecognized token %q", token)
 		return nil
 	}
+	if len(formValue) > 0 && ev.Kind == port.InteractionAsk {
+		// Stash form JSON in Meta for ingress to format against pending fields.
+		if ev.Meta == nil {
+			ev.Meta = map[string]string{}
+		}
+		ev.Meta["form_json"] = string(mustJSONMap(formValue))
+		ev.Option = "form"
+	}
 	return b.ingress.HandleInteraction(ctx, ev)
+}
+
+func mustJSONMap(v map[string]any) []byte {
+	b, _ := json.Marshal(v)
+	return b
 }
 
 func (b *FeishuBridge) Stop() {

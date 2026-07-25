@@ -76,6 +76,7 @@ const qqForm = ref({
   appId: '',
   clientSecret: '',
   projectId: '',
+  groupDenyTools: '',
 })
 const {
   appVersion,
@@ -341,6 +342,7 @@ onMounted(async () => {
       appId: qq.status.appId || '',
       clientSecret: '',
       projectId: qq.status.projectId || projects.sortedProjects[0]?.id || '',
+      groupDenyTools: (qq.status.groupDenyTools || []).join(', '),
     }
   } else if (sessions.agents.length) {
     qqForm.value.defaultAgentId = sessions.agents[0].id
@@ -472,6 +474,10 @@ async function handleSaveQQ() {
     return
   }
   try {
+    const denyTools = qqForm.value.groupDenyTools
+      .split(/[,，\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
     await qq.configure({
       enabled: qqForm.value.enabled,
       defaultAgentId: qqForm.value.defaultAgentId,
@@ -480,6 +486,7 @@ async function handleSaveQQ() {
       appId: qqForm.value.appId || undefined,
       clientSecret: qqForm.value.clientSecret || undefined,
       projectId: qqForm.value.projectId || undefined,
+      groupDenyTools: denyTools,
     })
     qqForm.value.clientSecret = ''
     toast.success(t('settings.qqSaved'))
@@ -1527,6 +1534,14 @@ const hasFooterActions = computed(() => {
                 @update:model-value="(v: boolean) => qqForm.autoApprove = v"
               />
             </label>
+            <label class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.qqGroupDenyTools') }}</span>
+              <DqInput
+                v-model="qqForm.groupDenyTools"
+                :placeholder="$t('settings.qqGroupDenyToolsPlaceholder')"
+              />
+            </label>
+            <p class="settings-form-group__desc">{{ $t('settings.qqGroupDenyToolsHint') }}</p>
           </div>
 
           <div class="settings-form-group">

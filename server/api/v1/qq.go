@@ -10,13 +10,14 @@ import (
 )
 
 type qqConfigureRequest struct {
-	Enabled        bool   `json:"enabled"`
-	DefaultAgentID string `json:"defaultAgentId"`
-	DefaultModelID string `json:"defaultModelId,omitempty"`
-	AutoApprove    *bool  `json:"autoApprove,omitempty"`
-	AppID          string `json:"appId,omitempty"`
-	ClientSecret   string `json:"clientSecret,omitempty"`
-	ProjectID      string `json:"projectId,omitempty"`
+	Enabled        bool     `json:"enabled"`
+	DefaultAgentID string   `json:"defaultAgentId"`
+	DefaultModelID string   `json:"defaultModelId,omitempty"`
+	AutoApprove    *bool    `json:"autoApprove,omitempty"`
+	AppID          string   `json:"appId,omitempty"`
+	ClientSecret   string   `json:"clientSecret,omitempty"`
+	ProjectID      string   `json:"projectId,omitempty"`
+	GroupDenyTools []string `json:"groupDenyTools,omitempty"`
 }
 
 func qqStatusPayload(qc domain.ConfigQQChannel, running bool) gin.H {
@@ -29,6 +30,7 @@ func qqStatusPayload(qc domain.ConfigQQChannel, running bool) gin.H {
 		"appId":           qc.AppID,
 		"projectId":       qc.ProjectID,
 		"hasClientSecret": qc.ClientSecret != "",
+		"groupDenyTools":  qc.Group.DenyTools,
 	}
 }
 
@@ -90,6 +92,9 @@ func qqConfigure(h *Handler) gin.HandlerFunc {
 		}
 		if req.ProjectID != "" {
 			qc.ProjectID = req.ProjectID
+		}
+		if req.GroupDenyTools != nil {
+			qc.Group.DenyTools = req.GroupDenyTools
 		}
 		if req.Enabled {
 			if qc.DefaultAgentID == "" {

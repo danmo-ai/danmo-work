@@ -153,14 +153,19 @@ func (e *QQEndpoint) FinishStream(ctx context.Context, in *port.InboundMessage, 
 }
 
 func (e *QQEndpoint) PresentAsk(ctx context.Context, in *port.InboundMessage, ask port.AskPrompt) (bool, error) {
+	// QQ has no native multi-field form; formFields use markdown instructions + free-text reply.
+	actions := askActions(ask)
+	if len(ask.FormFields) > 0 {
+		actions = nil
+	}
 	msg := port.OutboundMessage{
 		Kind:  port.OutboundKindCard,
 		Title: "需要你的确认",
 		Text:  formatAskText(ask),
 		Card: &port.OutboundCard{
 			Title:   "需要你的确认",
-			Body:    strings.TrimSpace(ask.Question),
-			Actions: askActions(ask),
+			Body:    formatAskText(ask),
+			Actions: actions,
 		},
 	}
 	if err := e.Deliver(ctx, in, msg); err != nil {

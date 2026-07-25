@@ -2,6 +2,8 @@ package port
 
 import (
 	"context"
+
+	"danmo-work/core/domain"
 )
 
 // ChannelType identifies an external chat platform.
@@ -14,6 +16,17 @@ const (
 	ChannelQQ     ChannelType = "qq"
 )
 
+// InboundMedia is an attachment on an inbound IM message.
+// Before ingress, adapters fill Path (local) or URL/Key for download.
+type InboundMedia struct {
+	Name     string // original filename
+	Path     string // absolute local path under data/channels/...
+	URL      string // remote download URL (QQ)
+	Key      string // platform resource key (Feishu image_key / file_key)
+	MimeType string
+	Kind     string // image | file | audio | video
+}
+
 // InboundMessage is the normalized inbound chat message (WeKnora-style).
 type InboundMessage struct {
 	Type      ChannelType
@@ -24,6 +37,7 @@ type InboundMessage struct {
 	Text      string
 	MessageID string
 	Meta      map[string]string // e.g. context_token, req_id, stream_id, receive_id
+	Media     []InboundMedia
 }
 
 // InteractionKind classifies button / keyboard callbacks from IM platforms.
@@ -151,6 +165,7 @@ type AskPrompt struct {
 	Question   string
 	Options    []string
 	DefaultOpt string
+	FormFields []domain.AskUserFormField
 }
 
 // PermissionPrompt is the normalized tool-permission presentation for IM channels.

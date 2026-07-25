@@ -1,8 +1,10 @@
 package feishu
 
 import (
+	"fmt"
 	"strings"
 
+	"danmo-work/core/domain"
 	"danmo-work/core/port"
 )
 
@@ -117,6 +119,128 @@ func CallbackTokenFromActionValue(value map[string]any) string {
 	// Tolerate flat stringish maps from older cards.
 	if v, ok := value["action"].(string); ok {
 		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+// BuildAskFormCard builds a schema 2.0 form card for ask_user formFields.
+func BuildAskFormCard(title, question string, fields []domain.AskUserFormField, submitToken string) map[string]any {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = "需要你的确认"
+	}
+	formChildren := []any{}
+	if q := strings.TrimSpace(question); q != "" {
+		formChildren = append(formChildren, map[string]any{
+			"tag":     "markdown",
+			"content": q,
+		})
+	}
+	for _, f := range fields {
+		name := strings.TrimSpace(f.Name)
+		if name == "" {
+			continue
+		}
+		label := strings.TrimSpace(f.Label)
+		if label == "" {
+			label = name
+		}
+		formChildren = append(formChildren, map[string]any{
+			"tag":     "markdown",
+			"content": "**" + label + "**" + requiredMark(f.Required),
+		})
+		switch strings.ToLower(strings.TrimSpace(f.Type)) {
+		case "select":
+			opts := make([]any, 0, len(f.Options))
+			for _, o := range f.Options {
+				opts = append(opts, map[string]any{
+					"text":  map[string]any{"tag": "plain_text", "content": o},
+					"value": o,
+				})
+			}
+			formChildren = append(formChildren, map[string]any{
+				"tag":         "select_static",
+				"name":        name,
+				"required":    f.Required,
+				"placeholder": map[string]any{"tag": "plain_text", "content": pickPlaceholder(f)},
+				"options":     opts,
+			})
+		case "boolean":
+			formChildren = append(formChildren, map[string]any{
+				"tag":         "select_static",
+				"name":        name,
+				"required":    f.Required,
+				"placeholder": map[string]any{"tag": "plain_text", "content": "是 / 否"},
+				"options": []any{
+					map[string]any{"text": map[string]any{"tag": "plain_text", "content": "是"}, "value": "是"},
+					map[string]any{"text": map[string]any{"tag": "plain_text", "content": "否"}, "value": "否"},
+				},
+			})
+		default: // text, number
+			inputType := "text"
+			if strings.EqualFold(f.Type, "number") {
+				inputType = "number"
+			}
+			el := map[string]any{
+				"tag":         "input",
+				"name":        name,
+				"required":    f.Required,
+				"input_type":  inputType,
+				"placeholder": map[string]any{"tag": "plain_text", "content": pickPlaceholder(f)},
+			}
+			if f.Default != nil {
+				el["default_value"] = fmt.Sprint(f.Default)
+			}
+			formChildren = append(formChildren, el)
+		}
+	}
+	if submitToken == "" {
+		submitToken = "submit"
+	}
+	formChildren = append(formChildren, map[string]any{
+		"tag":  "button",
+		"type": "primary",
+		"text": map[string]any{"tag": "plain_text", "content": "提交"},
+		"behaviors": []any{
+			map[string]any{
+				"type":  "callback",
+				"value": map[string]any{"dw": submitToken},
+			},
+		},
+		"form_action_type": "submit",
+		"name":             "submit",
+	})
+	return map[string]any{
+		"schema": "2.0",
+		"header": map[string]any{
+			"template": "blue",
+			"title":    map[string]any{"tag": "plain_text", "content": title},
+		},
+		"body": map[string]any{
+			"elements": []any{
+				map[string]any{
+					"tag":      "form",
+					"name":     "ask_form",
+					"elements": formChildren,
+				},
+			},
+		},
+	}
+}
+
+func pickPlaceholder(f domain.AskUserFormField) string {
+	if ph := strings.TrimSpace(f.Placeholder); ph != "" {
+		return ph
+	}
+	if f.Default != nil {
+		return fmt.Sprint(f.Default)
+	}
+	return "请输入"
+}
+
+func requiredMark(required bool) string {
+	if required {
+		return "（必填）"
 	}
 	return ""
 }
