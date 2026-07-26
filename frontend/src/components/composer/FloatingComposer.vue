@@ -491,7 +491,13 @@ async function send() {
       clearComposer()
       focusInput()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t('composer.sendFailed'))
+      const msg = e instanceof Error ? e.message : ''
+      // New-session path hard-fails on work.db INSERT; old-session turns often ignore DB errors.
+      if (/not writable|readonly database|只读/i.test(msg)) {
+        toast.error(t('composer.dbReadOnly'))
+      } else {
+        toast.error(msg || t('composer.sendFailed'))
+      }
     }
     return
   }

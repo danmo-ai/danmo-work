@@ -811,6 +811,7 @@ export default {
     needLlm: 'Configure an LLM provider first',
     needProject: 'Select a project',
     sendFailed: 'Send failed',
+    dbReadOnly: 'Database is not writable — cannot create a new session. Check ~/.danmo-work permissions and restart.',
     cancelFailed: 'Cancel failed',
     running: 'Running',
     send: 'Send',

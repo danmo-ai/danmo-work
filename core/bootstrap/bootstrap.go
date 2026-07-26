@@ -328,6 +328,13 @@ func (c *Core) Close() error {
 		c.Weixin.Stop()
 	}
 	var first error
+	if c.Store != nil {
+		if closer, ok := c.Store.(interface{ Close() error }); ok {
+			if err := closer.Close(); err != nil && first == nil {
+				first = err
+			}
+		}
+	}
 	if c.TableStore != nil {
 		if err := c.TableStore.Close(); err != nil && first == nil {
 			first = err

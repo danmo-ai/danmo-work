@@ -55,7 +55,9 @@ func (m *SessionManager) Create(ctx context.Context, req domain.CreateSessionReq
 		UpdatedAt: now,
 	}
 	if err := m.store.Sessions().Create(ctx, s); err != nil {
-		return domain.Session{}, err
+		// Surface path/readonly hints from the store; this is the only hard-fail
+		// write on the "new session" path (old-session turns often ignore DB errors).
+		return domain.Session{}, fmt.Errorf("save session: %w", err)
 	}
 	m.engine.StartSession(ctx, s, atts)
 	if !req.SkipAutoTitle && s.Title == "" {

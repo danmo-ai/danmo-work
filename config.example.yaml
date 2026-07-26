@@ -6,7 +6,8 @@
 # Data and persistence paths (defaults resolve under ~/.danmo-work/).
 data:
   dir: "data"                 # -> ~/.danmo-work/data
-  database: "work.db"        # -> ~/.danmo-work/work.db
+  database: "work.db"        # -> ~/.danmo-work/work.db (control plane; dir must be writable)
+  store_database: "store.db" # -> ~/.danmo-work/store.db (agent table store data plane)
   store: "sqlite"             # sqlite only today; memory backend reserved for future use.
 
 # HTTP API server settings.

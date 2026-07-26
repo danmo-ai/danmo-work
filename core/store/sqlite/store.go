@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,12 +17,14 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 var _ port.Repository = (*Store)(nil)
 
 type Store struct {
-	db *gorm.DB
+	db     *gorm.DB
+	dbPath string
 }
 
 func New(dbPath string) (*Store, error) {
@@ -31,21 +34,76 @@ func New(dbPath string) (*Store, error) {
 	if abs, err := filepath.Abs(dbPath); err == nil {
 		dbPath = abs
 	}
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
-		return nil, err
+	dir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("create database directory %s: %w", dir, err)
 	}
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	// SQLite needs to create journal/WAL siblings next to the DB file.
+	probe := filepath.Join(dir, ".danmo-write-probe")
+	if err := os.WriteFile(probe, []byte("ok"), 0o644); err != nil {
+		return nil, fmt.Errorf("database directory not writable (%s): %w — new sessions cannot be saved", dir, err)
+	}
+	_ = os.Remove(probe)
+	// Pure-Go SQLite: serialize connections and enable WAL — same hardening as store.db.
+	// Without MaxOpenConns(1), concurrent GORM pool writers can stall or fail session creates.
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Warn),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("open database %s: %w", dbPath, err)
+	}
+	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{db: db}
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	if _, err := sqlDB.Exec(`PRAGMA journal_mode=WAL`); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("database not writable (%s): %w — ensure the file and its directory are writable", dbPath, err)
+	}
+	if _, err := sqlDB.Exec(`PRAGMA busy_timeout=5000`); err != nil {
+		_ = sqlDB.Close()
+		return nil, err
+	}
+	if err := ensureWritable(sqlDB, dbPath); err != nil {
+		_ = sqlDB.Close()
+		return nil, err
+	}
+	s := &Store{db: db, dbPath: dbPath}
 	if err := s.migrate(); err != nil {
+		_ = sqlDB.Close()
 		return nil, err
 	}
 	return s, nil
 }
 
+// ensureWritable acquires a reserved write lock so a read-only directory/file
+// fails at boot instead of on the first Sessions().Create (new chat).
+func ensureWritable(sqlDB *sql.DB, dbPath string) error {
+	if _, err := sqlDB.Exec(`BEGIN IMMEDIATE`); err != nil {
+		return fmt.Errorf("database not writable (%s): %w — ensure the file and its directory are writable", dbPath, err)
+	}
+	if _, err := sqlDB.Exec(`ROLLBACK`); err != nil {
+		return fmt.Errorf("database rollback after write probe (%s): %w", dbPath, err)
+	}
+	return nil
+}
+
 func (s *Store) DB() *gorm.DB { return s.db }
+
+func (s *Store) Path() string { return s.dbPath }
+
+func (s *Store) Close() error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	sqlDB, err := s.db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
+}
 
 func (s *Store) migrate() error {
 	if err := s.db.AutoMigrate(
@@ -289,7 +347,10 @@ type sessionRepo struct{ s *Store }
 
 func (r *sessionRepo) Create(ctx context.Context, s domain.Session) error {
 	m := sessionFromDomain(s)
-	return r.s.db.WithContext(ctx).Create(&m).Error
+	if err := r.s.db.WithContext(ctx).Create(&m).Error; err != nil {
+		return fmt.Errorf("create session in %s: %w", r.s.dbPath, err)
+	}
+	return nil
 }
 
 func (r *sessionRepo) Update(ctx context.Context, s domain.Session) error {

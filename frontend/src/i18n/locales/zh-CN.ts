@@ -810,6 +810,7 @@ export default {
     needLlm: '请先配置 LLM 提供商',
     needProject: '请选择项目',
     sendFailed: '发送失败',
+    dbReadOnly: '数据库不可写，无法创建新会话。请检查 ~/.danmo-work 目录权限后重启。',
     cancelFailed: '取消失败',
     running: '运行中',
     send: '发送',
