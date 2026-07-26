@@ -5,23 +5,45 @@
 [![Release](https://img.shields.io/github/v/release/danmo-ai/danmo-work?label=release)](https://github.com/danmo-ai/danmo-work/releases/latest)
 [![License](https://img.shields.io/github/license/danmo-ai/danmo-work)](LICENSE)
 [![Go](https://img.shields.io/github/go-mod/go-version/danmo-ai/danmo-work?filename=go.mod)](go.mod)
+[![Stars](https://img.shields.io/github/stars/danmo-ai/danmo-work?style=social)](https://github.com/danmo-ai/danmo-work)
 
-General-purpose **AI Work Agent** (with coding capability). Built for **long-horizon complex tasks** via multi-agent collaboration.
+**Open-source AI Work Agent for long-horizon tasks** — self-hosted, multi-agent, MIT.
 
-**Core difference:** pure LLM-driven control — multi-agent delegation on the **same thinking chain**. No fixed workflows; the model’s reasoning and chain-of-thought decide what happens next.
+Not another coding-only CLI. Not a workflow graph you babysit. Danmo Work is a **human–AI co-thinking workspace**: the model drives one Agent Loop, sub-agents and humans join as Tools, and every Tool Call is logged so you can **resume, replay, and edit the thinking trail**.
 
-**Design:** everything is a Tool; the model drives everything. Sub-agents are Tools (`delegate_agent`). Humans join via `ask_user` tool — **co-thinking**.
+> Ship research reports, decks, sheets, demos, and automations — with coding when you need it — from desktop, web, CLI/TUI, or WeChat / Feishu / WeCom / QQ.
 
-**Runtime:** every Tool Call is logged — **resume**, **replay**, and **visualize** the model’s thinking through ultra-long runs. Self-hosted. MIT. **Channels:** WeChat, **Feishu**, **WeCom**, and **QQ** (outbound WebSocket / Gateway, no public URL) — same Agent Loop on your machine.
+| | |
+|--|--|
+| **Positioning** | General-purpose **Work Agent** (coding capable), built for days/weeks-long complex work |
+| **Control** | **Pure LLM-driven** — no hand-maintained graph / role router / product “mode” |
+| **Abstraction** | **Everything is a Tool** — `delegate_agent`, `ask_user`, memory, table store, MCP, files… |
+| **State** | **Log is state** — Turn Log → recover, replay, edit a result and continue |
+| **Surfaces** | Web · Desktop · CLI · TUI · IM channels · Document Stage |
 
-| Pillar | What it means |
-|--------|----------------|
-| Pure LLM-driven | No hand-maintained graph / role router / mode switch — LLM plans Tool Calls on one Agent Loop |
-| Same thinking chain | `delegate_agent` with hard context isolation; child returns a Report; parent continues |
-| Everything is a Tool | Skills, knowledge, memory, files, MCP, `ask_user` — one abstraction |
-| Log is state | Persistent Turn Log → recover from any step, full replay, edit a result and continue |
+MIT · Anthropic & OpenAI-compatible providers · Local-first data under `~/.danmo-work/`
 
-MIT · Web / Desktop / CLI / TUI · Anthropic & OpenAI-compatible providers
+---
+
+## Why Danmo Work (in 30 seconds)
+
+Most open-source “AI agents” today are **coding agents**: terminal pair-programmers, IDE plugins, or sandboxed software engineers. Powerful — and still aimed at *writing code*.
+
+Danmo Work starts from a different question: **how do humans and models co-think through real work** — research, docs, slides, ops, connectors — over a long horizon, with a trail you can trust?
+
+| You get | Instead of |
+|---------|------------|
+| One thinking chain + hard-isolated sub-agents | Parallel sessions / opaque handoffs |
+| Document Stage (doc / slides / sheet / preview) | Chat that dumps Markdown into a void |
+| Inspectable Memory + schema-free Table Store | Black-box product memory or another vector DB |
+| MCP Connectors + cron/webhook Automations | One-off scripts glued outside the loop |
+| WeChat · Feishu · WeCom · QQ on the same loop | “Deploy a public webhook” IM hacks |
+| Resume / replay / edit Tool Results | Restart the chat and hope |
+
+**Mainstream:** developer or product orchestrates; LLM executes.  
+**Danmo Work:** LLM orchestrates on one chain; you supply capability units; humans join as peers via `ask_user`.
+
+---
 
 ## Try it
 
@@ -31,34 +53,77 @@ MIT · Web / Desktop / CLI / TUI · Anthropic & OpenAI-compatible providers
 | **Windows** | [Setup `.exe`](https://github.com/danmo-ai/danmo-work/releases/latest) |
 | **Linux server** | [`.tar.gz`](https://github.com/danmo-ai/danmo-work/releases/latest) |
 
-Or run from source (needs sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui)):
+From source (needs sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui)):
 
 ```bash
 make dev-web   # → http://localhost:5801/app/
 ```
 
-Add an LLM API key in the UI (or `~/.danmo-work/config.yaml`). See [Quick start](#quick-start) for the full flow.
+Add an LLM API key in the UI (or `~/.danmo-work/config.yaml`). Full flow: [Quick start](#quick-start).
+
+---
+
+## Who it’s for
+
+- **Builders & operators** who need an agent that finishes *work products*, not only PRs
+- **Teams behind a firewall** who want Feishu / WeCom / QQ without a public callback URL
+- **Power users** who want Memory, Table Store, and Turn Log to be **visible and editable**
+- **Anyone tired of Graph/Role frameworks** that fight the model’s planning instead of feeding it Tools
+
+---
+
+## Not another coding agent — comparison
+
+OpenHands, OpenCode, Aider, Cline, Goose, Continue and friends excel at **code-centric loops**. Danmo Work overlaps on tools & models, then goes after **work runtime + co-thinking UX**.
+
+| Dimension | Typical OSS coding agents | Agent frameworks (LangGraph / CrewAI / AutoGen) | **Danmo Work** |
+|-----------|---------------------------|--------------------------------------------------|----------------|
+| Primary job | Code, PR, terminal | App/workflow orchestration | **Long-horizon work + artifacts** |
+| Control flow | Product loop / modes | Developer-written graph / roles | **Pure LLM Tool Call planning** |
+| Sub-agents | Extra session or skill | Handoff / crew roles | `delegate_agent` on **same chain**, hard isolation |
+| Human in the loop | Approvals / chat | Preset nodes | `ask_user` Tool — model chooses when |
+| Artifacts | Repo diffs | App-defined | **Document Stage**: doc · slides · sheet · preview |
+| Memory | Product-private or none | Buffers / external vector DBs | Explicit `memory_*` + scoped SQLite + UI tab |
+| Business data | Files / DIY DB | LangGraph Store etc. | Built-in **Table Store** (`store.db`, schema-free) |
+| Connectors | MCP / plugins (varies) | DIY | MCP catalog + secrets + permissions + automations |
+| IM / chat ingress | Rare / DIY | Rare | **WeChat · Feishu · WeCom · QQ** (outbound WS) |
+| Durability | Session / container | Optional checkpointer | **Turn Log = state** (resume · replay · edit) |
+| License / host | Mostly OSS | OSS libs | **MIT, self-hosted**, Web/Desktop/CLI/TUI |
+
+If you want a Claude Code–like terminal, use a coding agent. If you want a **self-hosted work OS for the model’s thinking**, use Danmo Work.
+
+---
+
+## Product value
+
+1. **Finish the job, not the chat** — Stage-native docs, Markdown slides, sheets, and HTML preview stay in the project filesystem.
+2. **Trust through transparency** — every Tool Call is persisted; recover mid-turn; edit a Tool Result and continue.
+3. **Scale capability without scaling complexity** — new power = new Tool / Skill / MCP server, not a new graph language.
+4. **Meet people where they already chat** — same Agent Loop from phone WeChat or Feishu cards; tools still run on your machine.
+5. **Local-first ownership** — config, DB, turn logs, secrets under `~/.danmo-work/`; bring your own model keys.
+
+---
 
 ## See it
 
-Three-pane workspace: project sidebar · agent execution Stream · right panel (Plan / Files / **Memory** / Changes / Terminal). Center **Document Stage** switches toolbar by file kind (doc / slides / sheet / preview).
+Three-pane workspace: project sidebar · agent execution Stream · right panel (Plan / Files / **Memory** / Changes / Terminal). Center **Document Stage** switches toolbar by file kind.
 
-### Document Stage — docs, slides, sheets, and preview
+### Document Stage — docs, slides, sheets, preview
 
-Open any project file from Files → it opens in the center **Document Stage**. Editable kinds use format-specific editors + AI; generic HTML / images / external URLs use **Preview** (URL bar + Design mode). AI polish/modify runs as a normal **session turn** (not a separate API).
+Open any project file from Files → center Stage. Editable kinds use format-specific editors + AI; generic HTML / images / URLs use **Preview** (URL bar + Design mode). AI polish runs as a normal **session turn**.
 
 | Kind | Source of truth | Editor / view |
-|------|-----------------|--------|
-| **Doc** | GFM `.md` | TipTap (MD ↔ HTML for the edit session) |
+|------|-----------------|---------------|
+| **Doc** | GFM `.md` | TipTap (MD ↔ HTML in the edit session) |
 | **Slides** | Markdown with `---` pages | Edit markdown + present playable HTML |
 | **Sheet** | `.csv` / `.danmo-sheet.json` | Grid editor |
 | **Preview** | Generic `.html`, images, URLs | iframe / image; element pick → Composer |
 
-Toolbar builds an `[office-edit]` prompt → `POST /sessions/:id/turns`. Dirty content auto-saves before AI; scope can be selection / full document / this slide / whole sheet. After the turn, the Stage reloads the file and restores scroll (and slides page index). Stream stays visible by default for turn progress.
+Toolbar builds an `[office-edit]` prompt → `POST /sessions/:id/turns`. Dirty content auto-saves before AI; scope can be selection / full document / this slide / whole sheet. After the turn, Stage reloads and restores scroll (and slides page index).
 
-### Point at the page — don't describe it
+### Point at the page — don’t describe it
 
-In Stage **Preview**, click a DOM element, write a short note, confirm into Composer. The model gets exact HTML/CSS context and makes the change — **select → annotate → edit**, co-thinking on the rendered result.
+In Stage **Preview**, click a DOM element, annotate, confirm into Composer. The model gets exact HTML/CSS context — **select → annotate → edit**.
 
 ![Browser element annotate](docs/screenshots/ui-browser-annotate.png)
 
@@ -66,172 +131,128 @@ In Stage **Preview**, click a DOM element, write a short note, confirm into Comp
 |-------------------|------------------|-----------|
 | ![Market report](docs/screenshots/ui-market-report.png) | ![Cooking demo](docs/screenshots/ui-cooking-demo.png) | ![Snake game](docs/screenshots/ui-snake-game.png) |
 
-- **Research & report** — web fetch, structured writing, live HTML preview
-- **Interactive demo** — step-by-step demo with playback controls
-- **Mini-game** — generate a playable page, then iterate via **element annotate** (above)
+- **Research & report** — web fetch, structured writing, live HTML preview  
+- **Interactive demo** — step-by-step demo with playback controls  
+- **Mini-game** — generate a playable page, then iterate via element annotate  
 
 ### Channels (WeChat · Feishu · WeCom · QQ)
 
-Chat with the same Agent Loop from IM — tools still run on your machine; Turn Log stays in Teams. Sessions are keyed by `(channel, account, peer)`, so binding multiple channels to one project does **not** mix conversations.
+Same Agent Loop from IM — tools on your machine; Turn Log in Teams. Sessions keyed by `(channel, account, peer)` so multiple channels on one project **don’t mix chats**.
 
-| Channel | How it connects | Setup |
-|---------|-----------------|-------|
-| **WeChat** | Chat from your phone WeChat (iLink long-poll) | Account default project + in-chat `/project` override; text-menu approvals; inbound image/file |
-| **Feishu** | Outbound WebSocket (no public URL) | Long-connection events/card callbacks; interactive cards/forms, approvals, progress, inbound image/file, `/project` |
-| **WeCom** | Outbound WebSocket (`openws.work.weixin.qq.com`) | Admin → Smart Robot long connection → Settings → WeCom (Bot ID / Secret) |
-| **QQ** | Outbound Gateway WebSocket (no public URL) | Keyboard approvals, C2C stream, inbound attachments, group deny-tools, `/project` |
+| Channel | How it connects | Highlights |
+|---------|-----------------|------------|
+| **WeChat** | Phone WeChat (iLink long-poll) | Account default project + `/project`; text-menu approvals; image/file in |
+| **Feishu** | Outbound WebSocket (no public URL) | Cards/forms, approvals, progress, media, `/project` |
+| **WeCom** | Outbound WebSocket | Admin Smart Robot → Settings; stream placeholder then final answer |
+| **QQ** | Outbound Gateway WebSocket | Keyboard approvals, C2C stream, group deny-tools, `/project` |
 
 | Desktop (WeChat-tagged session) | Phone (WeChat chat) |
 |---------------------------------|---------------------|
 | ![WeChat session in Teams](docs/screenshots/wx1.png) | ![DQ-Teams AI in WeChat](docs/screenshots/wx2.png) |
 
-**WeChat** — use your everyday WeChat. Account binding is the default project; send `/project` in chat to override per peer. With auto-approve off, reply `1/2/3` to authorize tools. Inbound images/files are saved for the agent. History syncs with the desktop.
+### Experts, skills, connectors & data plane
 
-**Feishu / WeCom / QQ** — intranet-friendly: the app dials out, so no callback URL or tunnel. Pick Agent, model, and project in Settings, then enable. Feishu/QQ support in-chat tool approval and `/project` switching; WeCom sends a stream placeholder within ~5s, then replaces it with the final answer.
-
-### Experts, skills & runtime
-
-Edit agent prompts, Agentskills (`SKILL.md`), and sandbox / delegation limits in the UI — capability units you give the model, not a hand-maintained workflow graph.
+Edit prompts, Agentskills (`SKILL.md`), sandbox / delegation in the UI — **capability units**, not a workflow graph. Summon skills from Composer via `@` / button.
 
 | Expert prompt editor | Skill library | Runtime & sandbox |
 |----------------------|---------------|-------------------|
 | ![Explorer system prompt](docs/screenshots/ui-expert-prompts.png) | ![playable-slides skill](docs/screenshots/ui-skill-editor.png) | ![Runtime settings](docs/screenshots/ui-runtime-settings.png) |
 
-- **Experts** — local + market agents; overview / prompt / skills / tools / knowledge
-- **Skills** — built-in & custom Agentskills; instructions, files, tool bindings
-- **Runtime** — turn loop limits, **tool output hard cap** (`runtime.tools.max_output_chars`, default 50k), max delegation depth, memory TopK, OS sandbox & network policy
+- **Experts** — local + market agents; overview / prompt / skills / tools / knowledge  
+- **Skills** — built-in & custom Agentskills; instructions, files, tool bindings  
+- **Connectors (MCP)** — catalog (Composio / OpenConnector / GitHub / Notion / Feishu…); `tools/list` → `mcp_<server>_<tool>` on the loop; encrypted secrets; `external` risk → permission gate  
+- **Automations** — cron / webhook start real session turns with Turn Log replay  
+- **Memory** — `memory_update` / `memory_read` (scopes: user · project · agent); Memory tab  
+- **Table Store** — schema-free `table_*` tools on isolated `store.db` for digests, counters, cursors (not Memory, not files)  
+- **Runtime** — turn limits, tool output hard cap (`runtime.tools.max_output_chars`, default 50k), max delegation depth, memory TopK, OS sandbox & network policy  
+
+---
 
 ## Design philosophy
 
 ### Everything is a Tool
 
-Every capability is a Tool — no mode switches, no special cases:
-
 | Traditional concept | Unified abstraction |
 |---------------------|---------------------|
-| Sub-agent delegation | `delegate_agent` Tool |
-| User interaction | `ask_user` Tool |
-| Skills / capabilities | `read_skill` / skill bindings |
-| Knowledge retrieval | `search_kb` Tool |
-| Durable memory | `memory_update` / `memory_read` (user · project · agent) |
-| File operations | `read_file` / `write` / `edit` / … |
+| Sub-agent delegation | `delegate_agent` |
+| User interaction | `ask_user` |
+| Skills | `read_skill` / skill bindings |
+| Knowledge | `search_kb` |
+| Durable memory | `memory_update` / `memory_read` |
+| Business rows | `table_upsert` / `table_query` / … |
+| Files | `read_file` / `write` / `edit` / … |
 | External APIs | `http_request` / MCP / `web_fetch` · `web_search` |
 
-One abstraction (Tool), one loop (Agent Loop), one store (Turn Log). New capability = new Tool.
+One abstraction (Tool), one loop (Agent Loop), one execution store (Turn Log). New capability = new Tool.
 
 ### Pure LLM-driven control
 
-The model is the only decision center. There is **no developer-maintained graph, role router, or mode switch** — control flow is generated by the LLM on one Agent Loop:
+No developer-maintained graph, role router, or mode switch — the model plans Tool Calls on one loop:
 
 ```
 User input
     ↓
-[LLM parses intent] → plans Tool Call DAG
+[LLM] → plans Tool Call DAG
     ↓
 Execute tools (Agent Loop)
     ↓
-Need clarification? → ask_user Tool
+Need clarification? → ask_user
     ↓
-Need to remember? → memory_update / memory_read (cross-session, scoped)
+Need to remember? → memory_*  |  Need rows? → table_*
     ↓
-Need delegation? → delegate_agent Tool
-      → new Turn, fresh messages (system + goal; parent transcript not inherited)
-      → own tool registry / skills / knowledge
-      → child runs the same Agent Loop
-      → returns Report only → parent continues
+Need delegation? → delegate_agent
+      → fresh Turn (system + goal; parent transcript not inherited)
+      → own tools / skills / knowledge → same Agent Loop
+      → Report only → parent continues
     ↓
 Done → deliver result
 ```
 
-Delegation is not a framework scheduler or a parallel product mode — it is a tool call on the **same thinking chain**, with **hard context isolation**. Developers supply Tools and agent definitions; the LLM orchestrates. Coding and work modes emerge from configuration, not an explicit `mode` flag.
-
-### Long-term memory
-
-Cross-session continuity is a first-class Tool — not prompt stuffing, not an opaque product black box, and not the same thing as session compaction.
-
-**How it works**
-
-| Piece | Behavior |
-|-------|----------|
-| Write | `memory_update(scope, key, content)` — model decides *when* something is worth remembering |
-| Read | `memory_read(scope?, key?, query?)` — on-demand retrieval; **not** auto-injected every turn |
-| Scopes | `user` (global prefs) · `project` (conventions / decisions) · `agent` (role-specific style) |
-| Store | SQLite `memories` table, separate from Knowledge docs and Turn Log |
-| Human | Right-panel **Memory** tab — browse, refresh, delete |
-
-System prompt includes a `<memory-policy>` that steers the model: remember lasting preferences and project conventions; skip one-off tasks, secrets, large code dumps, and anything already in the repo (`todowrite` covers transient progress).
-
-**Not confused with**
-
-| Mechanism | Role |
-|-----------|------|
-| Memory tools | Durable facts the agent *chooses* to keep across sessions |
-| Compaction checkpoint | Session-local summary when context is truncated |
-| Knowledge (`search_kb`) | Human-curated documents bound to an agent |
-
-**vs mainstream AI agents**
-
-| Approach | Typical products / stacks | Gap | Danmo Work |
-|----------|---------------------------|-----|---------------|
-| Opaque product memory | ChatGPT / Claude “Memory” | User rarely sees structure, scope, or exact writes | Explicit tools + visible Memory tab; scoped keys |
-| IDE / coding-agent memory | Cursor-style memories | Often product-private; hard to audit or share across surfaces | Same SQLite store for web / desktop / CLI; API list/delete |
-| Framework buffers | LangChain ConversationBuffer / summary memory | Session-bound chat history, not durable project facts | Separate durable layer with `user` / `project` / `agent` |
-| Vector memory services | Mem0 / Zep-style stores | Extra infra; write policy often external to the agent loop | Built-in tools on the Agent Loop; keyword search v1, no extra service |
-| Auto-summarize everything | Turn/episode auto-index | Noise, near-zero useful recall (we tried this; removed) | Model-gated writes only when worth remembering |
-
-Mainstream often treats memory as either *invisible product magic* or *another vector DB to wire up*. Danmo Work keeps memory on the same Tool abstraction: the LLM decides, storage is inspectable, and humans stay in the loop via the Memory tab.
+Coding vs “work” emerges from configuration and `ask_user` defaults — not an explicit `mode` flag.
 
 ### Log is state
 
-- Every Tool Call (input, output, latency, rationale) is persisted
-- Failures are recoverable — retry from any step
-- Full replay for debugging and audit
-- Humans can edit any Tool Result; the agent continues from that point
+- Every Tool Call (input, output, latency, rationale) persisted  
+- Failures recoverable — retry from any step  
+- Full replay for debug and audit  
+- Humans can edit any Tool Result; the agent continues  
 
-## Why different from mainstream frameworks
+### Memory vs Table Store vs Knowledge
 
-| Dimension | LangChain / LangGraph / CrewAI / AutoGen / typical coding agents | Danmo Work |
-|-----------|------------------------------------------------------------------|---------------|
-| Control flow | Developer-written graph, role router, or product modes | **Pure LLM-driven** — no human-maintained workflow |
-| Abstraction | Agent / Chain / Graph / Role / Mode layers | **Tool only** — minimal, flat |
-| Decision center | Nodes / handoffs / role scheduling | LLM plans Tool Call DAGs on one Agent Loop |
-| Sub-agents | Explicit create, configure, route; or parallel sessions / modes | `delegate_agent` Tool on the **same thinking chain** |
-| Context | Often shared or trimmed parent transcript | **Hard isolation** — child gets goal (+ optional context) only; parent sees Report |
-| Memory | Opaque product memory, chat buffers, or external vector DBs | Explicit `memory_update` / `memory_read` + scoped store + Memory tab |
-| User interaction | Preset nodes / approval gates | `ask_user` Tool — model chooses when |
-| State | In-memory first, optional persistence | Native persistence — log is state |
-| Debugging | Breakpoints / external logs | Visual replay; edit results and continue |
-| Human role | Command → execute (master/slave) | Join the reasoning stream (peer) |
+| Store | Role |
+|-------|------|
+| **Memory** | Lasting prefs / conventions the model *chooses* to keep |
+| **Table Store** | Queryable business rows (digests, cursors) in `store.db` |
+| **Knowledge** | Human-curated docs bound to an agent (`search_kb`) |
+| **Compaction** | Session-local summary when context truncates — not durable memory |
 
-Mainstream: *developer (or product) orchestrates, LLM executes*. Danmo Work: *LLM orchestrates on one thinking chain; developers supply capability units; sub-agents are isolated tool calls*.
+---
 
 ## Concept model
 
 ```
 Project/
-  └── Task (long-horizon, days/weeks)
+  └── Session (long-horizon, days/weeks)
         ├── Turn-1  ← one [input → agent reply]
         │     ├── Step: LLM call (function calling)
         │     ├── Step: Tool exec → inject result
         │     └── ...
         ├── Turn-2  ← follow-up days later
-        ├── ~ Checkpoint (compaction anchor) ~
+        ├── ~ Checkpoint (compaction) ~
         └── Turn-N
 ```
 
 | Concept | Definition |
 |---------|------------|
 | **Project** | Task collection bound to a filesystem directory |
-| **Task** | Multi-turn interaction around one goal |
+| **Session / Task** | Multi-turn interaction around one goal |
 | **Turn** | One [input → agent reply], containing N LLM Steps |
-| **Step** | One LLM request/response inside a Turn (atomic context unit) |
-| **Delegated agent** | Delegation is a Tool (`delegate_agent`); child agent runs isolated, result returns to parent |
-| **ask_user** | Asking the user is a Tool; loop pauses until the reply arrives |
-| **Memory** | Cross-session facts via `memory_update` / `memory_read` (scopes: user / project / agent) |
+| **Step** | One LLM request/response inside a Turn |
+| **Delegated agent** | `delegate_agent` Tool; isolated child; Report back |
+| **ask_user** | Asking the user is a Tool; loop pauses for the reply |
+| **Memory / Table Store** | Cross-session facts vs schema-free business rows |
 
-### Connectors (MCP)
-
-Product SaaS actions go through **MCP** (not one-builtin-per-API). Enabled servers are discovered via `tools/list`, executed via `tools/call`, and mounted into the Agent Loop as `mcp_<server>_<tool>` (`external` risk → permission gate). Use the **Connector catalog** for Composio / OpenConnector / GitHub / Notion / Feishu presets; store API keys and OAuth tokens in the encrypted secrets store (never in prompts). IM channels (WeChat / Feishu / WeCom / QQ) are chat ingress only — not SaaS action connectors. Automations (cron / webhook) start real session turns with Turn Log replay.
+---
 
 ## Architecture
 
@@ -245,27 +266,29 @@ server/   cli/   tui/    frontend/ (Vue 3 + Vite)
        |              |                 |
   core/port ←─────────┘    core/adapter/llm
        |                  (Anthropic / OpenAI-compat / Mock)
-  core/store/sqlite
-  core/store/turnlog
+  core/store/sqlite + turnlog + store.db
 ```
 
 | Layer | Directory | Role |
 |-------|-----------|------|
-| Entry points | `server/` `cli/` `tui/` | HTTP API (Gin), CLI, TUI |
-| Frontend | `frontend/` | Vue 3 + Vite |
-| Bootstrap | `core/bootstrap/` | DI wiring, config assembly |
-| Services | `core/service/` | Session, Project, Agent, Skill, LLM config, … |
-| Runtime | `core/runtime/` | Session/Turn runners, prompt, compaction, permission, tools |
-| Domain | `core/domain/` | Agent, Session, Project, Skill, Knowledge, Memory, Turn, … |
-| Ports | `core/port/` | Engine, LLMProvider, Repository, Stream |
-| Adapters | `core/adapter/` | LLM providers, IM channels (Feishu / QQ / Weixin / WeCom), config loader |
-| Store | `core/store/` | SQLite + Turn Log |
+| Entry points | `server/` `cli/` `tui/` | HTTP (Gin), CLI, TUI |
+| Frontend | `frontend/` | Vue 3 + Vite + Document Stage |
+| Bootstrap | `core/bootstrap/` | DI, config |
+| Services | `core/service/` | Session, Project, Agent, Skill, MCP, channels, … |
+| Runtime | `core/runtime/` | Turn loop, prompt, compaction, permission, tools |
+| Domain / Ports | `core/domain/` `core/port/` | Entities & interfaces |
+| Adapters | `core/adapter/` | LLM + IM (Feishu / QQ / Weixin / WeCom) |
+| Store | `core/store/` | SQLite (`work.db`) + Turn Log + Table Store (`store.db`) |
+
+Deep dive: [`docs/core-design.md`](docs/core-design.md).
+
+---
 
 ## Prerequisites
 
 - Go 1.26+
 - Node.js 20+ (frontend / desktop)
-- Sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui) repo (frontend depends on `file:../../dq-ui/packages/*`)
+- Sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui) (`file:../../dq-ui/packages/*`)
 
 ```text
 Workspace/
@@ -276,7 +299,6 @@ Workspace/
 ## Quick start
 
 ```bash
-# Clone alongside dq-ui, then:
 make dev-web          # backend :7801 + Vite :5801 → http://localhost:5801/app/
 make dev-desktop      # backend + Tauri webview
 make backend          # backend only (debugger-friendly)
@@ -285,8 +307,6 @@ make dev-cli          # CLI (no server)
 make dev-tui          # TUI (no server)
 make stop             # stop all DQ_DEV processes
 ```
-
-Copy and edit config on first run:
 
 ```bash
 mkdir -p ~/.danmo-work
@@ -305,14 +325,11 @@ make pack-windows-desktop   # .exe
 make clean                  # rm -rf out/
 ```
 
-### Output layout
-
 ```text
 out/
-  frontend/dist/     # Vite production build (served at /app/)
+  frontend/dist/     # Vite production (served at /app/)
   server/            # danmo-work, danmo-work-cli, danmo-work-tui
   desktop/bundle/    # Tauri installers
-  desktop/cargo/     # Cargo intermediate
   dist/              # Linux server release tarball
   run/               # Dev PIDs, logs, wrappers
 ```
@@ -326,39 +343,35 @@ make test-integration   # integration tests
 
 ### Harbor agent compare (Terminal-Bench 2.0)
 
-Official **terminal-bench@2.0** (**89** tasks). Tasks are **not in git** — sync locally onto **`dq-harbor-base:local`**, then run via Harbor + Podman. Pass = Mean reward ≥ 1.0. Not a leaderboard submission.
+Official **terminal-bench@2.0** (**89** tasks). Tasks are **not in git** — sync locally, then Harbor + Podman. Pass = Mean reward ≥ 1.0.
 
-Full how-to: [`evals/dq_harbor/README.md`](evals/dq_harbor/README.md). Scores: [`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md).
+How-to: [`evals/dq_harbor/README.md`](evals/dq_harbor/README.md) · Scores: [`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md).
 
 ```bash
-# Prerequisites: Podman, `uv tool install 'harbor>=0.20'`, LLM credentials
 podman machine start                                    # macOS if needed
-make eval-harbor-base                                   # dq-harbor-base:local
-GH_TOKEN=$(gh auth token) make eval-harbor-sync-tb2     # → evals/dq_harbor/tasks/ (89, gitignored)
+make eval-harbor-base
+GH_TOKEN=$(gh auth token) make eval-harbor-sync-tb2
 make eval-harbor-bin
-
 export WORK_MODEL=deepseek/deepseek-v4-flash WORK_API_KEY=... WORK_BASE_URL=https://api.deepseek.com
-make eval-harbor-smoke                                  # 1-task smoke
-# make eval-harbor-suite                                # full 89: oracle then DanQing
-./evals/dq_harbor/compare_agents.sh                     # DanQing vs OpenCode vs OpenHands
+make eval-harbor-smoke
+./evals/dq_harbor/compare_agents.sh                     # vs OpenCode / OpenHands
 ```
 
 ## Environment
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `WORK_CONFIG` | `~/.danmo-work/config.yaml` | YAML config path |
-| `WORK_DB_PATH` | `~/.danmo-work/work.db` | SQLite database |
+| `WORK_CONFIG` | `~/.danmo-work/config.yaml` | YAML config |
+| `WORK_DB_PATH` | `~/.danmo-work/work.db` | Engine SQLite |
+| `WORK_STORE_DB_PATH` | `~/.danmo-work/store.db` | Agent Table Store |
 | `WORK_DATA_DIR` | `~/.danmo-work/data` | Projects / turn logs |
-| `DQ_BACKEND_PORT` | `7801` | Dev backend port |
-| `DQ_FRONTEND_PORT` | `5801` | Dev frontend port |
+| `DQ_BACKEND_PORT` | `7801` | Dev backend |
+| `DQ_FRONTEND_PORT` | `5801` | Dev frontend |
 | `VITE_API_BASE_URL` | `""` | Frontend API base (empty = same origin) |
-
-User data lives under `~/.danmo-work/` for server, CLI, TUI, and desktop. On first launch, data may migrate from `~/Library/Application Support/com.danmo.work/` or `./data/work.db`.
 
 ### Custom skill directories
 
-Each new turn scans these Agentskills directories (`skill-name/SKILL.md`) in memory — **not written to SQLite** — and merges them into that turn's `<available_skills>`:
+Each new turn scans Agentskills (`skill-name/SKILL.md`) in memory — **not SQLite** — into `<available_skills>`:
 
 | Path | Scope |
 |------|-------|
@@ -367,21 +380,19 @@ Each new turn scans these Agentskills directories (`skill-name/SKILL.md`) in mem
 | `<projectRoot>/.agents/skills/` | Project |
 | `<projectRoot>/.danmo-work/skills/` | Project |
 
-Later paths override earlier ones on skill ID collision (project `.danmo-work` wins). Disk changes apply on the next turn.
+Later paths win on ID collision. Disk changes apply next turn.
 
 ## Desktop (Tauri)
 
-Thin shell around the Go backend (sidecar). For day-to-day use:
-
 ```bash
 make dev-desktop
-# or, with an already-running backend:
+# or with an already-running backend:
 SKIP_BACKEND=1 make dev-desktop
 ```
 
 ## CI / release
 
-`.github/workflows/release.yml` runs on `v*` tags or `workflow_dispatch`:
+`.github/workflows/release.yml` on `v*` tags or `workflow_dispatch`:
 
 | Job | Artifact |
 |-----|----------|
@@ -389,16 +400,15 @@ SKIP_BACKEND=1 make dev-desktop
 | Linux server | `out/dist/danmo-work-linux-*.tar.gz` |
 | Windows desktop | `out/desktop/bundle/*.exe` |
 
-Tag builds are attached to the GitHub Release.
-
 ## Docs
 
 | Doc | Description |
 |-----|-------------|
-| [docs/core-design.md](docs/core-design.md) | Core design: unified agent architecture, channels, Document Stage |
-| [docs/channel-qq-feishu-plan.md](docs/channel-qq-feishu-plan.md) | QQ / Feishu / Weixin channel plan (Phase A–C landed) |
-| [docs/launch-posts.md](docs/launch-posts.md) | Community launch post drafts (copy-paste) |
-| [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor Terminal-Bench 2.0 eval & agent compare |
+| [docs/core-design.md](docs/core-design.md) | Core design: agent architecture, channels, Stage |
+| [docs/agent-table-store-plan.md](docs/agent-table-store-plan.md) | Schema-free Table Store (`store.db`) |
+| [docs/channel-qq-feishu-plan.md](docs/channel-qq-feishu-plan.md) | QQ / Feishu / Weixin channels (Phase A–C) |
+| [docs/launch-posts.md](docs/launch-posts.md) | Community launch drafts |
+| [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor Terminal-Bench 2.0 |
 | [AGENTS.md](AGENTS.md) | Contributor / agent quick reference |
 | [config.example.yaml](config.example.yaml) | Full config reference |
 
