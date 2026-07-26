@@ -221,27 +221,33 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--dq-bg, #fff);
+  background: var(--dq-bg-base);
+  color: var(--dq-label-primary);
 }
 .sheet-surface__status {
   padding: 24px;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--dq-label-tertiary);
 }
 .sheet-surface__toolbar {
   display: flex;
   gap: 6px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--dq-border, #e5e7eb);
+  border-bottom: 1px solid var(--dq-separator-light);
+  background: color-mix(in srgb, var(--dq-bg-elevated) 40%, transparent);
 }
 .sheet-surface__btn {
   height: 28px;
   padding: 0 10px;
-  border: 1px solid var(--dq-border, #e5e7eb);
+  border: 1px solid var(--dq-border);
   border-radius: 6px;
-  background: var(--dq-bg-subtle, #f9fafb);
+  background: var(--dq-fill-tertiary);
+  color: var(--dq-label-primary);
   font-size: 12px;
   cursor: pointer;
+}
+.sheet-surface__btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, var(--dq-fill-tertiary));
 }
 .sheet-surface__btn:disabled {
   opacity: 0.5;
@@ -256,9 +262,10 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
   min-width: 100%;
 }
 .sheet-surface__grid td {
-  border: 1px solid var(--dq-border, #e5e7eb);
+  border: 1px solid var(--dq-border);
   padding: 0;
   min-width: 96px;
+  background: color-mix(in srgb, var(--dq-bg-elevated) 45%, transparent);
 }
 .sheet-surface__cell {
   width: 100%;
@@ -266,10 +273,13 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
   padding: 6px 8px;
   font-size: 13px;
   background: transparent;
-  color: inherit;
+  color: var(--dq-label-primary);
   outline: none;
 }
 .sheet-surface__cell:focus {
-  background: #eff6ff;
+  background: var(--dq-selection-bg, var(--dq-accent-tint));
+}
+.sheet-surface__cell:read-only {
+  color: var(--dq-label-secondary);
 }
 </style>

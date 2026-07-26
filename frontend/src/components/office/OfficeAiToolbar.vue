@@ -123,7 +123,7 @@ async function run(action: 'polish' | 'modify' | 'continue' | 'slide-page' | 'sh
 .office-ai__scope {
   flex: 0 0 auto;
   font-size: 11px;
-  color: var(--dq-text-muted, #6b7280);
+  color: var(--dq-label-tertiary);
   white-space: nowrap;
   padding: 0 2px;
 }
@@ -132,29 +132,44 @@ async function run(action: 'polish' | 'modify' | 'continue' | 'slide-page' | 'sh
   min-width: 100px;
   height: 28px;
   padding: 0 8px;
-  border: 1px solid var(--dq-border, #e5e7eb);
+  border: 1px solid var(--dq-border);
   border-radius: 6px;
-  background: var(--dq-bg, #fff);
-  color: inherit;
+  background: var(--dq-bg-elevated);
+  color: var(--dq-label-primary);
   font-size: 12px;
+}
+.office-ai__input::placeholder {
+  color: var(--dq-label-quaternary);
+}
+.office-ai__input:focus {
+  outline: none;
+  border-color: var(--dq-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 12%, transparent);
 }
 .office-ai__btn {
   height: 28px;
   padding: 0 10px;
-  border: 1px solid var(--dq-border, #e5e7eb);
+  border: 1px solid var(--dq-border);
   border-radius: 6px;
-  background: var(--dq-bg-subtle, #f9fafb);
+  background: var(--dq-fill-tertiary);
+  color: var(--dq-label-primary);
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
+}
+.office-ai__btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, var(--dq-fill-tertiary));
 }
 .office-ai__btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 .office-ai__btn--primary {
-  background: var(--dq-accent, #2563eb);
+  background: var(--dq-accent);
   border-color: transparent;
   color: #fff;
+}
+.office-ai__btn--primary:hover:not(:disabled) {
+  background: var(--dq-accent-hover);
 }
 </style>
