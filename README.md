@@ -41,23 +41,24 @@ Add an LLM API key in the UI (or `~/.danmo-work/config.yaml`). See [Quick start]
 
 ## See it
 
-Three-pane workspace: project sidebar · agent execution Stream · right panel (Plan / Files / **Memory** / Changes / Terminal / Browser). Center canvas hosts **Browser** or **Document Stage** depending on the file.
+Three-pane workspace: project sidebar · agent execution Stream · right panel (Plan / Files / **Memory** / Changes / Terminal). Center **Document Stage** switches toolbar by file kind (doc / slides / sheet / preview).
 
-### Document Stage — edit docs, slides, and sheets with AI
+### Document Stage — docs, slides, sheets, and preview
 
-Open a project `.md` / slides markdown / `.csv` from Files → the **Document Stage** takes the center canvas (Browser keeps generic `.html`). Format-specific editors; AI polish/modify runs as a normal **session turn** (not a separate API).
+Open any project file from Files → it opens in the center **Document Stage**. Editable kinds use format-specific editors + AI; generic HTML / images / external URLs use **Preview** (URL bar + Design mode). AI polish/modify runs as a normal **session turn** (not a separate API).
 
-| Kind | Source of truth | Editor |
+| Kind | Source of truth | Editor / view |
 |------|-----------------|--------|
 | **Doc** | GFM `.md` | TipTap (MD ↔ HTML for the edit session) |
 | **Slides** | Markdown with `---` pages | Edit markdown + present playable HTML |
 | **Sheet** | `.csv` / `.danmo-sheet.json` | Grid editor |
+| **Preview** | Generic `.html`, images, URLs | iframe / image; element pick → Composer |
 
-Toolbar builds an `[office-edit]` prompt → `POST /sessions/:id/turns`. Dirty content auto-saves before AI; scope can be selection / full document / this slide / whole sheet. After the turn, the Stage reloads the file and restores scroll (and slides page index). Stream stays visible for turn progress.
+Toolbar builds an `[office-edit]` prompt → `POST /sessions/:id/turns`. Dirty content auto-saves before AI; scope can be selection / full document / this slide / whole sheet. After the turn, the Stage reloads the file and restores scroll (and slides page index). Stream stays visible by default for turn progress.
 
 ### Point at the page — don't describe it
 
-In the built-in Browser, click a DOM element, write a short note, confirm into Composer. The model gets exact HTML/CSS context and makes the change — **select → annotate → edit**, co-thinking on the rendered result.
+In Stage **Preview**, click a DOM element, write a short note, confirm into Composer. The model gets exact HTML/CSS context and makes the change — **select → annotate → edit**, co-thinking on the rendered result.
 
 ![Browser element annotate](docs/screenshots/ui-browser-annotate.png)
 

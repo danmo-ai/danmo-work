@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import {
   Plus,
@@ -13,6 +14,7 @@ import { useResizableWidth } from '@/composables/useResizableWidth'
 import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
 import { useWeixinStore } from '@/stores/weixin'
+import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import { confirm, toast } from '@/utils/feedback'
 import { formatRelativeTime } from '@/utils/time'
 import { isTauriRuntime } from '@/utils/desktop'
@@ -32,13 +34,20 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-const COLLAPSED_KEY = 'app-left-collapsed'
 const { width, onResizePointerDown } = useResizableWidth('app-left-width', 240, 180, 320)
 
-const collapsed = ref(localStorage.getItem(COLLAPSED_KEY) === '1')
-watch(collapsed, (v) => localStorage.setItem(COLLAPSED_KEY, v ? '1' : '0'))
+const workspaceUi = useWorkspaceUiStore()
+const { leftRailCollapsed: collapsed } = storeToRefs(workspaceUi)
 
 const railStyle = computed(() => (collapsed.value ? { width: '44px' } : { width: `${width.value}px` }))
+
+function expandLeftRail() {
+  workspaceUi.setLeftRailCollapsed(false)
+}
+
+function collapseLeftRail() {
+  workspaceUi.setLeftRailCollapsed(true)
+}
 
 const sessions = useSessionsStore()
 const projects = useProjectsStore()
@@ -334,7 +343,7 @@ watch(() => projects.projects.length, (len) => {
       <DqIconButton :aria-label="$t('navigation.newSession')" @click="onNewSession()">
         <DqIcon :size="18"><Plus /></DqIcon>
       </DqIconButton>
-      <DqIconButton aria-label="展开侧栏" @click="collapsed = false">
+      <DqIconButton aria-label="展开侧栏" @click="expandLeftRail">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M9 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
         </svg>

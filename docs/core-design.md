@@ -599,9 +599,11 @@ Zone C — Scratch:  当前 Turn 的 user + Step 消息
 
 ---
 
-## 13. Document Stage（办公画布）
+## 13. Document Stage（统一画布）
 
-中间画布除 Browser 外增加 **Document Stage**：按文件类型打开文档 / 幻灯片 / 表格的在线编辑面；AI 改稿走**普通 session turn**，不另开 `/office/ai`。
+中间画布为唯一内容视图 **Document Stage**：按文件类型切换 toolbar + surface（文档 / 幻灯片 / 表格 / 预览）。AI 改稿走**普通 session turn**，不另开 `/office/ai`。右侧不再有独立 Browser tab。
+
+Agent 自动化无头浏览器（Settings / `web_fetch` CDP）与此 UI 无关，保持独立。
 
 ### 13.1 路由与格式
 
@@ -612,9 +614,9 @@ Files 树点击 → `routeOfficeFile`（`frontend/src/utils/office-route.ts`）�
 | `doc` | GFM `.md` | TipTap（编辑会话 MD ↔ HTML） | edit |
 | `slides` | Markdown `---` 分页；`*-slides.html` 可播放 | 编辑 Markdown / present HTML | edit 或 present |
 | `sheet` | `.csv` / `.danmo-sheet.json` | 网格编辑 | edit |
-| （非 Stage） | 通用 `.html` | 仍走 Browser | — |
+| `preview` | 通用 `.html`、图片、外链等 | iframe / 图片预览；URL 栏 + Design mode | view |
 
-布局：`DocFocus` / `Immersive` 时 Stage 占中心；Stream 仍可见以跟踪 AI turn。
+布局：`stage` 时 Stream | Stage | 右侧；`immersive`（Present / 沉浸）时仅 Stage。默认打开文件不隐藏 Stream。
 
 ### 13.2 AI 编辑回合
 
@@ -644,7 +646,7 @@ OOXML 作 SoT / OfficeCLI 导出、独立 Office AI 端点、Yjs 协同。
 
 ## 14. 产品形态与价值
 
-工作台：侧栏 · Stream · 右侧 Tab（计划 / 文件 / **记忆** / 变更 / 终端 / 浏览器）· 中心 **Browser 或 Document Stage**。记忆 Tab 展示当前可见作用域下的持久记忆条目。IM 通道是同一 Agent Loop 的远端输入面。
+工作台：侧栏 · Stream · 右侧 Tab（计划 / 文件 / **记忆** / 变更 / 终端）· 中心 **Document Stage**（按 kind 换 toolbar）。记忆 Tab 展示当前可见作用域下的持久记忆条目。IM 通道是同一 Agent Loop 的远端输入面。
 
 | 层级 | 价值 |
 |------|------|

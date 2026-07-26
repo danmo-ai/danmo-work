@@ -9,9 +9,11 @@ import {
 } from '@/utils/office-route'
 import { toast } from '@/utils/feedback'
 
+type EditableOfficeKind = Exclude<OfficeKind, 'preview'>
+
 const props = defineProps<{
   path: string
-  kind: OfficeKind
+  kind: EditableOfficeKind
   getSelectionMarkdown: () => string
   getEditScope: () => OfficeEditScope
   ensureSaved: () => Promise<boolean>

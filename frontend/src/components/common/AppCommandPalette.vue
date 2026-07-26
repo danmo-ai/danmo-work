@@ -101,10 +101,20 @@ const actions = computed<PaletteAction[]>(() => [
     run: () => goTab('terminal'),
   },
   {
-    id: 'tab.browser',
-    title: t('commandPalette.tabBrowser'),
+    id: 'stage.preview',
+    title: t('commandPalette.openPreview'),
     group: t('commandPalette.groupNavigate'),
-    run: () => goTab('browser'),
+    keywords: ['preview', 'browser', 'url', '预览', '浏览器'],
+    run: () => {
+      if (!sessions.selectedProjectId) return
+      workspaceUi.openStage({ kind: 'preview', path: '', mode: 'view', url: '' })
+      if (router.currentRoute.value.name !== 'sessions') {
+        router.push({
+          name: 'sessions',
+          params: sessions.currentSessionId ? { id: sessions.currentSessionId } : {},
+        })
+      }
+    },
   },
 ])
 </script>
