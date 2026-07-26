@@ -7,15 +7,15 @@
 [![Go](https://img.shields.io/github/go-mod/go-version/danmo-ai/danmo-work?filename=go.mod)](go.mod)
 [![Stars](https://img.shields.io/github/stars/danmo-ai/danmo-work?style=social)](https://github.com/danmo-ai/danmo-work)
 
-**Open-source AI Work Agent for long-horizon tasks** — self-hosted, multi-agent, MIT.
+**Open-source AI Work Agent** — coding-agent-grade loop for long-horizon work. Self-hosted, multi-agent, MIT.
 
-Not another coding-only CLI. Not a workflow graph you babysit. Danmo Work is a **human–AI co-thinking workspace**: the model drives one Agent Loop, sub-agents and humans join as Tools, and every Tool Call is logged so you can **resume, replay, and edit the thinking trail**.
+Not just another powerful coding agent. Not a workflow graph you babysit. Danmo Work is a **human–AI co-thinking workspace**: the same Agent Loop that handles files, shell, and multi-agent coding also ships **docs, slides, sheets, connectors, and IM** — every Tool Call logged so you can **resume, replay, and edit the thinking trail**.
 
-> Ship research reports, decks, sheets, demos, and automations — with coding when you need it — from desktop, web, CLI/TUI, or WeChat / Feishu / WeCom / QQ.
+> Code, research reports, decks, sheets, demos, and automations — from desktop, web, CLI/TUI, or WeChat / Feishu / WeCom / QQ — on one trail.
 
 | | |
 |--|--|
-| **Positioning** | General-purpose **Work Agent** (coding capable), built for days/weeks-long complex work |
+| **Positioning** | General-purpose **Work Agent** — coding is a first-class lane, not the ceiling |
 | **Control** | **Pure LLM-driven** — no hand-maintained graph / role router / product “mode” |
 | **Abstraction** | **Everything is a Tool** — `delegate_agent`, `ask_user`, memory, table store, MCP, files… |
 | **State** | **Log is state** — Turn Log → recover, replay, edit a result and continue |
@@ -27,9 +27,9 @@ MIT · Anthropic & OpenAI-compatible providers · Local-first data under `~/.dan
 
 ## Why Danmo Work (in 30 seconds)
 
-Most open-source “AI agents” today are **coding agents**: terminal pair-programmers, IDE plugins, or sandboxed software engineers. Powerful — and still aimed at *writing code*.
+Most open-source agents stop at **writing code**: terminal pair-programmers, IDE plugins, sandboxed software engineers. Strong loops — narrow job.
 
-Danmo Work starts from a different question: **how do humans and models co-think through real work** — research, docs, slides, ops, connectors — over a long horizon, with a trail you can trust?
+Danmo Work keeps a **coding-agent-grade** execution core, then asks a wider question: **how do humans and models co-think through real work** — code, research, docs, slides, ops, connectors — over a long horizon, with a trail you can trust?
 
 | You get | Instead of |
 |---------|------------|
@@ -66,23 +66,24 @@ Add an LLM API key in the UI (or `~/.danmo-work/config.yaml`). Full flow: [Quick
 ## Who it’s for
 
 - **Builders & operators** who need an agent that finishes *work products*, not only PRs
+- **Developers** who want a coding-agent-grade CLI/TUI — and the same loop for everything after the diff
 - **Teams behind a firewall** who want Feishu / WeCom / QQ without a public callback URL
 - **Power users** who want Memory, Table Store, and Turn Log to be **visible and editable**
 - **Anyone tired of Graph/Role frameworks** that fight the model’s planning instead of feeding it Tools
 
 ---
 
-## Not another coding agent — comparison
+## Work Agent, not coding-only — comparison
 
-OpenHands, OpenCode, Aider, Cline, Goose, Continue and friends excel at **code-centric loops**. Danmo Work overlaps on tools & models, then goes after **work runtime + co-thinking UX**.
+Typical OSS coding agents excel at **code-centric loops**. Danmo Work runs a loop in that class — then adds **work runtime + co-thinking UX** on the same trail.
 
 | Dimension | Typical OSS coding agents | Agent frameworks (LangGraph / CrewAI / AutoGen) | **Danmo Work** |
 |-----------|---------------------------|--------------------------------------------------|----------------|
-| Primary job | Code, PR, terminal | App/workflow orchestration | **Long-horizon work + artifacts** |
-| Control flow | Product loop / modes | Developer-written graph / roles | **Pure LLM Tool Call planning** |
+| Primary job | Code, PR, terminal | App/workflow orchestration | **Long-horizon work (incl. coding) + artifacts** |
+| Agent loop | Strong, code-focused | Developer-written graph / roles | **Coding-agent-grade + pure LLM Tool Call planning** |
 | Sub-agents | Extra session or skill | Handoff / crew roles | `delegate_agent` on **same chain**, hard isolation |
 | Human in the loop | Approvals / chat | Preset nodes | `ask_user` Tool — model chooses when |
-| Artifacts | Repo diffs | App-defined | **Document Stage**: doc · slides · sheet · preview |
+| Artifacts | Repo diffs | App-defined | Diffs **+ Document Stage**: doc · slides · sheet · preview |
 | Memory | Product-private or none | Buffers / external vector DBs | Explicit `memory_*` + scoped SQLite + UI tab |
 | Business data | Files / DIY DB | LangGraph Store etc. | Built-in **Table Store** (`store.db`, schema-free) |
 | Connectors | MCP / plugins (varies) | DIY | MCP catalog + secrets + permissions + automations |
@@ -90,7 +91,7 @@ OpenHands, OpenCode, Aider, Cline, Goose, Continue and friends excel at **code-c
 | Durability | Session / container | Optional checkpointer | **Turn Log = state** (resume · replay · edit) |
 | License / host | Mostly OSS | OSS libs | **MIT, self-hosted**, Web/Desktop/CLI/TUI |
 
-If you want a Claude Code–like terminal, use a coding agent. If you want a **self-hosted work OS for the model’s thinking**, use Danmo Work.
+Use the CLI/TUI as your daily coding agent when the job is code. Stay in the same Work Agent when the job is **the work around the code** — docs, decks, data, connectors, and IM.
 
 ---
 
