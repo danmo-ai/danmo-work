@@ -28,7 +28,27 @@ import '@/styles/work.css'
 // Theme class is managed by theme store; default flash before init is mac dark
 document.documentElement.classList.add('dq-mac', 'dark')
 
+function isRecoverableRuntimeError(err: unknown): boolean {
+  if (!err) return false
+  // API / network failures must not blank the whole desktop shell.
+  if (typeof err === 'object' && err !== null && 'status' in err && 'path' in err) return true
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase()
+  return (
+    msg.includes('not found') ||
+    msg.includes('readonly database') ||
+    msg.includes('database not writable') ||
+    msg.includes('网络请求失败') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('http ')
+  )
+}
+
 function showFatalError(err: unknown) {
+  if (isRecoverableRuntimeError(err)) {
+    // eslint-disable-next-line no-console
+    console.error('[runtime]', err)
+    return
+  }
   const container = document.getElementById('app')
   const msg = err instanceof Error ? err.message : String(err)
   const stack = err instanceof Error ? err.stack : ''
@@ -40,7 +60,12 @@ function showFatalError(err: unknown) {
 }
 
 window.addEventListener('error', (e) => showFatalError(e.error))
-window.addEventListener('unhandledrejection', (e) => showFatalError(e.reason))
+window.addEventListener('unhandledrejection', (e) => {
+  if (isRecoverableRuntimeError(e.reason)) {
+    e.preventDefault()
+  }
+  showFatalError(e.reason)
+})
 
 const app = createApp(App)
 registerDqIcons(app)

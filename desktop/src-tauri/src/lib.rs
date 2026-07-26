@@ -216,6 +216,10 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
             "WORK_DB_PATH",
             home.join("work.db").to_string_lossy().as_ref(),
         )
+        .env(
+            "WORK_STORE_DB_PATH",
+            home.join("store.db").to_string_lossy().as_ref(),
+        )
         .env("WORK_CONFIG", config_path.to_string_lossy().as_ref())
         .env("WORK_DATA_DIR", work_dir.to_string_lossy().as_ref())
         .stdout(std::process::Stdio::from(log_file))
