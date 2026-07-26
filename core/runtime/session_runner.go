@@ -44,6 +44,8 @@ type Engine struct {
 	skills        *service.SkillManager
 	knowledge     *builtin.Knowledge
 	memories      port.MemoryRepo
+	tableStore    port.TableStoreRepo
+	tableBudget   *builtin.TableTurnBudget
 	llm           port.LLMProvider
 	stream        port.EventStream
 	sandbox       port.Sandbox
@@ -149,6 +151,81 @@ func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, pro
 	turnRunner.SandboxStatus = e.sandboxStatus
 	turnRunner.SessionAllowNetwork = e.sessionAllowsNetwork
 	return e
+}
+
+// SetTableStore wires the isolated agent table-store data plane (store.db).
+func (e *Engine) SetTableStore(store port.TableStoreRepo) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.tableStore = store
+	if e.tableBudget == nil {
+		e.tableBudget = builtin.NewTableTurnBudget()
+	}
+}
+
+func (e *Engine) tableQuotas() domain.ConfigTableSection {
+	q := domain.DefaultTableSection()
+	if e.configStore == nil {
+		return q
+	}
+	c, err := e.configStore.Load(context.Background())
+	if err != nil {
+		return q
+	}
+	return resolveEngineTableQuotas(c.Runtime.Table)
+}
+
+func resolveEngineTableQuotas(got domain.ConfigTableSection) domain.ConfigTableSection {
+	q := domain.DefaultTableSection()
+	if got.MaxRowsPerUpsert > 0 {
+		q.MaxRowsPerUpsert = got.MaxRowsPerUpsert
+	}
+	if got.MaxRowsPerTurn > 0 {
+		q.MaxRowsPerTurn = got.MaxRowsPerTurn
+	}
+	if got.MaxRowsPerTable > 0 {
+		q.MaxRowsPerTable = got.MaxRowsPerTable
+	}
+	if got.MaxRowBytes > 0 {
+		q.MaxRowBytes = got.MaxRowBytes
+	}
+	if got.MaxTablesPerScope > 0 {
+		q.MaxTablesPerScope = got.MaxTablesPerScope
+	}
+	if got.QueryDefaultLimit > 0 {
+		q.QueryDefaultLimit = got.QueryDefaultLimit
+	}
+	if got.QueryMaxLimit > 0 {
+		q.QueryMaxLimit = got.QueryMaxLimit
+	}
+	if got.MaxRowChars > 0 {
+		q.MaxRowChars = got.MaxRowChars
+	}
+	return q
+}
+
+func (e *Engine) coreTableTools() []tool.Handler {
+	e.mu.Lock()
+	store := e.tableStore
+	budget := e.tableBudget
+	e.mu.Unlock()
+	if store == nil {
+		return nil
+	}
+	if budget == nil {
+		budget = builtin.NewTableTurnBudget()
+		e.mu.Lock()
+		e.tableBudget = budget
+		e.mu.Unlock()
+	}
+	quotas := func() domain.ConfigTableSection { return e.tableQuotas() }
+	return []tool.Handler{
+		&builtin.TableUpsert{Store: store, Quotas: quotas, Budget: budget},
+		&builtin.TableGet{Store: store, Quotas: quotas},
+		&builtin.TableQuery{Store: store, Quotas: quotas},
+		&builtin.TableDelete{Store: store},
+		&builtin.TableList{Store: store},
+	}
 }
 
 // SetFileChangeStore wires the session file-change journal into the turn runner and compaction manager.
@@ -1122,7 +1199,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			return rep, err
 		},
 	}
-	reg := tool.NewRegistry(
+	handlers := []tool.Handler{
 		&builtin.SearchKB{Knowledge: e.knowledge, KBIDs: agent.KnowledgeIDs},
 		&builtin.AskUser{
 			Stream: e.stream,
@@ -1131,7 +1208,9 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 		&builtin.MemoryUpdate{Store: e.memories},
 		&builtin.MemoryRead{Store: e.memories, TopK: cfg.memoryReadTopK},
 		delegator,
-	)
+	}
+	handlers = append(handlers, e.coreTableTools()...)
+	reg := tool.NewRegistry(handlers...)
 	e.mountAlwaysOnBuiltins(reg)
 	e.mountBuiltinTools(reg, agent.Tools)
 	e.mountMCPForAgent(reg, agent)
@@ -1140,7 +1219,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 
 func (e *Engine) buildWorkerRegistry(agent domain.Agent) *tool.Registry {
 	cfg := e.loadRunCfg(context.Background())
-	reg := tool.NewRegistry(
+	handlers := []tool.Handler{
 		&builtin.SearchKB{Knowledge: e.knowledge, KBIDs: agent.KnowledgeIDs},
 		&builtin.AskUser{
 			Stream: e.stream,
@@ -1148,7 +1227,9 @@ func (e *Engine) buildWorkerRegistry(agent domain.Agent) *tool.Registry {
 		},
 		&builtin.MemoryUpdate{Store: e.memories},
 		&builtin.MemoryRead{Store: e.memories, TopK: cfg.memoryReadTopK},
-	)
+	}
+	handlers = append(handlers, e.coreTableTools()...)
+	reg := tool.NewRegistry(handlers...)
 	e.mountAlwaysOnBuiltins(reg)
 	e.mountBuiltinTools(reg, agent.Tools)
 	e.mountMCPForAgent(reg, agent)

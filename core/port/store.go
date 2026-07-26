@@ -77,6 +77,18 @@ type MemoryRepo interface {
 	Delete(ctx context.Context, scope domain.MemoryScope, scopeID, key string) error
 }
 
+// TableStoreRepo persists schema-free agent business rows in a separate SQLite
+// data-plane database (store.db), isolated from the control-plane work.db.
+type TableStoreRepo interface {
+	Upsert(ctx context.Context, row domain.TableRow) (domain.TableRow, error)
+	Get(ctx context.Context, scope domain.TableScope, scopeID, table, key string) (domain.TableRow, error)
+	Query(ctx context.Context, q domain.TableQuery) ([]domain.TableRow, error)
+	Delete(ctx context.Context, scope domain.TableScope, scopeID, table, key string) error
+	CountTable(ctx context.Context, scope domain.TableScope, scopeID, table string) (int64, error)
+	ListTables(ctx context.Context, scopes []domain.TableScopeRef) ([]domain.TableInfo, error)
+	Close() error
+}
+
 type AgentRepo interface {
 	List(ctx context.Context) ([]domain.Agent, error)
 	Get(ctx context.Context, id string) (domain.Agent, error)

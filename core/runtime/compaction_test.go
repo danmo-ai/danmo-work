@@ -422,6 +422,9 @@ func TestFormatActiveTodosAndSystemPrompt(t *testing.T) {
 	if !contains(sys, "<memory-policy>") || !contains(sys, "memory_update") {
 		t.Errorf("expected memory-policy in prompt, got %q", sys)
 	}
+	if !contains(sys, "<table-store-policy>") || !contains(sys, "table_upsert") {
+		t.Errorf("expected table-store-policy in prompt, got %q", sys)
+	}
 	if contains(sys, "<delegation-policy>") {
 		t.Error("delegation-policy should be absent when canDelegate=false")
 	}

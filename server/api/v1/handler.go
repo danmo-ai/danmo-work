@@ -42,6 +42,7 @@ type Handler struct {
 	Sandbox       port.Sandbox
 	Browser       port.Browser
 	Store         port.Repository
+	TableStore    port.TableStoreRepo
 }
 
 type RouterConfig struct {
@@ -139,6 +140,10 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.DELETE("/agents/:id", deleteAgent(h))
 	api.GET("/memories", listMemories(h))
 	api.DELETE("/memories", deleteMemory(h))
+	api.GET("/tables", listTables(h))
+	api.GET("/tables/:table/rows", listTableRows(h))
+	api.GET("/tables/:table/rows/:key", getTableRow(h))
+	api.DELETE("/tables/:table/rows/:key", deleteTableRow(h))
 	api.GET("/mcp/servers", listMCPServers(h))
 	api.POST("/mcp/servers", createMCPServer(h))
 	api.GET("/mcp/servers/:id", getMCPServer(h))
@@ -548,6 +553,144 @@ func deleteMemory(h *Handler) gin.HandlerFunc {
 		}
 		if err := h.Store.Memories().Delete(c, scope, scopeID, key); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	}
+}
+
+func resolveTableScopeQuery(c *gin.Context) (domain.TableScope, string, error) {
+	scope := domain.TableScope(strings.TrimSpace(c.Query("scope")))
+	scopeID := strings.TrimSpace(c.Query("scopeId"))
+	switch scope {
+	case domain.TableScopeUser:
+		if scopeID == "" {
+			scopeID = domain.TableUserScopeID
+		}
+		return scope, scopeID, nil
+	case domain.TableScopeProject, domain.TableScopeAgent:
+		if scopeID == "" {
+			return "", "", fmt.Errorf("scopeId is required")
+		}
+		return scope, scopeID, nil
+	default:
+		return "", "", fmt.Errorf("scope must be user, project, or agent")
+	}
+}
+
+func listTables(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.TableStore == nil {
+			c.JSON(http.StatusOK, []domain.TableInfo{})
+			return
+		}
+		scope := strings.TrimSpace(c.Query("scope"))
+		scopeID := strings.TrimSpace(c.Query("scopeId"))
+		projectID := strings.TrimSpace(c.Query("projectId"))
+		agentID := strings.TrimSpace(c.Query("agentId"))
+
+		var refs []domain.TableScopeRef
+		if scope != "" {
+			s, id, err := resolveTableScopeQuery(c)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			refs = []domain.TableScopeRef{{Scope: s, ScopeID: id}}
+		} else {
+			refs = []domain.TableScopeRef{{Scope: domain.TableScopeUser, ScopeID: domain.TableUserScopeID}}
+			if projectID != "" {
+				refs = append(refs, domain.TableScopeRef{Scope: domain.TableScopeProject, ScopeID: projectID})
+			}
+			if agentID != "" {
+				refs = append(refs, domain.TableScopeRef{Scope: domain.TableScopeAgent, ScopeID: agentID})
+			}
+			_ = scopeID
+		}
+		items, err := h.TableStore.ListTables(c, refs)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if items == nil {
+			items = []domain.TableInfo{}
+		}
+		c.JSON(http.StatusOK, items)
+	}
+}
+
+func listTableRows(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.TableStore == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "table store unavailable"})
+			return
+		}
+		scope, scopeID, err := resolveTableScopeQuery(c)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		table := strings.TrimSpace(c.Param("table"))
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+		offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+		if limit <= 0 {
+			limit = 50
+		}
+		if limit > 200 {
+			limit = 200
+		}
+		rows, err := h.TableStore.Query(c, domain.TableQuery{
+			Scope:   scope,
+			ScopeID: scopeID,
+			Table:   table,
+			Order:   strings.TrimSpace(c.Query("order")),
+			Limit:   limit,
+			Offset:  offset,
+		})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if rows == nil {
+			rows = []domain.TableRow{}
+		}
+		c.JSON(http.StatusOK, rows)
+	}
+}
+
+func getTableRow(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.TableStore == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "table store unavailable"})
+			return
+		}
+		scope, scopeID, err := resolveTableScopeQuery(c)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		row, err := h.TableStore.Get(c, scope, scopeID, c.Param("table"), c.Param("key"))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, row)
+	}
+}
+
+func deleteTableRow(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.TableStore == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "table store unavailable"})
+			return
+		}
+		scope, scopeID, err := resolveTableScopeQuery(c)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if err := h.TableStore.Delete(c, scope, scopeID, c.Param("table"), c.Param("key")); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})

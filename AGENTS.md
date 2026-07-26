@@ -61,7 +61,8 @@ out/run/             # dev PIDs, logs, wrappers (DQ_DEV markers)
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `WORK_CONFIG` | `~/.danmo-work/config.yaml` | YAML config path |
-| `WORK_DB_PATH` | `~/.danmo-work/work.db` | SQLite database |
+| `WORK_DB_PATH` | `~/.danmo-work/work.db` | SQLite control-plane database |
+| `WORK_STORE_DB_PATH` | `~/.danmo-work/store.db` | SQLite agent table-store (data plane) |
 | `WORK_DATA_DIR` | `~/.danmo-work/data` | Projects / turn logs |
 | `DQ_BACKEND_PORT` | `7801` | Injected by dev scripts |
 | `DQ_FRONTEND_PORT` | `5801` | Injected by dev scripts |
@@ -74,7 +75,8 @@ Server, CLI, TUI, and desktop all use the same home by default:
 ```
 ~/.danmo-work/
   config.yaml
-  work.db
+  work.db        # control plane (sessions, memories, …)
+  store.db       # agent table-store data plane
   data/          # projects, turn logs
   skills/        # optional user custom skills (scanned each turn)
   bin/           # desktop sidecar binary
@@ -89,6 +91,9 @@ Custom skills (Agentskills layout) are also read from `~/.agents/skills/`,
 Agent durable memories live in SQLite (`memories` table) via
 `memory_update` / `memory_read` (scopes: user / project / agent). UI: right
 workspace **Memory** tab. Config: `runtime.memory.read_top_k`.
+
+Agent table store (`table_*` tools) persists schema-free business rows in
+`store.db` (isolated from `work.db`). See `docs/agent-table-store-plan.md`.
 
 On first launch, existing data may be migrated from
 `~/Library/Application Support/com.danmo.work/` or `./data/work.db`.

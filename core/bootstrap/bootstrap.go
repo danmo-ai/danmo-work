@@ -22,6 +22,7 @@ import (
 	"danmo-work/core/runtime/tool/builtin"
 	"danmo-work/core/service"
 	sqlitestore "danmo-work/core/store/sqlite"
+	"danmo-work/core/store/tablestore"
 	"danmo-work/core/store/turnlog"
 )
 
@@ -39,6 +40,7 @@ type Config struct {
 
 type Core struct {
 	Store         port.Repository
+	TableStore    port.TableStoreRepo
 	Engine        port.Engine
 	Sandbox       port.Sandbox
 	Browser       port.Browser
@@ -97,11 +99,17 @@ func New(cfg Config) *Core {
 	if appCfg.Data.Database == "" {
 		appCfg.Data.Database = paths.DatabaseFile()
 	}
+	if appCfg.Data.StoreDatabase == "" {
+		appCfg.Data.StoreDatabase = paths.StoreDatabaseFile()
+	}
 	if !filepath.IsAbs(appCfg.Data.Dir) {
 		appCfg.Data.Dir = paths.ResolveAgainstHome(appCfg.Data.Dir)
 	}
 	if !filepath.IsAbs(appCfg.Data.Database) {
 		appCfg.Data.Database = paths.ResolveAgainstHome(appCfg.Data.Database)
+	}
+	if !filepath.IsAbs(appCfg.Data.StoreDatabase) {
+		appCfg.Data.StoreDatabase = paths.ResolveAgainstHome(appCfg.Data.StoreDatabase)
 	}
 	if appCfg.Instance.ID == "" {
 		appCfg.Instance.ID = os.Getenv("WORK_INSTANCE_ID")
@@ -113,6 +121,10 @@ func New(cfg Config) *Core {
 	st, err := sqlitestore.New(appCfg.Data.Database)
 	if err != nil {
 		panic("failed to open database: " + err.Error())
+	}
+	tableStore, err := tablestore.New(appCfg.Data.StoreDatabase)
+	if err != nil {
+		panic("failed to open table store: " + err.Error())
 	}
 
 	pm := service.NewProjectManager(st, appCfg.Data.Dir)
@@ -166,6 +178,7 @@ func New(cfg Config) *Core {
 	sessions := service.NewSessionManager(st, nil, provider)
 	eng := dqruntime.NewEngine(sessions, turnManager, pm, approvalManager, turnLogManager, agents, skills, knowledge, st.Memories(), provider, stream, checkpointStore, loader, appCfg.Data.Dir)
 	eng.SetFileChangeStore(fileChangeStore)
+	eng.SetTableStore(tableStore)
 	sessions.SetEngine(eng)
 
 	sb := sandbox.New(appCfg.Runtime.Sandbox)
@@ -194,6 +207,43 @@ func New(cfg Config) *Core {
 	}
 	eng.RegisterTool(&builtin.MemoryUpdate{Store: st.Memories()})
 	eng.RegisterTool(&builtin.MemoryRead{Store: st.Memories(), TopK: memTopK})
+	tableQuotas := func() domain.ConfigTableSection {
+		q := domain.DefaultTableSection()
+		if c, err := loader.Load(context.Background()); err == nil {
+			got := c.Runtime.Table
+			if got.MaxRowsPerUpsert > 0 {
+				q.MaxRowsPerUpsert = got.MaxRowsPerUpsert
+			}
+			if got.MaxRowsPerTurn > 0 {
+				q.MaxRowsPerTurn = got.MaxRowsPerTurn
+			}
+			if got.MaxRowsPerTable > 0 {
+				q.MaxRowsPerTable = got.MaxRowsPerTable
+			}
+			if got.MaxRowBytes > 0 {
+				q.MaxRowBytes = got.MaxRowBytes
+			}
+			if got.MaxTablesPerScope > 0 {
+				q.MaxTablesPerScope = got.MaxTablesPerScope
+			}
+			if got.QueryDefaultLimit > 0 {
+				q.QueryDefaultLimit = got.QueryDefaultLimit
+			}
+			if got.QueryMaxLimit > 0 {
+				q.QueryMaxLimit = got.QueryMaxLimit
+			}
+			if got.MaxRowChars > 0 {
+				q.MaxRowChars = got.MaxRowChars
+			}
+		}
+		return q
+	}
+	tableBudget := builtin.NewTableTurnBudget()
+	eng.RegisterTool(&builtin.TableUpsert{Store: tableStore, Quotas: tableQuotas, Budget: tableBudget})
+	eng.RegisterTool(&builtin.TableGet{Store: tableStore, Quotas: tableQuotas})
+	eng.RegisterTool(&builtin.TableQuery{Store: tableStore, Quotas: tableQuotas})
+	eng.RegisterTool(&builtin.TableDelete{Store: tableStore})
+	eng.RegisterTool(&builtin.TableList{Store: tableStore})
 
 	eng.SetMCPCaller(mcpManager)
 	mcpManager.SetToolSync(eng)
@@ -239,6 +289,7 @@ func New(cfg Config) *Core {
 
 	return &Core{
 		Store:         st,
+		TableStore:    tableStore,
 		Engine:        eng,
 		Sandbox:       sb,
 		Browser:       br,
@@ -276,10 +327,18 @@ func (c *Core) Close() error {
 	} else if c.Weixin != nil {
 		c.Weixin.Stop()
 	}
-	if c.Browser == nil {
-		return nil
+	var first error
+	if c.TableStore != nil {
+		if err := c.TableStore.Close(); err != nil && first == nil {
+			first = err
+		}
 	}
-	return c.Browser.Close(context.Background())
+	if c.Browser != nil {
+		if err := c.Browser.Close(context.Background()); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
 }
 
 func ensureDefaultProject(pm *service.ProjectManager) {
