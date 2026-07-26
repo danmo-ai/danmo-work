@@ -17,12 +17,11 @@ import PermissionAskBlock from '@/components/center/PermissionAskBlock.vue'
 import AskUserBlock, { type AskUserFormField } from '@/components/center/AskUserBlock.vue'
 import { groupConsecutiveToolCards, useTurnCollapse, type StreamTurn, type ToolCard, type UserImageAttachment } from '@/composables/useStreamTurns'
 import RightWorkspacePanel from '@/components/center/RightWorkspacePanel.vue'
-import ElementAnnotatePopover from '@/components/center/ElementAnnotatePopover.vue'
 import DocumentStage from '@/components/office/DocumentStage.vue'
 import { renderMarkdown } from '@/utils/markdown-render'
 import { toast } from '@/utils/feedback'
 import { apiBaseUrl, saveBlobAs } from '@/utils/desktop'
-import { fromInspectPayload, type InspectElementPayload } from '@/types/element-attachment'
+import type { ElementAttachment } from '@/types/element-attachment'
 import { fetchJSON } from '@/api/client'
 import { formatTokenCount, useSessionContextUsage } from '@/composables/useSessionContextUsage'
 import { routeOfficeFile } from '@/utils/office-route'
@@ -38,47 +37,7 @@ const rightPanelRef = ref<InstanceType<typeof RightWorkspacePanel> | null>(null)
 const { tokensForTurn } = useSessionContextUsage()
 const isEditingTitle = ref(false)
 const editingTitle = ref('')
-const browserUrl = ref('')
-const browserUrlInput = ref('')
-const browserRefresh = ref(0)
-const browserMdHtml = ref('')
-const selectingElement = ref(false)
 const composerRef = ref<InstanceType<typeof FloatingComposer> | null>(null)
-const annotateOpen = ref(false)
-const annotatePayload = ref<InspectElementPayload | null>(null)
-
-function isMdUrl(url: string): boolean {
-  const path = url.split('?')[0].split('#')[0]
-  return /\.(md|markdown)$/i.test(path)
-}
-
-async function loadMdContent(urlOrPath: string) {
-  try {
-    // Extract path: if full URL, take pathname; otherwise use as-is
-    let apiPath = urlOrPath
-    try {
-      const u = new URL(urlOrPath)
-      apiPath = u.pathname + u.search
-    } catch { /* not a full URL, use as-is */ }
-    const base = apiBaseUrl()
-    const resp = await fetch(`${base}${apiPath}`)
-    if (!resp.ok) throw new Error(resp.statusText)
-    const text = await resp.text()
-    browserMdHtml.value = renderMarkdown(text)
-  } catch (e) {
-    browserMdHtml.value = `<p style="color:red">加载 Markdown 失败: ${e}</p>`
-  }
-}
-
-function refreshBrowser() {
-  browserRefresh.value++
-  browserUrl.value = browserUrlInput.value
-  if (isMdUrl(browserUrl.value)) {
-    loadMdContent(browserUrl.value)
-  } else {
-    browserMdHtml.value = ''
-  }
-}
 
 // ── Split mode: 60:40 default ──
 const bodyRef = ref<HTMLElement | null>(null)
@@ -118,35 +77,6 @@ function onSplitResizePointerDown(event: PointerEvent) {
   window.addEventListener('pointerup', onUp)
 }
 
-function navigateBrowserUrl() {
-  let url = browserUrlInput.value.trim()
-  if (!url) return
-  if (!/^https?:\/\//i.test(url)) {
-    url = 'https://' + url
-  }
-  const proxied = toProxyUrl(url)
-  browserUrl.value = proxied
-  browserUrlInput.value = url
-  if (isMdUrl(proxied)) {
-    loadMdContent(proxied)
-  } else {
-    browserMdHtml.value = ''
-  }
-}
-
-function toProxyUrl(rawUrl: string): string {
-  // Project files & same-origin: use as-is
-  if (rawUrl.includes('/api/v1/projects/') || rawUrl.startsWith('/')) return rawUrl
-  // External/localhost URLs: route through proxy
-  try {
-    const u = new URL(rawUrl)
-    const host = u.host.replace(/:/g, '-') // localhost:3000 → localhost-3000
-    return `${apiBaseUrl()}/api/v1/proxy/${host}${u.pathname}${u.search}${u.hash}`
-  } catch {
-    return rawUrl
-  }
-}
-
 async function openFileInOffice(filePath: string) {
   if (!sessions.selectedProjectId) return
   let contentHint: string | undefined
@@ -161,88 +91,16 @@ async function openFileInOffice(filePath: string) {
     /* routing can proceed without hint */
   }
   const routed = routeOfficeFile(filePath, contentHint)
-  if (routed === 'browser' || routed == null) {
-    openFileInBrowser(filePath)
+  if (routed.kind === 'preview') {
+    const url = `${apiBaseUrl()}/api/v1/projects/${sessions.selectedProjectId}/raw/${encodeURIComponent(filePath)}`
+    workspaceUi.openStage({ ...routed, url })
     return
   }
   workspaceUi.openStage(routed)
 }
 
-function openFileInBrowser(filePath: string) {
-  if (!sessions.selectedProjectId) return
-  // Office formats open in Document Stage, not Browser.
-  if (/\.(md|markdown|csv|danmo-sheet\.json)$/i.test(filePath) || /-slides\.html$/i.test(filePath)) {
-    void openFileInOffice(filePath)
-    return
-  }
-  const apiPath = `/api/v1/projects/${sessions.selectedProjectId}/raw/${encodeURIComponent(filePath)}`
-  const base = apiBaseUrl()
-  const url = `${base}${apiPath}`
-  browserUrl.value = url
-  browserUrlInput.value = url
-  rightTab.value = 'browser'
-  browserMdHtml.value = ''
-}
-
-function startElementSelect() {
-  selectingElement.value = true
-  const iframe = document.querySelector('.session-workspace__browser-frame') as HTMLIFrameElement | null
-  if (!iframe?.contentWindow) return
-  iframe.contentWindow.postMessage({ type: 'dq-inspect-start' }, '*')
-}
-
-function stopElementSelect() {
-  selectingElement.value = false
-  const iframe = document.querySelector('.session-workspace__browser-frame') as HTMLIFrameElement | null
-  iframe?.contentWindow?.postMessage({ type: 'dq-inspect-stop' }, '*')
-}
-
-function resolveProjectSourceFile(): string | undefined {
-  const userUrl = browserUrlInput.value || browserUrl.value
-  if (!userUrl.includes('/api/v1/projects/')) return undefined
-  const marker = '/raw/'
-  const idx = userUrl.indexOf(marker)
-  if (idx === -1) return undefined
-  try {
-    return decodeURIComponent(userUrl.slice(idx + marker.length).split('?')[0].split('#')[0])
-  } catch {
-    return userUrl.slice(idx + marker.length).split('?')[0]
-  }
-}
-
-function handleInspectMessage(ev: MessageEvent) {
-  const data = ev.data
-  if (!data || typeof data !== 'object') return
-  if (data.type === 'dq-inspect-cancel') {
-    selectingElement.value = false
-    return
-  }
-  if (data.type !== 'dq-inspect-selected') return
-  selectingElement.value = false
-  const payload = data as InspectElementPayload
-  if (!payload.tag && !payload.text && !payload.outerHTML && !payload.html) return
-  annotatePayload.value = payload
-  annotateOpen.value = true
-}
-
-function onAnnotateConfirm(annotation: string) {
-  const raw = annotatePayload.value
-  annotateOpen.value = false
-  annotatePayload.value = null
-  if (!raw) return
-  const pageUrl = browserUrlInput.value || raw.page?.url || ''
-  const att = fromInspectPayload(raw, {
-    annotation,
-    sourceFile: resolveProjectSourceFile(),
-    pageUrl,
-  })
+function onStageAttachElement(att: ElementAttachment) {
   composerRef.value?.addElementAttachment(att)
-  toast.success('已提交到创作器')
-}
-
-function onAnnotateCancel() {
-  annotateOpen.value = false
-  annotatePayload.value = null
 }
 
 /** Manual expand/collapse overrides for individual tool cards. */
@@ -380,13 +238,11 @@ onMounted(() => {
     }
   })
   window.addEventListener('resize', syncComposerLayout)
-  window.addEventListener('message', handleInspectMessage)
 })
 onUnmounted(() => {
   composerResizeObs?.disconnect()
   composerResizeObs = null
   window.removeEventListener('resize', syncComposerLayout)
-  window.removeEventListener('message', handleInspectMessage)
 })
 
 type Turn = StreamTurn
@@ -1514,7 +1370,7 @@ function onTitleKeydown(e: KeyboardEvent) {
       ref="bodyRef"
       class="session-workspace__body"
       :class="{
-        'session-workspace__body--doc': layoutMode === 'doc' && !!stage,
+        'session-workspace__body--stage': layoutMode === 'stage' && !!stage,
         'session-workspace__body--immersive': layoutMode === 'immersive' && !!stage,
       }"
       :style="layoutMode === 'chat' || !stage
@@ -1697,10 +1553,11 @@ function onTitleKeydown(e: KeyboardEvent) {
         v-if="stage && sessions.selectedProjectId"
         class="session-workspace__stage"
         :project-id="sessions.selectedProjectId"
+        @attach-element="onStageAttachElement"
       />
 
       <div
-        v-show="layoutMode === 'doc' && !!stage"
+        v-show="layoutMode === 'stage' && !!stage"
         class="session-workspace__split session-workspace__split--static"
       />
 
@@ -1713,61 +1570,8 @@ function onTitleKeydown(e: KeyboardEvent) {
           :project-id="sessions.selectedProjectId"
           :changes-count="workspaceUi.changesCount"
           :agent-id="sessions.selectedAgentId"
-          @open-in-browser="openFileInBrowser"
           @open-in-office="openFileInOffice"
-        >
-          <template #browser>
-<div class="session-workspace__browser">
-            <p v-if="selectingElement" class="session-workspace__browser-hint">{{ t('sessions.designModeHint') }}</p>
-            <div class="session-workspace__browser-bar">
-              <input
-                v-model="browserUrlInput"
-                class="session-workspace__browser-input"
-                placeholder="输入网址..."
-                @keydown.enter="navigateBrowserUrl"
-              />
-              <button class="session-workspace__browser-btn" @click="refreshBrowser" title="刷新">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              </button>
-              <button class="session-workspace__browser-btn" @click="navigateBrowserUrl" title="前往">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="9 18 15 12 9 6"/>
-                </svg>
-              </button>
-              <button
-                class="session-workspace__browser-btn"
-                :class="{ 'is-active': selectingElement }"
-                :title="selectingElement ? t('sessions.designModeOn') : t('sessions.designModeOff')"
-                @click="selectingElement ? stopElementSelect() : startElementSelect()"
-              >
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
-              </button>
-              <button class="session-workspace__browser-btn" @click="browserUrl = ''; browserUrlInput = ''; browserMdHtml = ''" title="关闭">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
-            <div class="session-workspace__browser-stage">
-              <div
-                v-if="browserMdHtml"
-                class="session-workspace__browser-md dq-prose"
-                v-html="browserMdHtml"
-              />
-              <iframe
-                v-else
-                :key="browserUrl || 'empty' || browserRefresh"
-                class="session-workspace__browser-frame"
-                :src="browserUrl || 'about:blank'"
-              />
-              <ElementAnnotatePopover
-                :open="annotateOpen"
-                :payload="annotatePayload"
-                @confirm="onAnnotateConfirm"
-                @cancel="onAnnotateCancel"
-              />
-            </div>
-          </div>
-          </template>
-        </RightWorkspacePanel>
+        />
       </div>
     </div>
 
@@ -1866,7 +1670,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   overflow: hidden;
 }
 
-.session-workspace__body--doc {
+.session-workspace__body--stage {
   grid-template-columns: minmax(200px, 26%) 1fr minmax(200px, 24%);
 }
 
@@ -2518,101 +2322,6 @@ function onTitleKeydown(e: KeyboardEvent) {
   justify-content: center;
   font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-tertiary);
-}
-
-/* ── Browser tab ── */
-.session-workspace__browser-hint {
-  margin: 0;
-  padding: 6px 12px;
-  font-size: var(--dq-font-size-caption);
-  color: var(--dq-accent);
-  background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--dq-accent) 20%, transparent);
-}
-
-.session-workspace__browser {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.session-workspace__browser-bar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--dq-separator-light);
-}
-
-.session-workspace__browser-input {
-  flex: 1;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 6px;
-  border: 1px solid var(--work-glass-border);
-  background: var(--dq-bg-base);
-  color: var(--dq-label-primary);
-  font-size: var(--dq-font-size-footnote);
-  outline: none;
-  font-family: var(--dq-font-mono);
-}
-
-.session-workspace__browser-input:focus {
-  border-color: var(--dq-accent);
-}
-
-.session-workspace__browser-go,
-.session-workspace__browser-btn {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: none;
-  background: var(--dq-fill-on-glass);
-  color: var(--dq-label-secondary);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.session-workspace__browser-go:hover,
-.session-workspace__browser-btn:hover {
-  background: var(--dq-accent);
-  color: var(--dq-color-white);
-}
-
-.session-workspace__browser-btn.is-active {
-  background: var(--dq-accent);
-  color: var(--dq-color-white);
-}
-
-.session-workspace__browser-stage {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.session-workspace__browser-frame {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: none;
-  display: block;
-}
-
-.session-workspace__browser-md {
-  position: absolute;
-  inset: 0;
-  overflow-y: auto;
-  padding: 24px 32px;
-  background: var(--dq-bg-base);
 }
 
 .session-workspace__right-empty {

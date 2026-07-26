@@ -41,23 +41,24 @@ make dev-web   # → http://localhost:5801/app/
 
 ## 界面一览
 
-三栏工作台：项目侧栏 · Agent 执行 Stream · 右侧面板（计划 / 文件 / **记忆** / 变更 / 终端 / 浏览器）。中间画布按文件类型切换 **浏览器** 或 **Document Stage**。
+三栏工作台：项目侧栏 · Agent 执行 Stream · 右侧面板（计划 / 文件 / **记忆** / 变更 / 终端）。中间 **Document Stage** 按文件类型换 toolbar（文档 / 幻灯片 / 表格 / 预览）。
 
-### Document Stage — 文档 / 幻灯片 / 表格在线编辑 + AI
+### Document Stage — 文档 / 幻灯片 / 表格 / 预览
 
-从 Files 打开项目里的 `.md`、幻灯片 Markdown、`.csv` → **Document Stage** 占据中间画布（通用 `.html` 仍走浏览器）。分格式编辑器；AI 润色/修改走普通 **session turn**（不是独立 `/office/ai` API）。
+从 Files 打开项目文件 → 一律进入中间 **Document Stage**。可编辑类型走分格式编辑器 + AI；通用 HTML / 图片 / 外链走 **Preview**（URL 栏 + Design mode）。AI 润色/修改走普通 **session turn**（不是独立 `/office/ai` API）。
 
-| 类型 | 真相源 | 编辑器 |
+| 类型 | 真相源 | 编辑器 / 视图 |
 |------|--------|--------|
 | **Doc** | GFM `.md` | TipTap（编辑会话内 MD ↔ HTML） |
 | **Slides** | 以 `---` 分页的 Markdown | 编辑 Markdown + 播放 HTML |
 | **Sheet** | `.csv` / `.danmo-sheet.json` | 表格网格 |
+| **Preview** | 通用 `.html`、图片、外链等 | iframe / 图片；点选元素进 Composer |
 
-工具栏组装 `[office-edit]` prompt → `POST /sessions/:id/turns`。AI 前自动保存脏内容；作用域可为选区 / 全文 / 当前页 / 整表。Turn 结束后 Stage 重载文件并恢复滚动（幻灯片保留页码）。Stream 仍可见，用于跟踪 AI 进度。
+工具栏组装 `[office-edit]` prompt → `POST /sessions/:id/turns`。AI 前自动保存脏内容；作用域可为选区 / 全文 / 当前页 / 整表。Turn 结束后 Stage 重载文件并恢复滚动（幻灯片保留页码）。默认打开时 Stream 仍可见，用于跟踪 AI 进度。
 
 ### 点选页面，直接说改哪里
 
-在内置 **浏览器** 里点选 DOM 元素，写一句批注，确认注入 Composer。模型带着精确的 HTML/CSS 上下文去改——**点选 → 批注 → 修改**，在渲染结果上人机共思，不必口述「哪个按钮」。
+在 Stage **Preview** 里点选 DOM 元素，写一句批注，确认注入 Composer。模型带着精确的 HTML/CSS 上下文去改——**点选 → 批注 → 修改**，在渲染结果上人机共思，不必口述「哪个按钮」。
 
 ![网页元素批注](docs/screenshots/ui-browser-annotate.png)
 

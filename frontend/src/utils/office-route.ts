@@ -1,4 +1,4 @@
-export type OfficeKind = 'doc' | 'slides' | 'sheet'
+export type OfficeKind = 'doc' | 'slides' | 'sheet' | 'preview'
 export type OfficeMode = 'view' | 'edit' | 'present'
 /** What the AI turn will target given current UI selection. */
 export type OfficeEditScope = 'selection' | 'document' | 'slide' | 'sheet'
@@ -7,6 +7,8 @@ export interface OfficeRoute {
   kind: OfficeKind
   path: string
   mode: OfficeMode
+  /** For preview kind: initial URL (project raw or proxied external). */
+  url?: string
 }
 
 /** Detect slides markdown: YAML type: slides, or multiple --- slide separators. */
@@ -23,7 +25,8 @@ export function looksLikeSlidesMarkdown(content: string): boolean {
   return false
 }
 
-export function routeOfficeFile(path: string, contentHint?: string): OfficeRoute | 'browser' | null {
+/** Route a project-relative file path into a Stage kind. Always returns a route. */
+export function routeOfficeFile(path: string, contentHint?: string): OfficeRoute {
   const lower = path.replace(/\\/g, '/').toLowerCase()
   const base = lower.split('/').pop() || lower
 
@@ -31,16 +34,16 @@ export function routeOfficeFile(path: string, contentHint?: string): OfficeRoute
     return { kind: 'sheet', path, mode: 'edit' }
   }
 
-  if (base.endsWith('-slides.html') || /(?:^|\/)slides?\//.test(lower) && base.endsWith('.html')) {
+  if (base.endsWith('-slides.html') || (/(?:^|\/)slides?\//.test(lower) && base.endsWith('.html'))) {
     return { kind: 'slides', path, mode: 'present' }
   }
 
   if (base.endsWith('.html') || base.endsWith('.htm')) {
-    // Playable decks often mention keyboard presentation; default browser for generic HTML.
+    // Playable decks often mention keyboard presentation; default preview for generic HTML.
     if (contentHint && /playable-slides|data-slide|slide-deck|class=["']slide/i.test(contentHint)) {
       return { kind: 'slides', path, mode: 'present' }
     }
-    return 'browser'
+    return { kind: 'preview', path, mode: 'view' }
   }
 
   if (base.endsWith('.md') || base.endsWith('.markdown')) {
@@ -54,7 +57,7 @@ export function routeOfficeFile(path: string, contentHint?: string): OfficeRoute
     return { kind: 'doc', path, mode: 'edit' }
   }
 
-  return null
+  return { kind: 'preview', path, mode: 'view' }
 }
 
 export function buildOfficeEditPrompt(opts: {

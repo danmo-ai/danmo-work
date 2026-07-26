@@ -2,13 +2,15 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { OfficeKind, OfficeMode } from '@/utils/office-route'
 
-export type RightWorkspaceTab = 'plan' | 'files' | 'memory' | 'changes' | 'terminal' | 'browser'
-export type LayoutMode = 'chat' | 'doc' | 'immersive'
+export type RightWorkspaceTab = 'plan' | 'files' | 'memory' | 'changes' | 'terminal'
+export type LayoutMode = 'chat' | 'stage' | 'immersive'
 
 export interface OfficeStageState {
   kind: OfficeKind
   path: string
   mode: OfficeMode
+  /** Preview kind: project raw URL or proxied external URL. */
+  url?: string
 }
 
 export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
@@ -27,7 +29,7 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
 
   function openStage(next: OfficeStageState) {
     stage.value = { ...next }
-    layoutMode.value = next.mode === 'present' ? 'immersive' : 'doc'
+    layoutMode.value = next.mode === 'present' ? 'immersive' : 'stage'
   }
 
   function closeStage() {
@@ -38,12 +40,18 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   function setStageMode(mode: OfficeMode) {
     if (!stage.value) return
     stage.value = { ...stage.value, mode }
-    layoutMode.value = mode === 'present' ? 'immersive' : 'doc'
+    layoutMode.value = mode === 'present' ? 'immersive' : 'stage'
   }
 
   function setStageKind(kind: OfficeKind) {
     if (!stage.value) return
     stage.value = { ...stage.value, kind }
+  }
+
+  function setStageUrl(url: string | undefined) {
+    if (!stage.value) return
+    if (stage.value.url === url) return
+    stage.value = { ...stage.value, url }
   }
 
   function requestStageReload() {
@@ -75,6 +83,7 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     closeStage,
     setStageMode,
     setStageKind,
+    setStageUrl,
     requestStageReload,
     openPalette,
     closePalette,

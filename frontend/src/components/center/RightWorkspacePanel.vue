@@ -5,7 +5,6 @@ import {
   DqPillTabs,
   Document,
   FolderChecked,
-  Monitor,
   MagicStick,
   Terminal,
   Library,
@@ -17,7 +16,7 @@ import ChangesPanel from '@/components/center/ChangesPanel.vue'
 import TerminalPanel from '@/components/center/TerminalPanel.vue'
 import type { StreamEvent } from '@/types/mission'
 
-export type RightTab = 'plan' | 'files' | 'memory' | 'changes' | 'terminal' | 'browser'
+export type RightTab = 'plan' | 'files' | 'memory' | 'changes' | 'terminal'
 
 const props = defineProps<{
   streamEvents: StreamEvent[]
@@ -30,7 +29,6 @@ const props = defineProps<{
 const rightTab = defineModel<RightTab>('tab', { required: true })
 
 const emit = defineEmits<{
-  openInBrowser: [path: string]
   openInOffice: [path: string]
 }>()
 
@@ -63,7 +61,6 @@ const pillItems = computed(() => [
     badge: props.changesCount && props.changesCount > 0 ? props.changesCount : undefined,
   },
   { value: 'terminal', label: t('sessions.tabTerminal'), icon: Terminal },
-  { value: 'browser', label: t('sessions.tabBrowser'), icon: Monitor },
 ])
 
 defineExpose({
@@ -87,17 +84,12 @@ defineExpose({
           v-if="projectId"
           ref="fileTreeRef"
           :project-id="projectId"
-          @open-in-browser="emit('openInBrowser', $event)"
           @select-file="emit('openInOffice', $event)"
         />
         <div v-else class="right-workspace__empty">{{ t('sessions.noProjectLinked') }}</div>
       </template>
 
       <ChangesPanel v-else-if="rightTab === 'changes'" ref="changesPanelRef" />
-
-      <template v-else-if="rightTab === 'browser'">
-        <slot name="browser" />
-      </template>
 
       <template v-else-if="rightTab === 'terminal'">
         <div v-if="!projectId" class="right-workspace__empty">{{ t('sessions.noProjectLinked') }}</div>

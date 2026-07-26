@@ -7,12 +7,18 @@ import { useSessionsStore } from '@/stores/sessions'
 import DocSurface from '@/components/office/DocSurface.vue'
 import SlidesSurface from '@/components/office/SlidesSurface.vue'
 import SheetSurface from '@/components/office/SheetSurface.vue'
+import PreviewSurface from '@/components/office/PreviewSurface.vue'
 import OfficeAiToolbar from '@/components/office/OfficeAiToolbar.vue'
 import { confirm, toast } from '@/utils/feedback'
 import type { OfficeEditScope } from '@/utils/office-route'
+import type { ElementAttachment } from '@/types/element-attachment'
 
 const props = defineProps<{
   projectId: string
+}>()
+
+const emit = defineEmits<{
+  attachElement: [att: ElementAttachment]
 }>()
 
 const { t } = useI18n()
@@ -34,11 +40,28 @@ const turnRunning = computed(() => {
   return turn?.status === 'running'
 })
 
+const isPreview = computed(() => stage.value?.kind === 'preview')
+const editableKind = computed(() => {
+  const k = stage.value?.kind
+  if (k === 'doc' || k === 'slides' || k === 'sheet') return k
+  return null
+})
+const isEditableKind = computed(() => editableKind.value != null)
+
 const activeSurface = computed(() => {
   if (!stage.value) return null
   if (stage.value.kind === 'doc') return docRef
   if (stage.value.kind === 'slides') return slidesRef
-  return sheetRef
+  if (stage.value.kind === 'sheet') return sheetRef
+  return null
+})
+
+const chromeLabel = computed(() => {
+  if (!stage.value) return ''
+  if (stage.value.kind === 'preview') {
+    return stage.value.path || stage.value.url || ''
+  }
+  return stage.value.path
 })
 
 function getSelectionMarkdown(): string {
@@ -84,6 +107,7 @@ watch(
     if (kind === 'slides') editScope.value = 'slide'
     else if (kind === 'sheet') editScope.value = 'sheet'
     else editScope.value = 'document'
+    if (kind === 'preview') dirty.value = false
   },
   { immediate: true },
 )
@@ -100,6 +124,10 @@ function setKind(kind: 'doc' | 'slides' | 'sheet') {
   workspaceUi.setStageKind(kind)
 }
 
+function onPreviewUrlChange(_display: string, loadUrl: string) {
+  workspaceUi.setStageUrl(loadUrl || undefined)
+}
+
 watch(turnRunning, (running, was) => {
   if (was && !running) {
     workspaceUi.requestStageReload()
@@ -114,12 +142,12 @@ defineExpose({ save })
     <header class="document-stage__chrome">
       <div class="document-stage__meta">
         <span class="document-stage__badge">{{ stage.kind }}</span>
-        <span class="document-stage__path" :title="stage.path">{{ stage.path }}</span>
-        <span v-if="dirty" class="document-stage__dirty">●</span>
-        <span v-if="turnRunning" class="document-stage__running">{{ t('office.aiRunning') }}</span>
+        <span class="document-stage__path" :title="chromeLabel">{{ chromeLabel }}</span>
+        <span v-if="dirty && isEditableKind" class="document-stage__dirty">●</span>
+        <span v-if="turnRunning && isEditableKind" class="document-stage__running">{{ t('office.aiRunning') }}</span>
       </div>
       <div class="document-stage__actions">
-        <div class="document-stage__modes">
+        <div v-if="isEditableKind" class="document-stage__modes">
           <button
             class="document-stage__chip"
             :class="{ 'is-active': stage.mode === 'view' }"
@@ -143,7 +171,7 @@ defineExpose({ save })
             {{ t('office.present') }}
           </button>
         </div>
-        <div v-if="stage.path.match(/\.md$/i)" class="document-stage__modes">
+        <div v-if="stage.path.match(/\.md$/i) && !isPreview" class="document-stage__modes">
           <button
             class="document-stage__chip"
             :class="{ 'is-active': stage.kind === 'doc' }"
@@ -159,12 +187,17 @@ defineExpose({ save })
             Slides
           </button>
         </div>
-        <button class="document-stage__btn" :disabled="!dirty || turnRunning" @click="() => save()">
+        <button
+          v-if="isEditableKind"
+          class="document-stage__btn"
+          :disabled="!dirty || turnRunning"
+          @click="() => save()"
+        >
           {{ t('office.save') }}
         </button>
         <button
           class="document-stage__btn"
-          @click="workspaceUi.layoutMode = layoutMode === 'immersive' ? 'doc' : 'immersive'"
+          @click="workspaceUi.layoutMode = layoutMode === 'immersive' ? 'stage' : 'immersive'"
         >
           {{ layoutMode === 'immersive' ? t('office.exitImmersive') : t('office.immersive') }}
         </button>
@@ -172,10 +205,10 @@ defineExpose({ save })
       </div>
     </header>
 
-    <div v-if="stage.mode === 'edit'" class="document-stage__ai">
+    <div v-if="editableKind && stage.mode === 'edit'" class="document-stage__ai">
       <OfficeAiToolbar
         :path="stage.path"
-        :kind="stage.kind"
+        :kind="editableKind"
         :page-index="pageIndex"
         :disabled="turnRunning"
         :get-selection-markdown="getSelectionMarkdown"
@@ -208,7 +241,7 @@ defineExpose({ save })
       @update-page-index="pageIndex = $event"
     />
     <SheetSurface
-      v-else
+      v-else-if="stage.kind === 'sheet'"
       ref="sheetRef"
       :project-id="projectId"
       :path="stage.path"
@@ -216,6 +249,15 @@ defineExpose({ save })
       :reload-token="stageReloadToken"
       :turn-running="turnRunning"
       @dirty="dirty = $event"
+    />
+    <PreviewSurface
+      v-else-if="stage.kind === 'preview'"
+      :project-id="projectId"
+      :path="stage.path"
+      :url="stage.url"
+      :reload-token="stageReloadToken"
+      @url-change="onPreviewUrlChange"
+      @attach-element="emit('attachElement', $event)"
     />
   </section>
 </template>

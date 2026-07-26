@@ -20,7 +20,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   selectFile: [path: string]
-  openInBrowser: [path: string]
 }>()
 
 const rootNodes = ref<FileNode[]>([])
@@ -156,18 +155,6 @@ defineExpose({ refresh: loadRoot })
             <span class="file-tree__icon" v-html="fileIcon(node)" />
             <span class="file-tree__name" :title="node.path">{{ node.name }}</span>
             <span v-if="!node.isDir && node.size" class="file-tree__size">{{ formatSize(node.size) }}</span>
-            <button
-              v-if="!node.isDir"
-              class="file-tree__open-btn"
-              title="浏览器打开"
-              @click.stop="emit('openInBrowser', node.path)"
-            >
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                <polyline points="15 3 21 3 21 9"/>
-                <line x1="10" y1="14" x2="21" y2="3"/>
-              </svg>
-            </button>
           </div>
           <ul v-if="node.isDir && expanded[node.path] && childrenCache[node.path]" class="file-tree__children">
             <li
@@ -185,18 +172,6 @@ defineExpose({ refresh: loadRoot })
                 <span class="file-tree__icon" v-html="fileIcon(child)" />
                 <span class="file-tree__name" :title="child.path">{{ child.name }}</span>
                 <span v-if="!child.isDir && child.size" class="file-tree__size">{{ formatSize(child.size) }}</span>
-                <button
-                  v-if="!child.isDir"
-                  class="file-tree__open-btn"
-                  title="浏览器打开"
-                  @click.stop="emit('openInBrowser', child.path)"
-                >
-                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                    <polyline points="15 3 21 3 21 9"/>
-                    <line x1="10" y1="14" x2="21" y2="3"/>
-                  </svg>
-                </button>
               </div>
             </li>
           </ul>
@@ -302,32 +277,4 @@ defineExpose({ refresh: loadRoot })
   color: var(--dq-label-quaternary);
 }
 
-.file-tree__open-btn {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--dq-label-tertiary);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s, color 0.12s, background 0.12s;
-}
-
-.file-tree__row:hover .file-tree__open-btn {
-  opacity: 1;
-}
-
-.file-tree__open-btn:hover {
-  background: var(--dq-fill-on-glass);
-  color: var(--dq-accent);
-}
-
-.file-tree__open-btn :deep(svg) {
-  pointer-events: none;
-}
 </style>
