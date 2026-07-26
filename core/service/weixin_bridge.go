@@ -367,8 +367,11 @@ func (b *WeixinBridge) StartLogin(ctx context.Context, projectID string) (domain
 	if projectID == "" {
 		return domain.WeixinLoginStartResult{}, fmt.Errorf("请先选择要关联的项目")
 	}
+	if b.projects == nil {
+		return domain.WeixinLoginStartResult{}, fmt.Errorf("项目服务不可用")
+	}
 	if _, err := b.projects.Get(ctx, projectID); err != nil {
-		return domain.WeixinLoginStartResult{}, fmt.Errorf("项目不存在：%s", projectID)
+		return domain.WeixinLoginStartResult{}, fmt.Errorf("项目不存在或无法读取（%s）: %w", projectID, err)
 	}
 	accounts, _ := b.store.WeixinAccounts().List(ctx)
 	tokens := make([]string, 0, len(accounts))
@@ -376,6 +379,9 @@ func (b *WeixinBridge) StartLogin(ctx context.Context, projectID string) (domain
 		if t := strings.TrimSpace(accounts[i].Token); t != "" {
 			tokens = append(tokens, t)
 		}
+	}
+	if b.client == nil {
+		return domain.WeixinLoginStartResult{}, fmt.Errorf("微信客户端未初始化")
 	}
 	qr, err := b.client.GetBotQRCode(ctx, ilink.DefaultBotType, tokens)
 	if err != nil {

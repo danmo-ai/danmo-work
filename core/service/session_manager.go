@@ -55,7 +55,7 @@ func (m *SessionManager) Create(ctx context.Context, req domain.CreateSessionReq
 		UpdatedAt: now,
 	}
 	if err := m.store.Sessions().Create(ctx, s); err != nil {
-		return domain.Session{}, err
+		return domain.Session{}, fmt.Errorf("创建会话失败: %w", err)
 	}
 	m.engine.StartSession(ctx, s, atts)
 	if !req.SkipAutoTitle && s.Title == "" {

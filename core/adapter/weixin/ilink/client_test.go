@@ -43,6 +43,9 @@ func TestClientQRUpdatesSend(t *testing.T) {
 		switch {
 		case strings.Contains(path, "get_bot_qrcode"):
 			sawQR = true
+			if r.Method != http.MethodGet {
+				t.Errorf("get_bot_qrcode method=%s want GET", r.Method)
+			}
 			if r.Header.Get("iLink-App-Id") != "bot" {
 				t.Errorf("missing app id header")
 			}
@@ -113,5 +116,40 @@ func TestClientQRUpdatesSend(t *testing.T) {
 	}
 	if !sawSend {
 		t.Fatal("sendmessage not hit")
+	}
+}
+
+func TestGetBotQRCodeFallsBackToPOST(t *testing.T) {
+	var methods []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "get_bot_qrcode") {
+			w.WriteHeader(404)
+			return
+		}
+		methods = append(methods, r.Method)
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte("not found"))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"qrcode":             "qr-post",
+			"qrcode_img_content": "https://example.com/q",
+		})
+	}))
+	defer srv.Close()
+
+	c := ilink.NewClient()
+	c.HTTP = srv.Client()
+	c.BaseURL = srv.URL
+	qr, err := c.GetBotQRCode(context.Background(), ilink.DefaultBotType, []string{"tok"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if qr.QRCode != "qr-post" {
+		t.Fatalf("%+v", qr)
+	}
+	if len(methods) != 2 || methods[0] != http.MethodGet || methods[1] != http.MethodPost {
+		t.Fatalf("methods=%v", methods)
 	}
 }

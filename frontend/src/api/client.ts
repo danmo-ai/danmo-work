@@ -1,14 +1,33 @@
 import { apiBaseUrl } from '@/utils/desktop'
 
-const base = apiBaseUrl()
-
 /** Go 空 slice 常序列化为 JSON null，列表接口统一归一成 [] */
 export function asArray<T>(data: T[] | null | undefined): T[] {
   return Array.isArray(data) ? data : []
 }
 
+export class ApiError extends Error {
+  readonly status: number
+  readonly path: string
+
+  constructor(message: string, status: number, path: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.path = path
+  }
+}
+
+export function isNotFoundError(err: unknown): boolean {
+  if (err instanceof ApiError) return err.status === 404
+  const msg = err instanceof Error ? err.message : String(err ?? '')
+  const lower = msg.toLowerCase()
+  return lower.includes('not found') || lower.includes('404')
+}
+
 export async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = `${base}/api/v1${path}`
+  // Resolve per request — module-load-time apiBaseUrl() can miss Tauri globals
+  // and send /api calls to tauri://localhost (404 "not found").
+  const url = `${apiBaseUrl()}/api/v1${path}`
   let res: Response
   try {
     res = await fetch(url, {
@@ -19,8 +38,18 @@ export async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T>
     throw new Error(`网络请求失败: ${url} — ${networkErr instanceof Error ? networkErr.message : '未知错误'}`)
   }
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error((err as { error?: string }).error ?? res.statusText)
+    const raw = await res.text().catch(() => '')
+    let message = res.statusText || `HTTP ${res.status}`
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as { error?: string }
+        if (parsed?.error) message = parsed.error
+        else message = raw
+      } catch {
+        message = raw.trim() || message
+      }
+    }
+    throw new ApiError(message, res.status, path)
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>

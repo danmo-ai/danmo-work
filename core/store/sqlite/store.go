@@ -31,16 +31,48 @@ func New(dbPath string) (*Store, error) {
 	if abs, err := filepath.Abs(dbPath); err == nil {
 		dbPath = abs
 	}
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
-		return nil, err
+	dir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("create database dir %s: %w", dir, err)
 	}
+	// Probe directory writability early — SQLite reports cryptic READONLY_* codes
+	// (1032 DBMOVED / 1544 DIRECTORY) when the parent dir cannot host journals/WAL.
+	probe := filepath.Join(dir, ".work-db-write-probe")
+	if err := os.WriteFile(probe, []byte("ok"), 0o644); err != nil {
+		return nil, fmt.Errorf("database directory not writable (%s): %w", dir, err)
+	}
+	_ = os.Remove(probe)
+
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open database %s: %w", dbPath, err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("database sql handle %s: %w", dbPath, err)
+	}
+	// Pure-Go SQLite + concurrent pool connections is a common source of
+	// SQLITE_BUSY / SQLITE_READONLY_DBMOVED (1032) under desktop sidecar load.
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	if _, err := sqlDB.Exec(`PRAGMA journal_mode=WAL`); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("database WAL mode %s: %w", dbPath, err)
+	}
+	if _, err := sqlDB.Exec(`PRAGMA busy_timeout=5000`); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("database busy_timeout %s: %w", dbPath, err)
+	}
+	// Fail fast if the connection cannot write (e.g. file replaced / inode moved).
+	if _, err := sqlDB.Exec(`BEGIN IMMEDIATE; ROLLBACK;`); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("database not writable %s: %w", dbPath, err)
+	}
+
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
-		return nil, err
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("migrate database %s: %w", dbPath, err)
 	}
 	return s, nil
 }
@@ -289,7 +321,10 @@ type sessionRepo struct{ s *Store }
 
 func (r *sessionRepo) Create(ctx context.Context, s domain.Session) error {
 	m := sessionFromDomain(s)
-	return r.s.db.WithContext(ctx).Create(&m).Error
+	if err := r.s.db.WithContext(ctx).Create(&m).Error; err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+	return nil
 }
 
 func (r *sessionRepo) Update(ctx context.Context, s domain.Session) error {

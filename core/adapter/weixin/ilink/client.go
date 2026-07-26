@@ -169,17 +169,26 @@ func (c *Client) GetBotQRCode(ctx context.Context, botType string, localTokens [
 		botType = DefaultBotType
 	}
 	endpoint := "ilink/bot/get_bot_qrcode?bot_type=" + url.QueryEscape(botType)
-	body := map[string]any{"local_token_list": localTokens}
-	if localTokens == nil {
-		body["local_token_list"] = []string{}
-	}
-	raw, err := c.doJSON(ctx, http.MethodPost, c.apiBase(), endpoint, c.authHeaders(""), body, 15*time.Second)
+	// Official iLink login uses GET. Some deployments also accept POST with
+	// local_token_list; try GET first so a POST-only 404 "not found" cannot
+	// block QR generation.
+	raw, err := c.doJSON(ctx, http.MethodGet, c.apiBase(), endpoint, c.commonHeaders(), nil, 15*time.Second)
 	if err != nil {
-		return QRCodeResponse{}, err
+		body := map[string]any{"local_token_list": localTokens}
+		if localTokens == nil {
+			body["local_token_list"] = []string{}
+		}
+		raw, err = c.doJSON(ctx, http.MethodPost, c.apiBase(), endpoint, c.authHeaders(""), body, 15*time.Second)
+		if err != nil {
+			return QRCodeResponse{}, fmt.Errorf("获取微信二维码失败: %w", err)
+		}
 	}
 	var out QRCodeResponse
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return QRCodeResponse{}, err
+		return QRCodeResponse{}, fmt.Errorf("解析微信二维码响应失败: %w", err)
+	}
+	if out.QRCode == "" && out.QRCodeImgContent == "" {
+		return QRCodeResponse{}, fmt.Errorf("微信服务器未返回二维码")
 	}
 	return out, nil
 }
