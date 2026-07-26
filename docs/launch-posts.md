@@ -6,13 +6,18 @@ Latest release: https://github.com/danmo-ai/danmo-work/releases/latest
 
 ---
 
-## Capacity demo (shareable)
+## Product tour (shareable, bilingual)
 
-- Interactive: [`docs/demo/work-capacity-demo.html`](../demo/work-capacity-demo.html)
-- Loop GIF: [`docs/demo/work-capacity-demo.gif`](../demo/work-capacity-demo.gif)
-- MP4: [`docs/demo/work-capacity-demo.mp4`](../demo/work-capacity-demo.mp4)
+**Not video-only** — open the HTML for ZH/EN toggle; attach MP4/GIF when posting.
 
-Post tip: attach the GIF above the repo link — “从一句请求，到报告 / 幻灯片 / 表格”.
+- Interactive: [`docs/demo/product-tour.html`](../demo/product-tour.html)?lang=zh  
+- ZH GIF / MP4: [`product-tour-zh.gif`](../demo/product-tour-zh.gif) · [`product-tour-zh.mp4`](../demo/product-tour-zh.mp4)  
+- EN GIF / MP4: [`product-tour-en.gif`](../demo/product-tour-en.gif) · [`product-tour-en.mp4`](../demo/product-tour-en.mp4)  
+- Capacity-only (older): [`work-capacity-demo.html`](../demo/work-capacity-demo.html)
+
+Covers: architecture · Document Stage / multi-agent / Turn Log / Memory·Table / MCP / IM · capacity scenarios.
+
+Post tip: attach `product-tour-zh.mp4` (or GIF) above the repo link.
 
 ---
 

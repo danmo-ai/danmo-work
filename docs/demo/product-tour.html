@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Danmo Work — Product Tour</title>
+  <meta name="description" content="Bilingual animated tour: architecture, highlights, capacity demos." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0b1220;
+      --bg-elev: #121a2b;
+      --line: rgba(148, 163, 184, 0.18);
+      --text: #e8eef9;
+      --muted: #94a3b8;
+      --faint: #64748b;
+      --accent: #38bdf8;
+      --accent-2: #34d399;
+      --accent-warm: #fbbf24;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+      --font: "Noto Sans SC", "Sora", sans-serif;
+      --display: "Sora", "Noto Sans SC", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(1000px 520px at 10% -8%, rgba(56, 189, 248, 0.15), transparent 55%),
+        radial-gradient(900px 480px at 90% 0%, rgba(52, 211, 153, 0.10), transparent 50%),
+        linear-gradient(180deg, #0a101c 0%, var(--bg) 45%, #0d1524 100%);
+      -webkit-font-smoothing: antialiased;
+    }
+    [data-i18n] { /* filled by JS */ }
+
+    .top {
+      width: min(1180px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 1.25rem 0 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .brand {
+      font-family: var(--display);
+      font-weight: 700;
+      font-size: 1.05rem;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+    .brand i {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: linear-gradient(135deg, #38bdf8, #34d399);
+      display: grid; place-items: center;
+      font-style: normal; font-size: 0.85rem; color: #0b1220; font-weight: 800;
+    }
+    .nav {
+      display: flex; gap: 0.4rem; flex-wrap: wrap;
+      margin-left: 0.5rem;
+    }
+    .nav button, .lang button {
+      appearance: none; border: 1px solid var(--line);
+      background: rgba(18, 26, 43, 0.75); color: var(--muted);
+      border-radius: 999px; padding: 0.4rem 0.85rem;
+      font: inherit; font-size: 0.82rem; cursor: pointer;
+      transition: 160ms ease;
+    }
+    .nav button[aria-selected="true"], .lang button[aria-pressed="true"] {
+      color: var(--text);
+      border-color: rgba(56, 189, 248, 0.55);
+      background: rgba(56, 189, 248, 0.12);
+    }
+    .lang { margin-left: auto; display: flex; gap: 0.35rem; }
+
+    .page {
+      width: min(1180px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 1.25rem 0 2.5rem;
+    }
+    .eyebrow {
+      margin: 0 0 0.55rem;
+      font-family: var(--display);
+      font-size: 0.75rem; font-weight: 600;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--accent); text-align: center;
+    }
+    .title {
+      margin: 0; text-align: center;
+      font-family: var(--display);
+      font-size: clamp(1.7rem, 3.8vw, 2.5rem);
+      font-weight: 700; letter-spacing: -0.03em; line-height: 1.15;
+    }
+    .subtitle {
+      margin: 0.75rem auto 0; max-width: 46rem;
+      text-align: center; color: var(--muted);
+      font-size: 1rem; line-height: 1.6;
+    }
+
+    .stage {
+      margin-top: 1.75rem;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(22, 32, 51, 0.96), rgba(12, 18, 32, 0.98));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      min-height: 560px;
+    }
+    .stage-bar {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.8rem 1rem;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,0.02);
+    }
+    .lights { display: flex; gap: 0.4rem; }
+    .lights i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+    .lights i:nth-child(1) { background: #f87171; }
+    .lights i:nth-child(2) { background: #fbbf24; }
+    .lights i:nth-child(3) { background: #34d399; }
+    .stage-bar strong { font-family: var(--display); font-size: 0.9rem; }
+    .stage-bar em { margin-left: auto; font-style: normal; color: var(--faint); font-size: 0.78rem; }
+    .progress { height: 2px; background: rgba(148,163,184,0.12); }
+    .progress > i {
+      display: block; height: 100%; width: 0;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+    .is-playing .progress > i { animation: progress-fill var(--cycle, 12s) linear; }
+    @keyframes progress-fill { from { width: 0; } to { width: 100%; } }
+
+    .section { display: none; padding: 1.25rem 1.35rem 1.5rem; }
+    .section.is-active { display: block; }
+
+    /* ---- Architecture ---- */
+    .arch-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 1.1rem;
+    }
+    @media (max-width: 900px) { .arch-grid { grid-template-columns: 1fr; } }
+
+    .flow {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem;
+      background: rgba(255,255,255,0.02);
+    }
+    .flow-step {
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 0.75rem;
+      align-items: start;
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    .flow-step + .flow-step { margin-top: 0.55rem; }
+    .flow-num {
+      width: 36px; height: 36px; border-radius: 10px;
+      display: grid; place-items: center;
+      font-family: var(--display); font-weight: 700; font-size: 0.85rem;
+      background: var(--bg-elev); border: 1px solid var(--line);
+      color: var(--accent);
+    }
+    .flow-step strong { display: block; font-size: 0.95rem; margin-bottom: 0.15rem; }
+    .flow-step p { margin: 0; color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
+    .flow-arrow {
+      grid-column: 1 / -1;
+      height: 18px;
+      margin-left: 17px;
+      border-left: 2px dashed rgba(56, 189, 248, 0.35);
+      opacity: 0;
+    }
+
+    .pillars { display: grid; gap: 0.65rem; }
+    .pillar {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.85rem 0.95rem;
+      background: rgba(0,0,0,0.15);
+      opacity: 0;
+      transform: translateX(10px);
+    }
+    .pillar b {
+      display: block; font-family: var(--display);
+      font-size: 0.9rem; margin-bottom: 0.25rem; color: var(--accent-2);
+    }
+    .pillar span { color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
+    .pillar code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #cbd5e1; font-size: 0.78rem;
+    }
+
+    .layer-strip {
+      margin-top: 1rem;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5rem;
+    }
+    @media (max-width: 700px) { .layer-strip { grid-template-columns: repeat(2, 1fr); } }
+    .layer {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 0.65rem 0.7rem;
+      text-align: center;
+      background: rgba(56, 189, 248, 0.06);
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    .layer b { display: block; font-family: var(--display); font-size: 0.82rem; margin-bottom: 0.2rem; }
+    .layer span { color: var(--faint); font-size: 0.72rem; }
+
+    /* ---- Highlights ---- */
+    .hi-layout {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 860px) { .hi-layout { grid-template-columns: 1fr; } }
+    .hi-tabs { display: flex; flex-direction: column; gap: 0.5rem; }
+    .hi-tab {
+      appearance: none; text-align: left; cursor: pointer;
+      border: 1px solid var(--line); border-radius: 12px;
+      background: rgba(18,26,43,0.7); color: inherit;
+      padding: 0.8rem 0.9rem; transition: 160ms ease;
+    }
+    .hi-tab[aria-selected="true"] {
+      border-color: rgba(56,189,248,0.55);
+      background: rgba(56,189,248,0.12);
+    }
+    .hi-tab strong { display: block; font-size: 0.92rem; margin-bottom: 0.15rem; }
+    .hi-tab small { color: var(--muted); font-size: 0.8rem; line-height: 1.4; }
+
+    .hi-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      min-height: 380px;
+      padding: 1.1rem 1.15rem;
+      background: rgba(255,255,255,0.02);
+      display: none;
+    }
+    .hi-card.is-active { display: block; }
+    .hi-card h3 {
+      margin: 0 0 0.4rem;
+      font-family: var(--display);
+      font-size: 1.15rem; letter-spacing: -0.02em;
+    }
+    .hi-card .lead { margin: 0 0 1rem; color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+    .chip {
+      border: 1px solid var(--line); border-radius: 999px;
+      padding: 0.25rem 0.65rem; font-size: 0.75rem; color: var(--muted);
+      background: rgba(0,0,0,0.18);
+      opacity: 0; transform: translateY(6px);
+    }
+
+    .mock-ui {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #0f172a;
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    .mock-ui header {
+      display: flex; gap: 0.5rem; align-items: center;
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid var(--line);
+      font-size: 0.75rem; color: var(--faint);
+    }
+    .mock-ui .body { padding: 0.85rem; }
+    .mock-row {
+      display: flex; justify-content: space-between; gap: 0.75rem;
+      padding: 0.45rem 0.55rem; border-radius: 8px;
+      background: rgba(255,255,255,0.03);
+      margin-bottom: 0.4rem; font-size: 0.82rem;
+    }
+    .mock-row code { color: #cbd5e1; font-size: 0.78rem; }
+    .ok { color: var(--accent-2); font-size: 0.75rem; font-weight: 650; }
+    .metric-row {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45rem;
+    }
+    .metric-row div {
+      border: 1px solid var(--line); border-radius: 10px;
+      padding: 0.55rem; background: rgba(56,189,248,0.06);
+    }
+    .metric-row em { display: block; font-style: normal; color: var(--faint); font-size: 0.7rem; }
+    .metric-row strong { font-family: var(--display); font-size: 0.95rem; }
+
+    /* ---- Capacity (reuse pattern) ---- */
+    .cap-layout {
+      display: grid;
+      grid-template-columns: minmax(220px, 280px) 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 860px) { .cap-layout { grid-template-columns: 1fr; } }
+    .cap-tabs { display: flex; flex-direction: column; gap: 0.55rem; }
+    .cap-tab {
+      appearance: none; text-align: left; cursor: pointer;
+      border: 1px solid var(--line); border-radius: 12px;
+      background: rgba(18,26,43,0.7); color: inherit;
+      padding: 0.85rem 0.95rem;
+    }
+    .cap-tab[aria-selected="true"] {
+      border-color: rgba(56,189,248,0.55);
+      background: linear-gradient(180deg, rgba(56,189,248,0.14), rgba(18,26,43,0.9));
+    }
+    .cap-tab span {
+      display: block; font-family: var(--display);
+      font-size: 0.7rem; letter-spacing: 0.12em; color: var(--faint); margin-bottom: 0.25rem;
+    }
+    .cap-tab[aria-selected="true"] span { color: var(--accent); }
+    .cap-tab strong { display: block; font-size: 0.92rem; margin-bottom: 0.2rem; }
+    .cap-tab small { color: var(--muted); font-size: 0.8rem; line-height: 1.4; }
+
+    .cap-panel { display: none; }
+    .cap-panel.is-active { display: block; }
+    .msg-user {
+      margin-left: auto; width: fit-content; max-width: 92%;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff; border-radius: 16px 16px 4px 16px;
+      padding: 0.7rem 0.9rem; font-size: 0.92rem; line-height: 1.45;
+      opacity: 0; transform: translateY(8px);
+    }
+    .intro {
+      margin: 0.9rem 0 0.8rem; color: var(--muted);
+      font-size: 0.88rem; line-height: 1.55;
+      opacity: 0; transform: translateY(8px);
+    }
+    .process {
+      border: 1px solid var(--line); border-radius: 12px;
+      background: rgba(255,255,255,0.02); overflow: hidden;
+      opacity: 0; transform: translateY(8px);
+    }
+    .process-summary {
+      padding: 0.55rem 0.85rem; border-bottom: 1px solid var(--line);
+      font-family: var(--display); font-size: 0.8rem; font-weight: 600; color: var(--accent-2);
+    }
+    .tool-row {
+      display: grid; grid-template-columns: auto auto 1fr 18px;
+      gap: 0.5rem; align-items: center;
+      padding: 0.6rem 0.85rem; border-top: 1px solid rgba(148,163,184,0.08);
+      font-size: 0.82rem; opacity: 0; transform: translateX(-8px);
+    }
+    .tool-row:first-child { border-top: 0; }
+    .tag {
+      font-family: var(--display); font-size: 0.66rem; font-weight: 700;
+      letter-spacing: 0.08em; color: var(--accent-warm);
+    }
+    .tool-row code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #cbd5e1; font-size: 0.78rem;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .check { width: 16px; height: 16px; color: var(--accent-2); opacity: 0; transform: scale(0.6); }
+    .report {
+      margin-top: 0.85rem;
+      border: 1px solid rgba(56,189,248,0.22);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(56,189,248,0.08), rgba(22,32,51,0.5));
+      padding: 0.95rem 1rem;
+      opacity: 0; transform: translateY(12px) scale(0.985);
+    }
+    .report h3 { margin: 0 0 0.35rem; font-family: var(--display); font-size: 1.02rem; }
+    .report p { margin: 0 0 0.75rem; color: var(--muted); font-size: 0.88rem; line-height: 1.5; }
+    .report .note { margin: 0.7rem 0 0; color: var(--faint); font-size: 0.8rem; }
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.45rem; }
+    @media (max-width: 640px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
+    .metrics div {
+      border: 1px solid var(--line); border-radius: 8px;
+      padding: 0.45rem 0.55rem; background: rgba(0,0,0,0.18);
+    }
+    .metrics em { display: block; font-style: normal; color: var(--faint); font-size: 0.68rem; }
+    .metrics strong { font-family: var(--display); font-size: 0.92rem; }
+    .metrics strong.up { color: var(--accent-2); }
+    .slides { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45rem; }
+    .slide {
+      aspect-ratio: 4/3; border-radius: 8px; border: 1px solid var(--line);
+      background: linear-gradient(160deg, #1e293b, #0f172a);
+      padding: 0.5rem; display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .slide b { font-family: var(--display); font-size: 0.72rem; }
+    .slide i { font-style: normal; font-size: 0.66rem; color: var(--faint); }
+    table.sheet { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    table.sheet th, table.sheet td {
+      border-bottom: 1px solid var(--line); padding: 0.4rem 0.3rem; text-align: left;
+    }
+    table.sheet th { color: var(--faint); font-size: 0.7rem; }
+    .prio {
+      display: inline-block; padding: 0.08rem 0.35rem; border-radius: 999px;
+      font-size: 0.66rem; font-weight: 700;
+    }
+    .prio.p1 { background: rgba(248,113,113,0.16); color: #fca5a5; }
+    .prio.p2 { background: rgba(251,191,36,0.16); color: #fcd34d; }
+    .prio.p3 { background: rgba(148,163,184,0.16); color: #cbd5e1; }
+    .im-badge {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      padding: 0.15rem 0.5rem; border-radius: 999px;
+      background: rgba(52,211,153,0.12); color: var(--accent-2);
+      font-size: 0.72rem; font-weight: 600; margin-bottom: 0.55rem;
+    }
+
+    /* Animations when active */
+    .section.is-active .flow-step:nth-child(1) { animation: rise 420ms ease both 120ms; }
+    .section.is-active .flow-arrow:nth-child(2) { animation: rise 300ms ease both 320ms; }
+    .section.is-active .flow-step:nth-child(3) { animation: rise 420ms ease both 420ms; }
+    .section.is-active .flow-arrow:nth-child(4) { animation: rise 300ms ease both 620ms; }
+    .section.is-active .flow-step:nth-child(5) { animation: rise 420ms ease both 720ms; }
+    .section.is-active .flow-arrow:nth-child(6) { animation: rise 300ms ease both 920ms; }
+    .section.is-active .flow-step:nth-child(7) { animation: rise 420ms ease both 1020ms; }
+    .section.is-active .flow-arrow:nth-child(8) { animation: rise 300ms ease both 1220ms; }
+    .section.is-active .flow-step:nth-child(9) { animation: rise 420ms ease both 1320ms; }
+    .section.is-active .pillar:nth-child(1) { animation: slideR 420ms ease both 500ms; }
+    .section.is-active .pillar:nth-child(2) { animation: slideR 420ms ease both 750ms; }
+    .section.is-active .pillar:nth-child(3) { animation: slideR 420ms ease both 1000ms; }
+    .section.is-active .pillar:nth-child(4) { animation: slideR 420ms ease both 1250ms; }
+    .section.is-active .layer:nth-child(1) { animation: pop 380ms ease both 1500ms; }
+    .section.is-active .layer:nth-child(2) { animation: pop 380ms ease both 1650ms; }
+    .section.is-active .layer:nth-child(3) { animation: pop 380ms ease both 1800ms; }
+    .section.is-active .layer:nth-child(4) { animation: pop 380ms ease both 1950ms; }
+
+    .hi-card.is-active .chip:nth-child(1) { animation: rise 350ms ease both 200ms; }
+    .hi-card.is-active .chip:nth-child(2) { animation: rise 350ms ease both 320ms; }
+    .hi-card.is-active .chip:nth-child(3) { animation: rise 350ms ease both 440ms; }
+    .hi-card.is-active .chip:nth-child(4) { animation: rise 350ms ease both 560ms; }
+    .hi-card.is-active .mock-ui { animation: rise 450ms ease both 700ms; }
+
+    .cap-panel.is-active .msg-user { animation: rise 420ms ease both; }
+    .cap-panel.is-active .intro { animation: rise 420ms ease both 280ms; }
+    .cap-panel.is-active .process { animation: rise 420ms ease both 520ms; }
+    .cap-panel.is-active .tool-row:nth-child(1) { animation: slideL 380ms ease both 780ms; }
+    .cap-panel.is-active .tool-row:nth-child(2) { animation: slideL 380ms ease both 1080ms; }
+    .cap-panel.is-active .tool-row:nth-child(3) { animation: slideL 380ms ease both 1380ms; }
+    .cap-panel.is-active .tool-row:nth-child(1) .check { animation: pop 300ms ease both 1050ms; }
+    .cap-panel.is-active .tool-row:nth-child(2) .check { animation: pop 300ms ease both 1350ms; }
+    .cap-panel.is-active .tool-row:nth-child(3) .check { animation: pop 300ms ease both 1650ms; }
+    .cap-panel.is-active .report { animation: result 520ms ease both 1750ms; }
+
+    @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    @keyframes slideR { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+    @keyframes slideL { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+    @keyframes pop { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
+    @keyframes result { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+    .hint {
+      margin-top: 1.1rem; text-align: center; color: var(--faint); font-size: 0.8rem;
+    }
+    .hint a { color: var(--accent); text-decoration: none; }
+    body.record .top { padding-top: 0.75rem; }
+    body.record .page { padding-bottom: 1.25rem; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><i>D</i><span>Danmo Work</span></div>
+    <nav class="nav" role="tablist" aria-label="Tour sections">
+      <button type="button" data-section-tab="arch" aria-selected="true"></button>
+      <button type="button" data-section-tab="highlights" aria-selected="false"></button>
+      <button type="button" data-section-tab="capacity" aria-selected="false"></button>
+    </nav>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="zh" aria-pressed="true">中文</button>
+      <button type="button" data-lang="en" aria-pressed="false">EN</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <p class="eyebrow" data-i18n="eyebrow"></p>
+    <h1 class="title" data-i18n="title"></h1>
+    <p class="subtitle" data-i18n="subtitle"></p>
+
+    <div class="stage is-playing" data-stage style="--cycle: 12s">
+      <div class="stage-bar">
+        <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
+        <strong data-i18n="stageTitle"></strong>
+        <em data-i18n="stageMeta"></em>
+      </div>
+      <div class="progress" aria-hidden="true"><i></i></div>
+
+      <!-- Architecture -->
+      <section class="section is-active" data-section="arch">
+        <div class="arch-grid">
+          <div class="flow" data-flow>
+            <div class="flow-step">
+              <div class="flow-num">1</div>
+              <div><strong data-i18n="arch.s1t"></strong><p data-i18n="arch.s1d"></p></div>
+            </div>
+            <div class="flow-arrow"></div>
+            <div class="flow-step">
+              <div class="flow-num">2</div>
+              <div><strong data-i18n="arch.s2t"></strong><p data-i18n="arch.s2d"></p></div>
+            </div>
+            <div class="flow-arrow"></div>
+            <div class="flow-step">
+              <div class="flow-num">3</div>
+              <div><strong data-i18n="arch.s3t"></strong><p data-i18n="arch.s3d"></p></div>
+            </div>
+            <div class="flow-arrow"></div>
+            <div class="flow-step">
+              <div class="flow-num">4</div>
+              <div><strong data-i18n="arch.s4t"></strong><p data-i18n="arch.s4d"></p></div>
+            </div>
+            <div class="flow-arrow"></div>
+            <div class="flow-step">
+              <div class="flow-num">5</div>
+              <div><strong data-i18n="arch.s5t"></strong><p data-i18n="arch.s5d"></p></div>
+            </div>
+          </div>
+          <div>
+            <div class="pillars">
+              <div class="pillar"><b data-i18n="arch.p1t"></b><span data-i18n="arch.p1d"></span></div>
+              <div class="pillar"><b data-i18n="arch.p2t"></b><span data-i18n="arch.p2d"></span></div>
+              <div class="pillar"><b data-i18n="arch.p3t"></b><span data-i18n="arch.p3d"></span></div>
+              <div class="pillar"><b data-i18n="arch.p4t"></b><span data-i18n="arch.p4d"></span></div>
+            </div>
+            <div class="layer-strip">
+              <div class="layer"><b>Surfaces</b><span data-i18n="arch.l1"></span></div>
+              <div class="layer"><b>Runtime</b><span data-i18n="arch.l2"></span></div>
+              <div class="layer"><b>Tools</b><span data-i18n="arch.l3"></span></div>
+              <div class="layer"><b>Store</b><span data-i18n="arch.l4"></span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Highlights -->
+      <section class="section" data-section="highlights" hidden>
+        <div class="hi-layout">
+          <div class="hi-tabs" role="tablist">
+            <button class="hi-tab" type="button" data-hi="0" aria-selected="true">
+              <strong data-i18n="hi.t0"></strong><small data-i18n="hi.d0"></small>
+            </button>
+            <button class="hi-tab" type="button" data-hi="1" aria-selected="false">
+              <strong data-i18n="hi.t1"></strong><small data-i18n="hi.d1"></small>
+            </button>
+            <button class="hi-tab" type="button" data-hi="2" aria-selected="false">
+              <strong data-i18n="hi.t2"></strong><small data-i18n="hi.d2"></small>
+            </button>
+            <button class="hi-tab" type="button" data-hi="3" aria-selected="false">
+              <strong data-i18n="hi.t3"></strong><small data-i18n="hi.d3"></small>
+            </button>
+            <button class="hi-tab" type="button" data-hi="4" aria-selected="false">
+              <strong data-i18n="hi.t4"></strong><small data-i18n="hi.d4"></small>
+            </button>
+            <button class="hi-tab" type="button" data-hi="5" aria-selected="false">
+              <strong data-i18n="hi.t5"></strong><small data-i18n="hi.d5"></small>
+            </button>
+          </div>
+          <div>
+            <article class="hi-card is-active" data-hi-card="0">
+              <h3 data-i18n="hi.c0t"></h3>
+              <p class="lead" data-i18n="hi.c0l"></p>
+              <div class="chips">
+                <span class="chip">Doc</span><span class="chip">Slides</span>
+                <span class="chip">Sheet</span><span class="chip">Preview</span>
+              </div>
+              <div class="mock-ui">
+                <header><span>Document Stage</span><span>·</span><span data-i18n="hi.c0m"></span></header>
+                <div class="body">
+                  <div class="metric-row">
+                    <div><em>Doc</em><strong>.md</strong></div>
+                    <div><em>Slides</em><strong>---</strong></div>
+                    <div><em>Sheet</em><strong>.csv</strong></div>
+                  </div>
+                </div>
+              </div>
+            </article>
+            <article class="hi-card" data-hi-card="1" hidden>
+              <h3 data-i18n="hi.c1t"></h3>
+              <p class="lead" data-i18n="hi.c1l"></p>
+              <div class="chips">
+                <span class="chip">delegate_agent</span><span class="chip">hard isolation</span>
+                <span class="chip">same chain</span><span class="chip">Report</span>
+              </div>
+              <div class="mock-ui">
+                <header>Agent Loop</header>
+                <div class="body">
+                  <div class="mock-row"><code>delegate_agent · researcher</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>child Turn · tools/skills</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>Report → parent continues</code><span class="ok">OK</span></div>
+                </div>
+              </div>
+            </article>
+            <article class="hi-card" data-hi-card="2" hidden>
+              <h3 data-i18n="hi.c2t"></h3>
+              <p class="lead" data-i18n="hi.c2l"></p>
+              <div class="chips">
+                <span class="chip">resume</span><span class="chip">replay</span>
+                <span class="chip">edit result</span><span class="chip">JSONL</span>
+              </div>
+              <div class="mock-ui">
+                <header>Turn Log</header>
+                <div class="body">
+                  <div class="mock-row"><code>step.web_search</code><span class="ok">done</span></div>
+                  <div class="mock-row"><code>step.write_file</code><span class="ok">done</span></div>
+                  <div class="mock-row"><code>edit Tool Result → continue</code><span class="ok">live</span></div>
+                </div>
+              </div>
+            </article>
+            <article class="hi-card" data-hi-card="3" hidden>
+              <h3 data-i18n="hi.c3t"></h3>
+              <p class="lead" data-i18n="hi.c3l"></p>
+              <div class="chips">
+                <span class="chip">memory_*</span><span class="chip">table_*</span>
+                <span class="chip">store.db</span><span class="chip">scopes</span>
+              </div>
+              <div class="mock-ui">
+                <header>Memory · Table Store</header>
+                <div class="body">
+                  <div class="mock-row"><code>memory_update · project</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>table_upsert · digests</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>~/.danmo-work/store.db</code><span class="ok">local</span></div>
+                </div>
+              </div>
+            </article>
+            <article class="hi-card" data-hi-card="4" hidden>
+              <h3 data-i18n="hi.c4t"></h3>
+              <p class="lead" data-i18n="hi.c4l"></p>
+              <div class="chips">
+                <span class="chip">MCP</span><span class="chip">secrets</span>
+                <span class="chip">cron</span><span class="chip">webhook</span>
+              </div>
+              <div class="mock-ui">
+                <header>Connectors · Automations</header>
+                <div class="body">
+                  <div class="mock-row"><code>mcp_notion_search</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>mcp_feishu_bitable</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>cron → real Turn</code><span class="ok">OK</span></div>
+                </div>
+              </div>
+            </article>
+            <article class="hi-card" data-hi-card="5" hidden>
+              <h3 data-i18n="hi.c5t"></h3>
+              <p class="lead" data-i18n="hi.c5l"></p>
+              <div class="chips">
+                <span class="chip">WeChat</span><span class="chip">Feishu</span>
+                <span class="chip">WeCom</span><span class="chip">QQ</span>
+              </div>
+              <div class="mock-ui">
+                <header>IM Channels</header>
+                <div class="body">
+                  <div class="mock-row"><code>outbound WS · no public callback</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>same Agent Loop</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>tools on your machine</code><span class="ok">local</span></div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Capacity -->
+      <section class="section" data-section="capacity" hidden>
+        <div class="cap-layout">
+          <div class="cap-tabs">
+            <button class="cap-tab" type="button" data-cap="0" aria-selected="true">
+              <span>01</span><strong data-i18n="cap.t0"></strong><small data-i18n="cap.d0"></small>
+            </button>
+            <button class="cap-tab" type="button" data-cap="1" aria-selected="false">
+              <span>02</span><strong data-i18n="cap.t1"></strong><small data-i18n="cap.d1"></small>
+            </button>
+            <button class="cap-tab" type="button" data-cap="2" aria-selected="false">
+              <span>03</span><strong data-i18n="cap.t2"></strong><small data-i18n="cap.d2"></small>
+            </button>
+          </div>
+          <div>
+            <article class="cap-panel is-active" data-cap-panel="0">
+              <div class="msg-user" data-i18n="cap.u0"></div>
+              <p class="intro" data-i18n="cap.i0"></p>
+              <div class="process">
+                <div class="process-summary" data-i18n="cap.p0"></div>
+                <div class="tool-row"><span class="tag">CALLED</span><code>web_search</code><span></span>
+                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
+                </div>
+                <div class="tool-row"><span class="tag">CALLED</span><code>write_file · market-report.html</code><span></span>
+                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
+                </div>
+                <div class="tool-row"><span class="tag">CALLED</span><code>stage.open · Preview</code><span></span>
+                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
+                </div>
+              </div>
+              <div class="report">
+                <h3 data-i18n="cap.r0t"></h3>
+                <p data-i18n="cap.r0d"></p>
+                <div class="metrics">
+                  <div><em>Coding</em><strong>$12.3B</strong></div>
+                  <div><em>Work</em><strong>$7.8B</strong></div>
+                  <div><em>CAGR</em><strong class="up">45.8%</strong></div>
+                  <div><em>Adoption</em><strong>87%</strong></div>
+                </div>
+                <p class="note" data-i18n="cap.r0n"></p>
+              </div>
+            </article>
+            <article class="cap-panel" data-cap-panel="1" hidden>
+              <div class="msg-user" data-i18n="cap.u1"></div>
+              <p class="intro" data-i18n="cap.i1"></p>
+              <div class="process">
+                <div class="process-summary" data-i18n="cap.p1"></div>
+                <div class="tool-row"><span class="tag">CALLED</span><code>delegate_agent · researcher</code><span></span>
+                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
+                </div>
+                <div class="tool-row"><span class="tag">CALLED</span><code>memory_update · competitor notes</code><span></span>
+                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
+                </div>
+                <div class="tool-row"><span class="tag">CALLED</span><code>write_file · competitor-deck.md</code><span></span>
+                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
+                </div>
+              </div>
+              <div class="report">
+                <h3 data-i18n="cap.r1t"></h3>
+                <p data-i18n="cap.r1d"></p>
+                <div class="slides">
+                  <div class="slide"><b data-i18n="cap.sl1"></b><i>01</i></div>
+                  <div class="slide"><b data-i18n="cap.sl2"></b><i>02</i></div>
+                  <div class="slide"><b data-i18n="cap.sl3"></b><i>03</i></div>
+                </div>
+                <p class="note" data-i18n="cap.r1n"></p>
+              </div>
+            </article>
+            <article class="cap-panel" data-cap-panel="2" hidden>
+              <div class="msg-user" data-i18n="cap.u2"></div>
+              <p class="intro" data-i18n="cap.i2"></p>
+              <div class="process">
+                <div class="process-summary" data-i18n="cap.p2"></div>
+                <div class="tool-row"><span class="tag">CALLED</span><code>channel.feishu · support</code><span></span>
+                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
+                </div>
+                <div class="tool-row"><span class="tag">CALLED</span><code>table_upsert · customer_issues</code><span></span>
+                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
+                </div>
+                <div class="tool-row"><span class="tag">CALLED</span><code>stage.open · issues.csv</code><span></span>
+                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
+                </div>
+              </div>
+              <div class="report">
+                <div class="im-badge" data-i18n="cap.badge"></div>
+                <h3 data-i18n="cap.r2t"></h3>
+                <p data-i18n="cap.r2d"></p>
+                <table class="sheet">
+                  <thead><tr><th data-i18n="cap.th1"></th><th data-i18n="cap.th2"></th><th data-i18n="cap.th3"></th><th data-i18n="cap.th4"></th></tr></thead>
+                  <tbody>
+                    <tr><td>Billing</td><td>18</td><td><span class="prio p1">P1</span></td><td data-i18n="cap.row1"></td></tr>
+                    <tr><td>Onboarding</td><td>14</td><td><span class="prio p2">P2</span></td><td data-i18n="cap.row2"></td></tr>
+                    <tr><td>Performance</td><td>9</td><td><span class="prio p3">P3</span></td><td data-i18n="cap.row3"></td></tr>
+                    <tr><td>Integrations</td><td>7</td><td><span class="prio p3">P3</span></td><td data-i18n="cap.row4"></td></tr>
+                  </tbody>
+                </table>
+                <p class="note" data-i18n="cap.r2n"></p>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <p class="hint">
+      <span data-i18n="hint"></span>
+      · <a href="https://github.com/danmo-ai/danmo-work">danmo-ai/danmo-work</a>
+    </p>
+  </main>
+
+  <script>
+    const I18N = {
+      zh: {
+        eyebrow: "产品演示",
+        title: "架构 · 亮点 · 产能，一条思维链讲完",
+        subtitle: "不是又一个 Coding CLI。一流 Agent Loop 底盘，面向长程工作：文档、幻灯片、表格、MCP 与 IM，同一条 Turn Log。",
+        stageTitle: "Danmo Work Tour",
+        stageMeta: "Architecture · Highlights · Capacity",
+        nav: ["架构设计", "亮点功能", "产能示例"],
+        arch: {
+          s1t: "用户输入", s1d: "Web / 桌面 / CLI·TUI / 飞书·微信，同一入口语义。",
+          s2t: "LLM 规划 Tool Call", s2d: "无手写 Graph / Mode；模型是唯一决策中心。",
+          s3t: "Agent Loop 执行", s3d: "文件、Shell、MCP、记忆、委派……一切皆 Tool。",
+          s4t: "Turn Log 落盘", s4d: "每一步可恢复、可回放、可改结果再继续。",
+          s5t: "交付工作产物", s5d: "Document Stage：报告 / 幻灯片 / 表格 / 预览。",
+          p1t: "一切皆工具", p1d: "delegate_agent、ask_user、memory_*、table_*、MCP 统一接口。",
+          p2t: "纯 LLM 驱动", p2d: "控制流由模型生成，不是开发者预设路由。",
+          p3t: "日志即状态", p3d: "Turn Log = 可信任执行轨迹，不是黑盒会话。",
+          p4t: "Coding 是车道", p4d: "不是天花板——同一架构覆盖长程 Work。",
+          l1: "Web · Desktop · CLI · IM",
+          l2: "Session · Turn · Step",
+          l3: "Files · MCP · Agents",
+          l4: "work.db · store.db · logs",
+        },
+        hi: {
+          t0: "Document Stage", d0: "文档 / 幻灯片 / 表格 / 预览",
+          t1: "多 Agent 委派", d1: "同一思维链，硬隔离",
+          t2: "Turn Log", d2: "恢复 · 回放 · 改结果",
+          t3: "Memory + Table Store", d3: "可检视记忆与业务流水",
+          t4: "MCP + 自动化", d4: "连接器、密钥、cron/webhook",
+          t5: "IM 通道", d5: "微信 · 飞书 · 企微 · QQ",
+          c0t: "产物落在 Stage，不在聊天框",
+          c0l: "按文件类型切换编辑器与 AI 作用域；HTML/图片走 Preview，点选批注直接改。",
+          c0m: "可编辑 · 可预览 · 可 AI 润色",
+          c1t: "子 Agent 是 Tool，不是并行黑盒",
+          c1l: "delegate_agent 开独立 Turn；父链只收 Report，轨迹仍可检视。",
+          c2t: "执行轨迹可信任",
+          c2l: "输入输出全量持久化；中途失败可 Resume；人工改 Tool Result 后继续。",
+          c3t: "记忆与业务数据分开",
+          c3l: "Memory 存约定与偏好；Table Store 存可查询流水（独立 store.db）。",
+          c4t: "能力扩展不叠复杂度",
+          c4l: "新能力 = 新 Tool / Skill / MCP；自动化真正开启带 Turn Log 的 Session。",
+          c5t: "人在哪聊，Agent 就在哪",
+          c5l: "出站接入、无需公网回调；工具仍在本机执行，权限与密钥可控。",
+        },
+        cap: {
+          t0: "调研到报告", d0: "市场发展报告落到 Stage",
+          t1: "委派到幻灯片", d1: "子 Agent 调研 → 可播放 deck",
+          t2: "飞书到表格", d2: "IM 归类客户问题",
+          u0: "写一份 Coding Agent 与 Work Agent 市场发展报告，落到项目里可预览。",
+          i0: "检索、结构化、写作在同一思维链；产物进 Document Stage。",
+          p0: "请求 → 报告",
+          r0t: "市场发展报告已就绪",
+          r0d: "双赛道对比：规模、增速、采用率与产品边界。",
+          r0n: "Turn Log 可回放每一步；改结果后可从断点继续。",
+          u1: "委派子 Agent 调研 3 个竞品，整理成可播放幻灯片。",
+          i1: "硬隔离跑调研；主链汇总后写入 Markdown slides。",
+          p1: "委派 → 幻灯片",
+          r1t: "竞品 Deck · 6 页可播放",
+          r1d: "定位 / 功能矩阵 / 差异化建议已落盘。",
+          r1n: "子 Agent 与主链共享可检视 Turn Log。",
+          sl1: "市场地图", sl2: "功能对比", sl3: "差异化建议",
+          u2: "总结支持频道里本周客户问题，按优先级写入表格。",
+          i2: "飞书消息进同一 Loop；结果写入 Table Store 并打开 Sheet。",
+          p2: "IM → 表格",
+          badge: "飞书 · 同一 Loop · 工具在本机",
+          r2t: "48 条反馈 → 4 类问题",
+          r2d: "已写入 Table Store，并导出可编辑表格。",
+          th1: "主题", th2: "数量", th3: "优先级", th4: "建议",
+          row1: "导出失败", row2: "卡在创建", row3: "首屏慢", row4: "MCP 权限",
+          r2n: "Billing + Onboarding 覆盖 67% 高频问题。",
+        },
+        hint: "HTML 可切换语言与章节 · 录屏导出 GIF/MP4 用于 README / 社媒",
+      },
+      en: {
+        eyebrow: "Product tour",
+        title: "Architecture, highlights, capacity — one thinking trail",
+        subtitle: "Not just another coding CLI. Coding-agent-grade loop for long-horizon work: docs, slides, sheets, MCP & IM on one Turn Log.",
+        stageTitle: "Danmo Work Tour",
+        stageMeta: "Architecture · Highlights · Capacity",
+        nav: ["Architecture", "Highlights", "Capacity"],
+        arch: {
+          s1t: "User input", s1d: "Web / Desktop / CLI·TUI / Feishu·WeChat — same semantics.",
+          s2t: "LLM plans Tool Calls", s2d: "No hand-written graph or mode; the model decides.",
+          s3t: "Agent Loop executes", s3d: "Files, shell, MCP, memory, delegation — everything is a Tool.",
+          s4t: "Turn Log persists", s4d: "Resume, replay, edit a Tool Result and continue.",
+          s5t: "Ship work artifacts", s5d: "Document Stage: report / slides / sheet / preview.",
+          p1t: "Everything is a Tool", p1d: "delegate_agent, ask_user, memory_*, table_*, MCP — one interface.",
+          p2t: "Pure LLM-driven", p2d: "Control flow is model-planned, not a developer router.",
+          p3t: "Log is state", p3d: "Turn Log is a trusted trail — not a black-box chat.",
+          p4t: "Coding is a lane", p4d: "Not the ceiling — same architecture covers long-horizon work.",
+          l1: "Web · Desktop · CLI · IM",
+          l2: "Session · Turn · Step",
+          l3: "Files · MCP · Agents",
+          l4: "work.db · store.db · logs",
+        },
+        hi: {
+          t0: "Document Stage", d0: "Docs / slides / sheets / preview",
+          t1: "Multi-agent", d1: "Same chain, hard isolation",
+          t2: "Turn Log", d2: "Resume · replay · edit",
+          t3: "Memory + Table Store", d3: "Visible memory & business rows",
+          t4: "MCP + Automations", d4: "Connectors, secrets, cron/webhook",
+          t5: "IM channels", d5: "WeChat · Feishu · WeCom · QQ",
+          c0t: "Artifacts live in Stage, not the chat void",
+          c0l: "Editors switch by file kind; Preview supports element annotate → edit.",
+          c0m: "Edit · preview · AI polish",
+          c1t: "Sub-agents are Tools, not opaque sessions",
+          c1l: "delegate_agent opens an isolated Turn; parent continues on Report.",
+          c2t: "A trail you can trust",
+          c2l: "Full persistence; Resume on failure; humans can edit Tool Results.",
+          c3t: "Memory ≠ business rows",
+          c3l: "Memory keeps preferences; Table Store holds queryable digests in store.db.",
+          c4t: "Grow capability without graph sprawl",
+          c4l: "New power = Tool / Skill / MCP; automations start real logged Turns.",
+          c5t: "Meet people where they chat",
+          c5l: "Outbound connect, no public callback; tools still run on your machine.",
+        },
+        cap: {
+          t0: "Research → report", d0: "Market report into Stage",
+          t1: "Delegate → slides", d1: "Sub-agent research → deck",
+          t2: "Feishu → sheet", d2: "Classify support issues",
+          u0: "Write a Coding Agent vs Work Agent market report and preview it in the project.",
+          i0: "Retrieve, structure, write on one chain; artifact opens in Document Stage.",
+          p0: "Request → report",
+          r0t: "Market report ready",
+          r0d: "Dual-track comparison: size, growth, adoption, product boundaries.",
+          r0n: "Replay every Tool Call; edit a result and continue from the break.",
+          u1: "Delegate a sub-agent to research 3 competitors into playable slides.",
+          i1: "Hard-isolated research; parent writes Markdown slides.",
+          p1: "Delegate → slides",
+          r1t: "Competitor deck · 6 playable pages",
+          r1d: "Positioning / matrix / differentiation landed on disk.",
+          r1n: "Parent and child share an inspectable Turn Log.",
+          sl1: "Market map", sl2: "Feature matrix", sl3: "Differentiation",
+          u2: "Summarize this week’s support-channel issues into a prioritized sheet.",
+          i2: "Feishu enters the same loop; rows land in Table Store + Sheet Stage.",
+          p2: "IM → sheet",
+          badge: "Feishu · same loop · tools local",
+          r2t: "48 messages → 4 themes",
+          r2d: "Written to Table Store and opened as an editable sheet.",
+          th1: "Theme", th2: "Count", th3: "Priority", th4: "Note",
+          row1: "Export failed", row2: "Stuck create", row3: "Slow first paint", row4: "MCP perms",
+          r2n: "Billing + Onboarding cover 67% of high-frequency issues.",
+        },
+        hint: "HTML toggles language & sections · export GIF/MP4 for README / social",
+      },
+    };
+
+    const $ = (sel, el = document) => el.querySelector(sel);
+    const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
+
+    function getByPath(obj, path) {
+      return path.split(".").reduce((o, k) => (o == null ? o : o[k]), obj);
+    }
+
+    function applyI18n(lang) {
+      const dict = I18N[lang];
+      document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+      $$("[data-i18n]").forEach((node) => {
+        const key = node.getAttribute("data-i18n");
+        const val = getByPath(dict, key);
+        if (val != null) node.textContent = val;
+      });
+      $$("[data-section-tab]").forEach((btn, i) => {
+        btn.textContent = dict.nav[i];
+      });
+      $$("[data-lang]").forEach((btn) => {
+        btn.setAttribute("aria-pressed", String(btn.dataset.lang === lang));
+      });
+    }
+
+    function restartProgress(stage) {
+      stage.classList.remove("is-playing");
+      const bar = $(".progress > i", stage);
+      void bar.offsetWidth;
+      stage.classList.add("is-playing");
+    }
+
+    function replay(el) {
+      if (!el) return;
+      el.style.display = "none";
+      void el.offsetWidth;
+      el.style.display = "";
+    }
+
+    function init() {
+      const params = new URLSearchParams(location.search);
+      let lang = params.get("lang") === "en" ? "en" : "zh";
+      let section = params.get("section") || "arch";
+      if (!["arch", "highlights", "capacity"].includes(section)) section = "arch";
+      if (params.has("record")) document.body.classList.add("record");
+      const auto = params.has("tour") || params.has("record");
+
+      const stage = $("[data-stage]");
+      const sectionTabs = $$("[data-section-tab]");
+      const sections = $$("[data-section]");
+
+      let hi = 0;
+      let cap = 0;
+      let timer;
+
+      const fast = params.has("record") || params.get("tour") === "fast";
+      const CYCLE = fast
+        ? { arch: 7000, highlights: 4500, capacity: 7000 }
+        : { arch: 12000, highlights: 9000, capacity: 11000 };
+
+      function showSection(name, { restartHi = true, restartCap = true } = {}) {
+        section = name;
+        sectionTabs.forEach((btn) => {
+          btn.setAttribute("aria-selected", String(btn.dataset.sectionTab === name));
+        });
+        sections.forEach((sec) => {
+          const on = sec.dataset.section === name;
+          sec.classList.toggle("is-active", on);
+          sec.toggleAttribute("hidden", !on);
+          if (on) replay(sec);
+        });
+        stage.style.setProperty("--cycle", `${CYCLE[name]}ms`);
+        restartProgress(stage);
+        if (name === "highlights" && restartHi) showHi(0);
+        if (name === "capacity" && restartCap) showCap(0);
+      }
+
+      function showHi(i) {
+        hi = i;
+        $$("[data-hi]").forEach((btn, idx) => {
+          btn.setAttribute("aria-selected", String(idx === i));
+        });
+        $$("[data-hi-card]").forEach((card, idx) => {
+          const on = idx === i;
+          card.classList.toggle("is-active", on);
+          card.toggleAttribute("hidden", !on);
+          if (on) replay(card);
+        });
+      }
+
+      function showCap(i) {
+        cap = i;
+        $$("[data-cap]").forEach((btn, idx) => {
+          btn.setAttribute("aria-selected", String(idx === i));
+        });
+        $$("[data-cap-panel]").forEach((panel, idx) => {
+          const on = idx === i;
+          panel.classList.toggle("is-active", on);
+          panel.toggleAttribute("hidden", !on);
+          if (on) replay(panel);
+        });
+      }
+
+      function arm() {
+        if (!auto) return;
+        window.clearTimeout(timer);
+        const order = ["arch", "highlights", "capacity"];
+        timer = window.setTimeout(() => {
+          if (section === "highlights") {
+            if (hi < 5) {
+              showHi(hi + 1);
+              restartProgress(stage);
+              arm();
+              return;
+            }
+          }
+          if (section === "capacity") {
+            if (cap < 2) {
+              showCap(cap + 1);
+              restartProgress(stage);
+              arm();
+              return;
+            }
+          }
+          const next = order[(order.indexOf(section) + 1) % order.length];
+          showSection(next);
+          arm();
+        }, CYCLE[section]);
+      }
+
+      $$("[data-lang]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          lang = btn.dataset.lang;
+          applyI18n(lang);
+          const url = new URL(location.href);
+          url.searchParams.set("lang", lang);
+          history.replaceState(null, "", url);
+        });
+      });
+
+      sectionTabs.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          showSection(btn.dataset.sectionTab);
+          arm();
+        });
+      });
+
+      $$("[data-hi]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          showHi(Number(btn.dataset.hi));
+          restartProgress(stage);
+          arm();
+        });
+      });
+
+      $$("[data-cap]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          showCap(Number(btn.dataset.cap));
+          restartProgress(stage);
+          arm();
+        });
+      });
+
+      applyI18n(lang);
+      showSection(section);
+      arm();
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -108,11 +108,11 @@ make dev-web   # → http://localhost:5801/app/
 
 ## 界面一览
 
-从一句请求，到一份能用的结果——报告 / 幻灯片 / 表格，同一条 Agent Loop：
+架构 · 亮点 · 产能——双语动画演示（优先 HTML 可切换语言；GIF/MP4 用于传播）：
 
-![产能演示](docs/demo/work-capacity-demo.gif)
+![产品演示（中文）](docs/demo/product-tour-zh.gif)
 
-交互版：[`docs/demo/work-capacity-demo.html`](docs/demo/work-capacity-demo.html)。
+交互版（中/EN 切换）：[`docs/demo/product-tour.html`](docs/demo/product-tour.html) · [MP4](docs/demo/product-tour-zh.mp4)
 
 三栏工作台：项目侧栏 · Agent 执行 Stream · 右侧面板（计划 / 文件 / **记忆** / 变更 / 终端）。中间 **Document Stage** 按文件类型换 toolbar。
 
