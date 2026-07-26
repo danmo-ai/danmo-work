@@ -354,17 +354,10 @@ llm:
       max_output: 384000
       available_efforts: ["off", "low", "medium", "high", "max"]
 
-    # Short alias used by some provider lists / older settings entries
-    - model: deepseek-v4
-      context_window: 1000000
-      max_output: 384000
-      available_efforts: ["off", "low", "medium", "high", "max"]
-
     # Legacy aliases → deepseek-v4-flash (deprecated 2026-07-24)
     - model: deepseek-chat
       context_window: 1000000
       max_output: 384000
-      available_efforts: ["off", "low", "medium", "high", "max"]
 
     - model: deepseek-reasoner
       context_window: 1000000

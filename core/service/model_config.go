@@ -42,11 +42,7 @@ func (r *ModelConfigRegistry) ensureIndex() {
 }
 
 // lookup returns the config entry for a model ID, or nil if not found.
-// Match order:
-//  1. full modelID (e.g. "deepseek/deepseek-v4-pro")
-//  2. bare model name ("deepseek-v4-pro")
-//  3. longest prefix overlap either way (e.g. "deepseek-v4" ↔ "deepseek-v4-pro",
-//     or dated API ids like "deepseek-v4-pro-20260724")
+// Tries full modelID first (e.g. "anthropic/claude-sonnet-5"), then model name only.
 func (r *ModelConfigRegistry) lookup(modelID string) *domain.ModelConfig {
 	_, model := splitModelID(modelID)
 	if model == "" {
@@ -59,35 +55,10 @@ func (r *ModelConfigRegistry) lookup(modelID string) *domain.ModelConfig {
 	if c, ok := r.byModel[key]; ok {
 		return &c
 	}
-	bare := strings.ToLower(model)
-	if c, ok := r.byModel[bare]; ok {
+	if c, ok := r.byModel[strings.ToLower(model)]; ok {
 		return &c
 	}
-	var best *domain.ModelConfig
-	bestScore := -1
-	for cfgName, cfg := range r.byModel {
-		name := strings.ToLower(cfgName)
-		if name == "" {
-			continue
-		}
-		score := -1
-		switch {
-		case strings.HasPrefix(bare, name):
-			// Config is a prefix of the live id (deepseek-v4-pro vs deepseek-v4-pro-2026…).
-			// Prefer the longest config key.
-			score = 1_000_000 + len(name)
-		case strings.HasPrefix(name, bare):
-			// Live id is a short alias (deepseek-v4 vs deepseek-v4-pro/flash).
-			// Prefer the shortest config key so -pro wins over -flash when both match.
-			score = 500_000 - len(name)
-		}
-		if score > bestScore {
-			cp := cfg
-			best = &cp
-			bestScore = score
-		}
-	}
-	return best
+	return nil
 }
 
 // AvailableEfforts returns the reasoning effort levels for a model.
