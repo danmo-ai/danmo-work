@@ -333,7 +333,7 @@ Agent 可用能力按三层合成；Skill 与 Tool（含 MCP）共用同一 Ambi
 | 层 | 内容 | 何时生效 |
 |----|------|----------|
 | **Core** | `ask_user`、`memory_*`、`read_skill`、`search_kb`（有 KB 时）；`delegate_agent`（`canDelegate`） | 始终（与绑定无关） |
-| **Bound** | Agent `skillIds`（DB 技能）+ `tools[]`（builtin `toolId` / MCP `mcpServer`） | 始终按 Agent 配置 |
+| **Bound** | Agent `skillIds`（DB 技能）+ `tools[]`（builtin）+ `mcpServers[]`（MCP server id） | 始终按 Agent 配置 |
 | **Ambient** | 磁盘技能目录 + **全部已启用 MCP Server** | 仅当 `inheritAmbient`（默认：`primary=true`，`subagent=false`） |
 
 `inheritAmbient` 可在 Agent JSON / YAML（`inherit_ambient`）/ Teams UI 覆盖；`null` 表示按 Mode 默认。
@@ -351,11 +351,12 @@ Agent 可用能力按三层合成；Skill 与 Tool（含 MCP）共用同一 Ambi
 
 同名 ID 覆盖顺序（后者赢）：绑定 DB → `~/.agents` → `~/.danmo-work` → 项目 `.agents` → 项目 `.danmo-work`。目录缺失或坏 `SKILL.md` 跳过。Skills 管理页仍只显示 DB（内置 / 手建 / 市场）。
 
-#### MCP 绑定粒度：**按 Server**
+#### MCP 绑定粒度：**按 Server（独立字段）**
 
-- Agent 侧：`ToolBinding.mcpServer` = MCP Server id，或 `"*"`（全部已启用 Server）。
-- **不按单个 MCP tool 绑到 Agent**；单个 tool 的启用/禁用在 MCP Server 配置里（discover 后 persist）。
-- Ambient 开：`MountAllMCP`；Ambient 关：仅 `MountFromBindings`（server id / `*`）。
+- Agent 侧：`mcpServers: ["github", "notion"]`（YAML `mcp_servers`）；**不支持通配符**。
+- `tools[]` 只绑 builtin（`tool_id`）；旧版 `tools[].mcp_server` 读入时迁移到 `mcpServers`。
+- 单个 MCP tool 的启用/禁用在 MCP Server 配置里（discover 后 persist），不绑到 Agent。
+- Ambient 开：`MountAllMCP`；Ambient 关：仅 `MountServers(agent.MCPServers)`。
 
 | Tool / 能力 | 条件 |
 |------|------|
@@ -364,7 +365,7 @@ Agent 可用能力按三层合成；Skill 与 Tool（含 MCP）共用同一 Ambi
 | `ask_user` / `read_skill` | Core |
 | `delegate_agent` | Core + `canDelegate` |
 | 其它 builtin | Bound：`tools[].toolId` |
-| MCP Tools | Ambient 全开，或 Bound：`tools[].mcpServer` |
+| MCP Tools | Ambient 全开，或 Bound：`mcpServers[]` |
 | 磁盘技能 | Ambient（`inheritAmbient`） |
 
 ### 7.1.1 外部 API 分层（避免 Tool 元数据膨胀）

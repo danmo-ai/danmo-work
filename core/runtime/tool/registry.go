@@ -97,16 +97,13 @@ func (r *Registry) Mount(serverID string) {
 	}
 }
 
-func (r *Registry) MountFromBindings(bindings []domain.ToolBinding) {
-	for _, b := range bindings {
-		if b.MCPServer == "" {
+// MountServers mounts tools for the given MCP server ids (exact match only).
+func (r *Registry) MountServers(serverIDs []string) {
+	for _, id := range serverIDs {
+		if id == "" {
 			continue
 		}
-		if b.MCPServer == domain.MCPServerAll {
-			r.MountAllMCP()
-			continue
-		}
-		r.Mount(b.MCPServer)
+		r.Mount(id)
 	}
 }
 

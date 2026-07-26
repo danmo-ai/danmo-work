@@ -12,18 +12,19 @@ import (
 // ---- Agent ----
 
 type agentModel struct {
-	ID             string `gorm:"primaryKey"`
-	Name           string
-	Description    string
-	Persona        string
-	Mode           string
-	SystemPrompt   string `gorm:"column:system_prompt"`
-	Steps          int
-	SkillIDsJSON   string `gorm:"column:skill_ids"`
-	ToolsJSON      string `gorm:"column:tools"`
-	KnowledgeJSON  string `gorm:"column:knowledge_ids"`
-	CanDelegate    bool   `gorm:"column:can_delegate"`
-	InheritAmbient *bool  `gorm:"column:inherit_ambient"`
+	ID              string `gorm:"primaryKey"`
+	Name            string
+	Description     string
+	Persona         string
+	Mode            string
+	SystemPrompt    string `gorm:"column:system_prompt"`
+	Steps           int
+	SkillIDsJSON    string `gorm:"column:skill_ids"`
+	ToolsJSON       string `gorm:"column:tools"`
+	MCPServersJSON  string `gorm:"column:mcp_servers"`
+	KnowledgeJSON   string `gorm:"column:knowledge_ids"`
+	CanDelegate     bool   `gorm:"column:can_delegate"`
+	InheritAmbient  *bool  `gorm:"column:inherit_ambient"`
 }
 
 func (agentModel) TableName() string { return "agents" }
@@ -33,6 +34,8 @@ func (m *agentModel) BeforeSave(_ *gorm.DB) error {
 	m.SkillIDsJSON = string(b)
 	b, _ = json.Marshal(m.tools())
 	m.ToolsJSON = string(b)
+	b, _ = json.Marshal(m.mcpServers())
+	m.MCPServersJSON = string(b)
 	b, _ = json.Marshal(m.knowledgeIDs())
 	m.KnowledgeJSON = string(b)
 	return nil
@@ -47,22 +50,28 @@ func (m *agentModel) tools() []domain.ToolBinding {
 	}
 	return v
 }
+func (m *agentModel) mcpServers() []string { return unmarshalSlice[string](m.MCPServersJSON) }
 func (m *agentModel) knowledgeIDs() []string { return unmarshalSlice[string](m.KnowledgeJSON) }
 
 func agentToDomain(m agentModel) domain.Agent {
-	return domain.Agent{
+	a := domain.Agent{
 		ID: m.ID, Name: m.Name, Description: m.Description, Persona: m.Persona,
 		Mode: domain.AgentMode(m.Mode), SystemPrompt: m.SystemPrompt, Steps: m.Steps,
-		SkillIDs: m.skillIDs(), Tools: m.tools(), KnowledgeIDs: m.knowledgeIDs(),
+		SkillIDs: m.skillIDs(), Tools: m.tools(), MCPServers: m.mcpServers(),
+		KnowledgeIDs: m.knowledgeIDs(),
 		CanDelegate: m.CanDelegate, InheritAmbient: m.InheritAmbient,
 	}
+	domain.NormalizeAgentBindings(&a)
+	return a
 }
 
 func agentFromDomain(a domain.Agent) agentModel {
+	domain.NormalizeAgentBindings(&a)
 	return agentModel{
 		ID: a.ID, Name: a.Name, Description: a.Description, Persona: a.Persona,
 		Mode: string(a.Mode), SystemPrompt: a.SystemPrompt, Steps: a.Steps,
-		SkillIDsJSON: marshalJSON(a.SkillIDs), ToolsJSON: marshalJSON(a.Tools), KnowledgeJSON: marshalJSON(a.KnowledgeIDs),
+		SkillIDsJSON: marshalJSON(a.SkillIDs), ToolsJSON: marshalJSON(a.Tools),
+		MCPServersJSON: marshalJSON(a.MCPServers), KnowledgeJSON: marshalJSON(a.KnowledgeIDs),
 		CanDelegate: a.CanDelegate, InheritAmbient: a.InheritAmbient,
 	}
 }

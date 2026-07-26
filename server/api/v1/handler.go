@@ -391,6 +391,7 @@ func createAgent(h *Handler) gin.HandlerFunc {
 		if a.Mode == "" {
 			a.Mode = domain.AgentModePrimary
 		}
+		domain.NormalizeAgentBindings(&a)
 		if err := h.Agents.Upsert(c, a); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -449,6 +450,7 @@ func updateAgent(h *Handler) gin.HandlerFunc {
 		if a.Mode == "" {
 			a.Mode = domain.AgentModePrimary
 		}
+		domain.NormalizeAgentBindings(&a)
 		if err := h.Agents.Upsert(c, a); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

@@ -8,6 +8,8 @@ export interface Agent {
   steps?: number
   skillIds?: string[]
   tools?: ToolBinding[]
+  /** MCP server ids (exact). Used when inheritAmbient is false. */
+  mcpServers?: string[]
   knowledgeIds?: string[]
   canDelegate?: boolean
   /** Ambient layer: FS skills + all enabled MCP. Default: primary true, subagent false. */
@@ -26,6 +28,7 @@ export interface CreateAgentPayload {
   steps?: number
   skillIds?: string[]
   tools?: ToolBinding[]
+  mcpServers?: string[]
   knowledgeIds?: string[]
   canDelegate?: boolean
   inheritAmbient?: boolean
@@ -40,6 +43,7 @@ export interface UpdateAgentPayload {
   steps?: number
   skillIds?: string[]
   tools?: ToolBinding[]
+  mcpServers?: string[]
   knowledgeIds?: string[]
   canDelegate?: boolean
   inheritAmbient?: boolean
@@ -96,7 +100,6 @@ export interface AvailableSkill extends Skill {
 
 export interface ToolBinding {
   toolId: string
-  mcpServer?: string
   name?: string
   riskLevel?: RiskLevel
 }

@@ -14,13 +14,15 @@ description: Demo
 persona: Facilitator
 mode: subagent
 steps: 8
-inherit_ambient: true
+inherit_ambient: false
+mcp_servers:
+  - github
 skills:
   - meeting-notes
 tools:
   - tool_id: read_skill
     risk_level: low
-  - mcp_server: github
+  - mcp_server: notion
     risk_level: external
 knowledge: []
 ---
@@ -41,10 +43,13 @@ You facilitate meetings.
 	if a.SystemPrompt == "" {
 		t.Fatal("empty system prompt")
 	}
-	if a.InheritAmbient == nil || !*a.InheritAmbient {
+	if a.InheritAmbient == nil || *a.InheritAmbient {
 		t.Fatalf("inherit_ambient: %+v", a.InheritAmbient)
 	}
-	if len(a.Tools) != 2 || a.Tools[1].MCPServer != "github" {
+	if len(a.Tools) != 1 || a.Tools[0].ToolID != "read_skill" {
 		t.Fatalf("tools: %+v", a.Tools)
+	}
+	if len(a.MCPServers) != 2 || a.MCPServers[0] != "github" || a.MCPServers[1] != "notion" {
+		t.Fatalf("mcpServers: %+v", a.MCPServers)
 	}
 }

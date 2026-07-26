@@ -19,6 +19,7 @@ type agentFrontmatter struct {
 	Steps          int               `yaml:"steps"`
 	Skills         []string          `yaml:"skills"`
 	Tools          []toolFrontmatter `yaml:"tools"`
+	MCPServers     []string          `yaml:"mcp_servers"`
 	Knowledge      []string          `yaml:"knowledge"`
 	CanDelegate    bool              `yaml:"can_delegate"`
 	InheritAmbient *bool             `yaml:"inherit_ambient"`
@@ -26,8 +27,8 @@ type agentFrontmatter struct {
 
 type toolFrontmatter struct {
 	ToolID    string `yaml:"tool_id"`
-	MCP       string `yaml:"mcp"`        // legacy alias
-	MCPServer string `yaml:"mcp_server"` // preferred: bind by MCP server id or "*"
+	MCP       string `yaml:"mcp"`        // legacy → mcp_servers
+	MCPServer string `yaml:"mcp_server"` // legacy → mcp_servers
 	RiskLevel string `yaml:"risk_level"`
 }
 
@@ -113,10 +114,12 @@ func LoadTemplates() ([]AgentTemplate, error) {
 			Steps:          fm.Steps,
 			SkillIDs:       fm.Skills,
 			Tools:          tools,
+			MCPServers:     fm.MCPServers,
 			KnowledgeIDs:   fm.Knowledge,
 			CanDelegate:    fm.CanDelegate,
 			InheritAmbient: fm.InheritAmbient,
 		}
+		domain.NormalizeAgentBindings(&agent)
 		result = append(result, AgentTemplate{Agent: agent, Source: entry.Name()})
 	}
 	return result, nil

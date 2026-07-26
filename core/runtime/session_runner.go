@@ -1001,7 +1001,7 @@ func (e *Engine) mountAlwaysOnBuiltins(reg *tool.Registry) {
 
 func (e *Engine) mountBuiltinTools(reg *tool.Registry, bindings []domain.ToolBinding) {
 	for _, b := range bindings {
-		if b.ToolID == "" || b.MCPServer != "" {
+		if b.ToolID == "" {
 			continue
 		}
 		if h, ok := e.toolCatalog.Get(b.ToolID); ok {
@@ -1157,14 +1157,14 @@ func (e *Engine) buildWorkerRegistry(agent domain.Agent) *tool.Registry {
 
 // mountMCPForAgent applies the Ambient / Bound MCP policy:
 // - InheritAmbient (default primary): all enabled MCP servers
-// - otherwise: only MCP servers listed on agent.Tools (server id or "*")
+// - otherwise: only agent.MCPServers (exact server ids)
 func (e *Engine) mountMCPForAgent(reg *tool.Registry, agent domain.Agent) {
 	reg.CopyMCPServersFrom(e.toolCatalog)
 	if agent.InheritsAmbient() {
 		reg.MountAllMCP()
 		return
 	}
-	reg.MountFromBindings(agent.Tools)
+	reg.MountServers(agent.MCPServers)
 }
 
 func (e *Engine) waitAskUser(ctx context.Context, sessionID, turnID, callID, question string, options []string, defaultOpt string, formFields []domain.AskUserFormField) (string, error) {

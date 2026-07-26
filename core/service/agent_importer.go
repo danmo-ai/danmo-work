@@ -27,6 +27,7 @@ type agentFrontmatter struct {
 	Steps          int               `yaml:"steps"`
 	Skills         []string          `yaml:"skills"`
 	Tools          []toolFrontmatter `yaml:"tools"`
+	MCPServers     []string          `yaml:"mcp_servers"`
 	Knowledge      []string          `yaml:"knowledge"`
 	CanDelegate    bool              `yaml:"can_delegate"`
 	InheritAmbient *bool             `yaml:"inherit_ambient"`
@@ -35,8 +36,8 @@ type agentFrontmatter struct {
 
 type toolFrontmatter struct {
 	ToolID    string `yaml:"tool_id"`
-	MCP       string `yaml:"mcp"`        // legacy alias
-	MCPServer string `yaml:"mcp_server"` // preferred: bind by MCP server id or "*"
+	MCP       string `yaml:"mcp"`        // legacy: migrate → mcp_servers
+	MCPServer string `yaml:"mcp_server"` // legacy: migrate → mcp_servers
 	RiskLevel string `yaml:"risk_level"`
 }
 
@@ -95,7 +96,7 @@ func (i *AgentImporter) ParseAgentMD(content string) (*domain.Agent, error) {
 	if fm.Metadata != nil {
 		marketSrc = fm.Metadata["market.source"]
 	}
-	return &domain.Agent{
+	a := &domain.Agent{
 		ID:             fm.ID,
 		Name:           name,
 		Description:    fm.Description,
@@ -105,11 +106,14 @@ func (i *AgentImporter) ParseAgentMD(content string) (*domain.Agent, error) {
 		Steps:          fm.Steps,
 		SkillIDs:       fm.Skills,
 		Tools:          tools,
+		MCPServers:     fm.MCPServers,
 		KnowledgeIDs:   fm.Knowledge,
 		CanDelegate:    fm.CanDelegate,
 		InheritAmbient: fm.InheritAmbient,
 		MarketSource:   marketSrc,
-	}, nil
+	}
+	domain.NormalizeAgentBindings(a)
+	return a, nil
 }
 
 func parseAgentRisk(s string) domain.RiskLevel {

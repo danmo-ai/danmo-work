@@ -25,3 +25,21 @@ func TestInheritsAmbientOverride(t *testing.T) {
 		t.Fatal("explicit true should win for subagent")
 	}
 }
+
+func TestNormalizeAgentBindingsSplitsMCP(t *testing.T) {
+	a := Agent{
+		MCPServers: []string{"notion", "*", "notion", ""},
+		Tools: []ToolBinding{
+			{ToolID: "read_file", RiskLevel: RiskLow},
+			{MCPServer: "github", RiskLevel: RiskExternal},
+			{ToolID: "", MCPServer: "*"},
+		},
+	}
+	NormalizeAgentBindings(&a)
+	if len(a.MCPServers) != 2 || a.MCPServers[0] != "notion" || a.MCPServers[1] != "github" {
+		t.Fatalf("mcpServers: %+v", a.MCPServers)
+	}
+	if len(a.Tools) != 1 || a.Tools[0].ToolID != "read_file" || a.Tools[0].MCPServer != "" {
+		t.Fatalf("tools: %+v", a.Tools)
+	}
+}
