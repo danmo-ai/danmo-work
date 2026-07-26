@@ -43,6 +43,8 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 	b.WriteString("\n\n")
 	b.WriteString(buildAskUserPolicy())
 	b.WriteString("\n\n")
+	b.WriteString(buildKnowledgePolicy())
+	b.WriteString("\n\n")
 	b.WriteString(buildMemoryPolicy())
 	b.WriteString("\n\n")
 	b.WriteString(buildTableStorePolicy())
@@ -83,6 +85,25 @@ Do NOT:
 - Re-delegate the same insufficient task unchanged (refine, pick another agent, or do it yourself)
 - Duplicate overlapping scopes across parallel subagents
 </delegation-policy>`
+}
+
+func buildKnowledgePolicy() string {
+	return `<knowledge-policy>
+Use search_kb / list_kb_docs / get_kb_doc for human-curated knowledge bases bound to this agent. Relevant chapters may also be auto-injected each turn — still call tools when you need more or a different query.
+
+When to search_kb:
+- Need facts, procedures, or product/docs from the attached knowledge bases
+- Auto-injected snippets are insufficient or off-topic — re-query with clearer keywords
+
+When to list_kb_docs / get_kb_doc:
+- Browse which manuals exist, then pull a full Markdown document by doc_id
+- Prefer get_kb_doc after list_kb_docs or a search hit that names a document
+
+Do NOT:
+- Treat knowledge as Memory (preferences) or Table Store (business rows)
+- Invent doc_ids — use ids from list_kb_docs or search results
+- Dump entire knowledge bases into the reply; quote only what you need
+</knowledge-policy>`
 }
 
 func buildMemoryPolicy() string {

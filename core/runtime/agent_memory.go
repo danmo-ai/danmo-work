@@ -5,7 +5,8 @@
 // SQLite memories table with user / project / agent scopes.
 //
 // System prompt guidance lives in <memory-policy> / <ask-user-policy> /
-// <mcp-tool-naming> (and <delegation-policy> when CanDelegate) in prompt_builder.go.
+// <knowledge-policy> / <mcp-tool-naming> (and <delegation-policy> when
+// CanDelegate) in prompt_builder.go.
 // Memories are tool-driven: they are NOT auto-injected every turn.
 //
 // Future (separate from durable tool memory) — compaction-time BM25 indexing:
