@@ -287,19 +287,20 @@ defineExpose({
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--dq-bg, #fff);
+  background: var(--dq-bg-base);
+  color: var(--dq-label-primary);
 }
 .slides-surface__status {
   padding: 24px;
   font-size: 13px;
-  color: var(--dq-text-muted, #6b7280);
+  color: var(--dq-label-tertiary);
 }
 .slides-surface__frame {
   flex: 1;
   border: 0;
   width: 100%;
   height: 100%;
-  background: #111;
+  background: var(--dq-bg-page);
 }
 .slides-surface__edit {
   flex: 1;
@@ -308,7 +309,8 @@ defineExpose({
   grid-template-columns: 180px 1fr;
 }
 .slides-surface__thumbs {
-  border-right: 1px solid var(--dq-border, #e5e7eb);
+  border-right: 1px solid var(--dq-separator-light);
+  background: color-mix(in srgb, var(--dq-bg-elevated) 40%, transparent);
   overflow: auto;
   padding: 8px;
   display: flex;
@@ -317,25 +319,31 @@ defineExpose({
 }
 .slides-surface__thumb {
   text-align: left;
-  border: 1px solid var(--dq-border, #e5e7eb);
+  border: 1px solid var(--dq-border);
   border-radius: 6px;
   padding: 8px;
-  background: var(--dq-bg-subtle, #f9fafb);
+  background: var(--dq-fill-tertiary);
+  color: var(--dq-label-primary);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
+.slides-surface__thumb:hover {
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, var(--dq-fill-tertiary));
+}
 .slides-surface__thumb.is-active {
-  border-color: var(--dq-accent, #2563eb);
-  background: #eff6ff;
+  border-color: var(--dq-accent);
+  background: color-mix(in srgb, var(--dq-accent) 14%, var(--dq-fill-tertiary));
+  box-shadow: inset 2px 0 0 var(--dq-accent);
 }
 .slides-surface__thumb-num {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--dq-label-tertiary);
 }
 .slides-surface__thumb-title {
   font-size: 12px;
+  color: var(--dq-label-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -344,11 +352,14 @@ defineExpose({
   border: 0;
   resize: none;
   padding: 16px 20px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--dq-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 13px;
   line-height: 1.55;
   outline: none;
   background: transparent;
-  color: inherit;
+  color: var(--dq-label-primary);
+}
+.slides-surface__editor::placeholder {
+  color: var(--dq-label-quaternary);
 }
 </style>

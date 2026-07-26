@@ -170,11 +170,12 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
   min-height: 0;
   overflow: auto;
   padding: 16px 20px 48px;
-  background: var(--dq-bg, #fff);
+  background: var(--dq-bg-base);
+  color: var(--dq-label-primary);
 }
 .doc-surface__status {
   padding: 24px;
-  color: var(--dq-text-muted, #6b7280);
+  color: var(--dq-label-tertiary);
   font-size: 13px;
 }
 .doc-surface__editor :deep(.tiptap) {
@@ -184,9 +185,10 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
   margin: 0 auto;
   font-size: 15px;
   line-height: 1.65;
+  color: var(--dq-label-primary);
 }
 .doc-surface__editor :deep(.tiptap p.is-editor-empty:first-child::before) {
-  color: #9ca3af;
+  color: var(--dq-label-quaternary);
   content: attr(data-placeholder);
   float: left;
   height: 0;

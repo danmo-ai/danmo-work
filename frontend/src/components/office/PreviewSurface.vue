@@ -278,14 +278,16 @@ defineExpose({
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--dq-bg-base);
+  color: var(--dq-label-primary);
 }
 .preview-surface__hint {
   margin: 0;
   padding: 6px 12px;
   font-size: 12px;
-  color: var(--dq-accent, #2563eb);
-  background: color-mix(in srgb, var(--dq-accent, #2563eb) 10%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--dq-accent, #2563eb) 20%, transparent);
+  color: var(--dq-accent);
+  background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--dq-accent) 20%, transparent);
 }
 .preview-surface__bar {
   flex-shrink: 0;
@@ -293,22 +295,27 @@ defineExpose({
   align-items: center;
   gap: 4px;
   padding: 6px 8px;
-  border-bottom: 1px solid var(--dq-border, #e5e7eb);
+  border-bottom: 1px solid var(--dq-separator-light);
+  background: color-mix(in srgb, var(--dq-bg-elevated) 45%, transparent);
 }
 .preview-surface__input {
   flex: 1;
   height: 28px;
   padding: 0 10px;
   border-radius: 6px;
-  border: 1px solid var(--dq-border, #e5e7eb);
-  background: var(--dq-bg, #fff);
-  color: inherit;
+  border: 1px solid var(--dq-border);
+  background: var(--dq-bg-elevated);
+  color: var(--dq-label-primary);
   font-size: 12px;
   outline: none;
   font-family: var(--dq-font-mono, ui-monospace, monospace);
 }
+.preview-surface__input::placeholder {
+  color: var(--dq-label-quaternary);
+}
 .preview-surface__input:focus {
-  border-color: var(--dq-accent, #2563eb);
+  border-color: var(--dq-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 12%, transparent);
 }
 .preview-surface__btn {
   flex-shrink: 0;
@@ -319,16 +326,16 @@ defineExpose({
   height: 28px;
   border-radius: 6px;
   border: none;
-  background: var(--dq-bg-subtle, #f3f4f6);
-  color: var(--dq-text-muted, #4b5563);
+  background: var(--dq-fill-tertiary);
+  color: var(--dq-label-secondary);
   cursor: pointer;
 }
 .preview-surface__btn:hover {
-  background: var(--dq-accent, #2563eb);
+  background: var(--dq-accent);
   color: #fff;
 }
 .preview-surface__btn.is-active {
-  background: var(--dq-accent, #2563eb);
+  background: var(--dq-accent);
   color: #fff;
 }
 .preview-surface__stage {
@@ -336,7 +343,7 @@ defineExpose({
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
-  background: var(--dq-bg, #fff);
+  background: var(--dq-bg-base);
 }
 .preview-surface__frame {
   position: absolute;
@@ -345,6 +352,7 @@ defineExpose({
   height: 100%;
   border: none;
   display: block;
+  background: var(--dq-bg-base);
 }
 .preview-surface__img {
   position: absolute;
@@ -359,5 +367,6 @@ defineExpose({
   inset: 0;
   overflow-y: auto;
   padding: 24px 32px;
+  color: var(--dq-label-primary);
 }
 </style>
