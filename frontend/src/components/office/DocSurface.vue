@@ -2,10 +2,10 @@
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
-import Link from '@tiptap/extension-link'
-import Placeholder from '@tiptap/extension-placeholder'
+import { Placeholder } from '@tiptap/extensions'
+import { Markdown } from '@tiptap/markdown'
 import { fetchJSON } from '@/api/client'
-import { htmlToMarkdown, markdownToEditorHTML } from '@/utils/md-bridge'
+import { editorToMarkdown, selectionToMarkdown } from '@/utils/tiptap-markdown'
 import { toast } from '@/utils/feedback'
 import { useI18n } from 'vue-i18n'
 import type { OfficeEditScope } from '@/utils/office-route'
@@ -38,11 +38,14 @@ function publishScope(empty: boolean) {
 
 const editor = useEditor({
   extensions: [
-    StarterKit,
-    Link.configure({ openOnClick: false }),
+    StarterKit.configure({
+      link: { openOnClick: false },
+    }),
     Placeholder.configure({ placeholder: '开始编写…' }),
+    Markdown,
   ],
   content: '',
+  contentType: 'markdown',
   editable: props.mode === 'edit',
   onUpdate: () => {
     dirty.value = true
@@ -78,7 +81,10 @@ async function load(opts?: { resetScroll?: boolean }) {
     )
     if (fc.binary) throw new Error('binary file')
     sourceMarkdown.value = fc.content || ''
-    editor.value?.commands.setContent(markdownToEditorHTML(sourceMarkdown.value), false)
+    editor.value?.commands.setContent(sourceMarkdown.value, {
+      contentType: 'markdown',
+      emitUpdate: false,
+    })
     dirty.value = false
     emit('dirty', false)
     publishScope(editor.value?.state.selection.empty ?? true)
@@ -95,7 +101,7 @@ async function save(opts?: { quiet?: boolean }) {
   if (!editor.value || !props.projectId) return
   saving.value = true
   try {
-    const md = htmlToMarkdown(editor.value.getHTML())
+    const md = editorToMarkdown(editor.value)
     await fetchJSON(`/projects/${props.projectId}/files/content`, {
       method: 'PUT',
       body: JSON.stringify({ path: props.path, content: md }),
@@ -126,11 +132,7 @@ function getEditScope(): OfficeEditScope {
 function getSelectionMarkdown(): string {
   const ed = editor.value
   if (!ed) return sourceMarkdown.value
-  const { from, to, empty } = ed.state.selection
-  if (empty) return htmlToMarkdown(ed.getHTML())
-  const text = ed.state.doc.textBetween(from, to, '\n\n')
-  if (text.trim()) return text.trimEnd() + '\n'
-  return htmlToMarkdown(ed.getHTML())
+  return selectionToMarkdown(ed)
 }
 
 watch(
