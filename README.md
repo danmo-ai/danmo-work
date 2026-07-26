@@ -430,7 +430,7 @@ SKIP_BACKEND=1 make dev-desktop
 | Linux server | `out/dist/danmo-work-linux-*.tar.gz` |
 | Windows desktop | `out/desktop/bundle/*.exe` |
 
-**macOS channels:** GitHub Releases `.dmg`, or Homebrew cask [`Casks/danmo-work.rb`](Casks/danmo-work.rb) (bumped on each `v*` release; cask URL = GitHub Releases). Optional `UPDATE_MIRROR_*` secrets can sync assets to `releases.danmo.ai` when that mirror exists.
+**macOS channels:** GitHub Releases `.dmg`, or Homebrew (`brew tap danmo-ai/tap` → [`danmo-ai/homebrew-tap`](https://github.com/danmo-ai/homebrew-tap), synced by `HOMEBREW_TAP_TOKEN` / **Publish Homebrew Tap**). Cask source of truth: [`Casks/danmo-work.rb`](Casks/danmo-work.rb).
 
 ## Docs
 

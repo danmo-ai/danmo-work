@@ -431,7 +431,7 @@ SKIP_BACKEND=1 make dev-desktop
 | Linux server | `out/dist/danmo-work-linux-*.tar.gz` |
 | Windows desktop | `out/desktop/bundle/*.exe` |
 
-**macOS 通道：** GitHub Releases `.dmg`，或 Homebrew cask [`Casks/danmo-work.rb`](Casks/danmo-work.rb)（每次 `v*` 发版 bump；cask URL 指向 GitHub Releases）。可选配置 `UPDATE_MIRROR_*`，在 `releases.danmo.ai` 就绪后同步产物。
+**macOS 通道：** GitHub Releases `.dmg`，或 Homebrew（`brew tap danmo-ai/tap` → [`danmo-ai/homebrew-tap`](https://github.com/danmo-ai/homebrew-tap)，由 `HOMEBREW_TAP_TOKEN` / **Publish Homebrew Tap** 同步）。cask 源：[`Casks/danmo-work.rb`](Casks/danmo-work.rb)。
 
 ## 文档
 
