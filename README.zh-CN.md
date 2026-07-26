@@ -7,15 +7,15 @@
 [![Go](https://img.shields.io/github/go-mod/go-version/danmo-ai/danmo-work?filename=go.mod)](go.mod)
 [![Stars](https://img.shields.io/github/stars/danmo-ai/danmo-work?style=social)](https://github.com/danmo-ai/danmo-work)
 
-**开源 AI Work Agent** —— 面向长程复杂任务，可自托管，多 Agent 协作，MIT。
+**开源 AI Work Agent** —— 具备一流 Coding Agent 的执行底盘，面向长程工作。可自托管，多 Agent 协作，MIT。
 
-不是又一个「只会写代码的 CLI」，也不是要你维护的工作流图。Danmo Work 是**人机共思工作台**：模型驱动同一条 Agent Loop，子 Agent 与人都是 Tool，每一步 Tool Call 全量落盘——**可恢复、可回放、可改结果再继续**。
+不只是又一个强大的 Coding Agent，也不是要你维护的工作流图。Danmo Work 是**人机共思工作台**：同一条 Agent Loop 既能做文件 / Shell / 多 Agent 编码，也能交付**文档、幻灯片、表格、连接器与 IM**——每一步 Tool Call 全量落盘，**可恢复、可回放、可改结果再继续**。
 
-> 调研报告、幻灯片、表格、演示页、自动化流水……需要时也能 Coding。桌面 / Web / CLI·TUI，或微信 / 飞书 / 企微 / QQ，同一套引擎。
+> 代码、调研报告、幻灯片、表格、演示页、自动化流水——桌面 / Web / CLI·TUI，或微信 / 飞书 / 企微 / QQ——同一条思维链。
 
 | | |
 |--|--|
-| **产品定位** | 通用型 **Work Agent**（兼具 Coding），专为跨天/周的复杂工作 |
+| **产品定位** | 通用型 **Work Agent**——Coding 是一等车道，不是天花板 |
 | **控制方式** | **纯 LLM 驱动**——无人工维护的 Graph / 角色路由 / 产品 Mode |
 | **抽象** | **一切皆工具**——`delegate_agent`、`ask_user`、记忆、Table Store、MCP、文件… |
 | **状态** | **日志即状态**——Turn Log → 断点恢复、完整回放、改结果继续 |
@@ -27,9 +27,9 @@ MIT · Anthropic 与 OpenAI 兼容接口 · 数据默认在 `~/.danmo-work/`
 
 ## 30 秒看懂为什么不一样
 
-当下开源「AI Agent」大多是 **Coding Agent**：终端结对编程、IDE 插件、沙箱里的软件工程师——强，但目标仍是*写代码*。
+当下开源 Agent 多半停在**写代码**：终端结对、IDE 插件、沙箱里的软件工程师——Loop 很强，主业很窄。
 
-Danmo Work 问的是另一件事：**人和模型如何在真实工作里共思**——调研、文档、幻灯片、运维、连接器——跨长程，且留下可信任的执行轨迹？
+Danmo Work 保留**一流 Coding Agent 量级**的执行底盘，再问更大的问题：**人和模型如何在真实工作里共思**——代码、调研、文档、幻灯片、运维、连接器——跨长程，且留下可信任的执行轨迹？
 
 | 你得到 | 而不是 |
 |--------|--------|
@@ -66,23 +66,24 @@ make dev-web   # → http://localhost:5801/app/
 ## 适合谁
 
 - 需要 Agent 交付**工作产物**（报告 / 幻灯片 / 演示），而不只是 PR 的人
+- 想要一流 Coding Agent 量级的 CLI/TUI，又希望**同一条 Loop 覆盖 Diff 之后的工作**的开发者
 - 内网环境要接飞书 / 企微 / QQ、**不想暴露公网回调**的团队
 - 希望 Memory、Table Store、Turn Log **看得见、改得动**的重度用户
 - 受够 Graph / Role 框架与模型规划「打架」、只想给模型喂 Tools 的人
 
 ---
 
-## 不是又一个 Coding Agent —— 差异对比
+## Work Agent，而不只是 Coding —— 差异对比
 
-OpenHands、OpenCode、Aider、Cline、Goose、Continue 等擅长**以代码为中心的循环**。Danmo Work 在工具与模型上有重叠，但主攻**工作运行时 + 人机共思体验**。
+典型开源 Coding Agent 擅长**以代码为中心的循环**。Danmo Work 的 Loop 在同一量级——再在同一条思维链上叠加**工作运行时 + 人机共思体验**。
 
 | 维度 | 典型开源 Coding Agent | Agent 框架（LangGraph / CrewAI / AutoGen） | **Danmo Work** |
 |------|----------------------|---------------------------------------------|----------------|
-| 主业 | 写代码、PR、终端 | 应用 / 工作流编排 | **长程工作 + 产物** |
-| 控制流 | 产品 Loop / Mode | 开发者写 Graph / 角色 | **纯 LLM 规划 Tool Call** |
+| 主业 | 写代码、PR、终端 | 应用 / 工作流编排 | **长程工作（含 Coding）+ 产物** |
+| Agent Loop | 强，偏代码 | 开发者写 Graph / 角色 | **一流 Coding 量级 + 纯 LLM 规划 Tool Call** |
 | 子 Agent | 额外 Session 或 Skill | Handoff / Crew | 同一思维链上的 `delegate_agent`，硬隔离 |
 | 人机 | 审批 / 聊天 | 预设节点 | `ask_user` Tool——模型决定时机 |
-| 产物 | 仓库 Diff | 应用自定义 | **Document Stage**：文档 · 幻灯片 · 表格 · 预览 |
+| 产物 | 仓库 Diff | 应用自定义 | Diff **+ Document Stage**：文档 · 幻灯片 · 表格 · 预览 |
 | 记忆 | 产品私有或没有 | 缓冲 / 外部向量库 | 显式 `memory_*` + 作用域 SQLite + UI |
 | 业务数据 | 文件 / 自建库 | LangGraph Store 等 | 内置 **Table Store**（`store.db`，schema-free） |
 | 连接器 | MCP / 插件（参差） | 自建 | MCP 目录 + 密钥 + 权限 + 自动化 |
@@ -90,8 +91,8 @@ OpenHands、OpenCode、Aider、Cline、Goose、Continue 等擅长**以代码为�
 | 持久化 | Session / 容器 | 可选 Checkpointer | **Turn Log = 状态**（恢复 · 回放 · 编辑） |
 | 许可 / 部署 | 多为 OSS | OSS 库 | **MIT，自托管**，Web/桌面/CLI/TUI |
 
-想要 Claude Code 式终端 → 用 Coding Agent。  
-想要**可自托管的、面向模型思维过程的工作 OS** → 用 Danmo Work。
+日常写代码 → 用 CLI/TUI 当 Coding Agent。  
+任务变成**代码之外的工作**——文档、幻灯片、数据、连接器、IM → 留在同一个 Work Agent 里。
 
 ---
 
