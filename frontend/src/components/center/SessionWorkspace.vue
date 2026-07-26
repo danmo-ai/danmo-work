@@ -22,7 +22,7 @@ import { renderMarkdown } from '@/utils/markdown-render'
 import { toast } from '@/utils/feedback'
 import { apiBaseUrl, saveBlobAs } from '@/utils/desktop'
 import type { ElementAttachment } from '@/types/element-attachment'
-import { fetchJSON } from '@/api/client'
+import { fetchJSON, isNotFoundError } from '@/api/client'
 import { formatTokenCount, useSessionContextUsage } from '@/composables/useSessionContextUsage'
 import { routeOfficeFile } from '@/utils/office-route'
 
@@ -1086,8 +1086,8 @@ async function submitAskAnswer(askId: string, answer: string) {
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('sessions.askResolveFailed'))
     // Stale ask after cancel/reload — stop showing interactive controls.
-    if (String(e instanceof Error ? e.message : e).includes('not found') ||
-        String(e instanceof Error ? e.message : e).includes('no longer waiting')) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (isNotFoundError(e) || msg.includes('no longer waiting')) {
       answeredAskIds.value = new Set(answeredAskIds.value).add(askId)
     }
   } finally {

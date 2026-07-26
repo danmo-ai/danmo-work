@@ -50,7 +50,7 @@ const headerTitle = computed(() => {
 })
 
 onMounted(async () => {
-  await Promise.all([agents.load(), automations.load()])
+  await Promise.allSettled([agents.load(), automations.load()])
   if (sortedAutomations.value.length && !selectedId.value) {
     selectAutomation(sortedAutomations.value[0].id)
   }

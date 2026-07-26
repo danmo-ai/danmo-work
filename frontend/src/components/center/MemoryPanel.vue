@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { asArray, fetchJSON } from '@/api/client'
+import { asArray, fetchJSON, isNotFoundError } from '@/api/client'
 import { toast } from '@/utils/feedback'
 import type { StreamEvent } from '@/types/mission'
 
@@ -39,7 +39,12 @@ async function load() {
     items.value = asArray(await fetchJSON<MemoryItem[]>(`/memories${q ? `?${q}` : ''}`))
   } catch (e) {
     items.value = []
-    toast.error(e instanceof Error ? e.message : t('sessions.memoryLoadFailed'))
+    // Soft-fail 404: panel stays mounted (v-show) and reloads on every
+    // session/agent/project change — an outdated sidecar without /memories
+    // must not spam "404 page not found" toasts on routine clicks.
+    if (!isNotFoundError(e)) {
+      toast.error(e instanceof Error ? e.message : t('sessions.memoryLoadFailed'))
+    }
   } finally {
     loading.value = false
     emit('loaded', items.value.length)

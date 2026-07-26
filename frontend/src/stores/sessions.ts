@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch } from 'vue'
-import { fetchJSON, asArray } from '@/api/client'
+import { fetchJSON, asArray, isNotFoundError } from '@/api/client'
 import { apiBaseUrl } from '@/utils/desktop'
 import { i18n } from '@/i18n'
 import type { Session, TurnLog, StreamEvent, Agent, Skill, WorkerCard, AgentRun, UpdateSessionPayload, LLMModel } from '@/types/mission'
@@ -233,8 +233,7 @@ export const useSessionsStore = defineStore('sessions', () => {
       // Stale session id / DB switch must not crash the app (e.g. after saving a provider
       // syncModelSelection PATCHes the current session and may 404).
       console.warn('[updateSession]', id, e)
-      const msg = e instanceof Error ? e.message : ''
-      if (msg.includes('record not found') || msg.includes('not found')) {
+      if (isNotFoundError(e)) {
         if (currentSessionId.value === id) {
           sessions.value = sessions.value.filter((s) => s.id !== id)
           startCompose()

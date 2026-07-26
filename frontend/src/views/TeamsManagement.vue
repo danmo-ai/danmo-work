@@ -133,7 +133,7 @@ const sectionTabs = computed(() => [
 ])
 
 onMounted(async () => {
-  await Promise.all([globalAgents.load(), skills.load(), runtimeConfig.loadConfig()])
+  await Promise.allSettled([globalAgents.load(), skills.load(), runtimeConfig.loadConfig()])
   if (sortedAgents.value.length && !selectedId.value) {
     selectAgent(sortedAgents.value[0].id)
   }

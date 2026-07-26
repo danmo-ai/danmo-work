@@ -96,7 +96,9 @@ const headerTitle = computed(() => {
 })
 
 onMounted(async () => {
-  await Promise.all([mcp.load(), mcp.loadCatalog()])
+  // Soft-fail so a missing optional API (e.g. catalog on an old sidecar)
+  // cannot take down the Connectors view via unhandledrejection.
+  await Promise.allSettled([mcp.load(), mcp.loadCatalog()])
   if (sortedServers.value.length && !selectedId.value) {
     selectServer(sortedServers.value[0].id)
   }

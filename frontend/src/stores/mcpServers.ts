@@ -13,8 +13,13 @@ export const useMcpServersStore = defineStore('mcpServers', () => {
   }
 
   async function loadCatalog() {
-    const data = await fetchJSON<ConnectorCatalogEntry[]>('/mcp/catalog')
-    catalog.value = asArray(data)
+    try {
+      const data = await fetchJSON<ConnectorCatalogEntry[]>('/mcp/catalog')
+      catalog.value = asArray(data)
+    } catch {
+      // Optional on older sidecars — empty catalog, no throw.
+      catalog.value = []
+    }
   }
 
   async function create(payload: Omit<MCPServer, 'id' | 'status'> & { headerSecrets?: Record<string, string> }) {

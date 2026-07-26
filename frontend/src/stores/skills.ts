@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { fetchJSON, asArray } from '@/api/client'
+import { fetchJSON, asArray, isNotFoundError } from '@/api/client'
 import type { Skill, SkillFile } from '@/types'
 
 function skillFileURL(skillId: string, filePath: string) {
@@ -20,6 +20,9 @@ export const useSkillsStore = defineStore('skills', () => {
     loading.value = true
     try {
       items.value = asArray(await fetchJSON<Skill[]>('/skills'))
+    } catch (e) {
+      items.value = []
+      if (!isNotFoundError(e)) throw e
     } finally {
       loading.value = false
     }

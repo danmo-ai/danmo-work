@@ -1,13 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { fetchJSON, asArray } from '@/api/client'
+import { fetchJSON, asArray, isNotFoundError } from '@/api/client'
 import type { Agent, CreateAgentPayload, UpdateAgentPayload } from '@/types'
 
 export const useGlobalAgentsStore = defineStore('globalAgents', () => {
   const items = ref<Agent[]>([])
 
   async function load() {
-    items.value = asArray(await fetchJSON<Agent[]>('/agents'))
+    try {
+      items.value = asArray(await fetchJSON<Agent[]>('/agents'))
+    } catch (e) {
+      items.value = []
+      if (!isNotFoundError(e)) throw e
+    }
   }
 
   async function get(agentId: string) {
