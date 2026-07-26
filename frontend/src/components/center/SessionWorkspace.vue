@@ -2340,6 +2340,8 @@ function onTitleKeydown(e: KeyboardEvent) {
   gap: 4px;
   padding: 16px 0 12px;
   pointer-events: none;
+  /* Skill / @ picker renders above the composer; do not clip it. */
+  overflow: visible;
 }
 
 .session-workspace__composer > * {

@@ -80,3 +80,39 @@ func TestSessionCreateSurvivesAfterFileReplaceWithFreshOpen(t *testing.T) {
 		t.Fatalf("write after reopen: %v", err)
 	}
 }
+
+func TestSessionCreateRetriesAfterDBMoved(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "work.db")
+	st, err := New(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Replace the file while the Store still holds the old inode.
+	sqlDB, err := st.DB().DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = sqlDB // keep handle open via Store
+	tmp := dbPath + ".new"
+	stTmp, err := New(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlTmp, _ := stTmp.DB().DB()
+	_ = sqlTmp.Close()
+	_ = os.Remove(dbPath)
+	_ = os.Remove(dbPath + "-wal")
+	_ = os.Remove(dbPath + "-shm")
+	if err := os.Rename(tmp, dbPath); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Remove(tmp + "-wal")
+	_ = os.Remove(tmp + "-shm")
+
+	if err := st.Sessions().Create(context.Background(), domain.Session{
+		ID: "recovered", AgentID: "a1", Status: domain.SessionStatusActive,
+	}); err != nil {
+		t.Fatalf("expected reopen+retry to succeed, got %v", err)
+	}
+}

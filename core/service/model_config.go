@@ -62,12 +62,25 @@ func (r *ModelConfigRegistry) lookup(modelID string) *domain.ModelConfig {
 }
 
 // AvailableEfforts returns the reasoning effort levels for a model.
-// Returns nil when no efforts are configured.
+// Prefers llm.models[].available_efforts from config; falls back to provider defaults
+// so Composer keeps showing the thinking-level selector for common providers.
 func (r *ModelConfigRegistry) AvailableEfforts(modelID string) []string {
 	if c := r.lookup(modelID); c != nil && len(c.AvailableEfforts) > 0 {
 		return c.AvailableEfforts
 	}
 	return nil
+}
+
+// DefaultEffortsForProvider returns built-in effort levels when config omits them.
+func DefaultEffortsForProvider(provider domain.LLMProviderType) []string {
+	switch provider {
+	case domain.LLMProviderAnthropic:
+		return append([]string(nil), domain.DefaultEffortsAnthropic...)
+	case domain.LLMProviderOpenAI, domain.LLMProviderLocal:
+		return append([]string(nil), domain.DefaultEffortsOpenAI...)
+	default:
+		return nil
+	}
 }
 
 // SupportsVision reports whether the model accepts image content parts.

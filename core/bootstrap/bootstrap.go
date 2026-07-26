@@ -118,6 +118,7 @@ func New(cfg Config) *Core {
 		}
 	}
 
+	log.Printf("[bootstrap] work.db=%s store.db=%s data=%s", appCfg.Data.Database, appCfg.Data.StoreDatabase, appCfg.Data.Dir)
 	st, err := sqlitestore.New(appCfg.Data.Database)
 	if err != nil {
 		panic("failed to open database: " + err.Error())

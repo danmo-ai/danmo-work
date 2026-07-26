@@ -44,6 +44,12 @@ type LLMModel struct {
 	Vision bool `json:"vision"`
 }
 
+// DefaultEffortsOpenAI is used when a model has no available_efforts in config.
+var DefaultEffortsOpenAI = []string{"off", "low", "medium", "high", "xhigh"}
+
+// DefaultEffortsAnthropic is used when an Anthropic model has no available_efforts in config.
+var DefaultEffortsAnthropic = []string{"off", "high", "max"}
+
 // ModelConfig defines per-model configuration including context window, max
 // output tokens, and generation parameter overrides. All fields are optional;
 // unset values fall back to built-in pattern rules.
