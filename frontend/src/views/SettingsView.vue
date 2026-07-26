@@ -563,7 +563,9 @@ async function handleWeixinQr() {
     if (weixinAddCancelled.value) return
     weixinPolling.value = false
     weixin.qr = null
-    toast.error(e instanceof Error ? e.message : t('settings.weixinLoginFailed'))
+    const msg = e instanceof Error ? e.message : t('settings.weixinLoginFailed')
+    const status = e && typeof e === 'object' && 'status' in e ? `HTTP ${(e as { status: number }).status}` : ''
+    toast.error(status ? `${msg} (${status})` : msg)
   }
 }
 
@@ -887,6 +889,9 @@ async function handleSaveModelConfig() {
   modelConfigForm.value = modelConfigForm.value.filter(m => m.model.trim() !== '')
   try {
     await modelConfig.save(modelConfigForm.value)
+    // Composer effort selector reads /llm/models — refresh after config save.
+    await llm.loadModels()
+    sessions.syncModelSelection(llm.models)
   } catch {
     /* toast already shown in store */
   }

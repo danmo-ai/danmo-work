@@ -149,22 +149,12 @@ const showTray = computed(
     Boolean(gitDisplay.value),
 )
 
-/** Few primary agents → mode chips with hover hints; many → dropdown. */
+/** Few primary agents → segmented toggle; many → dropdown. */
 const useAgentSegmented = computed(() => primaryAgents.value.length > 0 && primaryAgents.value.length <= 4)
 
-function agentModeLabel(id: string, fallback: string) {
-  if (id === 'default' || id === 'team' || id === 'planner') {
-    return t(`composer.agentMode.${id}`)
-  }
-  return fallback
-}
-
-function agentModeHint(id: string, description?: string) {
-  if (id === 'default' || id === 'team' || id === 'planner') {
-    return t(`composer.agentModeHint.${id}`)
-  }
-  return description?.trim() || t('composer.agentModeHint.custom')
-}
+const agentOptions = computed(() =>
+  primaryAgents.value.map((a) => ({ label: a.name, value: a.id })),
+)
 
 function clearGitStatus() {
   gitBranch.value = ''
@@ -756,6 +746,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
               size="sm"
               variant="ghost"
               :aria-label="t('composer.selectEffort')"
+              :placeholder="t('composer.selectEffort')"
             >
               <DqOption v-for="e in availableEfforts" :key="e" :value="e" :label="e" />
             </DqSelect>
@@ -814,26 +805,14 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
           </DqSelect>
         </div>
 
-        <div
+        <DqSegmented
           v-if="showAgentSelect && useAgentSegmented"
-          class="composer-agent-modes"
-          role="radiogroup"
+          v-model="sessions.selectedAgentId"
+          size="sm"
+          class="composer-agent-seg composer-agent-seg--compact"
+          :options="agentOptions"
           :aria-label="t('composer.selectAgent')"
-        >
-          <button
-            v-for="a in primaryAgents"
-            :key="a.id"
-            type="button"
-            role="radio"
-            class="composer-agent-mode"
-            :class="{ 'is-active': sessions.selectedAgentId === a.id }"
-            :aria-checked="sessions.selectedAgentId === a.id"
-            :title="agentModeHint(a.id, a.description)"
-            @click="sessions.selectedAgentId = a.id"
-          >
-            {{ agentModeLabel(a.id, a.name) }}
-          </button>
-        </div>
+        />
         <div
           v-else-if="showAgentSelect"
           class="composer-select composer-select--agent"
@@ -848,8 +827,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
               v-for="a in primaryAgents"
               :key="a.id"
               :value="a.id"
-              :label="agentModeLabel(a.id, a.name)"
-              :title="agentModeHint(a.id, a.description)"
+              :label="a.name"
             />
           </DqSelect>
         </div>
@@ -1188,8 +1166,8 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
 .composer-select--effort {
   flex: 0 0 auto;
   width: max-content;
-  min-width: 48px;
-  max-width: 72px;
+  min-width: 64px;
+  max-width: 96px;
   overflow: visible;
 }
 
@@ -1258,41 +1236,6 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
 .composer-skill-pop--button {
   left: 10px;
   right: auto;
-}
-
-.composer-agent-modes {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
-}
-
-.composer-agent-mode {
-  appearance: none;
-  margin: 0;
-  padding: 4px 10px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--dq-label-secondary, inherit);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.2;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.composer-agent-mode:hover {
-  color: var(--dq-label-primary, inherit);
-}
-
-.composer-agent-mode.is-active {
-  background: var(--dq-glass-popover-bg, #fff);
-  color: var(--dq-label-primary, inherit);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .composer-send {

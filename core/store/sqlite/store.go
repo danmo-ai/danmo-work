@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"danmo-work/core/domain"
@@ -21,7 +22,9 @@ import (
 var _ port.Repository = (*Store)(nil)
 
 type Store struct {
-	db *gorm.DB
+	mu     sync.Mutex
+	db     *gorm.DB
+	dbPath string
 }
 
 func New(dbPath string) (*Store, error) {
@@ -31,25 +34,37 @@ func New(dbPath string) (*Store, error) {
 	if abs, err := filepath.Abs(dbPath); err == nil {
 		dbPath = abs
 	}
-	dir := filepath.Dir(dbPath)
+	s := &Store{dbPath: dbPath}
+	if err := s.open(); err != nil {
+		return nil, err
+	}
+	if err := s.migrate(); err != nil {
+		_ = s.closeUnlocked()
+		return nil, fmt.Errorf("migrate database %s: %w", dbPath, err)
+	}
+	return s, nil
+}
+
+func (s *Store) open() error {
+	dir := filepath.Dir(s.dbPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("create database dir %s: %w", dir, err)
+		return fmt.Errorf("create database dir %s: %w", dir, err)
 	}
 	// Probe directory writability early — SQLite reports cryptic READONLY_* codes
 	// (1032 DBMOVED / 1544 DIRECTORY) when the parent dir cannot host journals/WAL.
 	probe := filepath.Join(dir, ".work-db-write-probe")
 	if err := os.WriteFile(probe, []byte("ok"), 0o644); err != nil {
-		return nil, fmt.Errorf("database directory not writable (%s): %w", dir, err)
+		return fmt.Errorf("database directory not writable (%s): %w", dir, err)
 	}
 	_ = os.Remove(probe)
 
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(s.dbPath), &gorm.Config{})
 	if err != nil {
-		return nil, fmt.Errorf("open database %s: %w", dbPath, err)
+		return fmt.Errorf("open database %s: %w", s.dbPath, err)
 	}
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, fmt.Errorf("database sql handle %s: %w", dbPath, err)
+		return fmt.Errorf("database sql handle %s: %w", s.dbPath, err)
 	}
 	// Pure-Go SQLite + concurrent pool connections is a common source of
 	// SQLITE_BUSY / SQLITE_READONLY_DBMOVED (1032) under desktop sidecar load.
@@ -57,27 +72,62 @@ func New(dbPath string) (*Store, error) {
 	sqlDB.SetMaxIdleConns(1)
 	if _, err := sqlDB.Exec(`PRAGMA journal_mode=WAL`); err != nil {
 		_ = sqlDB.Close()
-		return nil, fmt.Errorf("database WAL mode %s: %w", dbPath, err)
+		return fmt.Errorf("database WAL mode %s: %w", s.dbPath, err)
 	}
 	if _, err := sqlDB.Exec(`PRAGMA busy_timeout=5000`); err != nil {
 		_ = sqlDB.Close()
-		return nil, fmt.Errorf("database busy_timeout %s: %w", dbPath, err)
+		return fmt.Errorf("database busy_timeout %s: %w", s.dbPath, err)
 	}
 	// Fail fast if the connection cannot write (e.g. file replaced / inode moved).
 	if _, err := sqlDB.Exec(`BEGIN IMMEDIATE; ROLLBACK;`); err != nil {
 		_ = sqlDB.Close()
-		return nil, fmt.Errorf("database not writable %s: %w", dbPath, err)
+		return fmt.Errorf("database not writable %s: %w", s.dbPath, err)
 	}
-
-	s := &Store{db: db}
-	if err := s.migrate(); err != nil {
-		_ = sqlDB.Close()
-		return nil, fmt.Errorf("migrate database %s: %w", dbPath, err)
-	}
-	return s, nil
+	s.db = db
+	return nil
 }
 
+func (s *Store) closeUnlocked() error {
+	if s.db == nil {
+		return nil
+	}
+	sqlDB, err := s.db.DB()
+	s.db = nil
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
+}
+
+// Path returns the absolute SQLite file path.
+func (s *Store) Path() string { return s.dbPath }
+
 func (s *Store) DB() *gorm.DB { return s.db }
+
+func isDBMovedErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "readonly database") ||
+		strings.Contains(msg, "1032") ||
+		strings.Contains(msg, "dbmoved")
+}
+
+// withWrite retries once after reopening when SQLite reports DBMOVED/readonly.
+func (s *Store) withWrite(fn func(*gorm.DB) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	err := fn(s.db)
+	if err == nil || !isDBMovedErr(err) {
+		return err
+	}
+	_ = s.closeUnlocked()
+	if reopenErr := s.open(); reopenErr != nil {
+		return fmt.Errorf("%w (reopen %s failed: %v)", err, s.dbPath, reopenErr)
+	}
+	return fn(s.db)
+}
 
 func (s *Store) migrate() error {
 	if err := s.db.AutoMigrate(
@@ -321,8 +371,10 @@ type sessionRepo struct{ s *Store }
 
 func (r *sessionRepo) Create(ctx context.Context, s domain.Session) error {
 	m := sessionFromDomain(s)
-	if err := r.s.db.WithContext(ctx).Create(&m).Error; err != nil {
-		return fmt.Errorf("create session: %w", err)
+	if err := r.s.withWrite(func(db *gorm.DB) error {
+		return db.WithContext(ctx).Create(&m).Error
+	}); err != nil {
+		return fmt.Errorf("create session (%s): %w", r.s.dbPath, err)
 	}
 	return nil
 }

@@ -144,6 +144,9 @@ func (m *LLMConfigManager) ListModels(ctx context.Context) []domain.LLMModel {
 				efforts = m.modelCfg.AvailableEfforts(modelID)
 				vision = m.modelCfg.SupportsVision(modelID)
 			}
+			if len(efforts) == 0 {
+				efforts = DefaultEffortsForProvider(cfg.Provider)
+			}
 			out = append(out, domain.LLMModel{
 				ID:               modelID,
 				Name:             ref.Name,
