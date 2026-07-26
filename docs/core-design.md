@@ -32,7 +32,7 @@ Danmo Work 是一个**通用型 AI Work Agent**，兼具基本的 AI Coding 能�
 | 知识检索 | `search_kb` Tool：知识库检索，返回上下文 |
 | 持久记忆 | `memory_update` / `memory_read`：跨会话事实（user / project / agent） |
 | 文件操作 | `read_file` / `write` / `edit` / `apply_patch` / `exec_shell` |
-| 外部 API | `http_request`（通用 REST）/ MCP（强类型集成）/ `web_fetch`·`web_search`（检索与读页）；禁止一 API 一 builtin Tool |
+| 外部 API / 连接器 | `http_request`（通用 REST）/ **连接器**（产品名；实现多为 MCP）/ `web_fetch`·`web_search`；禁止一 API 一 builtin Tool |
 
 **关键设计**：所有 Tool 具有统一接口签名，模型通过 Tool Call 驱动整个系统循环。
 
@@ -328,13 +328,15 @@ OpenAI-compat 路径上，模型常把 `write`/`edit` 等内容里的未转义�
 
 ### 7.1.0 能力三层（Core / Bound / Ambient）
 
-Agent 可用能力按三层合成；Skill 与 Tool（含 MCP）共用同一 Ambient 开关。
+**产品名词**：UI 统一称 **连接器**（Connectors）；MCP 仅为协议/实现细节（tool 名仍可 `mcp_*`）。连接器 = 已安装实例（鉴权、开关、动作列表）；连接器目录 = 一键预设。
+
+Agent 可用能力按三层合成；Skill 与连接器共用同一 Ambient 开关。
 
 | 层 | 内容 | 何时生效 |
 |----|------|----------|
 | **Core** | `ask_user`、`memory_*`、`read_skill`、`search_kb`（有 KB 时）；`delegate_agent`（`canDelegate`） | 始终（与绑定无关） |
-| **Bound** | Agent `skillIds`（DB 技能）+ `tools[]`（builtin）+ `mcpServers[]`（MCP server id） | 始终按 Agent 配置 |
-| **Ambient** | 磁盘技能目录 + **全部已启用 MCP Server** | 仅当 `inheritAmbient`（默认：`primary=true`，`subagent=false`） |
+| **Bound** | Agent `skillIds`（DB 技能）+ `tools[]`（builtin）+ `mcpServers[]`（连接器 id） | 始终按 Agent 配置 |
+| **Ambient** | 磁盘技能目录 + **全部已启用连接器** | 仅当 `inheritAmbient`（默认：`primary=true`，`subagent=false`） |
 
 `inheritAmbient` 可在 Agent JSON / YAML（`inherit_ambient`）/ Teams UI 覆盖；`null` 表示按 Mode 默认。
 
@@ -351,11 +353,11 @@ Agent 可用能力按三层合成；Skill 与 Tool（含 MCP）共用同一 Ambi
 
 同名 ID 覆盖顺序（后者赢）：绑定 DB → `~/.agents` → `~/.danmo-work` → 项目 `.agents` → 项目 `.danmo-work`。目录缺失或坏 `SKILL.md` 跳过。Skills 管理页仍只显示 DB（内置 / 手建 / 市场）。
 
-#### MCP 绑定粒度：**按 Server（独立字段）**
+#### 连接器绑定粒度：**按连接器 id（独立字段）**
 
-- Agent 侧：`mcpServers: ["github", "notion"]`（YAML `mcp_servers`）；**不支持通配符**。
+- Agent 侧：`mcpServers: ["github", "notion"]`（YAML `mcp_servers`，字段名保留技术 id）；**不支持通配符**。
 - `tools[]` 只绑 builtin（`tool_id`）；旧版 `tools[].mcp_server` 读入时迁移到 `mcpServers`。
-- 单个 MCP tool 的启用/禁用在 MCP Server 配置里（discover 后 persist），不绑到 Agent。
+- 单个动作的启用/禁用在连接器配置里（discover 后 persist），不绑到 Agent。
 - Ambient 开：`MountAllMCP`；Ambient 关：仅 `MountServers(agent.MCPServers)`。
 
 | Tool / 能力 | 条件 |
@@ -365,7 +367,7 @@ Agent 可用能力按三层合成；Skill 与 Tool（含 MCP）共用同一 Ambi
 | `ask_user` / `read_skill` | Core |
 | `delegate_agent` | Core + `canDelegate` |
 | 其它 builtin | Bound：`tools[].toolId` |
-| MCP Tools | Ambient 全开，或 Bound：`mcpServers[]` |
+| 连接器动作 | Ambient 全开，或 Bound：`mcpServers[]` |
 | 磁盘技能 | Ambient（`inheritAmbient`） |
 
 ### 7.1.1 外部 API 分层（避免 Tool 元数据膨胀）

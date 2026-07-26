@@ -564,7 +564,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
         <p class="resource-field__hint">{{ $t('teams.mcpServerHint') }}</p>
         <div class="resource-form-grid resource-form-grid--3">
           <label class="resource-field">
-            <span class="resource-field__label">Server ID</span>
+            <span class="resource-field__label">{{ $t('teams.connectorIdLabel') }}</span>
             <DqInput v-model="pendingMcpServer" class="resource-input-mono" :placeholder="$t('teams.mcpServerPlaceholder')" @keydown.enter.prevent="addMcpServer" />
           </label>
           <div class="resource-field resource-field--action">
