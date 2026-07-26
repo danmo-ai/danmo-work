@@ -68,7 +68,16 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("runtime.tools.max_output_chars", 50000)
 	v.SetDefault("runtime.team.max_delegation_depth", 3)
 	v.SetDefault("runtime.memory.read_top_k", 10)
+	v.SetDefault("runtime.table.max_rows_per_upsert", 50)
+	v.SetDefault("runtime.table.max_rows_per_turn", 200)
+	v.SetDefault("runtime.table.max_rows_per_table", 50000)
+	v.SetDefault("runtime.table.max_row_bytes", 65536)
+	v.SetDefault("runtime.table.max_tables_per_scope", 100)
+	v.SetDefault("runtime.table.query_default_limit", 50)
+	v.SetDefault("runtime.table.query_max_limit", 200)
+	v.SetDefault("runtime.table.max_row_chars", 8000)
 	v.SetDefault("runtime.knowledge.search_top_k", 3)
+	v.SetDefault("data.store_database", paths.StoreDatabaseFile())
 	v.SetDefault("runtime.compaction.enabled", true)
 	v.SetDefault("runtime.compaction.model", "")
 	v.SetDefault("runtime.compaction.max_tokens", 128000)
@@ -93,6 +102,7 @@ func setDefaults(v *viper.Viper) {
 func bindEnv(v *viper.Viper) {
 	_ = v.BindEnv("data.dir", "WORK_DATA_DIR")
 	_ = v.BindEnv("data.database", "WORK_DB_PATH")
+	_ = v.BindEnv("data.store_database", "WORK_STORE_DB_PATH")
 	_ = v.BindEnv("data.store", "WORK_STORE")
 	_ = v.BindEnv("server.listen_addr", "WORK_ADDR")
 	_ = v.BindEnv("runtime.auto_approve", "WORK_AUTO_APPROVE")
@@ -139,6 +149,15 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 	}
 	if !filepath.IsAbs(cfg.Data.Database) {
 		cfg.Data.Database = paths.ResolveAgainstHome(cfg.Data.Database)
+	}
+	if cfg.Data.StoreDatabase == "" {
+		cfg.Data.StoreDatabase = paths.StoreDatabaseFile()
+	}
+	if !filepath.IsAbs(cfg.Data.StoreDatabase) {
+		cfg.Data.StoreDatabase = paths.ResolveAgainstHome(cfg.Data.StoreDatabase)
+	}
+	if cfg.Runtime.Table == (domain.ConfigTableSection{}) {
+		cfg.Runtime.Table = domain.DefaultTableSection()
 	}
 
 	if cfg.Search.Provider == "" {

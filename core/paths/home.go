@@ -2,7 +2,8 @@
 //
 //	~/.danmo-work/
 //	  config.yaml   — runtime config
-//	  work.db       — SQLite database
+//	  work.db       — SQLite control-plane database
+//	  store.db      — SQLite agent table-store (data plane)
 //	  data/         — projects, turn logs, checkpoints
 //	  bin/          — desktop sidecar binary (optional)
 //	  bin/coreutils/— Windows Microsoft Coreutils multi-call + applet hardlinks (optional)
@@ -37,6 +38,9 @@ func DataDir() string { return filepath.Join(Home(), "data") }
 
 // DatabaseFile is ~/.danmo-work/work.db
 func DatabaseFile() string { return filepath.Join(Home(), "work.db") }
+
+// StoreDatabaseFile is ~/.danmo-work/store.db (agent table-store data plane).
+func StoreDatabaseFile() string { return filepath.Join(Home(), "store.db") }
 
 // ResolveAgainstHome joins a relative path to ~/.danmo-work; absolute paths pass through.
 func ResolveAgainstHome(p string) string {

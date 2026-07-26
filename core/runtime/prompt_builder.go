@@ -45,6 +45,8 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 	b.WriteString("\n\n")
 	b.WriteString(buildMemoryPolicy())
 	b.WriteString("\n\n")
+	b.WriteString(buildTableStorePolicy())
+	b.WriteString("\n\n")
 	b.WriteString(buildMCPToolNamingPolicy())
 	b.WriteString("\n\n")
 	b.WriteString(buildRuntimeEnvironment(sandboxStatus))
@@ -108,6 +110,24 @@ When to memory_read:
 
 Writing style: short stable keys (e.g. preferred_language); one to a few factual sentences; update the same key instead of duplicating.
 </memory-policy>`
+}
+
+func buildTableStorePolicy() string {
+	return `<table-store-policy>
+Use table_upsert / table_get / table_query / table_delete / table_list for queryable business rows that must survive across sessions (digests, counters, cursors, structured logs).
+
+When to use table_*:
+- Daily/weekly digests or automation outputs you may filter later
+- Idempotent records keyed by date or external id
+- Small structured JSON documents (not long prose)
+
+Do NOT use table_*:
+- Lasting preferences or conventions (use memory_*)
+- Long-form reports (use write to project files; store a path in the row if needed)
+- Secrets/credentials, binaries, or full mailbox dumps
+
+Scopes match memory: user | project | agent. Prefer stable keys and small limits on table_query.
+</table-store-policy>`
 }
 
 func buildMCPToolNamingPolicy() string {

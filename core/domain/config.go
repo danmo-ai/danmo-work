@@ -20,9 +20,10 @@ type ConfigLLMSection struct {
 }
 
 type ConfigDataSection struct {
-	Dir      string `json:"dir" mapstructure:"dir"`
-	Database string `json:"database" mapstructure:"database"`
-	Store    string `json:"store" mapstructure:"store"`
+	Dir           string `json:"dir" mapstructure:"dir"`
+	Database      string `json:"database" mapstructure:"database"`
+	StoreDatabase string `json:"storeDatabase" mapstructure:"store_database"`
+	Store         string `json:"store" mapstructure:"store"`
 }
 
 type ConfigServerSection struct {
@@ -42,6 +43,7 @@ type ConfigRuntimeSection struct {
 	Team           ConfigTeamSection       `json:"team" mapstructure:"team"`
 	Tools          ConfigToolsSection      `json:"tools" mapstructure:"tools"`
 	Memory         ConfigMemorySection     `json:"memory" mapstructure:"memory"`
+	Table          ConfigTableSection      `json:"table" mapstructure:"table"`
 	Knowledge      ConfigKnowledgeSection  `json:"knowledge" mapstructure:"knowledge"`
 	Compaction     ConfigCompactionSection `json:"compaction" mapstructure:"compaction"`
 }

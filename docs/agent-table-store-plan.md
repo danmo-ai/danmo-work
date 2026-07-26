@@ -249,12 +249,12 @@ table_store_quota_exceeded: max_rows_per_table=50000 table=email_digests
 
 ### MVP（本方案必须完成）
 
-- [ ] `store.db` + `TableStoreRepo`
-- [ ] Core tools：`table_upsert` / `table_get` / `table_query` / `table_delete` / `table_list`
-- [ ] scope 注入 + 配额 + policy 文案
-- [ ] 单元测试覆盖 CRUD / quota / scope
-- [ ] `docs/core-design.md` 增加简短索引节
-- [ ] 调试 API：list/get/delete rows（可无前端）
+- [x] `store.db` + `TableStoreRepo`
+- [x] Core tools：`table_upsert` / `table_get` / `table_query` / `table_delete` / `table_list`
+- [x] scope 注入 + 配额 + policy 文案
+- [x] 单元测试覆盖 CRUD / quota / scope
+- [x] `docs/core-design.md` 增加简短索引节
+- [x] 调试 API：list/get/delete rows（可无前端）
 
 ### P1
 

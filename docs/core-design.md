@@ -134,7 +134,8 @@ Danmo Work 是一个**通用型 AI Work Agent**，兼具基本的 AI Coding 能�
 | **Agent** | 人设 + 技能 + 工具绑定 + 知识库；可 `primary` 或 `subagent`；`canDelegate` 决定能否委派 |
 | **委派 Agent** | 委派动作是 `delegate_agent` tool；子 Agent 在隔离 Turn 下运行，最终报告作为 tool result 反馈父 Turn |
 | **ask_user** | 向用户提问也是 tool；Agent 调用后暂停等待用户响应，用户输入作为 tool result 继续 |
-| **Memory** | Agent 主动写入的跨会话事实；`memory_update` / `memory_read`；作用域 user / project / agent；SQLite `memories` 表 |
+| **Memory** | Agent 主动写入的跨会话事实；`memory_update` / `memory_read`；作用域 user / project / agent；SQLite `memories` 表（`work.db`） |
+| **Table Store** | Agent 业务流水（schema-free）；`table_upsert` / `table_get` / `table_query` / `table_delete` / `table_list`；独立 `store.db`；见 [agent-table-store-plan.md](./agent-table-store-plan.md) |
 
 **层次关系**：
 
@@ -320,6 +321,7 @@ OpenAI-compat 路径上，模型常把 `write`/`edit` 等内容里的未转义�
 | `grep` / `glob` | 代码搜索 |
 | `todowrite` | 任务清单 |
 | `memory_update` / `memory_read` | 跨会话持久记忆（user / project / agent 三级作用域） |
+| `table_upsert` / `table_get` / `table_query` / `table_delete` / `table_list` | 业务流水表（schema-free JSON；独立 `store.db`） |
 | `web_fetch` / `web_search` | 读网页 / 搜索 |
 | `http_request` | 通用 HTTP/REST（文本/JSON；非二进制） |
 | `ask_user` | 向用户提问（全局，无需 Agent 绑定） |
@@ -334,7 +336,7 @@ Agent 可用能力按三层合成；Skill 与连接器共用同一 Ambient 开�
 
 | 层 | 内容 | 何时生效 |
 |----|------|----------|
-| **Core** | `ask_user`、`memory_*`、`read_skill`、`search_kb`（有 KB 时）；`delegate_agent`（`canDelegate`） | 始终（与绑定无关） |
+| **Core** | `ask_user`、`memory_*`、`table_*`、`read_skill`、`search_kb`（有 KB 时）；`delegate_agent`（`canDelegate`） | 始终（与绑定无关） |
 | **Bound** | Agent `skillIds`（DB 技能）+ `tools[]`（builtin）+ `mcpServers[]`（连接器 id） | 始终按 Agent 配置 |
 | **Ambient** | 磁盘技能目录 + **全部已启用连接器** | 仅当 `inheritAmbient`（默认：`primary=true`，`subagent=false`） |
 
@@ -364,6 +366,7 @@ Agent 可用能力按三层合成；Skill 与连接器共用同一 Ambient 开�
 |------|------|
 | `search_kb` | Core（绑定知识库时） |
 | `memory_update` / `memory_read` | Core |
+| `table_upsert` / `table_get` / `table_query` / `table_delete` / `table_list` | Core |
 | `ask_user` / `read_skill` | Core |
 | `delegate_agent` | Core + `canDelegate` |
 | 其它 builtin | Bound：`tools[].toolId` |
@@ -433,6 +436,18 @@ memory_read(scope?, key?, query?)
 **UI**：右侧工作区「记忆」Tab（`MemoryPanel`）按作用域分组展示；`GET/DELETE /api/v1/memories`；`memory_update` 完成后自动刷新。
 
 **勿记**：一次性任务细节、大段代码、密钥、可从仓库再读的文件内容、短暂 todo（用 `todowrite`）。
+
+### 7.4.1 Table Store（`table_*`）
+
+与 Memory 分家：Table Store 存**可查询业务流水**（如每日邮件摘要），Memory 存偏好/约定。物理库为独立 `~/.danmo-work/store.db`（`WORK_STORE_DB_PATH`），避免灌库拖慢 `work.db` 控制面。
+
+```
+table_upsert(scope, table, key, data, mode?=replace|merge)
+table_get / table_query / table_delete / table_list
+  → runtime 注入 scope_id；硬配额见 runtime.table.*
+```
+
+完整方案见 [agent-table-store-plan.md](./agent-table-store-plan.md)。
 
 ### 7.5 Tool 统一接口（概念）
 

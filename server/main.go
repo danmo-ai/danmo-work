@@ -45,6 +45,7 @@ func main() {
 		Sandbox:    core.Sandbox,
 		Browser:    core.Browser,
 		Store:      core.Store,
+		TableStore: core.TableStore,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
