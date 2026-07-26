@@ -56,7 +56,9 @@ runtime:
   memory:
     read_top_k: 10           # max memories returned by memory_read per call
   knowledge:
-    search_top_k: 3          # knowledge-base hits injected per turn
+    search_top_k: 3          # knowledge-base chapter hits injected per turn
+    chapter_max_tokens: 512  # Markdown chapter merge budget (splitter)
+    vector_hybrid: false     # optional BM25+vector hybrid (default off)
 
 # Search / HTTP backend for web_search, web_fetch, and http_request tools.
 search:

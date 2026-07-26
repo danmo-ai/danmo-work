@@ -217,6 +217,8 @@ export interface ConfigFile {
     }
     knowledge: {
       searchTopK: number
+      chapterMaxTokens?: number
+      vectorHybrid?: boolean
     }
     compaction: {
       enabled: boolean
@@ -331,6 +333,8 @@ export interface RuntimeConfigForm {
   maxDelegationDepth: number
   readTopK: number
   searchTopK: number
+  chapterMaxTokens?: number
+  vectorHybrid?: boolean
   compactionEnabled: boolean
   compactionMaxTokens: number
   compactionTriggerRatio: number

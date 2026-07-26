@@ -1201,6 +1201,8 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 	}
 	handlers := []tool.Handler{
 		&builtin.SearchKB{Knowledge: e.knowledge, KBIDs: agent.KnowledgeIDs},
+		&builtin.ListKBDocs{Knowledge: e.knowledge, KBIDs: agent.KnowledgeIDs},
+		&builtin.GetKBDoc{Knowledge: e.knowledge},
 		&builtin.AskUser{
 			Stream: e.stream,
 			OnAsk:  e.waitAskUser,
@@ -1221,6 +1223,8 @@ func (e *Engine) buildWorkerRegistry(agent domain.Agent) *tool.Registry {
 	cfg := e.loadRunCfg(context.Background())
 	handlers := []tool.Handler{
 		&builtin.SearchKB{Knowledge: e.knowledge, KBIDs: agent.KnowledgeIDs},
+		&builtin.ListKBDocs{Knowledge: e.knowledge, KBIDs: agent.KnowledgeIDs},
+		&builtin.GetKBDoc{Knowledge: e.knowledge},
 		&builtin.AskUser{
 			Stream: e.stream,
 			OnAsk:  e.waitAskUser,

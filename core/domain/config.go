@@ -86,6 +86,12 @@ type ConfigMemorySection struct {
 
 type ConfigKnowledgeSection struct {
 	SearchTopK int `json:"searchTopK" mapstructure:"search_top_k"`
+	// ChapterMaxTokens is the chapter merge budget for the Markdown splitter
+	// (approximate subword units, tiersum-style). Default 512.
+	ChapterMaxTokens int `json:"chapterMaxTokens" mapstructure:"chapter_max_tokens"`
+	// VectorHybrid enables optional dense-vector branch fused with BM25 (P2).
+	// Default false — BM25-only when off.
+	VectorHybrid bool `json:"vectorHybrid" mapstructure:"vector_hybrid"`
 }
 
 // UpdateConfigFileRequest is sent by clients to update one or more sections

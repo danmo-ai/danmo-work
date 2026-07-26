@@ -419,6 +419,9 @@ func TestFormatActiveTodosAndSystemPrompt(t *testing.T) {
 	if !contains(sys, "<ask-user-policy>") || !contains(sys, "ask_user") {
 		t.Errorf("expected ask-user-policy in prompt, got %q", sys)
 	}
+	if !contains(sys, "<knowledge-policy>") || !contains(sys, "search_kb") {
+		t.Errorf("expected knowledge-policy in prompt, got %q", sys)
+	}
 	if !contains(sys, "<memory-policy>") || !contains(sys, "memory_update") {
 		t.Errorf("expected memory-policy in prompt, got %q", sys)
 	}

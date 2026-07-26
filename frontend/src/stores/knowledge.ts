@@ -1,83 +1,108 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { asArray, fetchJSON } from '@/api/client'
 import type { KnowledgeBase, KnowledgeDocument } from '@/types'
 
-const KB_KEY = 'danqing-knowledge-bases'
-const DOC_KEY = 'danqing-knowledge-documents'
-
-function loadJSON<T>(key: string): T[] {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? (JSON.parse(raw) as T[]) : []
-  } catch {
-    return []
-  }
-}
-
-function saveJSON<T>(key: string, items: T[]) {
-  localStorage.setItem(key, JSON.stringify(items))
-}
-
 export const useKnowledgeStore = defineStore('knowledge', () => {
-  const bases = ref<KnowledgeBase[]>(loadJSON<KnowledgeBase>(KB_KEY))
-  const documents = ref<KnowledgeDocument[]>(loadJSON<KnowledgeDocument>(DOC_KEY))
+  const bases = ref<KnowledgeBase[]>([])
+  const documents = ref<KnowledgeDocument[]>([])
+  const loading = ref(false)
 
-  function saveBases() {
-    saveJSON(KB_KEY, bases.value)
-  }
-
-  function saveDocs() {
-    saveJSON(DOC_KEY, documents.value)
-  }
-
-  function createBase(payload: Omit<KnowledgeBase, 'id' | 'updatedAt'>) {
-    const now = new Date().toISOString()
-    const base: KnowledgeBase = {
-      ...payload,
-      id: `kb-${Date.now()}`,
-      updatedAt: now,
+  async function loadBases() {
+    loading.value = true
+    try {
+      bases.value = asArray(await fetchJSON<KnowledgeBase[]>('/knowledge/bases'))
+    } finally {
+      loading.value = false
     }
-    bases.value.push(base)
-    saveBases()
+  }
+
+  async function loadDocs(baseId: string) {
+    const docs = asArray(await fetchJSON<KnowledgeDocument[]>(`/knowledge/bases/${baseId}/docs`))
+    documents.value = [
+      ...documents.value.filter((d) => d.knowledgeBaseId !== baseId),
+      ...docs.map((d) => ({
+        ...d,
+        knowledgeBaseId: d.knowledgeBaseId || (d as { kbId?: string }).kbId || baseId,
+      })),
+    ]
+    return documentsFor(baseId)
+  }
+
+  async function createBase(payload: { name: string; description?: string }) {
+    const base = await fetchJSON<KnowledgeBase>('/knowledge/bases', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: payload.name,
+        description: payload.description ?? '',
+      }),
+    })
+    bases.value = [base, ...bases.value.filter((b) => b.id !== base.id)]
     return base
   }
 
-  function updateBase(id: string, payload: Partial<KnowledgeBase>) {
+  async function updateBase(id: string, payload: { name: string; description?: string }) {
+    const updated = await fetchJSON<KnowledgeBase>(`/knowledge/bases/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: payload.name,
+        description: payload.description ?? '',
+      }),
+    })
     const i = bases.value.findIndex((b) => b.id === id)
-    if (i < 0) return undefined
-    bases.value[i] = { ...bases.value[i], ...payload, updatedAt: new Date().toISOString() }
-    saveBases()
-    return bases.value[i]
+    if (i >= 0) bases.value[i] = updated
+    else bases.value.unshift(updated)
+    return updated
   }
 
-  function removeBase(id: string) {
+  async function removeBase(id: string) {
+    await fetchJSON(`/knowledge/bases/${id}`, { method: 'DELETE' })
     bases.value = bases.value.filter((b) => b.id !== id)
     documents.value = documents.value.filter((d) => d.knowledgeBaseId !== id)
-    saveBases()
-    saveDocs()
   }
 
-  function addDocument(baseId: string, title: string, content: string) {
+  async function addDocument(baseId: string, title: string, content: string) {
+    const raw = await fetchJSON<KnowledgeDocument & { kbId?: string }>(`/knowledge/bases/${baseId}/docs`, {
+      method: 'POST',
+      body: JSON.stringify({ title, content }),
+    })
     const doc: KnowledgeDocument = {
-      id: `doc-${Date.now()}`,
-      knowledgeBaseId: baseId,
-      title,
-      content,
-      updatedAt: new Date().toISOString(),
+      id: raw.id,
+      knowledgeBaseId: raw.knowledgeBaseId || raw.kbId || baseId,
+      title: raw.title,
+      content: raw.content,
+      updatedAt: raw.updatedAt,
     }
-    documents.value.push(doc)
+    documents.value = [doc, ...documents.value.filter((d) => d.id !== doc.id)]
     const base = bases.value.find((b) => b.id === baseId)
     if (base) {
       base.documentCount = documents.value.filter((d) => d.knowledgeBaseId === baseId).length
       base.updatedAt = doc.updatedAt
     }
-    saveDocs()
-    saveBases()
     return doc
   }
 
-  function removeDocument(docId: string) {
+  async function updateDocument(docId: string, title: string, content: string) {
+    const raw = await fetchJSON<KnowledgeDocument & { kbId?: string }>(`/knowledge/docs/${docId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ title, content }),
+    })
+    const doc: KnowledgeDocument = {
+      id: raw.id,
+      knowledgeBaseId: raw.knowledgeBaseId || raw.kbId || '',
+      title: raw.title,
+      content: raw.content,
+      updatedAt: raw.updatedAt,
+    }
+    const i = documents.value.findIndex((d) => d.id === docId)
+    if (i >= 0) documents.value[i] = doc
+    else documents.value.unshift(doc)
+    return doc
+  }
+
+  async function removeDocument(docId: string) {
     const doc = documents.value.find((d) => d.id === docId)
+    await fetchJSON(`/knowledge/docs/${docId}`, { method: 'DELETE' })
     documents.value = documents.value.filter((d) => d.id !== docId)
     if (doc) {
       const base = bases.value.find((b) => b.id === doc.knowledgeBaseId)
@@ -86,8 +111,17 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
         base.updatedAt = new Date().toISOString()
       }
     }
-    saveDocs()
-    saveBases()
+  }
+
+  async function getDocument(docId: string) {
+    const raw = await fetchJSON<KnowledgeDocument & { kbId?: string }>(`/knowledge/docs/${docId}`)
+    return {
+      id: raw.id,
+      knowledgeBaseId: raw.knowledgeBaseId || raw.kbId || '',
+      title: raw.title,
+      content: raw.content,
+      updatedAt: raw.updatedAt,
+    } satisfies KnowledgeDocument
   }
 
   function documentsFor(baseId: string) {
@@ -97,11 +131,16 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
   return {
     bases,
     documents,
+    loading,
+    loadBases,
+    loadDocs,
     createBase,
     updateBase,
     removeBase,
     addDocument,
+    updateDocument,
     removeDocument,
+    getDocument,
     documentsFor,
   }
 })

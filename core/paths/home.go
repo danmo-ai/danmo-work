@@ -4,6 +4,7 @@
 //	  config.yaml   — runtime config
 //	  work.db       — SQLite control-plane database
 //	  store.db      — SQLite agent table-store (data plane)
+//	  knowledge/    — knowledge-base Markdown source of truth
 //	  data/         — projects, turn logs, checkpoints
 //	  bin/          — desktop sidecar binary (optional)
 //	  bin/coreutils/— Windows Microsoft Coreutils multi-call + applet hardlinks (optional)
@@ -41,6 +42,13 @@ func DatabaseFile() string { return filepath.Join(Home(), "work.db") }
 
 // StoreDatabaseFile is ~/.danmo-work/store.db (agent table-store data plane).
 func StoreDatabaseFile() string { return filepath.Join(Home(), "store.db") }
+
+// KnowledgeDir is ~/.danmo-work/knowledge (Markdown KB source of truth).
+func KnowledgeDir() string {
+	dir := filepath.Join(Home(), "knowledge")
+	_ = os.MkdirAll(dir, 0o755)
+	return dir
+}
 
 // ResolveAgainstHome joins a relative path to ~/.danmo-work; absolute paths pass through.
 func ResolveAgainstHome(p string) string {

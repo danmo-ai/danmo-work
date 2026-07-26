@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import WorkspaceShell from '@/components/common/WorkspaceShell.vue'
 import { useKnowledgeStore } from '@/stores/knowledge'
@@ -15,6 +15,7 @@ const saving = ref(false)
 const activeTab = ref<'info' | 'documents'>('info')
 const pendingDocTitle = ref('')
 const pendingDocContent = ref('')
+const editingDocId = ref<string | null>(null)
 
 const form = ref<KnowledgeBase>({
   id: '',
@@ -37,28 +38,38 @@ const headerTitle = computed(() => {
 
 const selectedDocs = computed(() => (selectedId.value ? knowledge.documentsFor(selectedId.value) : []))
 
-onMounted(() => {
+onMounted(async () => {
+  await knowledge.loadBases()
   if (sortedBases.value.length && !selectedId.value) {
-    selectBase(sortedBases.value[0].id)
+    await selectBase(sortedBases.value[0].id)
   }
 })
 
-function selectBase(id: string) {
+watch(activeTab, async (tab) => {
+  if (tab === 'documents' && selectedId.value) {
+    await knowledge.loadDocs(selectedId.value)
+  }
+})
+
+async function selectBase(id: string) {
   isCreating.value = false
   selectedId.value = id
   activeTab.value = 'info'
+  editingDocId.value = null
   const base = knowledge.bases.find((b) => b.id === id)
   if (base) form.value = { ...base }
+  await knowledge.loadDocs(id)
 }
 
 function openCreate() {
   isCreating.value = true
   selectedId.value = null
   activeTab.value = 'info'
+  editingDocId.value = null
   form.value = { id: '', name: '', description: '', documentCount: 0, updatedAt: '' }
 }
 
-function save() {
+async function save() {
   if (!form.value.name.trim()) {
     toast.warning(t('knowledge.namePlaceholder'))
     return
@@ -66,21 +77,20 @@ function save() {
   saving.value = true
   try {
     if (isCreating.value) {
-      const base = knowledge.createBase({
+      const base = await knowledge.createBase({
         name: form.value.name.trim(),
         description: form.value.description?.trim() ?? '',
-        documentCount: 0,
       })
       toast.success(t('knowledge.created'))
       isCreating.value = false
-      selectBase(base.id)
+      await selectBase(base.id)
     } else if (selected.value) {
-      knowledge.updateBase(selected.value.id, {
+      await knowledge.updateBase(selected.value.id, {
         name: form.value.name.trim(),
         description: form.value.description?.trim() ?? '',
       })
       toast.success(t('knowledge.saved'))
-      selectBase(selected.value.id)
+      await selectBase(selected.value.id)
     }
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
@@ -96,23 +106,60 @@ async function removeSelected() {
   } catch {
     return
   }
-  knowledge.removeBase(selected.value.id)
-  selectedId.value = null
-  isCreating.value = false
-  toast.success(t('knowledge.deleted'))
+  try {
+    await knowledge.removeBase(selected.value.id)
+    selectedId.value = null
+    isCreating.value = false
+    toast.success(t('knowledge.deleted'))
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
+  }
 }
 
-function addDocument() {
+async function addDocument() {
   if (!selected.value || !pendingDocTitle.value.trim() || !pendingDocContent.value.trim()) return
-  knowledge.addDocument(selected.value.id, pendingDocTitle.value.trim(), pendingDocContent.value.trim())
-  pendingDocTitle.value = ''
-  pendingDocContent.value = ''
-  toast.success(t('knowledge.docAdded'))
+  try {
+    if (editingDocId.value) {
+      await knowledge.updateDocument(editingDocId.value, pendingDocTitle.value.trim(), pendingDocContent.value.trim())
+      editingDocId.value = null
+    } else {
+      await knowledge.addDocument(selected.value.id, pendingDocTitle.value.trim(), pendingDocContent.value.trim())
+    }
+    pendingDocTitle.value = ''
+    pendingDocContent.value = ''
+    await knowledge.loadBases()
+    await knowledge.loadDocs(selected.value.id)
+    toast.success(t('knowledge.docAdded'))
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
+  }
 }
 
-function removeDocument(docId: string) {
-  knowledge.removeDocument(docId)
-  toast.success(t('knowledge.docDeleted'))
+async function editDocument(docId: string) {
+  try {
+    const doc = await knowledge.getDocument(docId)
+    editingDocId.value = doc.id
+    pendingDocTitle.value = doc.title
+    pendingDocContent.value = doc.content ?? ''
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
+  }
+}
+
+async function removeDocument(docId: string) {
+  if (!selected.value) return
+  try {
+    await knowledge.removeDocument(docId)
+    if (editingDocId.value === docId) {
+      editingDocId.value = null
+      pendingDocTitle.value = ''
+      pendingDocContent.value = ''
+    }
+    await knowledge.loadBases()
+    toast.success(t('knowledge.docDeleted'))
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
+  }
 }
 
 function baseInitial(name: string) {
@@ -188,48 +235,39 @@ function onKeydown(e: KeyboardEvent) {
 
     <template #body>
       <section v-show="activeTab === 'info'" class="resource-section">
-        <label class="resource-field resource-field--block"
-        >
+        <label class="resource-field resource-field--block">
           <span class="resource-field__label">{{ $t('common.name') }}</span>
           <DqInput v-model="form.name" :placeholder="$t('knowledge.dummyName')" />
         </label>
-        <label class="resource-field resource-field--block"
-        >
+        <label class="resource-field resource-field--block">
           <span class="resource-field__label">{{ $t('common.description') }}</span>
           <DqInput v-model="form.description" type="textarea" :rows="5" :placeholder="$t('knowledge.descriptionPlaceholder')" />
         </label>
       </section>
 
       <section v-show="activeTab === 'documents'" class="resource-section">
-        <div class="resource-form-grid resource-form-grid--2"
-        >
-          <label class="resource-field"
-          >
+        <div class="resource-form-grid resource-form-grid--2">
+          <label class="resource-field">
             <span class="resource-field__label">{{ $t('knowledge.docTitle') }}</span>
             <DqInput v-model="pendingDocTitle" :placeholder="$t('knowledge.docTitlePlaceholder')" />
           </label>
           <div class="resource-field resource-field--action">
-          >
-            <DqButton @click="addDocument">{{ $t('knowledge.addDoc') }}</DqButton>
+            <DqButton @click="addDocument">{{ editingDocId ? $t('common.save') : $t('knowledge.addDoc') }}</DqButton>
           </div>
         </div>
-        <label class="resource-field resource-field--block"
-        >
+        <label class="resource-field resource-field--block">
           <span class="resource-field__label">{{ $t('knowledge.content') }}</span>
-          <DqInput v-model="pendingDocContent" type="textarea" :rows="6" :placeholder="$t('knowledge.contentPlaceholder')" />
+          <DqInput v-model="pendingDocContent" type="textarea" :rows="10" :placeholder="$t('knowledge.contentPlaceholder')" />
         </label>
 
-        <div class="resource-list-card"
-        >
-          <div v-for="doc in selectedDocs" :key="doc.id" class="resource-list-card__item"
-          >
-            <div class="resource-list-card__meta"
-            >
+        <div class="resource-list-card">
+          <div v-for="doc in selectedDocs" :key="doc.id" class="resource-list-card__item">
+            <div class="resource-list-card__meta">
               <span class="resource-list-card__name">{{ doc.title }}</span>
               <span class="resource-list-card__desc">{{ formatDate(doc.updatedAt) }}</span>
             </div>
-            <div class="resource-list-card__actions"
-            >
+            <div class="resource-list-card__actions">
+              <button type="button" class="resource-list-card__action" @click="editDocument(doc.id)">{{ $t('common.edit') }}</button>
               <button type="button" class="resource-list-card__action resource-list-card__action--danger" @click="removeDocument(doc.id)">{{ $t('common.delete') }}</button>
             </div>
           </div>
