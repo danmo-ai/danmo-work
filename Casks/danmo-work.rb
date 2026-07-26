@@ -2,9 +2,7 @@ cask "danmo-work" do
   version "0.9.8"
   sha256 "fee898ae4456a386f9cb1d2a29d64569b901f7075e12c90e4d51f26a25d0ad74"
 
-  # China-reachable release mirror (synced from CI). GitHub Releases is the origin.
-  url "https://releases.danmo.ai/danmo-work/Danmo.Work_#{version}_arm64.dmg",
-      verified: "releases.danmo.ai/danmo-work/"
+  url "https://github.com/danmo-ai/danmo-work/releases/download/v#{version}/Danmo.Work_#{version}_arm64.dmg"
   name "Danmo Work"
   desc "Agent workbench for shipping real work products"
   homepage "https://github.com/danmo-ai/danmo-work"

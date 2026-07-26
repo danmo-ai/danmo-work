@@ -63,7 +63,7 @@ brew install --cask danmo-work
 
 Upgrade later: `brew update && brew upgrade --cask danmo-work`.
 
-The cask downloads the `.dmg` from the China release mirror (`releases.danmo.ai`), which CI syncs on each GitHub Release (same host as the in-app updater).
+The cask downloads the `.dmg` from GitHub Releases. (A China mirror at `releases.danmo.ai` is optional later for in-app updates / brew.)
 
 Not Apple-notarized yet — on first launch, right-click the app → **Open** (or allow under System Settings → Privacy & Security).
 
@@ -427,7 +427,7 @@ SKIP_BACKEND=1 make dev-desktop
 | Linux server | `out/dist/danmo-work-linux-*.tar.gz` |
 | Windows desktop | `out/desktop/bundle/*.exe` |
 
-**macOS channels:** GitHub Releases `.dmg`, or Homebrew cask [`Casks/danmo-work.rb`](Casks/danmo-work.rb) (bumped on each `v*` release; `.dmg` served from `releases.danmo.ai`). Optional `UPDATE_MIRROR_*` secrets enable automatic mirror sync (incl. `.dmg`).
+**macOS channels:** GitHub Releases `.dmg`, or Homebrew cask [`Casks/danmo-work.rb`](Casks/danmo-work.rb) (bumped on each `v*` release; cask URL = GitHub Releases). Optional `UPDATE_MIRROR_*` secrets can sync assets to `releases.danmo.ai` when that mirror exists.
 
 ## Docs
 

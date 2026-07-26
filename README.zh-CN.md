@@ -63,7 +63,7 @@ brew install --cask danmo-work
 
 之后升级：`brew update && brew upgrade --cask danmo-work`。
 
-cask 从国内发布镜像 `releases.danmo.ai` 拉 `.dmg`（发版 CI 自动同步，与应用内更新同源）。
+cask 从 GitHub Releases 拉 `.dmg`。（国内镜像 `releases.danmo.ai` 可选，以后给应用内更新 / brew 用。）
 
 尚未 Apple 公证：首次请在 Finder 中右键 app → **打开**（或到「系统设置 → 隐私与安全性」允许）。
 
@@ -428,7 +428,7 @@ SKIP_BACKEND=1 make dev-desktop
 | Linux server | `out/dist/danmo-work-linux-*.tar.gz` |
 | Windows desktop | `out/desktop/bundle/*.exe` |
 
-**macOS 通道：** GitHub Releases `.dmg`，或 Homebrew cask [`Casks/danmo-work.rb`](Casks/danmo-work.rb)（每次 `v*` 发版 bump；`.dmg` 由 `releases.danmo.ai` 提供）。配置 `UPDATE_MIRROR_*` secret 后发版会自动推镜像（含 `.dmg`）。
+**macOS 通道：** GitHub Releases `.dmg`，或 Homebrew cask [`Casks/danmo-work.rb`](Casks/danmo-work.rb)（每次 `v*` 发版 bump；cask URL 指向 GitHub Releases）。可选配置 `UPDATE_MIRROR_*`，在 `releases.danmo.ai` 就绪后同步产物。
 
 ## 文档
 
