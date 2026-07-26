@@ -112,8 +112,10 @@ Builds Go backend as a Tauri sidecar binary (`scripts/build_sidecar.sh`), inject
 - Linux server → `out/dist/danmo-work-linux-*.tar.gz`
 - Windows desktop → `out/desktop/bundle/**/*.exe`
 
-Homebrew cask: `Casks/danmo-work.rb` (bumped on `v*` release).
-User install (long tap name):
+Homebrew cask: `Casks/danmo-work.rb` (bumped on `v*` release; URL =
+`https://releases.danmo.ai/danmo-work/Danmo.Work_*_arm64.dmg`).
+Release CI syncs `.dmg` (+ updater payloads) to that mirror when
+`UPDATE_MIRROR_*` secrets are set. Backfill: workflow **Sync China Mirror**.
 
 ```bash
 brew tap danmo-ai/danmo-work https://github.com/danmo-ai/danmo-work.git

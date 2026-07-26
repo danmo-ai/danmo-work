@@ -329,7 +329,7 @@ jobs:
           fi
 
       - name: Sync China mirror (optional)
-        if: steps.updater_manifest.outputs.has_manifest == 'true'
+        # Includes .dmg for Homebrew cask; skips cleanly if UPDATE_MIRROR_* unset.
         env:
           UPDATE_MIRROR_BASE_URL: ${{ secrets.UPDATE_MIRROR_BASE_URL }}
           UPDATE_MIRROR_S3_URI: ${{ secrets.UPDATE_MIRROR_S3_URI }}
@@ -339,6 +339,7 @@ jobs:
           AWS_DEFAULT_REGION: ${{ secrets.UPDATE_MIRROR_AWS_REGION }}
           AWS_ENDPOINT_URL: ${{ secrets.UPDATE_MIRROR_AWS_ENDPOINT_URL }}
         run: |
+          chmod +x ${{ env.REPO_DIR }}/scripts/*.sh
           ${{ env.REPO_DIR }}/scripts/sync_updater_mirror.sh \
             --asset-dir release-assets \
             --version "$RELEASE_VERSION"
