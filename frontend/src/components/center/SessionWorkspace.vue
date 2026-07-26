@@ -404,7 +404,18 @@ const turnMap = computed(() => {
     }
 
     const turnId = ev.turnId || activeTurnId
-    if (!turnId || !map[turnId]) continue
+    if (!turnId) continue
+    if (!map[turnId]) {
+      // turn.started can be dropped from the SSE buffer; still surface interactive cards.
+      if (ev.type !== 'permission.ask' && ev.type !== 'ask_user.pending') continue
+      map[turnId] = {
+        id: turnId,
+        goal: '',
+        events: [],
+        childTurnIds: [],
+        agentName: 'AI',
+      }
+    }
 
     if (ev.type.startsWith('tool.')) {
       if (!turnToolCards[turnId]) turnToolCards[turnId] = {}
@@ -539,7 +550,7 @@ const visibleTurns = computed(() => {
   return turn ? [turn] : []
 })
 
-const { isTurnCollapsed, toggleTurnCollapse, clearCollapseOverrides } = useTurnCollapse(() => visibleTurns.value)
+const { isTurnCollapsed, toggleTurnCollapse, ensureTurnExpanded, clearCollapseOverrides } = useTurnCollapse(() => visibleTurns.value)
 
 const breadcrumbs = computed(() => {
   const path: { id: string | null; label: string }[] = [{ id: null, label: '全部 Turn' }]
@@ -729,11 +740,22 @@ async function jumpToApprovalAnchor(a: ApprovalAnchor) {
     } else if (currentTurnId.value && currentTurnId.value !== a.turnId) {
       currentTurnId.value = null
     }
+    // Older turns default to collapsed — expand so the card is actually visible.
+    ensureTurnExpanded(a.turnId)
   }
   userScrolledUp.value = true
   await nextTick()
   const root = scrollAreaRef.value
-  const el = root?.querySelector(`[data-event-anchor="${a.seq}"]`) as HTMLElement | null
+  let el = root?.querySelector(`[data-event-anchor="${a.seq}"]`) as HTMLElement | null
+  // Card may land one frame later after turnMap / drill-in updates.
+  if (!el) {
+    await nextTick()
+    el = scrollAreaRef.value?.querySelector(`[data-event-anchor="${a.seq}"]`) as HTMLElement | null
+  }
+  if (!el) {
+    await new Promise<void>((r) => requestAnimationFrame(() => r()))
+    el = scrollAreaRef.value?.querySelector(`[data-event-anchor="${a.seq}"]`) as HTMLElement | null
+  }
   if (!el) return
   el.scrollIntoView({ behavior: 'smooth', block: 'center' })
   el.classList.add('is-anchor-flash')
@@ -754,6 +776,8 @@ watch(
     await nextTick()
     syncComposerLayout()
     jumpToFirstPendingApproval()
+    // Retry once — orphan turn shells / collapse expand may render a tick later.
+    window.setTimeout(() => jumpToFirstPendingApproval(), 120)
   },
 )
 
@@ -1019,6 +1043,16 @@ const decidingApprovalIds = ref(new Set<string>())
 const answeredAskIds = ref(new Set<string>())
 const resolvedAskAnswers = ref(new Map<string, string>())
 const answeringAskIds = ref(new Set<string>())
+
+watch(
+  () => sessions.currentSession?.id,
+  () => {
+    answeredAskIds.value = new Set()
+    resolvedAskAnswers.value = new Map()
+    decidingApprovalIds.value = new Set()
+    answeringAskIds.value = new Set()
+  },
+)
 
 function askUserId(payload: unknown): string {
   const p = asRecord(payload)

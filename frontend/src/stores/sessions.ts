@@ -84,7 +84,10 @@ export const useSessionsStore = defineStore('sessions', () => {
   })
 
   let eventSource: EventSource | null = null
+  /** Highest seq currently present in streamEvents (not "contiguous watermark"). */
   let lastSeq = 0
+  let backfillInFlight: Promise<void> | null = null
+  const knownSeqs = new Set<number>()
 
   const currentSession = computed(() =>
     sessions.value.find((t) => t.id === currentSessionId.value) ?? null,
@@ -193,28 +196,14 @@ export const useSessionsStore = defineStore('sessions', () => {
       currentSessionId.value = t.id
       selectedProjectId.value = t.projectId ?? null
       composingNew.value = false
-      streamEvents.value = []
-      lastSeq = 0
+      resetStreamState()
       turns.value = []
+      // Poll history before SSE — same order as selectSession — so turn.started
+      // is never missing when ask_user / permission cards arrive on a busy stream.
+      await loadSessionEvents(t.id)
       subscribeEvents(t.id)
       void pollSession(t.id)
       void loadTurns(t.id)
-      // Load any events that may have been emitted before SSE connected
-      void (async () => {
-        try {
-          const existing = await fetchJSON<StreamEvent[]>(`/sessions/${t.id}/events/poll?since=0`)
-          if (Array.isArray(existing)) {
-            for (const ev of existing) {
-              if (ev.seq > lastSeq) {
-                lastSeq = ev.seq
-                streamEvents.value.push(ev)
-              }
-            }
-          }
-        } catch (e) {
-          console.error('[createSession] failed to load initial events', e)
-        }
-      })()
       return t
     } finally {
       loading.value = false
@@ -351,6 +340,54 @@ export const useSessionsStore = defineStore('sessions', () => {
     void tick()
   }
 
+  function resetStreamState() {
+    streamEvents.value = []
+    lastSeq = 0
+    knownSeqs.clear()
+  }
+
+  /** Merge events by seq (fills holes). Returns whether the timeline changed. */
+  function mergeStreamEvents(events: StreamEvent[]): boolean {
+    if (!Array.isArray(events) || events.length === 0) return false
+    let changed = false
+    for (const ev of events) {
+      if (!ev || typeof ev.seq !== 'number') continue
+      if (knownSeqs.has(ev.seq)) continue
+      knownSeqs.add(ev.seq)
+      streamEvents.value.push(ev)
+      if (ev.seq > lastSeq) lastSeq = ev.seq
+      changed = true
+    }
+    if (changed) {
+      streamEvents.value.sort((a, b) => a.seq - b.seq)
+      hydrateDecidedApprovals(streamEvents.value)
+    }
+    return changed
+  }
+
+  async function loadSessionEvents(sessionId: string) {
+    try {
+      const existing = await fetchJSON<StreamEvent[]>(`/sessions/${sessionId}/events/poll?since=0`)
+      if (currentSessionId.value !== sessionId) return
+      mergeStreamEvents(Array.isArray(existing) ? existing : [])
+    } catch (e) {
+      console.error('[loadSessionEvents] failed for', sessionId, e)
+    }
+  }
+
+  /** Heal dropped SSE frames (non-blocking publish buffer) via poll. */
+  function backfillSessionEvents(sessionId: string) {
+    if (backfillInFlight) return backfillInFlight
+    backfillInFlight = (async () => {
+      try {
+        await loadSessionEvents(sessionId)
+      } finally {
+        backfillInFlight = null
+      }
+    })()
+    return backfillInFlight
+  }
+
   function subscribeEvents(sessionId: string) {
     eventSource?.close()
     const url = `${base}/api/v1/sessions/${sessionId}/events?stream=1&since_seq=${lastSeq}`
@@ -363,12 +400,20 @@ export const useSessionsStore = defineStore('sessions', () => {
         /* ignore */
       }
     }
+    eventSource.onerror = () => {
+      // Browser will retry EventSource; also heal any seq holes from drops.
+      if (currentSessionId.value === sessionId) {
+        void backfillSessionEvents(sessionId)
+      }
+    }
   }
 
   function pushEvent(parsed: StreamEvent) {
-    if (parsed.seq <= lastSeq) return
-    lastSeq = parsed.seq
-    streamEvents.value.push(parsed)
+    if (!parsed || typeof parsed.seq !== 'number') return
+    if (knownSeqs.has(parsed.seq)) return
+
+    mergeStreamEvents([parsed])
+
     if (
       parsed.type === 'permission.decided' ||
       parsed.type === 'tool.running' ||
@@ -381,6 +426,15 @@ export const useSessionsStore = defineStore('sessions', () => {
     if (parsed.type === 'turn.started' || parsed.type === 'turn.ended' || parsed.type === 'turn.failed') {
       const sid = currentSessionId.value
       if (sid) void loadTurns(sid)
+    }
+
+    // Seq is process-global (holes across sessions are normal). When an interactive
+    // card arrives, poll once so a dropped turn.started still lands in turnMap.
+    if (
+      (parsed.type === 'ask_user.pending' || parsed.type === 'permission.ask') &&
+      currentSessionId.value
+    ) {
+      void backfillSessionEvents(currentSessionId.value)
     }
   }
 
@@ -495,23 +549,10 @@ export const useSessionsStore = defineStore('sessions', () => {
         selectedEffort.value = decoded.effort
       }
     }
-    streamEvents.value = []
-    lastSeq = 0
+    resetStreamState()
     turns.value = []
     decidedApprovalIds.clear()
-    try {
-      const existing = await fetchJSON<StreamEvent[]>(`/sessions/${id}/events/poll?since=0`)
-      console.log('[selectSession] events for', id, ':', existing)
-      if (Array.isArray(existing)) {
-        for (const ev of existing) {
-          if (ev.seq > lastSeq) lastSeq = ev.seq
-          streamEvents.value.push(ev)
-        }
-        hydrateDecidedApprovals(streamEvents.value)
-      }
-    } catch (e) {
-      console.error('[selectSession] failed to load events for', id, e)
-    }
+    await loadSessionEvents(id)
     subscribeEvents(id)
     void pollSession(id)
     void loadTurns(id)
@@ -522,7 +563,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     currentSessionId.value = null
     selectedProjectId.value = projectId ?? null
     selectedAgentId.value = defaultAgentId() || 'team'
-    streamEvents.value = []
+    resetStreamState()
     turns.value = []
     eventSource?.close()
   }

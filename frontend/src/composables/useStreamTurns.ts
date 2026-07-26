@@ -93,11 +93,19 @@ export function useTurnCollapse(getTurns: () => StreamTurn[]) {
     collapseOverrides.value = new Map(collapseOverrides.value)
   }
 
+  /** Force a turn body visible so pending ask/approval cards can be scrolled into view. */
+  function ensureTurnExpanded(turnId: string) {
+    if (!turnId || !isTurnCollapsed(turnId)) return
+    collapseOverrides.value.set(turnId, false)
+    collapseOverrides.value = new Map(collapseOverrides.value)
+  }
+
   return {
     collapseOverrides,
     clearCollapseOverrides,
     isTurnCollapsed,
     toggleTurnCollapse,
+    ensureTurnExpanded,
     defaultCollapsed,
   }
 }
