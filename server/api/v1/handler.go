@@ -132,6 +132,7 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/agents", listAgents(h))
 	api.POST("/agents", createAgent(h))
 	api.GET("/agents/:id", getAgent(h))
+	api.GET("/agents/:id/available-skills", listAgentAvailableSkills(h))
 	api.PUT("/agents/:id", updateAgent(h))
 	api.POST("/agents/:id/reset", resetAgent(h))
 	api.DELETE("/agents/:id", deleteAgent(h))
@@ -392,6 +393,33 @@ func getAgent(h *Handler) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, agent)
+	}
+}
+
+// listAgentAvailableSkills returns skills usable for this agent in a project
+// workDir: agent.skillIds (DB) ∪ filesystem skills (user + project dirs).
+func listAgentAvailableSkills(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.Skills == nil || h.Agents == nil || h.Projects == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "skills unavailable"})
+			return
+		}
+		agent, err := h.Agents.Get(c, c.Param("id"))
+		if err != nil || agent == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "agent not found"})
+			return
+		}
+		projectID := strings.TrimSpace(c.Query("projectId"))
+		workDir := h.Projects.ResolveWorkDir(c, projectID)
+		skills, err := service.ListAvailableSkillsForAgent(c, h.Skills, *agent, workDir)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if skills == nil {
+			skills = []service.AvailableSkill{}
+		}
+		c.JSON(http.StatusOK, skills)
 	}
 }
 

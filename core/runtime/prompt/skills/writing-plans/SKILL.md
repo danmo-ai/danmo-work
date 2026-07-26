@@ -2,7 +2,7 @@
 name: writing-plans
 description: Write file-level, bite-sized implementation plans before coding. Use when you have a spec or multi-step requirements and need an actionable plan before touching implementation.
 license: MIT
-compatibility: Requires read_file, grep, glob; write for saving the plan when requested
+compatibility: Requires read_file, grep, glob; write only on Default/Team when the user asks to save the plan file
 metadata:
   author: danmo-work
   version: "1.0"
@@ -25,7 +25,9 @@ Write plans that a skilled engineer with little repo context can execute: exact 
 3. **File map** — list create/modify/test paths and each file’s responsibility before tasks.
 4. **Tasks** — bite-sized units with their own test cycle; each ends in an independently verifiable deliverable.
 5. **Self-review** — spec coverage, no placeholders, consistent names/types across tasks.
-6. **Handoff** — save the plan if the user wants a file; otherwise deliver in chat and ask whether to implement.
+6. **Handoff**
+   - **Planner (read-only):** always deliver the complete plan in the assistant reply (session event stream). Do not call `write` or claim a file was saved.
+   - **Default / Team:** deliver in chat by default; only `write` a plan file when the user explicitly asks to save it. Then ask whether to implement.
 
 ## Plan header (required)
 
@@ -69,4 +71,4 @@ Never leave: TBD/TODO, “add appropriate validation”, “write tests for the 
 
 ## Stop condition
 
-Deliver the complete plan (and path if saved). Offer to implement next; do not start coding inside this skill unless the user already approved execution.
+Deliver the complete plan in chat (and path only if Default/Team saved a file). Offer to implement next with Single-Agent or Multi-Agent mode; do not start coding inside this skill unless the user already approved execution.

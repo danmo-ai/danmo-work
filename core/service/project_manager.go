@@ -133,6 +133,15 @@ func (m *ProjectManager) ResolveDir(ctx context.Context, projectID, fallbackDir 
 	return filepath.Join(fallbackDir, p.Directory)
 }
 
+// ResolveWorkDir returns the agent working directory for a project, matching
+// runtime Engine.resolveWorkDir (empty projectID → dataDir).
+func (m *ProjectManager) ResolveWorkDir(ctx context.Context, projectID string) string {
+	if projectID == "" {
+		return m.dataDir
+	}
+	return m.ResolveDir(ctx, projectID, m.dataDir)
+}
+
 type FileNode struct {
 	Name     string      `json:"name"`
 	Path     string      `json:"path"`

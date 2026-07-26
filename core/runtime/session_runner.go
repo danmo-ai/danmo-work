@@ -687,20 +687,7 @@ func (e *Engine) resolveAgentSkills(agent domain.Agent, workDir string) []domain
 
 func (e *Engine) boundDBSkills(agent domain.Agent) []domain.Skill {
 	all, _ := e.skills.List(context.Background())
-	if len(agent.SkillIDs) == 0 {
-		return nil
-	}
-	wanted := make(map[string]struct{}, len(agent.SkillIDs))
-	for _, id := range agent.SkillIDs {
-		wanted[id] = struct{}{}
-	}
-	var result []domain.Skill
-	for _, sk := range all {
-		if _, ok := wanted[sk.ID]; ok {
-			result = append(result, sk)
-		}
-	}
-	return result
+	return service.BoundDBSkills(all, agent)
 }
 
 func (e *Engine) setTurnFSSkills(skills []domain.Skill, files map[string][]domain.SkillFile) {
