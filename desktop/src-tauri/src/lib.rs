@@ -3,6 +3,7 @@ use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
@@ -15,8 +16,46 @@ const BACKEND_READY_TIMEOUT: Duration = Duration::from_secs(45);
 const BACKEND_READY_INTERVAL: Duration = Duration::from_millis(200);
 const BACKEND_PID_FILE: &str = "backend.pid";
 
+/// Owns the desktop sidecar. Rust's `Child` drop does **not** kill the process,
+/// so we must terminate explicitly on app exit / Drop / uninstall.
 struct SidecarState {
-    _child: Mutex<Option<std::process::Child>>,
+    child: Mutex<Option<std::process::Child>>,
+    home: PathBuf,
+    stopped: AtomicBool,
+}
+
+impl SidecarState {
+    fn shutdown(&self) {
+        if self
+            .stopped
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return;
+        }
+        let mut guard = match self.child.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        if let Some(mut child) = guard.take() {
+            terminate_child(&mut child);
+        }
+        let pid_path = self.home.join(BACKEND_PID_FILE);
+        if let Ok(raw) = fs::read_to_string(&pid_path) {
+            if let Ok(pid) = raw.trim().parse::<u32>() {
+                eprintln!("[sidecar] exit: stopping pidfile backend pid={pid}");
+                stop_pid(pid);
+            }
+        }
+        let _ = fs::remove_file(&pid_path);
+        eprintln!("[sidecar] shutdown complete");
+    }
+}
+
+impl Drop for SidecarState {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
 }
 
 /// Unified user data root: ~/.danmo-work (same as server/cli/tui).
@@ -230,6 +269,13 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
         .env("WORK_DATA_DIR", work_dir.to_string_lossy().as_ref())
         .stdout(std::process::Stdio::from(log_file))
         .stderr(std::process::Stdio::from(log_err));
+    // Own process group on Unix so Exit/Drop can SIGTERM/SIGKILL the whole tree
+    // (Go may spawn helpers; killing only the parent leaves orphans).
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
     if let Some((exe, bin)) = coreutils {
         cmd.env("WORK_COREUTILS_EXE", exe.to_string_lossy().as_ref());
         cmd.env("WORK_COREUTILS_BIN", bin.to_string_lossy().as_ref());
@@ -260,7 +306,9 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
 
     let child_pid = child.id();
     app.manage(SidecarState {
-        _child: Mutex::new(Some(child)),
+        child: Mutex::new(Some(child)),
+        home: home.clone(),
+        stopped: AtomicBool::new(false),
     });
 
     // Emit ready only after OUR process is listening — not a foreign leftover on :7801.
@@ -322,8 +370,12 @@ fn stop_pid(pid: u32) {
     }
     #[cfg(unix)]
     {
+        // Negative PID = process group (when spawned with process_group(0)).
+        let pg = format!("-{pid}");
+        let _ = Command::new("kill").args(["-TERM", &pg]).status();
         let _ = Command::new("kill").args(["-TERM", &pid.to_string()]).status();
-        std::thread::sleep(Duration::from_millis(150));
+        std::thread::sleep(Duration::from_millis(200));
+        let _ = Command::new("kill").args(["-KILL", &pg]).status();
         let _ = Command::new("kill").args(["-KILL", &pid.to_string()]).status();
     }
     #[cfg(windows)]
@@ -331,6 +383,63 @@ fn stop_pid(pid: u32) {
         let _ = Command::new("taskkill")
             .args(["/PID", &pid.to_string(), "/T", "/F"])
             .status();
+    }
+}
+
+/// Graceful-then-force terminate of a spawned sidecar Child.
+fn terminate_child(child: &mut std::process::Child) {
+    let pid = child.id();
+    eprintln!("[sidecar] terminating backend pid={pid}");
+    #[cfg(unix)]
+    {
+        let pg = format!("-{pid}");
+        let _ = Command::new("kill").args(["-TERM", &pg]).status();
+        let _ = Command::new("kill").args(["-TERM", &pid.to_string()]).status();
+        std::thread::sleep(Duration::from_millis(250));
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                eprintln!("[sidecar] backend pid={pid} exited ({status})");
+                return;
+            }
+            _ => {
+                let _ = Command::new("kill").args(["-KILL", &pg]).status();
+                let _ = child.kill();
+                let _ = child.wait();
+                eprintln!("[sidecar] backend pid={pid} force-killed");
+            }
+        }
+    }
+    #[cfg(windows)]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .status();
+        let _ = child.wait();
+        eprintln!("[sidecar] backend pid={pid} taskkilled");
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
+/// Called on ExitRequested / Exit — Child drop alone never kills the OS process.
+fn shutdown_sidecar(app: &AppHandle) {
+    if let Some(state) = app.try_state::<SidecarState>() {
+        state.shutdown();
+        return;
+    }
+    // Spawn failed before manage(), but a pidfile may still exist.
+    if let Ok(home) = teams_home(app) {
+        let pid_path = home.join(BACKEND_PID_FILE);
+        if let Ok(raw) = fs::read_to_string(&pid_path) {
+            if let Ok(pid) = raw.trim().parse::<u32>() {
+                eprintln!("[sidecar] exit: stopping orphan pidfile backend pid={pid}");
+                stop_pid(pid);
+            }
+        }
+        let _ = fs::remove_file(&pid_path);
     }
 }
 
@@ -496,6 +605,14 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| match event {
+            // ExitRequested fires first (window close / Cmd+Q); Exit is last chance.
+            // Without this, the Go sidecar keeps listening on :7801 forever.
+            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+                shutdown_sidecar(&app_handle);
+            }
+            _ => {}
+        });
 }

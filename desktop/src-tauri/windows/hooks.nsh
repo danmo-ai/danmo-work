@@ -38,6 +38,37 @@
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
+  ; Sidecar is a separate process — uninstall must kill it or :7801 stays occupied
+  ; and the next install talks to a stale backend (WeChat 404 / SQLite DBMOVED).
+  DetailPrint "Stopping Danmo Work backend sidecar..."
+  ${If} ${FileExists} "$PROFILE\.danmo-work\backend.pid"
+    FileOpen $R1 "$PROFILE\.danmo-work\backend.pid" r
+    FileRead $R1 $R2
+    FileClose $R1
+    ; Strip trailing CR/LF from FileRead
+    StrCpy $R3 $R2 1 -1
+    ${If} $R3 == "$\r"
+    ${OrIf} $R3 == "$\n"
+      StrCpy $R2 $R2 -1
+    ${EndIf}
+    StrCpy $R3 $R2 1 -1
+    ${If} $R3 == "$\r"
+    ${OrIf} $R3 == "$\n"
+      StrCpy $R2 $R2 -1
+    ${EndIf}
+    ${If} $R2 != ""
+      DetailPrint "taskkill /PID $R2 (from backend.pid)"
+      nsExec::ExecToLog 'taskkill /PID $R2 /T /F'
+      Pop $R3
+    ${EndIf}
+    Delete "$PROFILE\.danmo-work\backend.pid"
+  ${EndIf}
+  ; Runtime copy under ~/.danmo-work/bin
+  nsExec::ExecToLog 'taskkill /IM danmo-work-backend.exe /T /F'
+  Pop $R2
+  ; Bundled externalBin name inside $INSTDIR
+  nsExec::ExecToLog 'taskkill /IM danmo-work-backend-x86_64-pc-windows-msvc.exe /T /F'
+  Pop $R2
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL
