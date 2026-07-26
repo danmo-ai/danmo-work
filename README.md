@@ -57,13 +57,16 @@ Danmo Work keeps a **coding-agent-grade** execution core, then asks a wider ques
 ### macOS — Homebrew
 
 ```bash
-brew tap danmo-ai/danmo-work https://github.com/danmo-ai/danmo-work.git
+brew tap danmo-ai/tap
 brew install --cask danmo-work
 ```
 
 Upgrade later: `brew update && brew upgrade --cask danmo-work`.
 
-The cask downloads the `.dmg` from GitHub Releases. (A China mirror at `releases.danmo.ai` is optional later for in-app updates / brew.)
+Fallback (tap this repo directly):  
+`brew tap danmo-ai/danmo-work https://github.com/danmo-ai/danmo-work.git`
+
+The cask downloads the `.dmg` from GitHub Releases. (A China mirror at `releases.danmo.ai` is optional later.)
 
 Not Apple-notarized yet — on first launch, right-click the app → **Open** (or allow under System Settings → Privacy & Security).
 

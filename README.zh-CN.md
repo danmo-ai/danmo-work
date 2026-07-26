@@ -57,13 +57,16 @@ Danmo Work 保留**一流 Coding Agent 量级**的执行底盘，再问更大的
 ### macOS — Homebrew
 
 ```bash
-brew tap danmo-ai/danmo-work https://github.com/danmo-ai/danmo-work.git
+brew tap danmo-ai/tap
 brew install --cask danmo-work
 ```
 
 之后升级：`brew update && brew upgrade --cask danmo-work`。
 
-cask 从 GitHub Releases 拉 `.dmg`。（国内镜像 `releases.danmo.ai` 可选，以后给应用内更新 / brew 用。）
+备用（直接 tap 本仓库）：  
+`brew tap danmo-ai/danmo-work https://github.com/danmo-ai/danmo-work.git`
+
+cask 从 GitHub Releases 拉 `.dmg`。（国内镜像 `releases.danmo.ai` 可选。）
 
 尚未 Apple 公证：首次请在 Finder 中右键 app → **打开**（或到「系统设置 → 隐私与安全性」允许）。
 
