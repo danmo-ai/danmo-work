@@ -107,11 +107,11 @@ Use the CLI/TUI as your daily coding agent when the job is code. Stay in the sam
 
 ## See it
 
-From one request to a usable artifact — report, slides, or sheet on the same Agent Loop:
+Architecture · highlights · capacity — bilingual animated tour (HTML first; GIF/MP4 for sharing):
 
-![Capacity demo](docs/demo/work-capacity-demo.gif)
+![Product tour (EN)](docs/demo/product-tour-en.gif)
 
-Interactive version: [`docs/demo/work-capacity-demo.html`](docs/demo/work-capacity-demo.html).
+Interactive (ZH/EN toggle): [`docs/demo/product-tour.html`](docs/demo/product-tour.html) · [MP4](docs/demo/product-tour-en.mp4)
 
 Three-pane workspace: project sidebar · agent execution Stream · right panel (Plan / Files / **Memory** / Changes / Terminal). Center **Document Stage** switches toolbar by file kind.
 
