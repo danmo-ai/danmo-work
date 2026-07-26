@@ -592,6 +592,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
       'is-dragover': dragOver,
       'is-blocked': hasPendingApproval,
       'is-compose': sessions.composingNew,
+      'is-skill-picker-open': skillPickerOpen,
     }"
     role="form"
     aria-label="Session composer"
@@ -599,6 +600,24 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
     @dragleave.prevent="dragOver = false"
     @drop="onDrop"
   >
+    <!-- Outside the glass card: card has overflow:hidden and would clip this popover. -->
+    <div
+      v-if="skillPickerOpen && !hasPendingApproval"
+      class="composer-skill-pop"
+      :class="{ 'composer-skill-pop--button': buttonPickerOpen }"
+    >
+      <ComposerSkillPicker
+        ref="skillPickerRef"
+        :skills="availableSkills"
+        :selected-ids="selectedSkillIds"
+        :query="atMenuOpen ? atQuery : ''"
+        :show-search="buttonPickerOpen"
+        :loading="availableSkillsLoading"
+        @select="onPickSkill"
+        @close="closeSkillPickers"
+      />
+    </div>
+
     <!-- Compact bar while ask_user / permission cards need attention -->
     <div v-if="hasPendingApproval" class="composer-float__card composer-float__card--blocked">
       <div class="composer-float__banner composer-float__banner--warn">
@@ -640,23 +659,6 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
       />
 
       <div class="composer-float__input-stack">
-        <div
-          v-if="skillPickerOpen"
-          class="composer-skill-pop"
-          :class="{ 'composer-skill-pop--button': buttonPickerOpen }"
-        >
-          <ComposerSkillPicker
-            ref="skillPickerRef"
-            :skills="availableSkills"
-            :selected-ids="selectedSkillIds"
-            :query="atMenuOpen ? atQuery : ''"
-            :show-search="buttonPickerOpen"
-            :loading="availableSkillsLoading"
-            @select="onPickSkill"
-            @close="closeSkillPickers"
-          />
-        </div>
-
         <div ref="inputWrap" class="composer-float__body">
           <DqInput
             v-model="content"
@@ -858,6 +860,12 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
   display: flex;
   flex-direction: column;
   gap: 0;
+  /* Allow skill popover to paint above the glass card / tray. */
+  overflow: visible;
+}
+
+.composer-float.is-skill-picker-open {
+  z-index: 30;
 }
 
 .composer-float.is-dragover .composer-float__card {
@@ -1222,8 +1230,9 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
   position: absolute;
   left: 10px;
   right: 10px;
-  bottom: calc(100% - 4px);
-  z-index: 5;
+  /* Sit above the whole composer (card + tray), not inside the clipped card. */
+  bottom: calc(100% + 8px);
+  z-index: 40;
   display: flex;
   justify-content: flex-start;
   pointer-events: none;
@@ -1236,6 +1245,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment })
 .composer-skill-pop--button {
   left: 10px;
   right: auto;
+  width: min(320px, calc(100% - 20px));
 }
 
 .composer-send {
