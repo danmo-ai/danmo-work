@@ -19,22 +19,24 @@ func NewAgentImporter() *AgentImporter {
 }
 
 type agentFrontmatter struct {
-	ID          string            `yaml:"id"`
-	Name        string            `yaml:"name"`
-	Description string            `yaml:"description"`
-	Persona     string            `yaml:"persona"`
-	Mode        string            `yaml:"mode"`
-	Steps       int               `yaml:"steps"`
-	Skills      []string          `yaml:"skills"`
-	Tools       []toolFrontmatter `yaml:"tools"`
-	Knowledge   []string          `yaml:"knowledge"`
-	CanDelegate bool              `yaml:"can_delegate"`
-	Metadata    map[string]string `yaml:"metadata"`
+	ID             string            `yaml:"id"`
+	Name           string            `yaml:"name"`
+	Description    string            `yaml:"description"`
+	Persona        string            `yaml:"persona"`
+	Mode           string            `yaml:"mode"`
+	Steps          int               `yaml:"steps"`
+	Skills         []string          `yaml:"skills"`
+	Tools          []toolFrontmatter `yaml:"tools"`
+	Knowledge      []string          `yaml:"knowledge"`
+	CanDelegate    bool              `yaml:"can_delegate"`
+	InheritAmbient *bool             `yaml:"inherit_ambient"`
+	Metadata       map[string]string `yaml:"metadata"`
 }
 
 type toolFrontmatter struct {
 	ToolID    string `yaml:"tool_id"`
-	MCP       string `yaml:"mcp"`
+	MCP       string `yaml:"mcp"`        // legacy alias
+	MCPServer string `yaml:"mcp_server"` // preferred: bind by MCP server id or "*"
 	RiskLevel string `yaml:"risk_level"`
 }
 
@@ -75,9 +77,13 @@ func (i *AgentImporter) ParseAgentMD(content string) (*domain.Agent, error) {
 	}
 	var tools []domain.ToolBinding
 	for _, t := range fm.Tools {
+		mcp := t.MCPServer
+		if mcp == "" {
+			mcp = t.MCP
+		}
 		tools = append(tools, domain.ToolBinding{
 			ToolID:    t.ToolID,
-			MCPServer: t.MCP,
+			MCPServer: mcp,
 			RiskLevel: parseAgentRisk(t.RiskLevel),
 		})
 	}
@@ -90,23 +96,26 @@ func (i *AgentImporter) ParseAgentMD(content string) (*domain.Agent, error) {
 		marketSrc = fm.Metadata["market.source"]
 	}
 	return &domain.Agent{
-		ID:           fm.ID,
-		Name:         name,
-		Description:  fm.Description,
-		Persona:      fm.Persona,
-		Mode:         parseAgentImportMode(fm.Mode),
-		SystemPrompt: strings.TrimSpace(parts[2]),
-		Steps:        fm.Steps,
-		SkillIDs:     fm.Skills,
-		Tools:        tools,
-		KnowledgeIDs: fm.Knowledge,
-		CanDelegate:  fm.CanDelegate,
-		MarketSource: marketSrc,
+		ID:             fm.ID,
+		Name:           name,
+		Description:    fm.Description,
+		Persona:        fm.Persona,
+		Mode:           parseAgentImportMode(fm.Mode),
+		SystemPrompt:   strings.TrimSpace(parts[2]),
+		Steps:          fm.Steps,
+		SkillIDs:       fm.Skills,
+		Tools:          tools,
+		KnowledgeIDs:   fm.Knowledge,
+		CanDelegate:    fm.CanDelegate,
+		InheritAmbient: fm.InheritAmbient,
+		MarketSource:   marketSrc,
 	}, nil
 }
 
 func parseAgentRisk(s string) domain.RiskLevel {
 	switch strings.ToLower(s) {
+	case "external":
+		return domain.RiskExternal
 	case "high":
 		return domain.RiskHigh
 	case "medium":

@@ -705,11 +705,15 @@ func (e *Engine) delegatableAgents(agent domain.Agent) []domain.Agent {
 	return result
 }
 
-// resolveAgentSkills returns Agent-bound DB skills merged with filesystem skills
-// scanned from user/project skill dirs for workDir (later dirs override by ID).
-// Filesystem skills are auto-included; they are not written to the database.
+// resolveAgentSkills returns Agent-bound DB skills, optionally merged with
+// Ambient filesystem skills when agent.InheritsAmbient() (default: primary yes,
+// subagent no). Filesystem skills are not written to the database.
 func (e *Engine) resolveAgentSkills(agent domain.Agent, workDir string) []domain.Skill {
 	bound := e.boundDBSkills(agent)
+	if !agent.InheritsAmbient() {
+		e.setTurnFSSkills(nil, nil)
+		return bound
+	}
 	fsSkills, fsFiles := service.ScanFilesystemSkills(workDir)
 	e.setTurnFSSkills(fsSkills, fsFiles)
 	return service.MergeSkillsByID(bound, fsSkills)
@@ -1128,11 +1132,9 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 		&builtin.MemoryRead{Store: e.memories, TopK: cfg.memoryReadTopK},
 		delegator,
 	)
-	reg.CopyMCPServersFrom(e.toolCatalog)
 	e.mountAlwaysOnBuiltins(reg)
 	e.mountBuiltinTools(reg, agent.Tools)
-	reg.MountFromBindings(agent.Tools)
-	reg.MountAllMCP()
+	e.mountMCPForAgent(reg, agent)
 	return reg
 }
 
@@ -1147,12 +1149,22 @@ func (e *Engine) buildWorkerRegistry(agent domain.Agent) *tool.Registry {
 		&builtin.MemoryUpdate{Store: e.memories},
 		&builtin.MemoryRead{Store: e.memories, TopK: cfg.memoryReadTopK},
 	)
-	reg.CopyMCPServersFrom(e.toolCatalog)
 	e.mountAlwaysOnBuiltins(reg)
 	e.mountBuiltinTools(reg, agent.Tools)
-	reg.MountFromBindings(agent.Tools)
-	reg.MountAllMCP()
+	e.mountMCPForAgent(reg, agent)
 	return reg
+}
+
+// mountMCPForAgent applies the Ambient / Bound MCP policy:
+// - InheritAmbient (default primary): all enabled MCP servers
+// - otherwise: only MCP servers listed on agent.Tools (server id or "*")
+func (e *Engine) mountMCPForAgent(reg *tool.Registry, agent domain.Agent) {
+	reg.CopyMCPServersFrom(e.toolCatalog)
+	if agent.InheritsAmbient() {
+		reg.MountAllMCP()
+		return
+	}
+	reg.MountFromBindings(agent.Tools)
 }
 
 func (e *Engine) waitAskUser(ctx context.Context, sessionID, turnID, callID, question string, options []string, defaultOpt string, formFields []domain.AskUserFormField) (string, error) {

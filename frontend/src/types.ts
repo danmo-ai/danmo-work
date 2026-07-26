@@ -10,6 +10,8 @@ export interface Agent {
   tools?: ToolBinding[]
   knowledgeIds?: string[]
   canDelegate?: boolean
+  /** Ambient layer: FS skills + all enabled MCP. Default: primary true, subagent false. */
+  inheritAmbient?: boolean
   builtin?: boolean
   marketSource?: string
 }
@@ -26,6 +28,7 @@ export interface CreateAgentPayload {
   tools?: ToolBinding[]
   knowledgeIds?: string[]
   canDelegate?: boolean
+  inheritAmbient?: boolean
 }
 
 export interface UpdateAgentPayload {
@@ -39,6 +42,7 @@ export interface UpdateAgentPayload {
   tools?: ToolBinding[]
   knowledgeIds?: string[]
   canDelegate?: boolean
+  inheritAmbient?: boolean
 }
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'external'

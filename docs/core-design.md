@@ -326,9 +326,21 @@ OpenAI-compat 路径上，模型常把 `write`/`edit` 等内容里的未转义�
 | `sleep` | 等待 |
 | `read_skill` | 读取技能说明（**全局默认**，无需 Agent 绑定） |
 
-### 7.1.0 自定义技能目录（New Turn 扫描）
+### 7.1.0 能力三层（Core / Bound / Ambient）
 
-每个 New Turn 在构建 system prompt 前实时扫描磁盘技能目录（**不写 SQLite**），与 Agent 已绑定的 DB 技能内存合并后注入 `<available_skills>`。
+Agent 可用能力按三层合成；Skill 与 Tool（含 MCP）共用同一 Ambient 开关。
+
+| 层 | 内容 | 何时生效 |
+|----|------|----------|
+| **Core** | `ask_user`、`memory_*`、`read_skill`、`search_kb`（有 KB 时）；`delegate_agent`（`canDelegate`） | 始终（与绑定无关） |
+| **Bound** | Agent `skillIds`（DB 技能）+ `tools[]`（builtin `toolId` / MCP `mcpServer`） | 始终按 Agent 配置 |
+| **Ambient** | 磁盘技能目录 + **全部已启用 MCP Server** | 仅当 `inheritAmbient`（默认：`primary=true`，`subagent=false`） |
+
+`inheritAmbient` 可在 Agent JSON / YAML（`inherit_ambient`）/ Teams UI 覆盖；`null` 表示按 Mode 默认。
+
+#### 自定义技能目录（Ambient，New Turn 扫描）
+
+每个 New Turn 在构建 system prompt 前实时扫描磁盘技能目录（**不写 SQLite**），与 Agent 已绑定的 DB 技能内存合并后注入 `<available_skills>`——**仅 Ambient 开启时**扫描磁盘。
 
 | 路径 | 范围 |
 |------|------|
@@ -339,16 +351,21 @@ OpenAI-compat 路径上，模型常把 `write`/`edit` 等内容里的未转义�
 
 同名 ID 覆盖顺序（后者赢）：绑定 DB → `~/.agents` → `~/.danmo-work` → 项目 `.agents` → 项目 `.danmo-work`。目录缺失或坏 `SKILL.md` 跳过。Skills 管理页仍只显示 DB（内置 / 手建 / 市场）。
 
-按 Agent 挂载：
+#### MCP 绑定粒度：**按 Server**
 
-| Tool | 条件 |
+- Agent 侧：`ToolBinding.mcpServer` = MCP Server id，或 `"*"`（全部已启用 Server）。
+- **不按单个 MCP tool 绑到 Agent**；单个 tool 的启用/禁用在 MCP Server 配置里（discover 后 persist）。
+- Ambient 开：`MountAllMCP`；Ambient 关：仅 `MountFromBindings`（server id / `*`）。
+
+| Tool / 能力 | 条件 |
 |------|------|
-| `search_kb` | 始终（绑定知识库时） |
-| `memory_update` / `memory_read` | 始终（SQLite `memories`；不自动注入 prompt） |
-| `ask_user` / `read_skill` | 全局默认 |
-| `delegate_agent` | `agent.CanDelegate` |
-| MCP Tools | Agent `ToolBinding` + MCP Server |
-| 其它 builtin | Agent `tools:` 显式绑定 |
+| `search_kb` | Core（绑定知识库时） |
+| `memory_update` / `memory_read` | Core |
+| `ask_user` / `read_skill` | Core |
+| `delegate_agent` | Core + `canDelegate` |
+| 其它 builtin | Bound：`tools[].toolId` |
+| MCP Tools | Ambient 全开，或 Bound：`tools[].mcpServer` |
+| 磁盘技能 | Ambient（`inheritAmbient`） |
 
 ### 7.1.1 外部 API 分层（避免 Tool 元数据膨胀）
 

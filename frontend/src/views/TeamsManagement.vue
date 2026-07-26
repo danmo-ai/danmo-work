@@ -44,6 +44,10 @@ const saving = ref(false)
 const activeTab = ref<ConfigTab>('overview')
 const pendingTool = ref<ToolBinding>({ toolId: '', riskLevel: 'low' })
 
+function defaultInheritAmbient(mode?: Agent['mode']): boolean {
+  return mode !== 'subagent'
+}
+
 function emptyAgentForm(): AgentForm {
   return {
     id: '',
@@ -57,6 +61,7 @@ function emptyAgentForm(): AgentForm {
     knowledgeIds: [],
     steps: 0,
     canDelegate: false,
+    inheritAmbient: true,
   }
 }
 
@@ -143,6 +148,7 @@ function selectAgent(id: string) {
       skillIds: agent.skillIds ? [...agent.skillIds] : [],
       tools: agent.tools ? [...agent.tools] : [],
       knowledgeIds: agent.knowledgeIds ? [...agent.knowledgeIds] : [],
+      inheritAmbient: agent.inheritAmbient ?? defaultInheritAmbient(agent.mode),
     }
   }
 }
@@ -183,6 +189,7 @@ async function save() {
         tools: agentForm.value.tools,
         knowledgeIds: agentForm.value.knowledgeIds,
         canDelegate: agentForm.value.canDelegate ?? false,
+        inheritAmbient: agentForm.value.inheritAmbient ?? defaultInheritAmbient(agentForm.value.mode),
       })
       toast.success(t('teams.created'))
       isCreating.value = false
@@ -199,6 +206,7 @@ async function save() {
         tools: agentForm.value.tools,
         knowledgeIds: agentForm.value.knowledgeIds,
         canDelegate: agentForm.value.canDelegate ?? false,
+        inheritAmbient: agentForm.value.inheritAmbient ?? defaultInheritAmbient(agentForm.value.mode),
       })
 
       toast.success(t('teams.saved'))
@@ -241,8 +249,13 @@ async function resetSelected() {
 }
 
 function addTool() {
-  if (!pendingTool.value.toolId.trim()) return
-  agentForm.value.tools = [...(agentForm.value.tools ?? []), { ...pendingTool.value }]
+  const toolId = pendingTool.value.toolId?.trim() ?? ''
+  const mcpServer = pendingTool.value.mcpServer?.trim() ?? ''
+  if (!toolId && !mcpServer) return
+  agentForm.value.tools = [
+    ...(agentForm.value.tools ?? []),
+    { ...pendingTool.value, toolId, mcpServer: mcpServer || undefined },
+  ]
   pendingTool.value = { toolId: '', riskLevel: 'low' }
 }
 
@@ -458,6 +471,13 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
           </div>
           <DqSwitch :model-value="agentForm.canDelegate" size="sm" />
         </div>
+        <div class="resource-field resource-field--block resource-field--inline" @click="agentForm.inheritAmbient = !agentForm.inheritAmbient">
+          <div class="resource-field__inline-meta">
+            <span class="resource-field__label">{{ $t('teams.inheritAmbient') }}</span>
+            <span class="resource-field__hint">{{ $t('teams.inheritAmbientHint') }}</span>
+          </div>
+          <DqSwitch :model-value="agentForm.inheritAmbient" size="sm" />
+        </div>
       </section>
 
       <section v-show="activeTab === 'prompt'" class="resource-section resource-section--prompt">
@@ -491,7 +511,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
           </label>
           <label class="resource-field">
             <span class="resource-field__label">MCP Server</span>
-            <DqInput v-model="pendingTool.mcpServer" class="resource-input-mono" :placeholder="$t('teams.riskOptional')" />
+            <DqInput v-model="pendingTool.mcpServer" class="resource-input-mono" :placeholder="$t('teams.mcpServerPlaceholder')" />
           </label>
           <label class="resource-field">
             <span class="resource-field__label">{{ $t('common.riskLevel') }}</span>
@@ -499,16 +519,18 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
               <DqOption value="low" label="Low" />
               <DqOption value="medium" label="Medium" />
               <DqOption value="high" label="High" />
+              <DqOption value="external" label="External" />
             </DqSelect>
           </label>
           <div class="resource-field resource-field--action">
             <DqButton @click="addTool">{{ $t('common.addTool') }}</DqButton>
           </div>
         </div>
+        <p class="resource-field__hint">{{ $t('teams.mcpServerHint') }}</p>
         <div class="resource-list-card">
           <div v-for="(tool, idx) in agentForm.tools" :key="idx" class="resource-list-card__item">
             <div class="resource-list-card__meta">
-              <span class="resource-list-card__name">{{ tool.toolId }}</span>
+              <span class="resource-list-card__name">{{ tool.toolId || (tool.mcpServer ? `mcp:${tool.mcpServer}` : '—') }}</span>
               <span class="resource-list-card__desc">{{ tool.mcpServer ? `${tool.mcpServer} · ` : '' }}{{ tool.riskLevel || 'low' }}</span>
             </div>
             <div class="resource-list-card__actions">
@@ -516,6 +538,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
                 <DqOption value="low" label="Low" />
                 <DqOption value="medium" label="Medium" />
                 <DqOption value="high" label="High" />
+                <DqOption value="external" label="External" />
               </DqSelect>
               <button type="button" class="resource-list-card__action resource-list-card__action--danger" @click="removeTool(idx)">{{ $t('common.delete') }}</button>
             </div>

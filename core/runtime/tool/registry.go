@@ -99,9 +99,14 @@ func (r *Registry) Mount(serverID string) {
 
 func (r *Registry) MountFromBindings(bindings []domain.ToolBinding) {
 	for _, b := range bindings {
-		if b.MCPServer != "" {
-			r.Mount(b.MCPServer)
+		if b.MCPServer == "" {
+			continue
 		}
+		if b.MCPServer == domain.MCPServerAll {
+			r.MountAllMCP()
+			continue
+		}
+		r.Mount(b.MCPServer)
 	}
 }
 
