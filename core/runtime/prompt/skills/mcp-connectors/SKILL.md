@@ -5,7 +5,9 @@ description: Use MCP connectors and auth gateways (Composio / OpenConnector) wit
 
 # MCP connectors
 
-Danmo Work mounts enabled MCP tools into the Agent Loop as `mcp_<server>_<tool>`.
+Danmo Work mounts enabled MCP tools into the Agent Loop as `mcp_<server>_<tool>`
+(see system `<mcp-tool-naming>`). Skills may cite short names; always call the
+full `mcp_*` name from the tool list.
 
 ## When to use
 
