@@ -38,7 +38,7 @@ Open-source AI Work Agent — coding-agent-grade loop for long-horizon work: cod
 
 同一思维链多 Agent；一切皆工具（含 `ask_user`）；Turn Log 可恢复可回放。Document Stage 直接改文档/幻灯片/表格；微信·飞书·企微·QQ 同一套 Loop，工具在本机跑。
 
-MIT，可自托管。https://github.com/danmo-ai/danmo-work/releases/latest
+MIT，可自托管。macOS：`brew tap danmo-ai/danmo-work https://github.com/danmo-ai/danmo-work.git && brew install --cask danmo-work`，或 https://github.com/danmo-ai/danmo-work/releases/latest
 
 ---
 
@@ -56,8 +56,14 @@ MIT，可自托管。https://github.com/danmo-ai/danmo-work/releases/latest
 
 macOS / Windows / Linux，MIT。
 
-https://github.com/danmo-ai/danmo-work  
-https://github.com/danmo-ai/danmo-work/releases/latest
+macOS（Apple Silicon）：
+```bash
+brew tap danmo-ai/danmo-work https://github.com/danmo-ai/danmo-work.git
+brew install --cask danmo-work
+```
+或 DMG：https://github.com/danmo-ai/danmo-work/releases/latest
+
+https://github.com/danmo-ai/danmo-work
 
 欢迎试用、提 Issue；也求轻拍 Star。
 
