@@ -107,6 +107,12 @@ Use the CLI/TUI as your daily coding agent when the job is code. Stay in the sam
 
 ## See it
 
+From one request to a usable artifact — report, slides, or sheet on the same Agent Loop:
+
+![Capacity demo](docs/demo/work-capacity-demo.gif)
+
+Interactive version: [`docs/demo/work-capacity-demo.html`](docs/demo/work-capacity-demo.html).
+
 Three-pane workspace: project sidebar · agent execution Stream · right panel (Plan / Files / **Memory** / Changes / Terminal). Center **Document Stage** switches toolbar by file kind.
 
 ### Document Stage — docs, slides, sheets, preview

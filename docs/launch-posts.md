@@ -6,6 +6,16 @@ Latest release: https://github.com/danmo-ai/danmo-work/releases/latest
 
 ---
 
+## Capacity demo (shareable)
+
+- Interactive: [`docs/demo/work-capacity-demo.html`](../demo/work-capacity-demo.html)
+- Loop GIF: [`docs/demo/work-capacity-demo.gif`](../demo/work-capacity-demo.gif)
+- MP4: [`docs/demo/work-capacity-demo.mp4`](../demo/work-capacity-demo.mp4)
+
+Post tip: attach the GIF above the repo link — “从一句请求，到报告 / 幻灯片 / 表格”.
+
+---
+
 ## GitHub About (paste into repo description)
 
 **EN (≤350 chars):**
