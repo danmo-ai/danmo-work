@@ -75,6 +75,8 @@ https://github.com/danmo-ai/danmo-work
 
 Pure LLM-driven. Sub-agents & humans are Tools. Turn Log → resume/replay. Self-hosted, MIT.
 
+macOS: `brew tap danmo-ai/danmo-work https://github.com/danmo-ai/danmo-work.git && brew install --cask danmo-work`
+
 https://github.com/danmo-ai/danmo-work
 
 ---
@@ -84,5 +86,7 @@ https://github.com/danmo-ai/danmo-work
 **Show HN: Danmo Work – open-source AI Work Agent for long-horizon tasks**
 
 Most OSS agents optimize for writing code. Danmo Work keeps a coding-agent-grade loop, then runs the rest of the work on the same trail: the model plans Tool Calls; `delegate_agent` and `ask_user` are tools; every call is logged for resume/replay. Document Stage edits docs/slides/sheets in-project. MCP connectors, schema-free table store, and IM channels (WeChat/Feishu/WeCom/QQ) share the same Agent Loop.
+
+macOS (Apple Silicon): `brew tap danmo-ai/danmo-work https://github.com/danmo-ai/danmo-work.git && brew install --cask danmo-work`
 
 Repo: https://github.com/danmo-ai/danmo-work
