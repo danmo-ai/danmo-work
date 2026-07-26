@@ -29,7 +29,7 @@ Danmo Work 是一个**通用型 AI Work Agent**，兼具基本的 AI Coding 能�
 | Sub-Agent | `delegate_agent` Tool：接收参数，返回结果，可被委派 |
 | 用户交互 | `ask_user` Tool：带选项、推荐、字段，返回用户反馈 |
 | 技能/能力 | `read_skill` / Skill 绑定：封装特定领域能力 |
-| 知识检索 | `search_kb` Tool：知识库检索，返回上下文 |
+| 知识检索 | `search_kb` Tool：知识库检索，返回上下文（章级 BM25；见 [knowledge-base-plan.md](./knowledge-base-plan.md)） |
 | 持久记忆 | `memory_update` / `memory_read`：跨会话事实（user / project / agent） |
 | 文件操作 | `read_file` / `write` / `edit` / `apply_patch` / `exec_shell` |
 | 外部 API / 连接器 | `http_request`（通用 REST）/ **连接器**（产品名；实现多为 MCP）/ `web_fetch`·`web_search`；禁止一 API 一 builtin Tool |
@@ -297,7 +297,7 @@ OpenAI-compat 路径上，模型常把 `write`/`edit` 等内容里的未转义�
 | `ApprovalManager` | 审批记录 |
 | `LLMConfigManager` | 模型配置 |
 | `MCPManager` | MCP Server 配置 |
-| `KnowledgeManager` | 知识库 |
+| `KnowledgeManager` | 知识库（MD SoT + 章级 FTS；见 [knowledge-base-plan.md](./knowledge-base-plan.md)） |
 | `ConfigManager` | YAML 配置 |
 | `ChannelIngress` | IM 入站 → Session Turn → 经 `ChannelEndpoint` 出站；`HandleInteraction` |
 | `*Bridge` / `*Endpoint` | 各平台连接与差异化投递（飞书 / QQ / 微信 / 企微） |
@@ -558,9 +558,9 @@ Tool 刚执行完时已按 `runtime.tools.max_output_chars` 做硬上限（§6.3
 |------|--------|----------|------|
 | **Memory** | Agent tool（显式） | 跨 Session，SQLite | `memory_read` / UI |
 | **Compaction Checkpoint** | 引擎自动摘要 | Session 内 | 注入 system prompt |
-| **Knowledge** | 人工文档 | 绑定 Agent KB | `search_kb` + 自动 top-K 注入 |
+| **Knowledge** | 人工文档（`~/.danmo-work/knowledge/` MD SoT） | 绑定 Agent KB | 章级 `search_kb` + 自动 top-K 注入（FTS5 BM25；可选向量混合） |
 
-会话内被压缩丢掉的消息召回（BM25-at-compaction）为后续议题，与 durable Memory 独立。
+落地细节见 [knowledge-base-plan.md](./knowledge-base-plan.md)。会话内被压缩丢掉的消息召回（BM25-at-compaction）为后续议题，与 durable Memory 独立。
 
 ### 10.4 KV Cache 友好分区（设计目标）
 

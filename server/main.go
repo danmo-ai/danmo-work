@@ -34,6 +34,7 @@ func main() {
 		MarketHandler: &apiv1.MarketHandler{
 			Market: core.Market,
 		},
+		Knowledge:   core.Knowledge,
 		TurnLogs:    core.TurnLogs,
 		MCPServers:  core.MCPServers,
 		Automations: core.Automations,

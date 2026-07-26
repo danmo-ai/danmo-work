@@ -180,6 +180,8 @@ const runtimeForm = ref({
   maxDelegationDepth: 3,
   readTopK: 10,
   searchTopK: 3,
+  chapterMaxTokens: 512,
+  vectorHybrid: false,
   compactionEnabled: true,
   compactionMaxTokens: 128000,
   compactionTriggerRatio: 0.85,
@@ -1080,6 +1082,19 @@ const hasFooterActions = computed(() => {
                   <DqSlider v-model="runtimeForm.searchTopK" :min="1" :max="20" :step="1" />
                   <span class="slider-row__value">{{ runtimeForm.searchTopK }}</span>
                 </div>
+              </div>
+            </div>
+            <div class="settings-form-row">
+              <div class="settings-field settings-field--half">
+                <span class="settings-field__label">{{ $t('settings.chapterMaxTokens') }}</span>
+                <div class="slider-row">
+                  <DqSlider v-model="runtimeForm.chapterMaxTokens" :min="128" :max="2048" :step="64" />
+                  <span class="slider-row__value">{{ runtimeForm.chapterMaxTokens }}</span>
+                </div>
+              </div>
+              <div class="settings-field settings-field--half">
+                <span class="settings-field__label">{{ $t('settings.vectorHybrid') }}</span>
+                <DqSwitch v-model="runtimeForm.vectorHybrid" />
               </div>
             </div>
           </div>

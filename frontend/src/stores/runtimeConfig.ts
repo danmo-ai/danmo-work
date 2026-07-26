@@ -22,6 +22,8 @@ export interface RuntimeForm {
   maxDelegationDepth: number
   readTopK: number
   searchTopK: number
+  chapterMaxTokens: number
+  vectorHybrid: boolean
   compactionEnabled: boolean
   compactionMaxTokens: number
   compactionTriggerRatio: number
@@ -52,6 +54,8 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     maxDelegationDepth: rt.team.maxDelegationDepth,
     readTopK: rt.memory.readTopK,
     searchTopK: rt.knowledge.searchTopK,
+    chapterMaxTokens: rt.knowledge.chapterMaxTokens ?? 512,
+    vectorHybrid: rt.knowledge.vectorHybrid ?? false,
     compactionEnabled: rt.compaction?.enabled ?? true,
     compactionMaxTokens: rt.compaction?.maxTokens ?? 128000,
     compactionTriggerRatio: rt.compaction?.triggerRatio ?? 0.85,
@@ -132,6 +136,8 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
         },
         knowledge: {
           searchTopK: form.searchTopK,
+          chapterMaxTokens: form.chapterMaxTokens,
+          vectorHybrid: form.vectorHybrid,
         },
         compaction: {
           enabled: form.compactionEnabled,

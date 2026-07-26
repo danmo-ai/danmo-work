@@ -31,6 +31,7 @@ type Handler struct {
 	Skills        *service.SkillManager
 	SkillHandler  *SkillHandler
 	MarketHandler *MarketHandler
+	Knowledge     *service.KnowledgeManager
 	TurnLogs      *service.TurnLogManager
 	MCPServers    *service.MCPManager
 	Automations   *service.AutomationManager
@@ -177,6 +178,17 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.PUT("/skills/:id/files/*path", upsertSkillFile(h.SkillHandler))
 	api.DELETE("/skills/:id/files/*path", deleteSkillFile(h.SkillHandler))
 	api.GET("/skills/:id/files/*path", getSkillFile(h.SkillHandler))
+
+	api.GET("/knowledge/bases", listKnowledgeBases(h))
+	api.POST("/knowledge/bases", createKnowledgeBase(h))
+	api.GET("/knowledge/bases/:id", getKnowledgeBase(h))
+	api.PUT("/knowledge/bases/:id", updateKnowledgeBase(h))
+	api.DELETE("/knowledge/bases/:id", deleteKnowledgeBase(h))
+	api.GET("/knowledge/bases/:id/docs", listKnowledgeDocs(h))
+	api.POST("/knowledge/bases/:id/docs", createKnowledgeDoc(h))
+	api.GET("/knowledge/docs/:docId", getKnowledgeDoc(h))
+	api.PUT("/knowledge/docs/:docId", updateKnowledgeDoc(h))
+	api.DELETE("/knowledge/docs/:docId", deleteKnowledgeDoc(h))
 
 	if h.MarketHandler != nil {
 		api.GET("/market/sources", listMarketSources(h.MarketHandler))

@@ -141,8 +141,11 @@ export interface Project {
 export interface KnowledgeDocument {
   id: string
   knowledgeBaseId: string
+  /** Backend JSON field alias */
+  kbId?: string
   title: string
   content?: string
+  path?: string
   updatedAt: string
 }
 

@@ -77,6 +77,7 @@ Server, CLI, TUI, and desktop all use the same home by default:
   config.yaml
   work.db        # control plane (sessions, memories, …)
   store.db       # agent table-store data plane
+  knowledge/     # knowledge-base Markdown source of truth
   data/          # projects, turn logs
   skills/        # optional user custom skills (scanned each turn)
   bin/           # desktop sidecar binary
@@ -94,6 +95,9 @@ workspace **Memory** tab. Config: `runtime.memory.read_top_k`.
 
 Agent table store (`table_*` tools) persists schema-free business rows in
 `store.db` (isolated from `work.db`). See `docs/agent-table-store-plan.md`.
+
+Knowledge bases store Markdown under `knowledge/<kbId>/` with chapter FTS
+in `work.db`; see `docs/knowledge-base-plan.md`.
 
 On first launch, existing data may be migrated from
 `~/Library/Application Support/com.danmo.work/` or `./data/work.db`.

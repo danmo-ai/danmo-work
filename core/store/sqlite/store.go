@@ -138,7 +138,6 @@ func (s *Store) migrate() error {
 		&projectModel{},
 		&llmConfigModel{},
 		&approvalModel{},
-		&knowledgeDocModel{},
 		&memoryModel{},
 		&streamEventModel{},
 		&turnModel{},
@@ -179,6 +178,9 @@ func (s *Store) migrate() error {
 	} else if err != nil {
 		return err
 	}
+	if err := migrateKnowledgeSchema(s.db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -206,33 +208,6 @@ func (s *Store) WeixinAccounts() port.WeixinAccountRepo { return &weixinAccountR
 func (s *Store) WeixinBindings() port.WeixinBindingRepo { return &weixinBindingRepo{s} }
 func (s *Store) ChannelBindings() port.ChannelBindingRepo { return &channelBindingRepo{s} }
 func (s *Store) AppMeta() port.AppMetaRepo              { return &appMetaRepo{s} }
-
-func (s *Store) KnowledgeDocs() []KnowledgeDoc {
-	var rows []knowledgeDocModel
-	if err := s.db.Find(&rows).Error; err != nil {
-		return nil
-	}
-	out := make([]KnowledgeDoc, len(rows))
-	for i, r := range rows {
-		out[i] = KnowledgeDoc{KBID: r.KBID, Title: r.Title, Content: r.Content}
-	}
-	return out
-}
-
-type KnowledgeDoc struct {
-	KBID    string
-	Title   string
-	Content string
-}
-
-type knowledgeDocModel struct {
-	ID      uint   `gorm:"primaryKey;autoIncrement"`
-	KBID    string `gorm:"column:kb_id"`
-	Title   string
-	Content string
-}
-
-func (knowledgeDocModel) TableName() string { return "knowledge_docs" }
 
 // ---- AgentRepo ----
 

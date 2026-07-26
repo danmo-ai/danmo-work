@@ -77,6 +77,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("runtime.table.query_max_limit", 200)
 	v.SetDefault("runtime.table.max_row_chars", 8000)
 	v.SetDefault("runtime.knowledge.search_top_k", 3)
+	v.SetDefault("runtime.knowledge.chapter_max_tokens", 512)
+	v.SetDefault("runtime.knowledge.vector_hybrid", false)
 	v.SetDefault("data.store_database", paths.StoreDatabaseFile())
 	v.SetDefault("runtime.compaction.enabled", true)
 	v.SetDefault("runtime.compaction.model", "")

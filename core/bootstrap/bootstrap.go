@@ -53,6 +53,7 @@ type Core struct {
 	SearchConfig  *service.SearchConfigManager
 	Agents        *service.AgentManager
 	Skills        *service.SkillManager
+	Knowledge     *service.KnowledgeManager
 	Market        *service.MarketManager
 	TurnLogs      *service.TurnLogManager
 	MCPServers    *service.MCPManager
@@ -137,7 +138,34 @@ func New(cfg Config) *Core {
 	skills := service.NewSkillManager(st.Skills(), st.SkillFiles())
 	skills.SetTemplateLoader(prompt.LoadSkillTemplateByID)
 	skills.SetFileTemplateLoader(prompt.LoadBuiltinSkillFiles)
-	knowledge := buildKnowledge(st)
+	knowledgeMgr := service.NewKnowledgeManager(
+		st.KnowledgeBases(),
+		st.KnowledgeDocs(),
+		st.KnowledgeIndex(),
+		paths.KnowledgeDir(),
+		func() domain.ConfigKnowledgeSection {
+			c, err := loader.Load(context.Background())
+			if err != nil {
+				return domain.ConfigKnowledgeSection{SearchTopK: 3, ChapterMaxTokens: 512}
+			}
+			sec := c.Runtime.Knowledge
+			if sec.SearchTopK <= 0 {
+				sec.SearchTopK = 3
+			}
+			if sec.ChapterMaxTokens <= 0 {
+				sec.ChapterMaxTokens = 512
+			}
+			return sec
+		},
+	)
+	if err := knowledgeMgr.MigrateLegacyContents(context.Background(), st.LegacyDocContent, st.ClearLegacyDocContent); err != nil {
+		log.Printf("[bootstrap] knowledge legacy migrate: %v", err)
+	}
+	if err := knowledgeMgr.ReindexAll(context.Background()); err != nil {
+		log.Printf("[bootstrap] knowledge reindex: %v", err)
+	}
+	knowledge := builtin.NewKnowledge()
+	knowledge.SetBackend(knowledgeMgr)
 	turnManager := service.NewTurnManager(st.Turns())
 	turnLogManager := service.NewTurnLogManager(turnLog)
 	approvalManager := service.NewApprovalManager(st.Approvals())
@@ -303,6 +331,7 @@ func New(cfg Config) *Core {
 		SearchConfig:  searchConfig,
 		Agents:        agents,
 		Skills:        skills,
+		Knowledge:     knowledgeMgr,
 		Market:        marketMgr,
 		TurnLogs:      turnLogManager,
 		MCPServers:    mcpManager,
@@ -406,11 +435,4 @@ func ensureBuiltinSkills(skills *service.SkillManager) {
 			}
 		}
 	}
-}
-func buildKnowledge(st *sqlitestore.Store) *builtin.Knowledge {
-	kb := builtin.NewKnowledge()
-	for _, doc := range st.KnowledgeDocs() {
-		kb.Add(builtin.Doc{KBID: doc.KBID, Title: doc.Title, Content: doc.Content})
-	}
-	return kb
 }

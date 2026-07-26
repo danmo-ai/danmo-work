@@ -6,23 +6,65 @@ import (
 )
 
 type Repository interface {
-	Agents()         AgentRepo
-	Skills()         SkillRepo
-	SkillFiles()     SkillFileRepo
-	Sessions()       SessionRepo
-	Projects()       ProjectRepo
-	LLMConfig()      LLMConfigRepo
-	Approvals()      ApprovalRepo
-	StreamEvents()   StreamEventRepo
-	Turns()          TurnRepo
-	MCPServers()     MCPServerRepo
-	Secrets()        SecretStore
-	Automations()    AutomationRepo
-	Memories()       MemoryRepo
-	WeixinAccounts() WeixinAccountRepo
-	WeixinBindings() WeixinBindingRepo
+	Agents()          AgentRepo
+	Skills()          SkillRepo
+	SkillFiles()      SkillFileRepo
+	Sessions()        SessionRepo
+	Projects()        ProjectRepo
+	LLMConfig()       LLMConfigRepo
+	Approvals()       ApprovalRepo
+	StreamEvents()    StreamEventRepo
+	Turns()           TurnRepo
+	MCPServers()      MCPServerRepo
+	Secrets()         SecretStore
+	Automations()     AutomationRepo
+	Memories()        MemoryRepo
+	KnowledgeBases()  KnowledgeBaseRepo
+	KnowledgeDocs()   KnowledgeDocRepo
+	KnowledgeIndex()  KnowledgeIndexRepo
+	WeixinAccounts()  WeixinAccountRepo
+	WeixinBindings()  WeixinBindingRepo
 	ChannelBindings() ChannelBindingRepo
-	AppMeta()        AppMetaRepo
+	AppMeta()         AppMetaRepo
+}
+
+// KnowledgeBaseRepo persists knowledge-base catalog metadata.
+type KnowledgeBaseRepo interface {
+	List(ctx context.Context) ([]domain.KnowledgeBase, error)
+	Get(ctx context.Context, id string) (domain.KnowledgeBase, error)
+	Upsert(ctx context.Context, b domain.KnowledgeBase) error
+	Delete(ctx context.Context, id string) error
+}
+
+// KnowledgeDocRepo persists document metadata (content lives on disk).
+type KnowledgeDocRepo interface {
+	ListByKB(ctx context.Context, kbID string) ([]domain.KnowledgeDoc, error)
+	ListAll(ctx context.Context) ([]domain.KnowledgeDoc, error)
+	Get(ctx context.Context, id string) (domain.KnowledgeDoc, error)
+	Upsert(ctx context.Context, d domain.KnowledgeDoc) error
+	Delete(ctx context.Context, id string) error
+	DeleteByKB(ctx context.Context, kbID string) error
+	CountByKB(ctx context.Context, kbID string) (int, error)
+}
+
+// KnowledgeChapter is one indexed chapter row (not exposed over HTTP).
+type KnowledgeChapter struct {
+	Path      string
+	KBID      string
+	DocID     string
+	Title     string
+	Content   string
+	Embedding []float32 // optional; empty when vector hybrid off
+}
+
+// KnowledgeIndexRepo maintains chapter FTS (+ optional vectors) for search_kb.
+type KnowledgeIndexRepo interface {
+	ReplaceDocChapters(ctx context.Context, docID string, chapters []KnowledgeChapter) error
+	DeleteByDoc(ctx context.Context, docID string) error
+	DeleteByKB(ctx context.Context, kbID string) error
+	SearchBM25(ctx context.Context, kbIDs []string, query string, limit int) ([]domain.KnowledgeChapterHit, error)
+	SearchVector(ctx context.Context, kbIDs []string, queryVec []float32, limit int) ([]domain.KnowledgeChapterHit, error)
+	ListChapterEmbeddings(ctx context.Context, kbIDs []string) ([]KnowledgeChapter, error)
 }
 
 // AutomationRepo persists scheduled / webhook automations.
