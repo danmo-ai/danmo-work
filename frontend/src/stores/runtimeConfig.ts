@@ -6,6 +6,7 @@ import type { ConfigFile, UpdateConfigFileRequest, SandboxStatus, BrowserStatus 
 
 export interface RuntimeForm {
   autoApprove: boolean
+  permissionMode: 'discuss' | 'plan' | 'interactive' | 'auto'
   sandboxEnabled: boolean
   sandboxMode: 'read-only' | 'workspace-write' | 'danger-full-access'
   sandboxNetwork: 'deny' | 'allow' | 'allowlist'
@@ -35,6 +36,7 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
   const br = rt.browser
   return {
     autoApprove: rt.autoApprove,
+    permissionMode: rt.permissionMode || 'interactive',
     sandboxEnabled: sb?.enabled ?? true,
     sandboxMode: sb?.mode ?? 'workspace-write',
     sandboxNetwork: sb?.network ?? 'deny',
@@ -101,6 +103,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
     try {
       const runtime: ConfigFile['runtime'] = {
         autoApprove: form.autoApprove,
+        permissionMode: form.permissionMode,
         sandbox: {
           enabled: form.sandboxEnabled,
           mode: form.sandboxMode,

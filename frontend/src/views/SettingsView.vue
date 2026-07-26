@@ -164,6 +164,7 @@ const marketForm = ref<ConfigMarketSection>({
 
 const runtimeForm = ref({
   autoApprove: false,
+  permissionMode: 'interactive' as 'discuss' | 'plan' | 'interactive' | 'auto',
   sandboxEnabled: true,
   sandboxMode: 'workspace-write' as 'read-only' | 'workspace-write' | 'danger-full-access',
   sandboxNetwork: 'deny' as 'deny' | 'allow' | 'allowlist',
@@ -1188,6 +1189,16 @@ const hasFooterActions = computed(() => {
                 size="sm"
                 @update:model-value="(v: boolean) => runtimeForm.autoApprove = v"
               />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.permissionMode') }}</span>
+              <DqSelect v-model="runtimeForm.permissionMode" :placeholder="$t('settings.permissionMode')">
+                <DqOption value="discuss" :label="$t('settings.permDiscuss')" />
+                <DqOption value="plan" :label="$t('settings.permPlan')" />
+                <DqOption value="interactive" :label="$t('settings.permInteractive')" />
+                <DqOption value="auto" :label="$t('settings.permAuto')" />
+              </DqSelect>
+              <span class="settings-field__hint">{{ $t('settings.permissionModeHint') }}</span>
             </label>
           </div>
 

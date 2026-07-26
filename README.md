@@ -229,6 +229,10 @@ Project/
 | **ask_user** | Asking the user is a Tool; loop pauses until the reply arrives |
 | **Memory** | Cross-session facts via `memory_update` / `memory_read` (scopes: user / project / agent) |
 
+### Connectors (MCP)
+
+Product SaaS actions go through **MCP** (not one-builtin-per-API). Enabled servers are discovered via `tools/list`, executed via `tools/call`, and mounted into the Agent Loop as `mcp_<server>_<tool>` (`external` risk → permission gate). Use the **Connector catalog** for Composio / OpenConnector / GitHub / Notion / Feishu presets; store API keys and OAuth tokens in the encrypted secrets store (never in prompts). IM channels (WeChat / Feishu / WeCom / QQ) are chat ingress only — not SaaS action connectors. Automations (cron / webhook) start real session turns with Turn Log replay.
+
 ## Architecture
 
 ```

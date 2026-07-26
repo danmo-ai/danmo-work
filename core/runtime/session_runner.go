@@ -52,6 +52,7 @@ type Engine struct {
 	compactionMgr *CompactionManager
 	modelLimits   *ModelConfigRegistry
 	configStore   port.ConfigStore
+	mcpCaller     port.MCPCaller
 	dataDir       string
 	turnMessages  map[string][]Message
 	mu            sync.Mutex
@@ -190,6 +191,35 @@ func (e *Engine) RegisterTool(h tool.Handler) {
 		e.readSkill = rs
 	}
 	e.toolCatalog.Register(h)
+}
+
+// SetMCPCaller wires the MCP tool executor used by catalog handlers.
+func (e *Engine) SetMCPCaller(c port.MCPCaller) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.mcpCaller = c
+}
+
+// ReplaceMCPServer implements port.MCPToolSync.
+func (e *Engine) ReplaceMCPServer(serverID string, tools []domain.MCPToolBinding) {
+	e.mu.Lock()
+	caller := e.mcpCaller
+	e.mu.Unlock()
+	handlers := make([]tool.Handler, 0, len(tools))
+	for _, b := range tools {
+		handlers = append(handlers, tool.NewMCPHandler(b, func(ctx context.Context, sid, name string, args map[string]any) (string, error) {
+			if caller == nil {
+				return "", fmt.Errorf("mcp caller not configured")
+			}
+			return caller.CallTool(ctx, sid, name, args)
+		}))
+	}
+	e.toolCatalog.ReplaceServer(serverID, handlers...)
+}
+
+// RemoveMCPServer implements port.MCPToolSync.
+func (e *Engine) RemoveMCPServer(serverID string) {
+	e.toolCatalog.RemoveServer(serverID)
 }
 
 func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments []domain.UserAttachment) {
@@ -675,11 +705,15 @@ func (e *Engine) delegatableAgents(agent domain.Agent) []domain.Agent {
 	return result
 }
 
-// resolveAgentSkills returns Agent-bound DB skills merged with filesystem skills
-// scanned from user/project skill dirs for workDir (later dirs override by ID).
-// Filesystem skills are auto-included; they are not written to the database.
+// resolveAgentSkills returns Agent-bound DB skills, optionally merged with
+// Ambient filesystem skills when agent.InheritsAmbient() (default: primary yes,
+// subagent no). Filesystem skills are not written to the database.
 func (e *Engine) resolveAgentSkills(agent domain.Agent, workDir string) []domain.Skill {
 	bound := e.boundDBSkills(agent)
+	if !agent.InheritsAmbient() {
+		e.setTurnFSSkills(nil, nil)
+		return bound
+	}
 	fsSkills, fsFiles := service.ScanFilesystemSkills(workDir)
 	e.setTurnFSSkills(fsSkills, fsFiles)
 	return service.MergeSkillsByID(bound, fsSkills)
@@ -967,7 +1001,7 @@ func (e *Engine) mountAlwaysOnBuiltins(reg *tool.Registry) {
 
 func (e *Engine) mountBuiltinTools(reg *tool.Registry, bindings []domain.ToolBinding) {
 	for _, b := range bindings {
-		if b.ToolID == "" || b.MCPServer != "" {
+		if b.ToolID == "" {
 			continue
 		}
 		if h, ok := e.toolCatalog.Get(b.ToolID); ok {
@@ -1098,10 +1132,9 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 		&builtin.MemoryRead{Store: e.memories, TopK: cfg.memoryReadTopK},
 		delegator,
 	)
-	reg.CopyMCPServersFrom(e.toolCatalog)
 	e.mountAlwaysOnBuiltins(reg)
 	e.mountBuiltinTools(reg, agent.Tools)
-	reg.MountFromBindings(agent.Tools)
+	e.mountMCPForAgent(reg, agent)
 	return reg
 }
 
@@ -1116,11 +1149,22 @@ func (e *Engine) buildWorkerRegistry(agent domain.Agent) *tool.Registry {
 		&builtin.MemoryUpdate{Store: e.memories},
 		&builtin.MemoryRead{Store: e.memories, TopK: cfg.memoryReadTopK},
 	)
-	reg.CopyMCPServersFrom(e.toolCatalog)
 	e.mountAlwaysOnBuiltins(reg)
 	e.mountBuiltinTools(reg, agent.Tools)
-	reg.MountFromBindings(agent.Tools)
+	e.mountMCPForAgent(reg, agent)
 	return reg
+}
+
+// mountMCPForAgent applies the Ambient / Bound MCP policy:
+// - InheritAmbient (default primary): all enabled MCP servers
+// - otherwise: only agent.MCPServers (exact server ids)
+func (e *Engine) mountMCPForAgent(reg *tool.Registry, agent domain.Agent) {
+	reg.CopyMCPServersFrom(e.toolCatalog)
+	if agent.InheritsAmbient() {
+		reg.MountAllMCP()
+		return
+	}
+	reg.MountServers(agent.MCPServers)
 }
 
 func (e *Engine) waitAskUser(ctx context.Context, sessionID, turnID, callID, question string, options []string, defaultOpt string, formFields []domain.AskUserFormField) (string, error) {

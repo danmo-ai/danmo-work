@@ -45,6 +45,8 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 	b.WriteString("\n\n")
 	b.WriteString(buildMemoryPolicy())
 	b.WriteString("\n\n")
+	b.WriteString(buildMCPToolNamingPolicy())
+	b.WriteString("\n\n")
 	b.WriteString(buildRuntimeEnvironment(sandboxStatus))
 
 	return b.String()
@@ -106,6 +108,17 @@ When to memory_read:
 
 Writing style: short stable keys (e.g. preferred_language); one to a few factual sentences; update the same key instead of duplicating.
 </memory-policy>`
+}
+
+func buildMCPToolNamingPolicy() string {
+	return `<mcp-tool-naming>
+MCP tools are exposed to you as function names: mcp_<server>_<tool>
+- <server> and <tool> are lowercased; non-alphanumeric characters become underscores (e.g. "My Server!" + "do.thing" → mcp_my_server_do_thing).
+- Descriptions are prefixed with [MCP:<server display name>].
+- Skills or docs may mention a short tool name (e.g. echo, search). When calling, use the full mcp_* name from your tool list whose suffix matches that short name (after mcp_<server>_).
+- Prefer the exact name from the tool list. Do not invent mcp_* names that are not listed.
+- If several servers expose the same short tool name, pick the server that matches the task (see [MCP:…] prefix / server slug).
+</mcp-tool-naming>`
 }
 
 // buildRuntimeEnvironment returns a block describing the runtime OS / shell environment.

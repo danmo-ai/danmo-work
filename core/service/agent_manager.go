@@ -88,6 +88,7 @@ func (m *AgentManager) List(ctx context.Context) ([]domain.Agent, error) {
 }
 
 func (m *AgentManager) Upsert(ctx context.Context, a domain.Agent) error {
+	domain.NormalizeAgentBindings(&a)
 	stored := m.prepareStore(a)
 	if err := m.store.Upsert(ctx, stored); err != nil {
 		return err

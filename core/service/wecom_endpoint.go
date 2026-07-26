@@ -45,9 +45,10 @@ func (e *WecomEndpoint) Type() port.ChannelType { return port.ChannelWecom }
 
 func (e *WecomEndpoint) Capabilities() port.ChannelCapabilities {
 	return port.ChannelCapabilities{
-		ProgressiveStream: true,
-		RichCards:         false,
-		InteractiveAsk:    true, // text menu via stream update
+		ProgressiveStream:  true,
+		RichCards:          false,
+		InteractiveAsk:     true, // text menu via stream update
+		InteractiveApprove: true, // numbered 1/2/3 menu (same as Weixin)
 	}
 }
 
@@ -120,6 +121,21 @@ func (e *WecomEndpoint) PresentAsk(ctx context.Context, in *port.InboundMessage,
 		return false, fmt.Errorf("wecom present ask: not connected")
 	}
 	if err := lc.ReplyStream(reqID, streamID, formatAskText(ask), false); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (e *WecomEndpoint) PresentPermission(ctx context.Context, in *port.InboundMessage, ask port.PermissionPrompt) (bool, error) {
+	reqID, streamID := streamMeta(in)
+	if reqID == "" || streamID == "" {
+		return false, fmt.Errorf("wecom present permission: missing req_id/stream_id")
+	}
+	lc := e.longConn()
+	if lc == nil {
+		return false, fmt.Errorf("wecom present permission: not connected")
+	}
+	if err := lc.ReplyStream(reqID, streamID, formatPermissionText(ask), false); err != nil {
 		return false, err
 	}
 	return true, nil

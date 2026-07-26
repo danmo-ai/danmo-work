@@ -16,11 +16,22 @@ type Repository interface {
 	StreamEvents()   StreamEventRepo
 	Turns()          TurnRepo
 	MCPServers()     MCPServerRepo
+	Secrets()        SecretStore
+	Automations()    AutomationRepo
 	Memories()       MemoryRepo
 	WeixinAccounts() WeixinAccountRepo
 	WeixinBindings() WeixinBindingRepo
 	ChannelBindings() ChannelBindingRepo
 	AppMeta()        AppMetaRepo
+}
+
+// AutomationRepo persists scheduled / webhook automations.
+type AutomationRepo interface {
+	List(ctx context.Context) ([]domain.Automation, error)
+	Get(ctx context.Context, id string) (domain.Automation, error)
+	Upsert(ctx context.Context, a domain.Automation) error
+	Delete(ctx context.Context, id string) error
+	ListEnabled(ctx context.Context) ([]domain.Automation, error)
 }
 
 // ChannelBindingRepo maps (channel, account, peer) → Teams session for non-Weixin channels.

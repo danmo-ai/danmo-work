@@ -8,8 +8,12 @@ export interface Agent {
   steps?: number
   skillIds?: string[]
   tools?: ToolBinding[]
+  /** Connector ids (exact; API field mcpServers). Used when inheritAmbient is false. */
+  mcpServers?: string[]
   knowledgeIds?: string[]
   canDelegate?: boolean
+  /** Ambient layer: FS skills + all enabled connectors. Default: primary true, subagent false. */
+  inheritAmbient?: boolean
   builtin?: boolean
   marketSource?: string
 }
@@ -24,8 +28,10 @@ export interface CreateAgentPayload {
   steps?: number
   skillIds?: string[]
   tools?: ToolBinding[]
+  mcpServers?: string[]
   knowledgeIds?: string[]
   canDelegate?: boolean
+  inheritAmbient?: boolean
 }
 
 export interface UpdateAgentPayload {
@@ -37,11 +43,35 @@ export interface UpdateAgentPayload {
   steps?: number
   skillIds?: string[]
   tools?: ToolBinding[]
+  mcpServers?: string[]
   knowledgeIds?: string[]
   canDelegate?: boolean
+  inheritAmbient?: boolean
 }
 
-export type RiskLevel = 'low' | 'medium' | 'high'
+export type RiskLevel = 'low' | 'medium' | 'high' | 'external'
+
+export type PermissionMode = 'discuss' | 'plan' | 'interactive' | 'auto'
+
+export type MCPAuthMode = 'none' | 'headers' | 'oauth'
+
+export interface ConnectorCatalogEntry {
+  id: string
+  name: string
+  description: string
+  category: string
+  transport: 'stdio' | 'sse' | 'streamable-http'
+  url?: string
+  command?: string
+  args?: string
+  auth: MCPAuthMode
+  docsUrl?: string
+  oauthAuthorizeUrl?: string
+  oauthTokenUrl?: string
+  oauthScopes?: string
+  region?: string
+  tags?: string[]
+}
 
 export interface Skill {
   id: string
@@ -70,7 +100,6 @@ export interface AvailableSkill extends Skill {
 
 export interface ToolBinding {
   toolId: string
-  mcpServer?: string
   name?: string
   riskLevel?: RiskLevel
 }
@@ -121,6 +150,7 @@ export interface MCPToolDef {
   name: string
   description: string
   enabled: boolean
+  inputSchema?: Record<string, unknown>
 }
 
 export interface MCPServer {
@@ -133,6 +163,14 @@ export interface MCPServer {
   url?: string
   env?: string
   headers?: Record<string, string>
+  auth?: MCPAuthMode
+  secretHeadersRef?: Record<string, string>
+  oauthClientId?: string
+  oauthAuthorizeUrl?: string
+  oauthTokenUrl?: string
+  oauthScopes?: string
+  oauthStatus?: string
+  catalogId?: string
   enabledTools?: string[]
   discoveredTools?: MCPToolDef[]
   toolTimeout?: number
@@ -152,9 +190,13 @@ export interface Automation {
   eventType?: string
   webhookPath?: string
   agentId?: string
+  projectId?: string
+  modelId?: string
   prompt: string
   lastRunAt?: string
   nextRunAt?: string
+  lastTurnId?: string
+  lastStatus?: string
 }
 
 export interface TimelineEvent {

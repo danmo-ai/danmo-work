@@ -112,6 +112,7 @@ func BoundDBSkills(all []domain.Skill, agent domain.Agent) []domain.Skill {
 
 // ListAvailableSkillsForAgent merges agent-bound DB skills with filesystem
 // skills for workDir — same composition as runtime resolveAgentSkills.
+// Filesystem (Ambient) skills are included only when agent.InheritsAmbient().
 // Body is cleared on returned skills (picker/metadata only).
 func ListAvailableSkillsForAgent(ctx context.Context, skills *SkillManager, agent domain.Agent, workDir string) ([]AvailableSkill, error) {
 	_ = ctx
@@ -120,7 +121,10 @@ func ListAvailableSkillsForAgent(ctx context.Context, skills *SkillManager, agen
 		return nil, err
 	}
 	bound := BoundDBSkills(all, agent)
-	fsSkills, _ := ScanFilesystemSkills(workDir)
+	var fsSkills []domain.Skill
+	if agent.InheritsAmbient() {
+		fsSkills, _ = ScanFilesystemSkills(workDir)
+	}
 
 	boundIDs := make(map[string]struct{}, len(bound))
 	for _, sk := range bound {

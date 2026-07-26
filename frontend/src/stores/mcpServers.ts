@@ -1,17 +1,23 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { MCPServer, MCPToolDef } from '@/types'
+import type { ConnectorCatalogEntry, MCPServer, MCPToolDef } from '@/types'
 import { fetchJSON, asArray } from '@/api/client'
 
 export const useMcpServersStore = defineStore('mcpServers', () => {
   const items = ref<MCPServer[]>([])
+  const catalog = ref<ConnectorCatalogEntry[]>([])
 
   async function load() {
     const data = await fetchJSON<MCPServer[]>('/mcp/servers')
     items.value = asArray(data)
   }
 
-  async function create(payload: Omit<MCPServer, 'id' | 'status'>) {
+  async function loadCatalog() {
+    const data = await fetchJSON<ConnectorCatalogEntry[]>('/mcp/catalog')
+    catalog.value = asArray(data)
+  }
+
+  async function create(payload: Omit<MCPServer, 'id' | 'status'> & { headerSecrets?: Record<string, string> }) {
     const server = await fetchJSON<MCPServer>('/mcp/servers', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -20,7 +26,16 @@ export const useMcpServersStore = defineStore('mcpServers', () => {
     return server
   }
 
-  async function update(id: string, payload: Partial<MCPServer>) {
+  async function installCatalog(catalogId: string, name?: string) {
+    const server = await fetchJSON<MCPServer>(`/mcp/catalog/${encodeURIComponent(catalogId)}/install`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    })
+    items.value.push(server)
+    return server
+  }
+
+  async function update(id: string, payload: Partial<MCPServer> & { headerSecrets?: Record<string, string> }) {
     const server = await fetchJSON<MCPServer>(`/mcp/servers/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
@@ -53,5 +68,35 @@ export const useMcpServersStore = defineStore('mcpServers', () => {
     return server
   }
 
-  return { items, load, create, update, remove, refreshTools, toggleTool }
+  async function beginOAuth(id: string, redirectUri?: string) {
+    return fetchJSON<{ authorizeUrl: string; state: string }>(`/mcp/servers/${id}/oauth/begin`, {
+      method: 'POST',
+      body: JSON.stringify({ redirectUri }),
+    })
+  }
+
+  async function completeOAuth(id: string, payload: { code?: string; state?: string; accessToken?: string }) {
+    const server = await fetchJSON<MCPServer>(`/mcp/servers/${id}/oauth/complete`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    const i = items.value.findIndex((s) => s.id === id)
+    if (i >= 0) items.value[i] = server
+    return server
+  }
+
+  return {
+    items,
+    catalog,
+    load,
+    loadCatalog,
+    create,
+    installCatalog,
+    update,
+    remove,
+    refreshTools,
+    toggleTool,
+    beginOAuth,
+    completeOAuth,
+  }
 })

@@ -188,6 +188,7 @@ export interface ConfigFile {
   }
   runtime: {
     autoApprove: boolean
+    permissionMode?: 'discuss' | 'plan' | 'interactive' | 'auto'
     sandbox?: {
       enabled: boolean
       mode: 'read-only' | 'workspace-write' | 'danger-full-access'

@@ -33,6 +33,7 @@ type Handler struct {
 	MarketHandler *MarketHandler
 	TurnLogs      *service.TurnLogManager
 	MCPServers    *service.MCPManager
+	Automations   *service.AutomationManager
 	Weixin        *service.WeixinBridge
 	Feishu        *service.FeishuBridge
 	Wecom         *service.WecomBridge
@@ -145,6 +146,19 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.DELETE("/mcp/servers/:id", deleteMCPServer(h))
 	api.POST("/mcp/servers/:id/refresh-tools", refreshMCPTools(h))
 	api.PATCH("/mcp/servers/:id/tools/:toolName", toggleMCPTool(h))
+	api.POST("/mcp/servers/:id/oauth/begin", beginMCPOAuth(h))
+	api.POST("/mcp/servers/:id/oauth/complete", completeMCPOAuth(h))
+	api.GET("/mcp/catalog", listConnectorCatalog(h))
+	api.POST("/mcp/catalog/:id/install", installConnectorCatalog(h))
+
+	api.GET("/automations", listAutomations(h))
+	api.POST("/automations", createAutomation(h))
+	api.GET("/automations/:id", getAutomation(h))
+	api.PUT("/automations/:id", updateAutomation(h))
+	api.DELETE("/automations/:id", deleteAutomation(h))
+	api.POST("/automations/:id/toggle", toggleAutomation(h))
+	api.POST("/automations/:id/run", runAutomation(h))
+	api.POST("/hooks/*path", automationWebhook(h))
 
 	api.GET("/skills", listSkills(h.SkillHandler))
 	api.POST("/skills", createSkill(h.SkillHandler))
@@ -377,6 +391,7 @@ func createAgent(h *Handler) gin.HandlerFunc {
 		if a.Mode == "" {
 			a.Mode = domain.AgentModePrimary
 		}
+		domain.NormalizeAgentBindings(&a)
 		if err := h.Agents.Upsert(c, a); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -435,6 +450,7 @@ func updateAgent(h *Handler) gin.HandlerFunc {
 		if a.Mode == "" {
 			a.Mode = domain.AgentModePrimary
 		}
+		domain.NormalizeAgentBindings(&a)
 		if err := h.Agents.Upsert(c, a); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -1173,6 +1189,197 @@ func toggleMCPTool(h *Handler) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, srv)
+	}
+}
+
+func beginMCPOAuth(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			RedirectURI string `json:"redirectUri"`
+		}
+		_ = c.ShouldBindJSON(&req)
+		url, state, err := h.MCPServers.BeginOAuth(c, c.Param("id"), req.RedirectURI)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"authorizeUrl": url, "state": state})
+	}
+}
+
+func completeMCPOAuth(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Code        string `json:"code"`
+			State       string `json:"state"`
+			AccessToken string `json:"accessToken"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		srv, err := h.MCPServers.CompleteOAuth(c, c.Param("id"), req.Code, req.State, req.AccessToken)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, srv)
+	}
+}
+
+func listConnectorCatalog(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, service.DefaultConnectorCatalog())
+	}
+}
+
+func installConnectorCatalog(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		catalogID := c.Param("id")
+		var entry *domain.ConnectorCatalogEntry
+		for _, e := range service.DefaultConnectorCatalog() {
+			if e.ID == catalogID {
+				cp := e
+				entry = &cp
+				break
+			}
+		}
+		if entry == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "catalog entry not found"})
+			return
+		}
+		var body struct {
+			Name string `json:"name"`
+		}
+		_ = c.ShouldBindJSON(&body)
+		req := service.InstallCatalogEntry(*entry, body.Name)
+		s, err := h.MCPServers.Create(c, req)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, s)
+	}
+}
+
+// ---- Automations ----
+
+func listAutomations(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.Automations == nil {
+			c.JSON(http.StatusOK, []domain.Automation{})
+			return
+		}
+		items, err := h.Automations.List(c)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, items)
+	}
+}
+
+func createAutomation(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.Automations == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "automations not configured"})
+			return
+		}
+		var req domain.UpsertAutomationRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		a, err := h.Automations.Create(c, req)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, a)
+	}
+}
+
+func getAutomation(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		a, err := h.Automations.Get(c, c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, a)
+	}
+}
+
+func updateAutomation(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req domain.UpsertAutomationRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		a, err := h.Automations.Update(c, c.Param("id"), req)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, a)
+	}
+}
+
+func deleteAutomation(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := h.Automations.Delete(c, c.Param("id")); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	}
+}
+
+func toggleAutomation(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		a, err := h.Automations.Toggle(c, c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, a)
+	}
+}
+
+func runAutomation(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		a, err := h.Automations.RunNow(c, c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, a)
+	}
+}
+
+func automationWebhook(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.Automations == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "automations not configured"})
+			return
+		}
+		path := "/hooks/" + strings.TrimPrefix(c.Param("path"), "/")
+		a, err := h.Automations.FindByWebhookPath(c, path)
+		if err != nil {
+			// also try raw path param
+			a, err = h.Automations.FindByWebhookPath(c, c.Param("path"))
+			if err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+				return
+			}
+		}
+		a, err = h.Automations.RunNow(c, a.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, a)
 	}
 }
 

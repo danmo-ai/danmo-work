@@ -11,26 +11,31 @@ import (
 )
 
 type agentFrontmatter struct {
-	ID          string                `yaml:"id"`
-	Name        string                `yaml:"name"`
-	Description string                `yaml:"description"`
-	Persona     string                `yaml:"persona"`
-	Mode        string                `yaml:"mode"`
-	Steps       int                   `yaml:"steps"`
-	Skills      []string              `yaml:"skills"`
-	Tools       []toolFrontmatter     `yaml:"tools"`
-	Knowledge   []string              `yaml:"knowledge"`
-	CanDelegate bool                  `yaml:"can_delegate"`
+	ID             string            `yaml:"id"`
+	Name           string            `yaml:"name"`
+	Description    string            `yaml:"description"`
+	Persona        string            `yaml:"persona"`
+	Mode           string            `yaml:"mode"`
+	Steps          int               `yaml:"steps"`
+	Skills         []string          `yaml:"skills"`
+	Tools          []toolFrontmatter `yaml:"tools"`
+	MCPServers     []string          `yaml:"mcp_servers"`
+	Knowledge      []string          `yaml:"knowledge"`
+	CanDelegate    bool              `yaml:"can_delegate"`
+	InheritAmbient *bool             `yaml:"inherit_ambient"`
 }
 
 type toolFrontmatter struct {
 	ToolID    string `yaml:"tool_id"`
-	MCP       string `yaml:"mcp"`
+	MCP       string `yaml:"mcp"`        // legacy → mcp_servers
+	MCPServer string `yaml:"mcp_server"` // legacy → mcp_servers
 	RiskLevel string `yaml:"risk_level"`
 }
 
 func parseRisk(s string) domain.RiskLevel {
 	switch strings.ToLower(s) {
+	case "external":
+		return domain.RiskExternal
 	case "high":
 		return domain.RiskHigh
 	case "medium":
@@ -89,25 +94,32 @@ func LoadTemplates() ([]AgentTemplate, error) {
 		}
 		var tools []domain.ToolBinding
 		for _, t := range fm.Tools {
+			mcp := t.MCPServer
+			if mcp == "" {
+				mcp = t.MCP
+			}
 			tools = append(tools, domain.ToolBinding{
 				ToolID:    t.ToolID,
-				MCPServer: t.MCP,
+				MCPServer: mcp,
 				RiskLevel: parseRisk(t.RiskLevel),
 			})
 		}
 		agent := domain.Agent{
-			ID:           fm.ID,
-			Name:         fm.Name,
-			Description:  fm.Description,
-			Persona:      fm.Persona,
-			Mode:         parseAgentMode(fm.Mode),
-			SystemPrompt: body,
-			Steps:        fm.Steps,
-			SkillIDs:     fm.Skills,
-			Tools:        tools,
-			KnowledgeIDs: fm.Knowledge,
-			CanDelegate:  fm.CanDelegate,
+			ID:             fm.ID,
+			Name:           fm.Name,
+			Description:    fm.Description,
+			Persona:        fm.Persona,
+			Mode:           parseAgentMode(fm.Mode),
+			SystemPrompt:   body,
+			Steps:          fm.Steps,
+			SkillIDs:       fm.Skills,
+			Tools:          tools,
+			MCPServers:     fm.MCPServers,
+			KnowledgeIDs:   fm.Knowledge,
+			CanDelegate:    fm.CanDelegate,
+			InheritAmbient: fm.InheritAmbient,
 		}
+		domain.NormalizeAgentBindings(&agent)
 		result = append(result, AgentTemplate{Agent: agent, Source: entry.Name()})
 	}
 	return result, nil

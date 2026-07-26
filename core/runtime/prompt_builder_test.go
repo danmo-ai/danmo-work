@@ -75,6 +75,9 @@ func TestBuildSystemPromptPolicies(t *testing.T) {
 	if !strings.Contains(noDelegate, "<ask-user-policy>") {
 		t.Fatal("ask-user-policy is global")
 	}
+	if !strings.Contains(noDelegate, "<mcp-tool-naming>") || !strings.Contains(noDelegate, "mcp_<server>_<tool>") {
+		t.Fatal("mcp-tool-naming policy is global")
+	}
 
 	// CanDelegate with empty peer list still gets the policy (no roster).
 	emptyPeers := buildSystemPrompt("persona", nil, nil, true, "", "", "", domain.SandboxStatus{})
