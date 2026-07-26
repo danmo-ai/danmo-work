@@ -11,6 +11,7 @@ import PreviewSurface from '@/components/office/PreviewSurface.vue'
 import OfficeAiToolbar from '@/components/office/OfficeAiToolbar.vue'
 import { confirm, toast } from '@/utils/feedback'
 import type { OfficeEditScope } from '@/utils/office-route'
+import { siblingSlidesMarkdownPath } from '@/utils/slides-render'
 import type { ElementAttachment } from '@/types/element-attachment'
 
 const props = defineProps<{
@@ -116,7 +117,32 @@ function close() {
   workspaceUi.closeStage()
 }
 
-function setMode(mode: 'view' | 'edit' | 'present') {
+async function setMode(mode: 'view' | 'edit' | 'present') {
+  if (!stage.value) return
+
+  // Slides Present: programmatically sync md → sibling html (no AI turn).
+  if (mode === 'present' && stage.value.kind === 'slides') {
+    if (/\.md$|\.markdown$/i.test(stage.value.path)) {
+      const saved = await ensureSaved()
+      if (!saved) return
+      await slidesRef.value?.presentFromMarkdown?.()
+      return
+    }
+    workspaceUi.setStageMode('present')
+    return
+  }
+
+  // From playable HTML back to Markdown source for edit/view.
+  if (
+    (mode === 'edit' || mode === 'view') &&
+    stage.value.kind === 'slides' &&
+    /\.html?$/i.test(stage.value.path)
+  ) {
+    const mdPath = siblingSlidesMarkdownPath(stage.value.path)
+    workspaceUi.setStagePath(mdPath, mode)
+    return
+  }
+
   workspaceUi.setStageMode(mode)
 }
 

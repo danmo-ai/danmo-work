@@ -83,7 +83,7 @@ export function buildOfficeEditPrompt(opts: {
   lines.push('>>>')
   lines.push(`instruction: ${opts.instruction?.trim() || '(none)'}`)
   lines.push(
-    '约束: 使用 read_file + edit/write 更新上述 path；不要改无关文件；不要输出整份 HTML 覆盖；完成后在 SUMMARY 写明变更位置。',
+    '约束: 使用 read_file + edit/write 更新上述 path；不要改无关文件；幻灯片不要手写/覆盖 playable HTML（Stage 会从 md 程序同步）；完成后在 SUMMARY 写明变更位置。',
   )
   return lines.join('\n')
 }

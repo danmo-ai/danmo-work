@@ -1,6 +1,8 @@
 # Playable Slides — Markdown examples
 
-Load this file when you need more slide patterns. Keep decks Stage-routable: `type: slides` frontmatter and/or `*-slides.md` filename, pages split by a line that is only `---`.
+Marp-compatible subset for Danmo Slides Stage. Stage programmatically renders playable HTML — author **Markdown only**.
+
+Keep decks Stage-routable: `type: slides` frontmatter and/or `*-slides.md` filename; pages split by a line that is only `---`.
 
 ## Two-column intent (approximate in MD)
 
@@ -30,7 +32,7 @@ title: Build vs Buy
 
 ## Decision
 
-> Ship MD-first decks; HTML is Present-only.
+> Ship MD-first decks; HTML is Stage-rendered.
 
 Owner: Platform · By: Friday
 ```
@@ -59,7 +61,7 @@ Prefer two slides (clearer thumbs) over one dense comparison.
 ## Before
 
 - Docs in chat
-- No Present mode
+- No Present sync
 - Edits rewrite whole files
 
 ---
@@ -67,7 +69,7 @@ Prefer two slides (clearer thumbs) over one dense comparison.
 ## After
 
 - `*-slides.md` in Stage
-- HTML Present
+- Present syncs HTML from Markdown
 - `[office-edit]` per page
 ```
 
@@ -80,7 +82,7 @@ Prefer two slides (clearer thumbs) over one dense comparison.
 
 ![Stage flow](../assets/stage-flow.png)
 
-Markdown edit → HTML present
+Markdown edit → Stage Present
 ```
 
 ## Speaker notes patterns
@@ -118,7 +120,7 @@ Office Stage focus
 ## Slides
 
 - MD source of truth
-- HTML Present
+- Stage renders Present HTML
 - Per-page AI edit
 
 ---

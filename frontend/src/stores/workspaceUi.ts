@@ -100,6 +100,14 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     stage.value = { ...stage.value, kind }
   }
 
+  /** Replace Stage path (and optional mode), e.g. md → sibling html for Present. */
+  function setStagePath(path: string, mode?: OfficeMode) {
+    if (!stage.value) return
+    const nextMode = mode ?? stage.value.mode
+    stage.value = { ...stage.value, path, mode: nextMode }
+    layoutMode.value = nextMode === 'present' ? 'immersive' : 'stage'
+  }
+
   function setStageUrl(url: string | undefined) {
     if (!stage.value) return
     if (stage.value.url === url) return
@@ -138,6 +146,7 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     closeStage,
     setStageMode,
     setStageKind,
+    setStagePath,
     setStageUrl,
     requestStageReload,
     openPalette,

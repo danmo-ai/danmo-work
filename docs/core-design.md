@@ -612,7 +612,7 @@ Files 树点击 → `routeOfficeFile`（`frontend/src/utils/office-route.ts`）�
 | Kind | 真相源（SoT） | Surface | 默认模式 |
 |------|---------------|---------|----------|
 | `doc` | GFM `.md` | TipTap（编辑会话 MD ↔ HTML） | edit |
-| `slides` | Markdown `---` 分页；`*-slides.html` 可播放 | 编辑 Markdown / present HTML | edit 或 present |
+| `slides` | Markdown SoT（Marp 兼容子集：`type: slides` + `---` 分页）；`*-slides.html` 为 Stage **程序**派生物 | 编辑 Markdown；Present 时脏检查同步 HTML | edit 或 present |
 | `sheet` | `.csv` / `.danmo-sheet.json` | 网格编辑 | edit |
 | `preview` | 通用 `.html`、图片、外链等 | iframe / 图片预览；URL 栏 + Design mode | view |
 

@@ -5,6 +5,16 @@ import { fetchJSON } from '@/api/client'
 import { apiBaseUrl } from '@/utils/desktop'
 import { toast } from '@/utils/feedback'
 import type { OfficeEditScope } from '@/utils/office-route'
+import { useWorkspaceUiStore } from '@/stores/workspaceUi'
+import {
+  hashSlidesSource,
+  isPlayableHtmlStale,
+  joinSlidePages,
+  renderPlayableSlidesHtml,
+  siblingPlayableHtmlPath,
+  siblingSlidesMarkdownPath,
+  splitSlidesForEditor,
+} from '@/utils/slides-render'
 
 const props = defineProps<{
   projectId: string
@@ -21,9 +31,12 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const workspaceUi = useWorkspaceUiStore()
 const loading = ref(false)
 const saving = ref(false)
+const syncing = ref(false)
 const source = ref('')
+const frontmatterRaw = ref('')
 const pages = ref<string[]>([])
 const pageIndex = ref(0)
 const dirty = ref(false)
@@ -38,20 +51,8 @@ const presentUrl = computed(() => {
   return `${apiBaseUrl()}/api/v1/projects/${props.projectId}/raw/${encodeURIComponent(props.path)}`
 })
 
-function splitSlides(md: string): string[] {
-  const trimmed = md.replace(/^\uFEFF/, '')
-  // Strip YAML frontmatter
-  let body = trimmed
-  if (body.startsWith('---')) {
-    const end = body.indexOf('\n---', 3)
-    if (end !== -1) body = body.slice(end + 4).replace(/^\r?\n/, '')
-  }
-  const parts = body.split(/^\s*---\s*$/m).map((p) => p.trim()).filter(Boolean)
-  return parts.length ? parts : [body.trim() || '']
-}
-
-function joinSlides(parts: string[]): string {
-  return parts.map((p) => p.trimEnd()).join('\n\n---\n\n') + '\n'
+function currentMarkdown(): string {
+  return joinSlidePages(pages.value, frontmatterRaw.value)
 }
 
 function captureScroll() {
@@ -65,7 +66,37 @@ async function restoreScroll() {
   if (thumbsRef.value) thumbsRef.value.scrollTop = thumbsScrollTop.value
 }
 
-async function load(opts?: { resetPage?: boolean }) {
+async function readFileContent(path: string): Promise<string | null> {
+  try {
+    const fc = await fetchJSON<{ content: string }>(
+      `/projects/${props.projectId}/files/content?path=${encodeURIComponent(path)}`,
+    )
+    return fc.content ?? ''
+  } catch {
+    return null
+  }
+}
+
+/** Deterministic Stage sync: rewrite sibling HTML only when md hash differs. */
+async function syncPlayableHtml(md: string, opts?: { force?: boolean }): Promise<string> {
+  const mdPath =
+    /\.md$|\.markdown$/i.test(props.path) ? props.path : siblingSlidesMarkdownPath(props.path)
+  const htmlPath = siblingPlayableHtmlPath(mdPath)
+
+  const hash = await hashSlidesSource(md)
+  if (!opts?.force) {
+    const existing = await readFileContent(htmlPath)
+    if (!isPlayableHtmlStale(existing, hash)) return htmlPath
+  }
+  const html = renderPlayableSlidesHtml(md, hash)
+  await fetchJSON(`/projects/${props.projectId}/files/content`, {
+    method: 'PUT',
+    body: JSON.stringify({ path: htmlPath, content: html }),
+  })
+  return htmlPath
+}
+
+async function load(opts?: { resetPage?: boolean; syncHtml?: boolean }) {
   if (!props.projectId || !props.path) return
   captureScroll()
   const keepPage = opts?.resetPage ? 0 : pageIndex.value
@@ -73,6 +104,7 @@ async function load(opts?: { resetPage?: boolean }) {
   try {
     if (isHtmlPresent.value) {
       source.value = ''
+      frontmatterRaw.value = ''
       pages.value = []
       pageIndex.value = 0
       emit('updatePageIndex', 0)
@@ -82,12 +114,19 @@ async function load(opts?: { resetPage?: boolean }) {
       `/projects/${props.projectId}/files/content?path=${encodeURIComponent(props.path)}`,
     )
     source.value = fc.content || ''
-    pages.value = splitSlides(source.value)
+    const parsed = splitSlidesForEditor(source.value)
+    frontmatterRaw.value = parsed.frontmatterRaw
+    pages.value = parsed.pages
     pageIndex.value = Math.min(keepPage, Math.max(0, pages.value.length - 1))
     dirty.value = false
     emit('dirty', false)
     emit('updatePageIndex', pageIndex.value)
     await restoreScroll()
+    if (opts?.syncHtml) {
+      void syncPlayableHtml(source.value).catch(() => {
+        /* silent background sync after AI reload */
+      })
+    }
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('office.loadFailed'))
   } finally {
@@ -99,7 +138,7 @@ async function save(opts?: { quiet?: boolean }) {
   if (isHtmlPresent.value || !props.projectId) return
   saving.value = true
   try {
-    const md = joinSlides(pages.value)
+    const md = currentMarkdown()
     await fetchJSON(`/projects/${props.projectId}/files/content`, {
       method: 'PUT',
       body: JSON.stringify({ path: props.path, content: md }),
@@ -108,12 +147,46 @@ async function save(opts?: { quiet?: boolean }) {
     dirty.value = false
     emit('dirty', false)
     emit('saved')
+    try {
+      await syncPlayableHtml(md, { force: true })
+    } catch (syncErr) {
+      toast.error(syncErr instanceof Error ? syncErr.message : t('office.slidesSyncFailed'))
+    }
     if (!opts?.quiet) toast.success(t('office.saved'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('office.saveFailed'))
     throw e
   } finally {
     saving.value = false
+  }
+}
+
+/** Ensure sibling HTML matches current md, then open it in Present mode. */
+async function presentFromMarkdown(): Promise<boolean> {
+  if (!props.projectId || isHtmlPresent.value) {
+    workspaceUi.setStageMode('present')
+    return true
+  }
+  syncing.value = true
+  try {
+    const md = dirty.value ? currentMarkdown() : source.value || currentMarkdown()
+    if (dirty.value) {
+      await fetchJSON(`/projects/${props.projectId}/files/content`, {
+        method: 'PUT',
+        body: JSON.stringify({ path: props.path, content: md }),
+      })
+      source.value = md
+      dirty.value = false
+      emit('dirty', false)
+    }
+    const htmlPath = await syncPlayableHtml(md)
+    workspaceUi.setStagePath(htmlPath, 'present')
+    return true
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('office.slidesSyncFailed'))
+    return false
+  } finally {
+    syncing.value = false
   }
 }
 
@@ -152,15 +225,27 @@ watch(
 
 watch(
   () => props.reloadToken,
-  () => load({ resetPage: false }),
+  () => load({ resetPage: false, syncHtml: !isHtmlPresent.value }),
 )
 
-defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading, pageIndex })
+defineExpose({
+  save,
+  presentFromMarkdown,
+  getSelectionMarkdown,
+  getEditScope,
+  dirty,
+  saving,
+  loading,
+  syncing,
+  pageIndex,
+})
 </script>
 
 <template>
   <div class="slides-surface">
-    <div v-if="loading" class="slides-surface__status">{{ t('office.loading') }}</div>
+    <div v-if="loading || syncing" class="slides-surface__status">
+      {{ syncing ? t('office.slidesSyncing') : t('office.loading') }}
+    </div>
 
     <iframe
       v-else-if="mode === 'present' && isHtmlPresent"
