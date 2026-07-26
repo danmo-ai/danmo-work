@@ -174,7 +174,8 @@ if [[ -d "$DMG_STAGING/Danmo Work.app" ]]; then
   mkdir -p "$DMG_DIR"
   APP_VERSION=$(plutil -extract CFBundleShortVersionString raw "$DMG_STAGING/Danmo Work.app/Contents/Info.plist" 2>/dev/null || echo "0.0.0")
   ARCH=$(uname -m)
-  DMG_NAME="Danmo Work_${APP_VERSION}_${ARCH}.dmg"
+  # Prefer space-free names for GitHub Releases / Homebrew Cask URLs
+  DMG_NAME="Danmo.Work_${APP_VERSION}_${ARCH}.dmg"
   echo "==> Creating DMG: $DMG_NAME"
   hdiutil create -volname "Danmo Work" -srcfolder "$DMG_STAGING" -ov -format UDZO "$DMG_DIR/$DMG_NAME" 2>/dev/null && echo "==> DMG created" || echo "WARNING: DMG creation failed"
 fi

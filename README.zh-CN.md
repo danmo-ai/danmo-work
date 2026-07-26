@@ -49,9 +49,21 @@ Danmo Work 保留**一流 Coding Agent 量级**的执行底盘，再问更大的
 
 | 平台 | 下载 |
 |------|------|
-| **macOS**（Apple Silicon） | [`.dmg`](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **macOS**（Apple Silicon） | [`.dmg`](https://github.com/danmo-ai/danmo-work/releases/latest) 或 Homebrew（见下） |
 | **Windows** | [安装包 `.exe`](https://github.com/danmo-ai/danmo-work/releases/latest) |
 | **Linux 服务端** | [`.tar.gz`](https://github.com/danmo-ai/danmo-work/releases/latest) |
+
+macOS 用 Homebrew（Apple Silicon）：
+
+```bash
+# 已创建 danmo-ai/homebrew-tap 时推荐：
+brew tap danmo-ai/tap
+brew install --cask danmo-work
+
+# 或直接 tap 本仓库（无需独立 tap 仓库）：
+brew tap danmo-ai/danmo-work https://github.com/danmo-ai/danmo-work.git
+brew install --cask danmo-work
+```
 
 源码运行（需同级 [`dq-ui`](https://github.com/danmo-ai/dq-ui)）：
 
@@ -407,6 +419,8 @@ SKIP_BACKEND=1 make dev-desktop
 | macOS desktop | `out/desktop/bundle/*.dmg`、`*.app` |
 | Linux server | `out/dist/danmo-work-linux-*.tar.gz` |
 | Windows desktop | `out/desktop/bundle/*.exe` |
+
+Homebrew：发版会更新 [`Casks/danmo-work.rb`](Casks/danmo-work.rb)。可选 secret `HOMEBREW_TAP_TOKEN` 同步到 [`danmo-ai/homebrew-tap`](https://github.com/danmo-ai/homebrew-tap)（`brew tap danmo-ai/tap`）。
 
 ## 文档
 

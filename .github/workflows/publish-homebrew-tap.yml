@@ -1,0 +1,32 @@
+name: Publish Homebrew Tap
+
+# Sync Casks/ into danmo-ai/homebrew-tap (brew tap danmo-ai/tap).
+# Create that empty public repo once and set secret HOMEBREW_TAP_TOKEN.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'Casks/**'
+      - 'scripts/publish_homebrew_tap.sh'
+      - 'scripts/update_homebrew_cask.sh'
+      - '.github/workflows/publish-homebrew-tap.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish danmo-ai/homebrew-tap
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Publish tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          chmod +x scripts/publish_homebrew_tap.sh
+          ./scripts/publish_homebrew_tap.sh

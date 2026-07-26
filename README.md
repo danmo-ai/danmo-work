@@ -49,9 +49,21 @@ Danmo Work keeps a **coding-agent-grade** execution core, then asks a wider ques
 
 | Platform | Download |
 |----------|----------|
-| **macOS** (Apple Silicon) | [`.dmg`](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **macOS** (Apple Silicon) | [`.dmg`](https://github.com/danmo-ai/danmo-work/releases/latest) or Homebrew (below) |
 | **Windows** | [Setup `.exe`](https://github.com/danmo-ai/danmo-work/releases/latest) |
 | **Linux server** | [`.tar.gz`](https://github.com/danmo-ai/danmo-work/releases/latest) |
+
+macOS via Homebrew (Apple Silicon):
+
+```bash
+# Preferred once danmo-ai/homebrew-tap exists:
+brew tap danmo-ai/tap
+brew install --cask danmo-work
+
+# Or tap this repo directly (no separate tap repo required):
+brew tap danmo-ai/danmo-work https://github.com/danmo-ai/danmo-work.git
+brew install --cask danmo-work
+```
 
 From source (needs sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui)):
 
@@ -406,6 +418,8 @@ SKIP_BACKEND=1 make dev-desktop
 | macOS desktop | `out/desktop/bundle/*.dmg`, `*.app` |
 | Linux server | `out/dist/danmo-work-linux-*.tar.gz` |
 | Windows desktop | `out/desktop/bundle/*.exe` |
+
+Homebrew: release bumps [`Casks/danmo-work.rb`](Casks/danmo-work.rb) on `main`. Optional secret `HOMEBREW_TAP_TOKEN` publishes the same cask to [`danmo-ai/homebrew-tap`](https://github.com/danmo-ai/homebrew-tap) (`brew tap danmo-ai/tap`).
 
 ## Docs
 
