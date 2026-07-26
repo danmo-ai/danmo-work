@@ -304,16 +304,33 @@ func resumeTurn(h *Handler) gin.HandlerFunc {
 func streamEvents(h *Handler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sessionID := c.Param("id")
+		since, _ := strconv.ParseInt(c.DefaultQuery("since_seq", "0"), 10, 64)
+		// Subscribe before backfill so live events published during the poll are buffered.
 		ch := h.Sessions.Subscribe(sessionID)
 		defer h.Sessions.Unsubscribe(sessionID, ch)
 		c.Writer.Header().Set("Content-Type", "text/event-stream")
 		c.Writer.Header().Set("Cache-Control", "no-cache")
 		c.Writer.Header().Set("Connection", "keep-alive")
+
+		maxSent := since
+		for _, ev := range h.Sessions.StreamEvents(sessionID, since) {
+			data, _ := json.Marshal(ev)
+			c.SSEvent("message", string(data))
+			if ev.Seq > maxSent {
+				maxSent = ev.Seq
+			}
+		}
+		c.Writer.Flush()
+
 		c.Stream(func(w io.Writer) bool {
 			ev, ok := <-ch
 			if !ok {
 				return false
 			}
+			if ev.Seq <= maxSent {
+				return true
+			}
+			maxSent = ev.Seq
 			data, _ := json.Marshal(ev)
 			c.SSEvent("message", string(data))
 			return true

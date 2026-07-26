@@ -54,6 +54,8 @@ func (m *StreamEventManager) Publish(ctx context.Context, sessionID, turnID, typ
 		select {
 		case ch <- ev:
 		default:
+			// Slow SSE consumer: drop rather than block the agent loop.
+			// Clients heal via since_seq backfill + events/poll gap fill.
 		}
 	}
 	m.mu.RUnlock()
@@ -62,7 +64,8 @@ func (m *StreamEventManager) Publish(ctx context.Context, sessionID, turnID, typ
 }
 
 func (m *StreamEventManager) Subscribe(sessionID string) chan domain.StreamEvent {
-	ch := make(chan domain.StreamEvent, 64)
+	// Larger buffer reduces drops during SSE backfill / UI stalls; still non-blocking.
+	ch := make(chan domain.StreamEvent, 256)
 	m.mu.Lock()
 	m.subs[sessionID] = append(m.subs[sessionID], ch)
 	m.mu.Unlock()
