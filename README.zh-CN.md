@@ -229,6 +229,10 @@ Project/
 | **ask_user** | 向用户提问也是一个 Tool，暂停等待响应后继续 Agent Loop |
 | **Memory** | 跨会话事实：`memory_update` / `memory_read`（作用域 user / project / agent） |
 
+### 连接器（MCP）
+
+产品级 SaaS 动作走 **MCP**（禁止一 API 一 builtin）。启用的 Server 经 `tools/list` 发现、`tools/call` 执行，并以 `mcp_<server>_<tool>` 挂进 Agent Loop（`external` 风险 → 权限门禁）。**连接器目录**提供 Composio / OpenConnector / GitHub / Notion / 飞书等预设；API Key 与 OAuth Token 存加密 secrets（不进 prompt）。IM 通道（微信 / 飞书 / 企微 / QQ）只做对话入口，不是 SaaS Action 连接器。自动化（cron / webhook）会真正开 session turn，并可 Turn Log 回放。
+
 ## 架构
 
 ```

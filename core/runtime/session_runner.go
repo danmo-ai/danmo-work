@@ -52,6 +52,7 @@ type Engine struct {
 	compactionMgr *CompactionManager
 	modelLimits   *ModelConfigRegistry
 	configStore   port.ConfigStore
+	mcpCaller     port.MCPCaller
 	dataDir       string
 	turnMessages  map[string][]Message
 	mu            sync.Mutex
@@ -190,6 +191,35 @@ func (e *Engine) RegisterTool(h tool.Handler) {
 		e.readSkill = rs
 	}
 	e.toolCatalog.Register(h)
+}
+
+// SetMCPCaller wires the MCP tool executor used by catalog handlers.
+func (e *Engine) SetMCPCaller(c port.MCPCaller) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.mcpCaller = c
+}
+
+// ReplaceMCPServer implements port.MCPToolSync.
+func (e *Engine) ReplaceMCPServer(serverID string, tools []domain.MCPToolBinding) {
+	e.mu.Lock()
+	caller := e.mcpCaller
+	e.mu.Unlock()
+	handlers := make([]tool.Handler, 0, len(tools))
+	for _, b := range tools {
+		handlers = append(handlers, tool.NewMCPHandler(b, func(ctx context.Context, sid, name string, args map[string]any) (string, error) {
+			if caller == nil {
+				return "", fmt.Errorf("mcp caller not configured")
+			}
+			return caller.CallTool(ctx, sid, name, args)
+		}))
+	}
+	e.toolCatalog.ReplaceServer(serverID, handlers...)
+}
+
+// RemoveMCPServer implements port.MCPToolSync.
+func (e *Engine) RemoveMCPServer(serverID string) {
+	e.toolCatalog.RemoveServer(serverID)
 }
 
 func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments []domain.UserAttachment) {
@@ -1102,6 +1132,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 	e.mountAlwaysOnBuiltins(reg)
 	e.mountBuiltinTools(reg, agent.Tools)
 	reg.MountFromBindings(agent.Tools)
+	reg.MountAllMCP()
 	return reg
 }
 
@@ -1120,6 +1151,7 @@ func (e *Engine) buildWorkerRegistry(agent domain.Agent) *tool.Registry {
 	e.mountAlwaysOnBuiltins(reg)
 	e.mountBuiltinTools(reg, agent.Tools)
 	reg.MountFromBindings(agent.Tools)
+	reg.MountAllMCP()
 	return reg
 }
 

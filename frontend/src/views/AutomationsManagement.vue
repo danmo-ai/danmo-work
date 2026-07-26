@@ -49,8 +49,8 @@ const headerTitle = computed(() => {
   return selected.value?.name.trim() || t('automations.untitled')
 })
 
-onMounted(() => {
-  agents.load()
+onMounted(async () => {
+  await Promise.all([agents.load(), automations.load()])
   if (sortedAutomations.value.length && !selectedId.value) {
     selectAutomation(sortedAutomations.value[0].id)
   }
@@ -80,7 +80,7 @@ function openCreate() {
   }
 }
 
-function save() {
+async function save() {
   if (!form.value.name.trim()) {
     toast.warning(t('automations.namePlaceholder'))
     return
@@ -96,12 +96,12 @@ function save() {
   saving.value = true
   try {
     if (isCreating.value) {
-      const item = automations.create({ ...form.value, name: form.value.name.trim() })
+      const item = await automations.create({ ...form.value, name: form.value.name.trim() })
       toast.success(t('automations.created'))
       isCreating.value = false
       selectAutomation(item.id)
     } else if (selected.value) {
-      automations.update(selected.value.id, { ...form.value })
+      await automations.update(selected.value.id, { ...form.value })
       toast.success(t('automations.saved'))
       selectAutomation(selected.value.id)
     }
@@ -112,6 +112,17 @@ function save() {
   }
 }
 
+async function runSelected() {
+  if (!selected.value) return
+  try {
+    const a = await automations.run(selected.value.id)
+    toast.success(t('automations.runStarted'))
+    selectAutomation(a.id)
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('automations.runFailed'))
+  }
+}
+
 async function removeSelected() {
   if (!selected.value) return
   try {
@@ -119,16 +130,16 @@ async function removeSelected() {
   } catch {
     return
   }
-  automations.remove(selected.value.id)
+  await automations.remove(selected.value.id)
   selectedId.value = null
   isCreating.value = false
   toast.success(t('automations.deleted'))
 }
 
-function toggleEnabled() {
+async function toggleEnabled() {
   if (!selected.value) return
-  automations.toggle(selected.value.id)
-  selectAutomation(selected.value.id)
+  const a = await automations.toggle(selected.value.id)
+  selectAutomation(a.id)
 }
 
 function initial(name: string) {
@@ -267,6 +278,7 @@ function onKeydown(e: KeyboardEvent) {
       <span class="resource-workspace__hint">{{ $t('common.saveShortcut') }}</span>
       <div class="resource-workspace__footer-actions">
         <DqButton v-if="isCreating" @click="isCreating = false; selectedId = null">{{ $t('common.cancel') }}</DqButton>
+        <DqButton v-if="!isCreating" @click="runSelected">{{ $t('automations.runNow') }}</DqButton>
         <DqButton v-if="!isCreating" @click="toggleEnabled">
           {{ selected?.enabled ? $t('automations.disabled') : $t('automations.enabled') }}
         </DqButton>

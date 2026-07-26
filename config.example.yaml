@@ -20,6 +20,9 @@ instance:
 # Runtime behaviour tuning.
 runtime:
   auto_approve: false
+  # Permission mode: discuss | plan | interactive (default) | auto
+  # discuss/plan deny writes/exec/MCP; interactive asks on high/external; auto still asks dangerous shell & external MCP.
+  permission_mode: "interactive"
   # OS sandbox for exec_shell (Seatbelt / Landlock|bwrap / win-token|WSL2).
   # Modes: read-only | workspace-write | danger-full-access
   # Network: deny | allow | allowlist (allowlist treated as allow in v1)

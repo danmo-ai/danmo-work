@@ -105,13 +105,29 @@ func TestEffectiveHTTPRequestRisk(t *testing.T) {
 	if got := EffectiveHTTPRequestRisk(domain.RiskMedium, "GET", nil); got != domain.RiskMedium {
 		t.Fatalf("GET = %s", got)
 	}
-	if got := EffectiveHTTPRequestRisk(domain.RiskMedium, "POST", nil); got != domain.RiskHigh {
+	if got := EffectiveHTTPRequestRisk(domain.RiskMedium, "POST", nil); got != domain.RiskExternal {
 		t.Fatalf("POST = %s", got)
 	}
-	if got := EffectiveHTTPRequestRisk(domain.RiskMedium, "GET", map[string]string{"Authorization": "Bearer x"}); got != domain.RiskHigh {
+	if got := EffectiveHTTPRequestRisk(domain.RiskMedium, "GET", map[string]string{"Authorization": "Bearer x"}); got != domain.RiskExternal {
 		t.Fatalf("auth header = %s", got)
 	}
 	if got := EffectiveHTTPRequestRisk(domain.RiskMedium, "GET", map[string]string{"X-Custom": "1"}); got != domain.RiskMedium {
 		t.Fatalf("custom header = %s", got)
+	}
+}
+
+func TestGateExternalAsk(t *testing.T) {
+	g := NewGate(nil)
+	r := g.CheckRequest(Request{ToolName: "mcp_notion_search", Risk: domain.RiskExternal})
+	if r.Decision != DecisionAsk || r.Reason != ReasonExternal {
+		t.Fatalf("got %+v", r)
+	}
+}
+
+func TestGateDiscussDenyWrite(t *testing.T) {
+	g := NewGate(nil)
+	r := g.CheckRequest(Request{ToolName: "write", Risk: domain.RiskMedium, Mode: domain.PermModeDiscuss})
+	if r.Decision != DecisionDeny {
+		t.Fatalf("got %+v", r)
 	}
 }

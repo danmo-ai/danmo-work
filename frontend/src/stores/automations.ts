@@ -1,59 +1,57 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Automation } from '@/types'
-
-const AUTO_KEY = 'danmo-work-automations'
-
-function loadJSON<T>(key: string): T[] {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? (JSON.parse(raw) as T[]) : []
-  } catch {
-    return []
-  }
-}
-
-function saveJSON<T>(key: string, items: T[]) {
-  localStorage.setItem(key, JSON.stringify(items))
-}
+import { fetchJSON, asArray } from '@/api/client'
 
 export const useAutomationsStore = defineStore('automations', () => {
-  const items = ref<Automation[]>(loadJSON<Automation>(AUTO_KEY))
+  const items = ref<Automation[]>([])
 
-  function save() {
-    saveJSON(AUTO_KEY, items.value)
+  async function load() {
+    const data = await fetchJSON<Automation[]>('/automations')
+    items.value = asArray(data)
   }
 
-  function create(payload: Omit<Automation, 'id'>) {
-    const automation: Automation = {
-      ...payload,
-      id: `auto-${Date.now()}`,
-    }
-    items.value.push(automation)
-    save()
+  async function create(payload: Omit<Automation, 'id'>) {
+    const automation = await fetchJSON<Automation>('/automations', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    items.value.unshift(automation)
     return automation
   }
 
-  function update(id: string, payload: Partial<Automation>) {
+  async function update(id: string, payload: Partial<Automation>) {
+    const automation = await fetchJSON<Automation>(`/automations/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
     const i = items.value.findIndex((a) => a.id === id)
-    if (i < 0) return undefined
-    items.value[i] = { ...items.value[i], ...payload }
-    save()
-    return items.value[i]
+    if (i >= 0) items.value[i] = automation
+    return automation
   }
 
-  function remove(id: string) {
+  async function remove(id: string) {
+    await fetchJSON(`/automations/${id}`, { method: 'DELETE' })
     items.value = items.value.filter((a) => a.id !== id)
-    save()
   }
 
-  function toggle(id: string) {
+  async function toggle(id: string) {
+    const automation = await fetchJSON<Automation>(`/automations/${id}/toggle`, {
+      method: 'POST',
+    })
     const i = items.value.findIndex((a) => a.id === id)
-    if (i < 0) return undefined
-    items.value[i].enabled = !items.value[i].enabled
-    save()
-    return items.value[i]
+    if (i >= 0) items.value[i] = automation
+    return automation
   }
 
-  return { items, create, update, remove, toggle }
+  async function run(id: string) {
+    const automation = await fetchJSON<Automation>(`/automations/${id}/run`, {
+      method: 'POST',
+    })
+    const i = items.value.findIndex((a) => a.id === id)
+    if (i >= 0) items.value[i] = automation
+    return automation
+  }
+
+  return { items, load, create, update, remove, toggle, run }
 })

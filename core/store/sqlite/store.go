@@ -61,6 +61,8 @@ func (s *Store) migrate() error {
 		&streamEventModel{},
 		&turnModel{},
 		&mcpServerModel{},
+		&secretModel{},
+		&automationModel{},
 		&weixinAccountModel{},
 		&weixinBindingModel{},
 		&channelBindingModel{},
@@ -115,6 +117,8 @@ func (s *Store) Approvals() port.ApprovalRepo       { return &approvalRepo{s} }
 func (s *Store) StreamEvents() port.StreamEventRepo { return &streamEventRepo{s} }
 func (s *Store) Turns() port.TurnRepo               { return &turnRepo{s} }
 func (s *Store) MCPServers() port.MCPServerRepo     { return &mcpServerRepo{s} }
+func (s *Store) Secrets() port.SecretStore          { return newSecretStore(s.db) }
+func (s *Store) Automations() port.AutomationRepo   { return &automationRepo{s} }
 func (s *Store) Memories() port.MemoryRepo          { return &memoryRepo{s} }
 func (s *Store) WeixinAccounts() port.WeixinAccountRepo { return &weixinAccountRepo{s} }
 func (s *Store) WeixinBindings() port.WeixinBindingRepo { return &weixinBindingRepo{s} }

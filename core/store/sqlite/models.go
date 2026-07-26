@@ -284,20 +284,28 @@ func turnFromDomain(t domain.TurnLog) turnModel {
 // ---- MCPServer ----
 
 type mcpServerModel struct {
-	ID                 string `gorm:"primaryKey"`
-	Name               string
-	Description        string
-	Transport          string
-	Command            string
-	Args               string
-	URL                string
-	Env                string
-	HeadersJSON        string `gorm:"column:headers"`
-	EnabledToolsJSON   string `gorm:"column:enabled_tools"`
+	ID                  string `gorm:"primaryKey"`
+	Name                string
+	Description         string
+	Transport           string
+	Command             string
+	Args                string
+	URL                 string
+	Env                 string
+	HeadersJSON         string `gorm:"column:headers"`
+	Auth                string `gorm:"column:auth"`
+	SecretHeadersRefJSON string `gorm:"column:secret_headers_ref"`
+	OAuthClientID       string `gorm:"column:oauth_client_id"`
+	OAuthAuthorizeURL   string `gorm:"column:oauth_authorize_url"`
+	OAuthTokenURL       string `gorm:"column:oauth_token_url"`
+	OAuthScopes         string `gorm:"column:oauth_scopes"`
+	OAuthStatus         string `gorm:"column:oauth_status"`
+	CatalogID           string `gorm:"column:catalog_id"`
+	EnabledToolsJSON    string `gorm:"column:enabled_tools"`
 	DiscoveredToolsJSON string `gorm:"column:discovered_tools"`
-	ToolTimeout        int    `gorm:"column:tool_timeout"`
-	Status             string
-	Enabled            bool
+	ToolTimeout         int    `gorm:"column:tool_timeout"`
+	Status              string
+	Enabled             bool
 }
 
 func (mcpServerModel) TableName() string { return "mcp_servers" }
@@ -315,6 +323,8 @@ func (m *mcpServerModel) BeforeSave(_ *gorm.DB) error {
 func mcpServerToDomain(m mcpServerModel) domain.MCPServer {
 	var headers map[string]string
 	_ = json.Unmarshal([]byte(m.HeadersJSON), &headers)
+	var secretRefs map[string]string
+	_ = json.Unmarshal([]byte(m.SecretHeadersRefJSON), &secretRefs)
 	var enabledTools []string
 	_ = json.Unmarshal([]byte(m.EnabledToolsJSON), &enabledTools)
 	if len(enabledTools) == 0 {
@@ -322,21 +332,33 @@ func mcpServerToDomain(m mcpServerModel) domain.MCPServer {
 	}
 	var discovered []domain.MCPToolDef
 	_ = json.Unmarshal([]byte(m.DiscoveredToolsJSON), &discovered)
+	auth := domain.MCPAuthMode(m.Auth)
+	if auth == "" {
+		auth = domain.MCPAuthNone
+	}
 	return domain.MCPServer{
-		ID:              m.ID,
-		Name:            m.Name,
-		Description:     m.Description,
-		Transport:       m.Transport,
-		Command:         m.Command,
-		Args:            m.Args,
-		URL:             m.URL,
-		Env:             m.Env,
-		Headers:         headers,
-		EnabledTools:    enabledTools,
-		DiscoveredTools: discovered,
-		ToolTimeout:     m.ToolTimeout,
-		Status:          m.Status,
-		Enabled:         m.Enabled,
+		ID:                 m.ID,
+		Name:               m.Name,
+		Description:        m.Description,
+		Transport:          m.Transport,
+		Command:            m.Command,
+		Args:               m.Args,
+		URL:                m.URL,
+		Env:                m.Env,
+		Headers:            headers,
+		Auth:               auth,
+		SecretHeadersRef:   secretRefs,
+		OAuthClientID:      m.OAuthClientID,
+		OAuthAuthorizeURL:  m.OAuthAuthorizeURL,
+		OAuthTokenURL:      m.OAuthTokenURL,
+		OAuthScopes:        m.OAuthScopes,
+		OAuthStatus:        m.OAuthStatus,
+		CatalogID:          m.CatalogID,
+		EnabledTools:       enabledTools,
+		DiscoveredTools:    discovered,
+		ToolTimeout:        m.ToolTimeout,
+		Status:             m.Status,
+		Enabled:            m.Enabled,
 	}
 }
 
@@ -345,6 +367,11 @@ func mcpServerFromDomain(s domain.MCPServer) mcpServerModel {
 	if len(s.Headers) > 0 {
 		b, _ := json.Marshal(s.Headers)
 		headersJSON = string(b)
+	}
+	secretRefsJSON := "{}"
+	if len(s.SecretHeadersRef) > 0 {
+		b, _ := json.Marshal(s.SecretHeadersRef)
+		secretRefsJSON = string(b)
 	}
 	enabledToolsJSON := `["*"]`
 	if len(s.EnabledTools) > 0 {
@@ -364,19 +391,31 @@ func mcpServerFromDomain(s domain.MCPServer) mcpServerModel {
 	if status == "" {
 		status = "disconnected"
 	}
+	auth := string(s.Auth)
+	if auth == "" {
+		auth = string(domain.MCPAuthNone)
+	}
 	return mcpServerModel{
-		ID:                  s.ID,
-		Name:                s.Name,
-		Description:         s.Description,
-		Transport:           s.Transport,
-		Command:             s.Command,
-		Args:                s.Args,
-		URL:                 s.URL,
-		Env:                 s.Env,
-		HeadersJSON:         headersJSON,
-		EnabledToolsJSON:    enabledToolsJSON,
-		DiscoveredToolsJSON: discoveredJSON,
-		ToolTimeout:         timeout,
+		ID:                   s.ID,
+		Name:                 s.Name,
+		Description:          s.Description,
+		Transport:            s.Transport,
+		Command:              s.Command,
+		Args:                 s.Args,
+		URL:                  s.URL,
+		Env:                  s.Env,
+		HeadersJSON:          headersJSON,
+		Auth:                 auth,
+		SecretHeadersRefJSON: secretRefsJSON,
+		OAuthClientID:        s.OAuthClientID,
+		OAuthAuthorizeURL:    s.OAuthAuthorizeURL,
+		OAuthTokenURL:        s.OAuthTokenURL,
+		OAuthScopes:          s.OAuthScopes,
+		OAuthStatus:          s.OAuthStatus,
+		CatalogID:            s.CatalogID,
+		EnabledToolsJSON:     enabledToolsJSON,
+		DiscoveredToolsJSON:  discoveredJSON,
+		ToolTimeout:          timeout,
 		Status:              status,
 		Enabled:             s.Enabled,
 	}

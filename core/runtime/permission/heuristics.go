@@ -96,8 +96,8 @@ var sensitiveHTTPHeaderNames = map[string]struct{}{
 // EffectiveHTTPRequestRisk raises risk for mutating methods or credential headers.
 // Base schema risk stays medium; callers pass handler.RiskLevel() as base.
 func EffectiveHTTPRequestRisk(base domain.RiskLevel, method string, headers map[string]string) domain.RiskLevel {
-	if base == domain.RiskHigh {
-		return domain.RiskHigh
+	if base == domain.RiskHigh || base == domain.RiskExternal {
+		return domain.RiskExternal
 	}
 	m := strings.ToUpper(strings.TrimSpace(method))
 	if m == "" {
@@ -105,11 +105,11 @@ func EffectiveHTTPRequestRisk(base domain.RiskLevel, method string, headers map[
 	}
 	switch m {
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-		return domain.RiskHigh
+		return domain.RiskExternal
 	}
 	for k := range headers {
 		if _, ok := sensitiveHTTPHeaderNames[strings.ToLower(strings.TrimSpace(k))]; ok {
-			return domain.RiskHigh
+			return domain.RiskExternal
 		}
 	}
 	if base == "" {

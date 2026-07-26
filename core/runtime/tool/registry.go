@@ -45,6 +45,36 @@ func (r *Registry) RegisterServer(serverID string, tools ...Handler) {
 	r.mcpServers[serverID] = append(r.mcpServers[serverID], tools...)
 }
 
+// ReplaceServer replaces all tools for a server id (empty clears).
+func (r *Registry) ReplaceServer(serverID string, tools ...Handler) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(tools) == 0 {
+		delete(r.mcpServers, serverID)
+		return
+	}
+	r.mcpServers[serverID] = append([]Handler(nil), tools...)
+}
+
+// RemoveServer drops a server's tool list from the catalog.
+func (r *Registry) RemoveServer(serverID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.mcpServers, serverID)
+}
+
+// MountAllMCP mounts every registered MCP server's tools into the active set.
+func (r *Registry) MountAllMCP() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for serverID, handlers := range r.mcpServers {
+		r.mounted[serverID] = struct{}{}
+		for _, h := range handlers {
+			r.registerLocked(h)
+		}
+	}
+}
+
 func (r *Registry) CopyMCPServersFrom(src *Registry) {
 	if src == nil {
 		return

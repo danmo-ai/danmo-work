@@ -9,6 +9,7 @@ import (
 	"danmo-work/core/adapter/config"
 	"danmo-work/core/adapter/feishu"
 	"danmo-work/core/adapter/llm"
+	adaptermcp "danmo-work/core/adapter/mcp"
 	"danmo-work/core/adapter/qq"
 	gitmarket "danmo-work/core/adapter/market/git"
 	"danmo-work/core/domain"
@@ -53,6 +54,7 @@ type Core struct {
 	Market        *service.MarketManager
 	TurnLogs      *service.TurnLogManager
 	MCPServers    *service.MCPManager
+	Automations   *service.AutomationManager
 	Weixin        *service.WeixinBridge
 	Feishu        *service.FeishuBridge
 	Wecom         *service.WecomBridge
@@ -127,6 +129,9 @@ func New(cfg Config) *Core {
 	turnLogManager := service.NewTurnLogManager(turnLog)
 	approvalManager := service.NewApprovalManager(st.Approvals())
 	mcpManager := service.NewMCPManager(st.MCPServers())
+	mcpManager.SetSecretStore(st.Secrets())
+	mcpDialer := adaptermcp.NewDialer()
+	mcpManager.SetDialer(mcpDialer)
 
 	llmConfigRepo := st.LLMConfig()
 	searchConfig := service.NewSearchConfigManager(loader)
@@ -189,6 +194,14 @@ func New(cfg Config) *Core {
 	}
 	eng.RegisterTool(&builtin.MemoryUpdate{Store: st.Memories()})
 	eng.RegisterTool(&builtin.MemoryRead{Store: st.Memories(), TopK: memTopK})
+
+	eng.SetMCPCaller(mcpManager)
+	mcpManager.SetToolSync(eng)
+	_ = mcpManager.SyncAll(context.Background())
+
+	automations := service.NewAutomationManager(st.Automations(), sessions, pm)
+	automations.StartScheduler()
+
 	eng.RecoverRunning(context.Background())
 
 	weixinPeer := service.NewWeixinPeerStore(st)
@@ -241,6 +254,7 @@ func New(cfg Config) *Core {
 		Market:        marketMgr,
 		TurnLogs:      turnLogManager,
 		MCPServers:    mcpManager,
+		Automations:   automations,
 		Weixin:        weixin,
 		Channels:      channels,
 		Feishu:        feishuBridge,
@@ -253,6 +267,9 @@ func New(cfg Config) *Core {
 func (c *Core) Close() error {
 	if c == nil {
 		return nil
+	}
+	if c.Automations != nil {
+		c.Automations.StopScheduler()
 	}
 	if c.Channels != nil {
 		c.Channels.StopAll()

@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import WorkspaceShell from '@/components/common/WorkspaceShell.vue'
 import { useMcpServersStore } from '@/stores/mcpServers'
 import { confirm, toast } from '@/utils/feedback'
-import type { MCPServer, MCPToolDef } from '@/types'
+import type { MCPAuthMode, MCPServer, MCPToolDef } from '@/types'
 
 type Transport = 'stdio' | 'sse' | 'streamable-http'
 
@@ -15,6 +15,9 @@ const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
 const saving = ref(false)
 const refreshingTools = ref(false)
+const headerSecretsText = ref('')
+const accessToken = ref('')
+const installingCatalogId = ref<string | null>(null)
 
 const transportOptions: { value: Transport; label: string }[] = [
   { value: 'stdio', label: 'STDIO' },
@@ -31,9 +34,29 @@ const form = ref<MCPServer>({
   args: '',
   url: '',
   env: '',
+  auth: 'none',
   status: 'disconnected',
   enabled: true,
 })
+
+const authOptions: { value: MCPAuthMode; label: string }[] = [
+  { value: 'none', label: t('mcpServers.authNone') },
+  { value: 'headers', label: t('mcpServers.authHeaders') },
+  { value: 'oauth', label: t('mcpServers.authOAuth') },
+]
+
+function parseSecrets(val: string): Record<string, string> {
+  const map: Record<string, string> = {}
+  for (const line of val.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    const eqIdx = trimmed.indexOf('=')
+    if (eqIdx > 0) {
+      map[trimmed.slice(0, eqIdx).trim()] = trimmed.slice(eqIdx + 1).trim()
+    }
+  }
+  return map
+}
 
 /** Editable text for headers (KEY=VALUE per line) */
 const headersText = computed({
@@ -73,7 +96,7 @@ const headerTitle = computed(() => {
 })
 
 onMounted(async () => {
-  await mcp.load()
+  await Promise.all([mcp.load(), mcp.loadCatalog()])
   if (sortedServers.value.length && !selectedId.value) {
     selectServer(sortedServers.value[0].id)
   }
@@ -98,9 +121,12 @@ function openCreate() {
     args: '',
     url: '',
     env: '',
+    auth: 'none',
     status: 'disconnected',
     enabled: true,
   }
+  headerSecretsText.value = ''
+  accessToken.value = ''
 }
 
 async function save() {
@@ -110,20 +136,49 @@ async function save() {
   }
   saving.value = true
   try {
+    const headerSecrets = parseSecrets(headerSecretsText.value)
+    const payload = { ...form.value, name: form.value.name.trim(), headerSecrets }
     if (isCreating.value) {
-      const server = await mcp.create({ ...form.value, name: form.value.name.trim() })
+      const server = await mcp.create(payload)
       toast.success(t('mcpServers.created'))
       isCreating.value = false
+      headerSecretsText.value = ''
       selectServer(server.id)
     } else if (selected.value) {
-      await mcp.update(selected.value.id, { ...form.value })
+      await mcp.update(selected.value.id, payload)
       toast.success(t('mcpServers.saved'))
+      headerSecretsText.value = ''
       selectServer(selected.value.id)
     }
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
   } finally {
     saving.value = false
+  }
+}
+
+async function installFromCatalog(catalogId: string) {
+  installingCatalogId.value = catalogId
+  try {
+    const server = await mcp.installCatalog(catalogId)
+    toast.success(t('mcpServers.catalogInstalled'))
+    selectServer(server.id)
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
+  } finally {
+    installingCatalogId.value = null
+  }
+}
+
+async function saveOAuthToken() {
+  if (!selected.value || !accessToken.value.trim()) return
+  try {
+    await mcp.completeOAuth(selected.value.id, { accessToken: accessToken.value.trim() })
+    accessToken.value = ''
+    toast.success(t('mcpServers.oauthSaved'))
+    selectServer(selected.value.id)
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
   }
 }
 
@@ -194,6 +249,20 @@ function onKeydown(e: KeyboardEvent) {
     @keydown="onKeydown"
   >
     <template #rail>
+      <div v-if="mcp.catalog.length" class="mcp-catalog">
+        <div class="mcp-catalog__title">{{ $t('mcpServers.catalog') }}</div>
+        <button
+          v-for="entry in mcp.catalog"
+          :key="entry.id"
+          type="button"
+          class="mcp-catalog__row"
+          :disabled="installingCatalogId === entry.id"
+          @click="installFromCatalog(entry.id)"
+        >
+          <span class="mcp-catalog__name">{{ entry.name }}</span>
+          <span class="mcp-catalog__action">{{ $t('mcpServers.installCatalog') }}</span>
+        </button>
+      </div>
       <DqEmpty v-if="!sortedServers.length" class="resource-rail__empty" :description="$t('mcpServers.noServers')" />
       <nav v-else class="resource-rail__list" :aria-label="$t('mcpServers.serverList')">
         <button
@@ -279,6 +348,26 @@ function onKeydown(e: KeyboardEvent) {
           <span class="resource-field__label">{{ $t('mcpServers.headers') }}</span>
           <DqInput v-model="headersText" class="resource-input-mono" type="textarea" :rows="3" :placeholder="$t('mcpServers.headersPlaceholder')" />
         </label>
+        <label class="resource-field">
+          <span class="resource-field__label">{{ $t('mcpServers.auth') }}</span>
+          <DqSelect v-model="form.auth" :placeholder="$t('mcpServers.auth')">
+            <DqOption v-for="opt in authOptions" :key="opt.value" :value="opt.value" :label="opt.label" />
+          </DqSelect>
+        </label>
+        <label v-if="form.auth === 'headers' || form.auth === 'oauth'" class="resource-field resource-field--block">
+          <span class="resource-field__label">{{ $t('mcpServers.headerSecrets') }}</span>
+          <DqInput v-model="headerSecretsText" class="resource-input-mono" type="textarea" :rows="3" :placeholder="$t('mcpServers.headerSecretsPlaceholder')" />
+        </label>
+        <div v-if="!isCreating && form.auth === 'oauth'" class="resource-form-grid resource-form-grid--2">
+          <label class="resource-field">
+            <span class="resource-field__label">{{ $t('mcpServers.pasteAccessToken') }}</span>
+            <DqInput v-model="accessToken" class="resource-input-mono" type="password" autocomplete="off" />
+          </label>
+          <div class="resource-field resource-field--toggle">
+            <span class="resource-field__label">&nbsp;</span>
+            <DqButton size="sm" @click="saveOAuthToken">{{ $t('mcpServers.completeOAuth') }}</DqButton>
+          </div>
+        </div>
         <!-- Discovered Tools -->
         <div class="resource-section__tools">
           <div class="resource-section__tools-header">
@@ -326,3 +415,43 @@ function onKeydown(e: KeyboardEvent) {
     </template>
   </WorkspaceShell>
 </template>
+
+<style scoped>
+.mcp-catalog {
+  padding: 8px 10px 4px;
+  border-bottom: 1px solid var(--dq-border, rgba(0, 0, 0, 0.08));
+  margin-bottom: 4px;
+}
+.mcp-catalog__title {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-bottom: 6px;
+}
+.mcp-catalog__row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.mcp-catalog__row:hover {
+  background: var(--dq-fill-muted, rgba(0, 0, 0, 0.04));
+}
+.mcp-catalog__name {
+  font-size: 13px;
+  flex: 1;
+  min-width: 0;
+}
+.mcp-catalog__action {
+  font-size: 12px;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+</style>

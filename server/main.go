@@ -34,9 +34,10 @@ func main() {
 		MarketHandler: &apiv1.MarketHandler{
 			Market: core.Market,
 		},
-		TurnLogs:   core.TurnLogs,
-		MCPServers: core.MCPServers,
-		Weixin:     core.Weixin,
+		TurnLogs:    core.TurnLogs,
+		MCPServers:  core.MCPServers,
+		Automations: core.Automations,
+		Weixin:      core.Weixin,
 		Feishu:     core.Feishu,
 		Wecom:      core.Wecom,
 		QQ:         core.QQ,

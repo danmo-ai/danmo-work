@@ -10,9 +10,20 @@ const (
 type RiskLevel string
 
 const (
-	RiskLow    RiskLevel = "low"
-	RiskMedium RiskLevel = "medium"
-	RiskHigh   RiskLevel = "high"
+	RiskLow      RiskLevel = "low"
+	RiskMedium   RiskLevel = "medium"
+	RiskHigh     RiskLevel = "high"
+	RiskExternal RiskLevel = "external" // side effects off-machine (MCP, outbound APIs)
+)
+
+// PermissionMode presets map to Gate behaviour (OpenWorker-aligned).
+type PermissionMode string
+
+const (
+	PermModeDiscuss     PermissionMode = "discuss"     // read-only: deny write/exec/external
+	PermModePlan        PermissionMode = "plan"        // read-only planning
+	PermModeInteractive PermissionMode = "interactive" // ask before high/external (default)
+	PermModeAuto        PermissionMode = "auto"        // allow within sandbox; still ask dangerous
 )
 
 type Agent struct {

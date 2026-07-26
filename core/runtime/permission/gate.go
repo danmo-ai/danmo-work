@@ -23,6 +23,8 @@ const (
 	ReasonUnsandboxed       = "unsandboxed"
 	ReasonRuleAsk           = "rule_ask"
 	ReasonHighRisk          = "high_risk"
+	ReasonExternal          = "external"
+	ReasonModeDeny          = "mode_deny"
 )
 
 // Request is the structured input for permission checks.
@@ -32,6 +34,7 @@ type Request struct {
 	Command             string // exec_shell command when applicable
 	Sandbox             domain.SandboxStatus
 	SessionAllowNetwork bool
+	Mode                domain.PermissionMode
 }
 
 // Result is the gate outcome.
@@ -42,10 +45,24 @@ type Result struct {
 
 type Gate struct {
 	Rules []domain.PermissionRule
+	Mode  domain.PermissionMode
 }
 
 func NewGate(rules []domain.PermissionRule) *Gate {
-	return &Gate{Rules: rules}
+	return &Gate{Rules: rules, Mode: domain.PermModeInteractive}
+}
+
+// WithMode returns a shallow copy with permission mode set.
+func (g *Gate) WithMode(mode domain.PermissionMode) *Gate {
+	if g == nil {
+		return NewGate(nil).WithMode(mode)
+	}
+	out := *g
+	if mode == "" {
+		mode = domain.PermModeInteractive
+	}
+	out.Mode = mode
+	return &out
 }
 
 // Check evaluates tool permission. Prefer CheckRequest for sandbox-aware policy.
@@ -53,11 +70,19 @@ func (g *Gate) Check(toolName string, risk domain.RiskLevel) Decision {
 	return g.CheckRequest(Request{ToolName: toolName, Risk: risk}).Decision
 }
 
-// CheckRequest applies mainstream-aligned policy:
-// non-high → allow (unless rules deny/ask);
-// exec_shell + strong sandbox → allow unless dangerous / network-denied;
-// otherwise high → ask.
+// CheckRequest applies mode + mainstream-aligned policy:
+// discuss/plan deny write/exec/external;
+// interactive asks on high/external;
+// auto allows medium writes but still asks dangerous shell / network-deny.
 func (g *Gate) CheckRequest(req Request) Result {
+	mode := req.Mode
+	if mode == "" && g != nil {
+		mode = g.Mode
+	}
+	if mode == "" {
+		mode = domain.PermModeInteractive
+	}
+
 	for _, r := range g.Rules {
 		if !matchPattern(r.Pattern, req.ToolName) {
 			continue
@@ -70,7 +95,17 @@ func (g *Gate) CheckRequest(req Request) Result {
 		}
 	}
 
-	if req.Risk != domain.RiskHigh {
+	if mode == domain.PermModeDiscuss || mode == domain.PermModePlan {
+		if isConsequentialRisk(req.Risk) || req.ToolName == "exec_shell" || strings.HasPrefix(req.ToolName, "mcp_") {
+			return Result{Decision: DecisionDeny, Reason: ReasonModeDeny}
+		}
+		if req.ToolName == "write" || req.ToolName == "edit" || req.ToolName == "apply_patch" {
+			return Result{Decision: DecisionDeny, Reason: ReasonModeDeny}
+		}
+		return Result{Decision: DecisionAllow}
+	}
+
+	if !isAskRisk(req.Risk) {
 		return Result{Decision: DecisionAllow}
 	}
 
@@ -84,13 +119,32 @@ func (g *Gate) CheckRequest(req Request) Result {
 			}
 			return Result{Decision: DecisionAsk, Reason: ReasonNetwork}
 		}
+		if mode == domain.PermModeAuto {
+			return Result{Decision: DecisionAllow}
+		}
 		return Result{Decision: DecisionAllow}
 	}
 
 	if req.ToolName == "exec_shell" {
 		return Result{Decision: DecisionAsk, Reason: ReasonUnsandboxed}
 	}
+
+	if mode == domain.PermModeAuto && req.Risk != domain.RiskExternal {
+		return Result{Decision: DecisionAllow}
+	}
+
+	if req.Risk == domain.RiskExternal || strings.HasPrefix(req.ToolName, "mcp_") {
+		return Result{Decision: DecisionAsk, Reason: ReasonExternal}
+	}
 	return Result{Decision: DecisionAsk, Reason: ReasonHighRisk}
+}
+
+func isAskRisk(risk domain.RiskLevel) bool {
+	return risk == domain.RiskHigh || risk == domain.RiskExternal
+}
+
+func isConsequentialRisk(risk domain.RiskLevel) bool {
+	return risk == domain.RiskHigh || risk == domain.RiskExternal || risk == domain.RiskMedium
 }
 
 func isStrongSandbox(st domain.SandboxStatus) bool {

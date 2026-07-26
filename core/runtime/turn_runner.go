@@ -184,6 +184,7 @@ type doomTurnState struct {
 
 type turnRunCfg struct {
 	autoApprove            bool
+	permissionMode         domain.PermissionMode
 	doomLoopThreshold      int
 	maxStepsDefault        int
 	maxLLMFailures         int
@@ -214,6 +215,10 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 		if c, err := p.ConfigStore.Load(ctx); err == nil {
 			rt := c.Runtime
 			cfg.autoApprove = rt.AutoApprove
+			cfg.permissionMode = rt.PermissionMode
+			if cfg.permissionMode == "" {
+				cfg.permissionMode = domain.PermModeInteractive
+			}
 			if rt.Turn.DoomLoopThreshold > 0 {
 				cfg.doomLoopThreshold = rt.Turn.DoomLoopThreshold
 			}
@@ -427,6 +432,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 				Command:             cmdStr,
 				Sandbox:             sbStatus,
 				SessionAllowNetwork: allowNet,
+				Mode:                cfg.permissionMode,
 			})
 			decision := permResult.Decision
 			if decision == permission.DecisionDeny {
