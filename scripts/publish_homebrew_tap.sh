@@ -40,6 +40,16 @@ fi
 if [[ "$HTTP" != "200" ]]; then
   echo "Failed to query ${TAP_SLUG} (HTTP ${HTTP})" >&2
   cat /tmp/tap-repo.json >&2 || true
+  if grep -qi 'lifetime is greater than' /tmp/tap-repo.json 2>/dev/null; then
+    echo >&2
+    echo "Fix: recreate HOMEBREW_TAP_TOKEN with Expiration ≤ 366 days" >&2
+    echo "(danmo-ai org forbids longer-lived fine-grained PATs), then" >&2
+    echo "update the danmo-work Actions secret and re-run Publish Homebrew Tap." >&2
+  elif grep -qi 'Bad credentials\|Resource not accessible\|requires authentication' /tmp/tap-repo.json 2>/dev/null; then
+    echo >&2
+    echo "Fix: HOMEBREW_TAP_TOKEN must be a valid PAT with Contents: Read and write" >&2
+    echo "on ${TAP_SLUG}. Resource owner: danmo-ai." >&2
+  fi
   exit 1
 fi
 
