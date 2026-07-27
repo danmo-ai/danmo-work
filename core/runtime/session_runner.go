@@ -788,7 +788,9 @@ func (e *Engine) delegatableAgents(agent domain.Agent) []domain.Agent {
 func (e *Engine) resolveAgentSkills(agent domain.Agent, workDir string) []domain.Skill {
 	bound := e.boundDBSkills(agent)
 	if !agent.InheritsAmbient() {
-		e.setTurnFSSkills(nil, nil)
+		// Do not clear the shared ReadSkill FS overlay. Parent turns (and
+		// parallel sibling tool calls) may still need it; subagent registries
+		// mount an isolated ReadSkill without that overlay.
 		return bound
 	}
 	fsSkills, fsFiles := service.ScanFilesystemSkills(workDir)
@@ -1096,9 +1098,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			childTurnID := fmt.Sprintf("turn-%d", time.Now().UnixNano())
 			workDir := e.dataDir
 			projectID := ""
-			var session domain.Session
 			if s, err := e.sessions.Get(ctx, sessionID); err == nil {
-				session = s
 				workDir = e.resolveWorkDir(ctx, s.ProjectID)
 				projectID = s.ProjectID
 			}
@@ -1135,19 +1135,29 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 				e.mu.Unlock()
 			}()
 
-			oldReg := e.turnRunner.Registry
-			oldSkills := e.turnRunner.SkillList
-			oldBindings := e.turnRunner.ToolBindings
-			oldLog := e.turnRunner.Log
-			e.turnRunner.Registry = e.setupRegistry(session, workerAgent)
-			defer func() {
-				e.turnRunner.Registry = oldReg
-				e.turnRunner.SkillList = oldSkills
-				e.turnRunner.ToolBindings = oldBindings
-				e.turnRunner.Log = oldLog
-			}()
+			// Isolated child runner so parallel delegate_agent calls do not
+			// mutate the parent's Registry / SkillList / Log mid-flight.
+			skills := e.resolveAgentSkills(workerAgent, workDir)
+			var childReg *tool.Registry
+			if agentHasDelegation(workerAgent) {
+				childReg = e.buildTeamRegistry(workerAgent)
+			} else {
+				childReg = e.buildWorkerRegistry(workerAgent)
+			}
+			childReg.Register(&builtin.ReadSkill{Skills: e.skills})
 
-			sys := buildSystemPrompt(workerAgent.SystemPrompt, e.turnRunner.SkillList, nil, workerAgent.CanDelegate, "", "", "", e.sandboxStatus())
+			childRunner := NewTurnRunner(e.llm, e.stream, e.turnRunner.Perm, childReg, e.configStore)
+			childRunner.Approval = e
+			childRunner.SandboxStatus = e.sandboxStatus
+			childRunner.SessionAllowNetwork = e.sessionAllowsNetwork
+			childRunner.FileChanges = e.turnRunner.FileChanges
+			childRunner.SkillList = skills
+			childRunner.ToolBindings = workerAgent.Tools
+			childRunner.Log = func(typ string, data map[string]any) {
+				e.turnLog.Append(childTurnID, typ, data)
+			}
+
+			sys := buildSystemPrompt(workerAgent.SystemPrompt, skills, nil, workerAgent.CanDelegate, "", "", "", e.sandboxStatus())
 			messages := []Message{
 				{Role: RoleSystem, Content: sys},
 			}
@@ -1164,9 +1174,6 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			// Nested tool-run log for zip/debug only — not parent LLM history.
 			e.turnLog.CreateNested(childTurnID, sessionID, projectID, workerAgent.ID, goal)
 			_ = e.turns.Create(ctx, domain.TurnLog{ID: childTurnID, SessionID: sessionID, AgentID: workerAgent.ID, Goal: goal, Status: domain.TurnRunning})
-			e.turnRunner.Log = func(typ string, data map[string]any) {
-				e.turnLog.Append(childTurnID, typ, data)
-			}
 			e.turnLog.Append(childTurnID, "user", map[string]any{"content": goal})
 
 			e.stream.Publish(ctx, sessionID, childTurnID, domain.EventTurnStarted, domain.TurnStartedPayload{
@@ -1174,7 +1181,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			})
 			e.stream.Publish(ctx, sessionID, childTurnID, domain.EventUserMessage, domain.UserMessagePayload{Content: goal})
 
-			rep, _, err := e.turnRunner.Run(ctx, childCtx)
+			rep, _, err := childRunner.Run(ctx, childCtx)
 			finalStatus := turnStatus(err, rep)
 			e.turnLog.EndTurn(childTurnID, finalStatus)
 			// Parent cancel leaves ctx cancelled; persist/publish with Background

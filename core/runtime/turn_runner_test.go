@@ -2,9 +2,13 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"danmo-work/core/adapter/llm"
 	"danmo-work/core/domain"
@@ -552,6 +556,281 @@ type failingLLM struct {
 func (f *failingLLM) Chat(_ context.Context, _ port.LLMChatRequest) (port.LLMChatResponse, error) {
 	f.calls++
 	return port.LLMChatResponse{}, fmt.Errorf("bad request (400): unknown variant image_url")
+}
+
+type barrierTool struct {
+	name    string
+	entered chan struct{}
+	release <-chan struct{}
+	calls   atomic.Int32
+}
+
+func (h *barrierTool) Name() string                        { return h.name }
+func (h *barrierTool) RiskLevel() domain.RiskLevel         { return domain.RiskLow }
+func (h *barrierTool) Describe(args map[string]any) string { return h.name }
+func (h *barrierTool) Schema() domain.ToolSchema {
+	return domain.ToolSchema{
+		Name: h.name, Description: "barrier mock",
+		Parameters: map[string]any{"type": "object", "properties": map[string]any{}},
+	}
+}
+func (h *barrierTool) Execute(ctx context.Context, _ map[string]any) (domain.ToolResult, error) {
+	h.calls.Add(1)
+	select {
+	case h.entered <- struct{}{}:
+	default:
+	}
+	select {
+	case <-h.release:
+		return domain.ToolResult{Content: h.name + "-ok"}, nil
+	case <-ctx.Done():
+		return domain.ToolResult{}, ctx.Err()
+	}
+}
+
+func TestTurnRunnerParallelToolExecute(t *testing.T) {
+	release := make(chan struct{})
+	a := &barrierTool{name: "tool_a", entered: make(chan struct{}, 1), release: release}
+	b := &barrierTool{name: "tool_b", entered: make(chan struct{}, 1), release: release}
+
+	mockLLM := llm.NewMock().
+		AddParallelToolCalls(
+			llm.ParallelCall{Name: "tool_a", Args: map[string]any{}},
+			llm.ParallelCall{Name: "tool_b", Args: map[string]any{}},
+		).
+		AddText("done")
+
+	stream := NewStreamEventManager(nil)
+	ch := stream.Subscribe("s-parallel")
+	defer stream.Unsubscribe("s-parallel", ch)
+
+	reg := tool.NewRegistry()
+	reg.Register(a)
+	reg.Register(b)
+	tr := NewTurnRunner(mockLLM, stream, permission.NewGate(nil), reg, &testConfigStore{
+		cfg: &domain.ConfigFile{Runtime: domain.ConfigRuntimeSection{
+			Turn: domain.ConfigTurnSection{DoomLoopThreshold: 10, MaxStepsDefault: 20},
+		}},
+	})
+
+	var (
+		wg     sync.WaitGroup
+		rep    domain.Report
+		msgs   []Message
+		runErr error
+	)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		rep, msgs, runErr = tr.Run(context.Background(), TurnContext{
+			SessionID: "s-parallel",
+			TurnID:    "t-parallel",
+			Agent:     domain.Agent{ID: "a", Steps: 20},
+			Model:     "mock",
+			MaxSteps:  20,
+			Messages: []Message{
+				{Role: RoleSystem, Content: "test"},
+				{Role: RoleUser, Content: "go"},
+			},
+		})
+	}()
+
+	// Both Executes must be in-flight before either finishes → true overlap.
+	timeout := time.After(2 * time.Second)
+	for _, entered := range []<-chan struct{}{a.entered, b.entered} {
+		select {
+		case <-entered:
+		case <-timeout:
+			t.Fatal("timed out waiting for parallel Execute overlap")
+		}
+	}
+	close(release)
+	wg.Wait()
+
+	if runErr != nil {
+		t.Fatalf("unexpected err: %v", runErr)
+	}
+	if rep.Status != domain.ReportDone {
+		t.Fatalf("expected done, got %s: %s", rep.Status, rep.Summary)
+	}
+	if a.calls.Load() != 1 || b.calls.Load() != 1 {
+		t.Fatalf("expected both tools once, got a=%d b=%d", a.calls.Load(), b.calls.Load())
+	}
+
+	// Results committed in original tool_calls order.
+	var toolMsgs []Message
+	for _, m := range msgs {
+		if m.Role == RoleTool {
+			toolMsgs = append(toolMsgs, m)
+		}
+	}
+	if len(toolMsgs) != 2 || toolMsgs[0].Name != "tool_a" || toolMsgs[1].Name != "tool_b" {
+		t.Fatalf("tool message order want [tool_a, tool_b], got %+v", toolMsgs)
+	}
+
+	// Status: starts are published serially before Execute; completes after.
+	deadline := time.After(2 * time.Second)
+	var seq []string
+collect:
+	for {
+		select {
+		case ev := <-ch:
+			switch ev.Type {
+			case domain.EventToolPending, domain.EventToolRunning, domain.EventToolCompleted:
+				seq = append(seq, ev.Type+":"+payloadToolName(ev))
+			case domain.EventTurnEnded, domain.EventReport:
+				break collect
+			}
+		case <-deadline:
+			break collect
+		}
+	}
+	wantStart := []string{
+		domain.EventToolPending + ":tool_a",
+		domain.EventToolRunning + ":tool_a",
+		domain.EventToolPending + ":tool_b",
+		domain.EventToolRunning + ":tool_b",
+	}
+	wantDone := []string{
+		domain.EventToolCompleted + ":tool_a",
+		domain.EventToolCompleted + ":tool_b",
+	}
+	if !containsSequence(seq, wantStart) {
+		t.Fatalf("missing serial tool starts before Execute;\nseq=%v\nwant %v", seq, wantStart)
+	}
+	if !containsSequence(seq, wantDone) {
+		t.Fatalf("missing serial completes after Execute;\nseq=%v\nwant %v", seq, wantDone)
+	}
+	// Starts must precede completes (no post-hoc pending after completed).
+	firstComplete := indexOf(seq, domain.EventToolCompleted+":tool_a")
+	lastStart := indexOf(seq, domain.EventToolRunning+":tool_b")
+	if firstComplete < 0 || lastStart < 0 || lastStart > firstComplete {
+		t.Fatalf("starts should all precede completes; seq=%v", seq)
+	}
+}
+
+func payloadToolName(ev domain.StreamEvent) string {
+	var part domain.ToolPart
+	if err := json.Unmarshal(ev.Payload, &part); err != nil {
+		return ""
+	}
+	return part.Name
+}
+
+func containsSequence(have, want []string) bool {
+	if len(want) == 0 {
+		return true
+	}
+	j := 0
+	for _, h := range have {
+		if h == want[j] {
+			j++
+			if j == len(want) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func indexOf(have []string, want string) int {
+	for i, h := range have {
+		if h == want {
+			return i
+		}
+	}
+	return -1
+}
+
+type blockingAskUser struct {
+	started chan struct{}
+	release <-chan struct{}
+	calls   atomic.Int32
+}
+
+func (h *blockingAskUser) Name() string                        { return "ask_user" }
+func (h *blockingAskUser) RiskLevel() domain.RiskLevel         { return domain.RiskLow }
+func (h *blockingAskUser) Describe(args map[string]any) string { return "ask_user" }
+func (h *blockingAskUser) Schema() domain.ToolSchema {
+	return domain.ToolSchema{
+		Name: "ask_user", Description: "ask",
+		Parameters: map[string]any{"type": "object", "properties": map[string]any{}},
+	}
+}
+func (h *blockingAskUser) Execute(ctx context.Context, _ map[string]any) (domain.ToolResult, error) {
+	h.calls.Add(1)
+	select {
+	case h.started <- struct{}{}:
+	default:
+	}
+	select {
+	case <-h.release:
+		return domain.ToolResult{Content: "user-yes"}, nil
+	case <-ctx.Done():
+		return domain.ToolResult{}, ctx.Err()
+	}
+}
+
+func TestTurnRunnerAskUserBeforeParallelTools(t *testing.T) {
+	askRelease := make(chan struct{})
+	toolRelease := make(chan struct{})
+	ask := &blockingAskUser{started: make(chan struct{}, 1), release: askRelease}
+	work := &barrierTool{name: "tool_a", entered: make(chan struct{}, 1), release: toolRelease}
+
+	mockLLM := llm.NewMock().
+		AddParallelToolCalls(
+			llm.ParallelCall{Name: "ask_user", Args: map[string]any{"question": "ok?"}},
+			llm.ParallelCall{Name: "tool_a", Args: map[string]any{}},
+		).
+		AddText("done")
+
+	reg := tool.NewRegistry()
+	reg.Register(ask)
+	reg.Register(work)
+	tr := NewTurnRunner(mockLLM, NewStreamEventManager(nil), permission.NewGate(nil), reg, &testConfigStore{
+		cfg: &domain.ConfigFile{Runtime: domain.ConfigRuntimeSection{
+			Turn: domain.ConfigTurnSection{DoomLoopThreshold: 10, MaxStepsDefault: 20},
+		}},
+	})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _, _ = tr.Run(context.Background(), TurnContext{
+			SessionID: "s-ask", TurnID: "t-ask",
+			Agent: domain.Agent{ID: "a", Steps: 20}, Model: "mock", MaxSteps: 20,
+			Messages: []Message{{Role: RoleUser, Content: "go"}},
+		})
+	}()
+
+	select {
+	case <-ask.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("ask_user should start first")
+	}
+	// While ask_user is waiting, the parallel tool must not have started.
+	select {
+	case <-work.entered:
+		t.Fatal("tool_a must not Execute before ask_user finishes")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(askRelease)
+
+	select {
+	case <-work.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("tool_a should run after ask_user")
+	}
+	close(toolRelease)
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("turn did not finish")
+	}
+	if ask.calls.Load() != 1 || work.calls.Load() != 1 {
+		t.Fatalf("calls ask=%d tool=%d", ask.calls.Load(), work.calls.Load())
+	}
 }
 
 func TestTurnRunnerStopsAfterMaxLLMFailures(t *testing.T) {

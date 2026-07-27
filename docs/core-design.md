@@ -262,12 +262,35 @@ Step 循环 1..MaxSteps (Agent.Steps 或默认 20):
   1. 可选 Turn 内压缩（tool result 去重/截断/配对）
   2. LLM Chat（含 function calling）
   3. 无 tool call → 最终文本报告，结束
-  4. 有 tool call → 权限门禁 → 审批等待（如需）→ 执行 Tool
+  4. 有 tool_calls[] → 按 LLM 并行 tool-call 规范执行（见 6.3.0）
   5. 立即 hard-cap Tool Result（见 6.3.1）→ 注入 messages / Stream / Turn Log
   末步强制 toolChoice=none + 最大步数提醒
 ```
 
 Doom-loop 检测、权限门禁、审批阻塞、`ask_user` 阻塞均在此层完成。
+
+#### 6.3.0 LLM 并行 Tool Call 规范
+
+模型在同一条 assistant 消息里返回多个 `tool_calls` 时，视为**显式并行意图**。人机交互前置，避免和副作用 tool 赛跑：
+
+```
+1. 串行门禁：doom / unknown / permission / approval（审批全部问完）
+2. 串行 start + Execute：ask_user（pending→running 后执行并答完）
+3. 串行 start：其余 tools 全部 pending→running
+4. 并行 Execute：其余 tools 的 handler.Execute
+5. 串行提交：completed|error + messages / Turn Log（按 call 顺序）
+```
+
+| 规则 | 行为 |
+|------|------|
+| 并行范围 | **只有**非交互 `Execute`；门禁、审批、start 状态、`ask_user`、结果提交均串行 |
+| 审批 | 前置：同批所有需审批的 call 先 `WaitApproval`，再进入 Execute |
+| `ask_user` | 前置：start 后串行 Execute，再给其余 tool 发 start / 并行 |
+| tool start | 前置串行：`pending` → `running` 在 Execute 之前发完 |
+| tool 结果 | 后置串行：全部 Execute 结束后按 call 顺序 `completed`/`error` + Turn Log |
+| Doom | 按 call 顺序累计；命中后该 call 及后续不再 Execute |
+| 取消 | ctx 取消后为未完成 call 补 `cancelled` |
+| `delegate_agent` | 独立 child `TurnRunner`，不改写父 Registry |
 
 #### 6.3.1 本地 Tool 输出硬上限
 
