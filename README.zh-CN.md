@@ -47,13 +47,36 @@ Danmo Work 保留**一流 Coding Agent 量级**的执行底盘，再问更大的
 
 ## 试用
 
-| 平台 | 下载 |
-|------|------|
-| **macOS**（Apple Silicon） | [`.dmg`](https://github.com/danmo-ai/danmo-work/releases/latest) |
-| **Windows** | [安装包 `.exe`](https://github.com/danmo-ai/danmo-work/releases/latest) |
-| **Linux 服务端** | [`.tar.gz`](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| 平台 | 通道 | 方式 |
+|------|------|------|
+| **macOS**（Apple Silicon） | **Homebrew**（有 brew 时推荐） | 见下 |
+| **macOS**（Apple Silicon） | `.dmg` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **Windows** | 安装包 `.exe` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **Linux 服务端** | `.tar.gz` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
 
-源码运行（需同级 [`dq-ui`](https://github.com/danmo-ai/dq-ui)）：
+### macOS — Homebrew
+
+```bash
+brew tap danmo-ai/tap
+brew install --cask danmo-work
+```
+
+之后升级：`brew update && brew upgrade --cask danmo-work`。
+
+备用（直接 tap 本仓库）：  
+`brew tap danmo-ai/danmo-work https://github.com/danmo-ai/danmo-work.git`
+
+cask 从 GitHub Releases 拉 `.dmg`。（国内镜像 `releases.danmo.ai` 可选。）
+
+尚未 Apple 公证：首次请在 Finder 中右键 app → **打开**（或到「系统设置 → 隐私与安全性」允许）。
+
+### macOS — DMG
+
+从 [Releases](https://github.com/danmo-ai/danmo-work/releases/latest) 下载 `Danmo.Work_*_arm64.dmg`，拖入「应用程序」，首次右键 → 打开。
+
+### 源码运行
+
+需同级 [`dq-ui`](https://github.com/danmo-ai/dq-ui)：
 
 ```bash
 make dev-web   # → http://localhost:5801/app/
@@ -407,6 +430,8 @@ SKIP_BACKEND=1 make dev-desktop
 | macOS desktop | `out/desktop/bundle/*.dmg`、`*.app` |
 | Linux server | `out/dist/danmo-work-linux-*.tar.gz` |
 | Windows desktop | `out/desktop/bundle/*.exe` |
+
+**macOS 通道：** GitHub Releases `.dmg`，或 Homebrew（`brew tap danmo-ai/tap` → [`danmo-ai/homebrew-tap`](https://github.com/danmo-ai/homebrew-tap)，由 `HOMEBREW_TAP_TOKEN` / **Publish Homebrew Tap** 同步）。cask 源：[`Casks/danmo-work.rb`](Casks/danmo-work.rb)。
 
 ## 文档
 

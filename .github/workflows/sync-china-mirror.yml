@@ -1,0 +1,70 @@
+name: Sync China Mirror
+
+# Backfill / re-sync GitHub Release assets (incl. .dmg for Homebrew) to
+# https://releases.danmo.ai/danmo-work when UPDATE_MIRROR_* secrets are set.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (e.g. v0.9.8). Empty = latest.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Sync release assets to mirror
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Resolve tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ -n "${{ inputs.tag }}" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="$(gh release view --repo "${{ github.repository }}" --json tagName -q .tagName)"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p release-assets
+          gh release download "${{ steps.tag.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --dir release-assets \
+            --pattern '*.dmg' \
+            --pattern '*.app.tar.gz' \
+            --pattern '*.app.tar.gz.sig' \
+            --pattern '*.nsis.zip' \
+            --pattern '*.nsis.zip.sig' \
+            --pattern '*setup.exe' \
+            --pattern '*setup.exe.sig' \
+            --pattern 'danmo-work-linux-*.tar.gz' \
+            --clobber
+          ls -la release-assets
+
+      - name: Sync China mirror
+        env:
+          UPDATE_MIRROR_BASE_URL: ${{ secrets.UPDATE_MIRROR_BASE_URL }}
+          UPDATE_MIRROR_S3_URI: ${{ secrets.UPDATE_MIRROR_S3_URI }}
+          UPDATE_MIRROR_RCLONE_REMOTE: ${{ secrets.UPDATE_MIRROR_RCLONE_REMOTE }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.UPDATE_MIRROR_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.UPDATE_MIRROR_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.UPDATE_MIRROR_AWS_REGION }}
+          AWS_ENDPOINT_URL: ${{ secrets.UPDATE_MIRROR_AWS_ENDPOINT_URL }}
+        run: |
+          chmod +x scripts/*.sh
+          ./scripts/sync_updater_mirror.sh \
+            --asset-dir release-assets \
+            --version "${{ steps.tag.outputs.version }}"

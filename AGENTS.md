@@ -116,6 +116,17 @@ Builds Go backend as a Tauri sidecar binary (`scripts/build_sidecar.sh`), inject
 - Linux server → `out/dist/danmo-work-linux-*.tar.gz`
 - Windows desktop → `out/desktop/bundle/**/*.exe`
 
+Homebrew cask: `Casks/danmo-work.rb` (bumped on `v*` release; URL =
+GitHub Releases `.dmg`). Short tap: `brew tap danmo-ai/tap` via repo
+`danmo-ai/homebrew-tap` + secret `HOMEBREW_TAP_TOKEN` (workflow
+**Publish Homebrew Tap**). Fallback: tap this repo with full URL.
+Optional China mirror `releases.danmo.ai` via `UPDATE_MIRROR_*`.
+
+```bash
+brew tap danmo-ai/tap
+brew install --cask danmo-work
+```
+
 Checks out `danmo-ai/dq-ui` alongside the repo.
 
 ## Architecture

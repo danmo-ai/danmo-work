@@ -38,7 +38,7 @@ Open-source AI Work Agent — coding-agent-grade loop for long-horizon work: cod
 
 同一思维链多 Agent；一切皆工具（含 `ask_user`）；Turn Log 可恢复可回放。Document Stage 直接改文档/幻灯片/表格；微信·飞书·企微·QQ 同一套 Loop，工具在本机跑。
 
-MIT，可自托管。https://github.com/danmo-ai/danmo-work/releases/latest
+MIT，可自托管。macOS：`brew tap danmo-ai/tap && brew install --cask danmo-work`，或 https://github.com/danmo-ai/danmo-work/releases/latest
 
 ---
 
@@ -56,8 +56,14 @@ MIT，可自托管。https://github.com/danmo-ai/danmo-work/releases/latest
 
 macOS / Windows / Linux，MIT。
 
-https://github.com/danmo-ai/danmo-work  
-https://github.com/danmo-ai/danmo-work/releases/latest
+macOS（Apple Silicon）：
+```bash
+brew tap danmo-ai/tap
+brew install --cask danmo-work
+```
+或 DMG：https://github.com/danmo-ai/danmo-work/releases/latest
+
+https://github.com/danmo-ai/danmo-work
 
 欢迎试用、提 Issue；也求轻拍 Star。
 
@@ -69,6 +75,8 @@ https://github.com/danmo-ai/danmo-work/releases/latest
 
 Pure LLM-driven. Sub-agents & humans are Tools. Turn Log → resume/replay. Self-hosted, MIT.
 
+macOS: `brew tap danmo-ai/tap && brew install --cask danmo-work`
+
 https://github.com/danmo-ai/danmo-work
 
 ---
@@ -78,5 +86,7 @@ https://github.com/danmo-ai/danmo-work
 **Show HN: Danmo Work – open-source AI Work Agent for long-horizon tasks**
 
 Most OSS agents optimize for writing code. Danmo Work keeps a coding-agent-grade loop, then runs the rest of the work on the same trail: the model plans Tool Calls; `delegate_agent` and `ask_user` are tools; every call is logged for resume/replay. Document Stage edits docs/slides/sheets in-project. MCP connectors, schema-free table store, and IM channels (WeChat/Feishu/WeCom/QQ) share the same Agent Loop.
+
+macOS (Apple Silicon): `brew tap danmo-ai/tap && brew install --cask danmo-work`
 
 Repo: https://github.com/danmo-ai/danmo-work

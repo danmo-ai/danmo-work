@@ -31,7 +31,9 @@ Optional China mirror secrets:
 - or `UPDATE_MIRROR_RCLONE_REMOTE` — rclone destination
 - `UPDATE_MIRROR_AWS_ACCESS_KEY_ID` / `UPDATE_MIRROR_AWS_SECRET_ACCESS_KEY` / `UPDATE_MIRROR_AWS_REGION` / `UPDATE_MIRROR_AWS_ENDPOINT_URL` as needed for S3-compatible storage
 
-App endpoints (in `tauri.conf.json`) try the China mirror first, then GitHub Releases `latest.json`.
+On each `v*` release, CI syncs updater payloads **and** the macOS `.dmg` to that mirror when secrets are set. App updater endpoints try the mirror first, then GitHub Releases `latest.json`. The Homebrew cask currently downloads from GitHub Releases (`Casks/danmo-work.rb`); point it at the mirror only after `releases.danmo.ai` is live.
+
+To backfill an older tag (e.g. after enabling mirror secrets), run workflow **Sync China Mirror** with the tag.
 
 Local pack with updater artifacts:
 

@@ -47,13 +47,36 @@ Danmo Work keeps a **coding-agent-grade** execution core, then asks a wider ques
 
 ## Try it
 
-| Platform | Download |
-|----------|----------|
-| **macOS** (Apple Silicon) | [`.dmg`](https://github.com/danmo-ai/danmo-work/releases/latest) |
-| **Windows** | [Setup `.exe`](https://github.com/danmo-ai/danmo-work/releases/latest) |
-| **Linux server** | [`.tar.gz`](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| Platform | Channel | How |
+|----------|---------|-----|
+| **macOS** (Apple Silicon) | **Homebrew** (recommended if you use brew) | see below |
+| **macOS** (Apple Silicon) | `.dmg` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **Windows** | Setup `.exe` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **Linux server** | `.tar.gz` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
 
-From source (needs sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui)):
+### macOS — Homebrew
+
+```bash
+brew tap danmo-ai/tap
+brew install --cask danmo-work
+```
+
+Upgrade later: `brew update && brew upgrade --cask danmo-work`.
+
+Fallback (tap this repo directly):  
+`brew tap danmo-ai/danmo-work https://github.com/danmo-ai/danmo-work.git`
+
+The cask downloads the `.dmg` from GitHub Releases. (A China mirror at `releases.danmo.ai` is optional later.)
+
+Not Apple-notarized yet — on first launch, right-click the app → **Open** (or allow under System Settings → Privacy & Security).
+
+### macOS — DMG
+
+Download `Danmo.Work_*_arm64.dmg` from [Releases](https://github.com/danmo-ai/danmo-work/releases/latest), drag into Applications, then right-click → Open the first time.
+
+### From source
+
+Needs sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui):
 
 ```bash
 make dev-web   # → http://localhost:5801/app/
@@ -406,6 +429,8 @@ SKIP_BACKEND=1 make dev-desktop
 | macOS desktop | `out/desktop/bundle/*.dmg`, `*.app` |
 | Linux server | `out/dist/danmo-work-linux-*.tar.gz` |
 | Windows desktop | `out/desktop/bundle/*.exe` |
+
+**macOS channels:** GitHub Releases `.dmg`, or Homebrew (`brew tap danmo-ai/tap` → [`danmo-ai/homebrew-tap`](https://github.com/danmo-ai/homebrew-tap), synced by `HOMEBREW_TAP_TOKEN` / **Publish Homebrew Tap**). Cask source of truth: [`Casks/danmo-work.rb`](Casks/danmo-work.rb).
 
 ## Docs
 
