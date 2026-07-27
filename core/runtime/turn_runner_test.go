@@ -668,8 +668,7 @@ func TestTurnRunnerParallelToolExecute(t *testing.T) {
 		t.Fatalf("tool message order want [tool_a, tool_b], got %+v", toolMsgs)
 	}
 
-	// Status events for a call appear only after both Executes finish, in order
-	// pending → running → completed per call.
+	// Status: starts are published serially before Execute; completes after.
 	deadline := time.After(2 * time.Second)
 	var seq []string
 collect:
@@ -686,16 +685,27 @@ collect:
 			break collect
 		}
 	}
-	want := []string{
+	wantStart := []string{
 		domain.EventToolPending + ":tool_a",
 		domain.EventToolRunning + ":tool_a",
-		domain.EventToolCompleted + ":tool_a",
 		domain.EventToolPending + ":tool_b",
 		domain.EventToolRunning + ":tool_b",
+	}
+	wantDone := []string{
+		domain.EventToolCompleted + ":tool_a",
 		domain.EventToolCompleted + ":tool_b",
 	}
-	if !containsSequence(seq, want) {
-		t.Fatalf("status sequence missing ordered commit after Execute;\nseq=%v\nwant subsequence %v", seq, want)
+	if !containsSequence(seq, wantStart) {
+		t.Fatalf("missing serial tool starts before Execute;\nseq=%v\nwant %v", seq, wantStart)
+	}
+	if !containsSequence(seq, wantDone) {
+		t.Fatalf("missing serial completes after Execute;\nseq=%v\nwant %v", seq, wantDone)
+	}
+	// Starts must precede completes (no post-hoc pending after completed).
+	firstComplete := indexOf(seq, domain.EventToolCompleted+":tool_a")
+	lastStart := indexOf(seq, domain.EventToolRunning+":tool_b")
+	if firstComplete < 0 || lastStart < 0 || lastStart > firstComplete {
+		t.Fatalf("starts should all precede completes; seq=%v", seq)
 	}
 }
 
@@ -721,6 +731,15 @@ func containsSequence(have, want []string) bool {
 		}
 	}
 	return false
+}
+
+func indexOf(have []string, want string) int {
+	for i, h := range have {
+		if h == want {
+			return i
+		}
+	}
+	return -1
 }
 
 type blockingAskUser struct {

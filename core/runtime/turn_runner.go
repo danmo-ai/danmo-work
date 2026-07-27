@@ -432,12 +432,11 @@ func isInteractiveTool(name string) bool {
 	return ok
 }
 
-// runToolCallBatch implements the LLM parallel tool-call contract with a
-// minimal shape:
-//  1. serial gate (doom / unknown / permission / approval) — approvals 前置
-//  2. serial Execute for interactive tools (ask_user) — also 前置
-//  3. parallel Execute for the remaining tools
-//  4. serial status + message commit in call order
+// runToolCallBatch implements the LLM parallel tool-call contract:
+//  1. serial gate (doom / unknown / permission / approval)
+//  2. serial start + Execute for interactive tools (ask_user)
+//  3. serial start for remaining tools, then parallel Execute
+//  4. serial completed|error + messages + Turn Log in call order
 func (p *TurnRunner) runToolCallBatch(
 	ctx context.Context,
 	tctx TurnContext,
@@ -493,7 +492,7 @@ func (p *TurnRunner) runToolCallBatch(
 			slots[i].content = "cancelled"
 			slots[i].errLabel = "cancelled"
 			slots[i].done = true
-			msgs = p.commitToolSlots(ctx, tctx, slots[:i+1], false)
+			msgs = p.commitToolResults(ctx, tctx, slots[:i+1])
 			msgs = p.closeUnfinishedToolCalls(tctx, msgs, assistantToolCalls)
 			return msgs, "", gateErr
 		}
@@ -507,21 +506,28 @@ func (p *TurnRunner) runToolCallBatch(
 		slots[i].exec = true
 	}
 
-	// --- 2) serial Execute for interactive tools (ask_user) before parallel ---
+	// --- 2) interactive tools: serial start + Execute (ask_user 前置) ---
 	for i := range slots {
 		slot := &slots[i]
 		if !slot.exec || !isInteractiveTool(slot.call.Name) {
 			continue
 		}
+		p.publishToolStart(ctx, tctx, slot)
 		if err := p.executeToolSlot(ctx, cfg, slot); err != nil {
-			msgs = p.commitToolSlots(ctx, tctx, slots, true)
+			msgs = p.commitToolResults(ctx, tctx, slots)
 			msgs = p.closeUnfinishedToolCalls(tctx, msgs, assistantToolCalls)
 			return msgs, "", err
 		}
-		// Already executed; keep exec=true so commit still emits run status.
 	}
 
-	// --- 3) parallel Execute for non-interactive tools only ---
+	// --- 3) non-interactive: serial start, then parallel Execute ---
+	for i := range slots {
+		slot := &slots[i]
+		if !slot.exec || slot.done || isInteractiveTool(slot.call.Name) {
+			continue
+		}
+		p.publishToolStart(ctx, tctx, slot)
+	}
 	var wg sync.WaitGroup
 	for i := range slots {
 		slot := &slots[i]
@@ -536,8 +542,8 @@ func (p *TurnRunner) runToolCallBatch(
 	}
 	wg.Wait()
 
-	// --- 4) serial status + message commit (after all Executes finish) ---
-	msgs = p.commitToolSlots(ctx, tctx, slots, true)
+	// --- 4) serial result commit: completed|error + messages + Turn Log ---
+	msgs = p.commitToolResults(ctx, tctx, slots)
 	if ctx.Err() != nil {
 		msgs = p.closeUnfinishedToolCalls(tctx, msgs, assistantToolCalls)
 		return msgs, "", ctx.Err()
@@ -570,25 +576,25 @@ func (p *TurnRunner) executeToolSlot(ctx context.Context, cfg turnRunCfg, slot *
 	return nil
 }
 
-// commitToolSlots publishes pending/running/completed|error and appends tool
-// messages in call order. emitRunStatus controls whether pending+running are
-// emitted for executed slots (true after a parallel batch finishes).
-func (p *TurnRunner) commitToolSlots(ctx context.Context, tctx TurnContext, slots []toolCallSlot, emitRunStatus bool) []Message {
+func (p *TurnRunner) publishToolStart(ctx context.Context, tctx TurnContext, slot *toolCallSlot) {
+	p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolPending, domain.ToolPart{
+		CallID: slot.call.ID, Name: slot.call.Name, Description: slot.describe,
+		Status: domain.ToolPending, Input: slot.call.Arguments,
+	})
+	p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolRunning, domain.ToolPart{
+		CallID: slot.call.ID, Name: slot.call.Name, Description: slot.describe,
+		Status: domain.ToolRunning, Input: slot.call.Arguments,
+	})
+}
+
+// commitToolResults publishes completed|error and appends tool messages / Turn Log
+// in call order. Start events must already have been published serially.
+func (p *TurnRunner) commitToolResults(ctx context.Context, tctx TurnContext, slots []toolCallSlot) []Message {
 	var msgs []Message
 	for i := range slots {
 		slot := &slots[i]
 		if !slot.done {
 			continue
-		}
-		if emitRunStatus && slot.exec {
-			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolPending, domain.ToolPart{
-				CallID: slot.call.ID, Name: slot.call.Name, Description: slot.describe,
-				Status: domain.ToolPending, Input: slot.call.Arguments,
-			})
-			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolRunning, domain.ToolPart{
-				CallID: slot.call.ID, Name: slot.call.Name, Description: slot.describe,
-				Status: domain.ToolRunning, Input: slot.call.Arguments,
-			})
 		}
 		if slot.errLabel != "" {
 			pubCtx := ctx
