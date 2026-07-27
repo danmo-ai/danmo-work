@@ -44,3 +44,9 @@ make pack-macos-desktop
 ```
 
 Private keys under `desktop/src-tauri/keys/` are gitignored.
+
+## Windows Authenticode (separate from updater)
+
+Updater signatures do **not** clear SmartScreen. See
+[`windows-authenticode.md`](./windows-authenticode.md) for SignPath Foundation
+wiring (`SIGNPATH_API_TOKEN` / `SIGNPATH_ORGANIZATION_ID`).

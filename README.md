@@ -74,6 +74,12 @@ Not Apple-notarized yet — on first launch, right-click the app → **Open** (o
 
 Download `Danmo.Work_*_arm64.dmg` from [Releases](https://github.com/danmo-ai/danmo-work/releases/latest), drag into Applications, then right-click → Open the first time.
 
+### Windows
+
+Download `Danmo.Work_*_x64-setup.exe` from [Releases](https://github.com/danmo-ai/danmo-work/releases/latest).
+
+Until Authenticode is enabled in release CI ([SignPath setup](docs/windows-authenticode.md)), SmartScreen may warn — **More info → Run anyway**. On Windows 11 with Smart App Control, unsigned installers can be hard-blocked; signing is the real fix.
+
 ### From source
 
 Needs sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui):

@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: write
+  # SignPath pulls the unsigned Windows installer via the Actions artifact API.
+  actions: read
 
 env:
   GO_VERSION: '1.26'
@@ -266,6 +268,88 @@ jobs:
         run: |
           chmod +x scripts/*.sh
           make pack-windows-desktop RELEASE_VERSION="$RELEASE_VERSION"
+
+      # Authenticode via SignPath (optional). Rewrites PE bytes — must run BEFORE
+      # final updater .sig / latest.json. Skips cleanly when SIGNPATH_* unset.
+      - name: Detect SignPath
+        id: signpath
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+        shell: bash
+        run: |
+          if [[ -n "${SIGNPATH_API_TOKEN:-}" && -n "${SIGNPATH_ORGANIZATION_ID:-}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            if [[ "${{ vars.SIGNPATH_RELEASE_SIGNING_READY }}" == "true" ]]; then
+              echo "policy=release-signing" >> "$GITHUB_OUTPUT"
+            else
+              echo "policy=test-signing" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "WARNING: SIGNPATH_* secrets unset — shipping unsigned Windows installer (SmartScreen)"
+          fi
+
+      - name: Stage unsigned installer (flat)
+        if: steps.signpath.outputs.enabled == 'true'
+        working-directory: ${{ env.REPO_DIR }}
+        shell: bash
+        run: |
+          mkdir -p out/desktop/signpath-upload
+          SRC="$(find out/desktop/bundle -type f -name '*x64-setup.exe' | head -1)"
+          if [[ -z "$SRC" || ! -f "$SRC" ]]; then
+            echo "ERROR: no *x64-setup.exe under out/desktop/bundle" >&2
+            exit 1
+          fi
+          cp -f "$SRC" "out/desktop/signpath-upload/$(basename "$SRC")"
+          ls -la out/desktop/signpath-upload/
+
+      - name: Upload unsigned installer for SignPath
+        if: steps.signpath.outputs.enabled == 'true'
+        id: unsigned-installer
+        uses: actions/upload-artifact@v6
+        with:
+          name: danmo-work-windows-unsigned-installer
+          # Flat layout so SignPath zip root matches Danmo.Work_*_x64-setup.exe
+          path: ${{ env.REPO_DIR }}/out/desktop/signpath-upload/*
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Authenticode-sign installer (SignPath)
+        if: steps.signpath.outputs.enabled == 'true'
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: danmo-work
+          signing-policy-slug: ${{ steps.signpath.outputs.policy }}
+          artifact-configuration-slug: windows-installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: ${{ env.REPO_DIR }}/out/desktop/signed-installer
+
+      - name: Apply signed installer + resign updater
+        if: steps.signpath.outputs.enabled == 'true'
+        working-directory: ${{ env.REPO_DIR }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          chmod +x scripts/*.sh
+          SIGNED="$(find out/desktop/signed-installer -type f -name '*x64-setup.exe' | head -1 || true)"
+          if [[ -z "$SIGNED" || ! -f "$SIGNED" ]]; then
+            echo "ERROR: SignPath output missing *x64-setup.exe under out/desktop/signed-installer" >&2
+            find out/desktop/signed-installer -type f 2>/dev/null || true
+            exit 1
+          fi
+          DEST="$(find out/desktop/bundle -type f -name '*x64-setup.exe' | head -1)"
+          if [[ -z "$DEST" || ! -f "$DEST" ]]; then
+            echo "ERROR: no setup.exe under out/desktop/bundle to replace" >&2
+            exit 1
+          fi
+          cp -f "$SIGNED" "$DEST"
+          echo "Replaced $DEST with Authenticode-signed installer"
+          scripts/ci_resign_windows_updater.sh out/desktop/bundle
 
       - name: Upload Windows desktop artifact
         uses: actions/upload-artifact@v6
