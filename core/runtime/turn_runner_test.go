@@ -723,6 +723,97 @@ func containsSequence(have, want []string) bool {
 	return false
 }
 
+type blockingAskUser struct {
+	started chan struct{}
+	release <-chan struct{}
+	calls   atomic.Int32
+}
+
+func (h *blockingAskUser) Name() string                        { return "ask_user" }
+func (h *blockingAskUser) RiskLevel() domain.RiskLevel         { return domain.RiskLow }
+func (h *blockingAskUser) Describe(args map[string]any) string { return "ask_user" }
+func (h *blockingAskUser) Schema() domain.ToolSchema {
+	return domain.ToolSchema{
+		Name: "ask_user", Description: "ask",
+		Parameters: map[string]any{"type": "object", "properties": map[string]any{}},
+	}
+}
+func (h *blockingAskUser) Execute(ctx context.Context, _ map[string]any) (domain.ToolResult, error) {
+	h.calls.Add(1)
+	select {
+	case h.started <- struct{}{}:
+	default:
+	}
+	select {
+	case <-h.release:
+		return domain.ToolResult{Content: "user-yes"}, nil
+	case <-ctx.Done():
+		return domain.ToolResult{}, ctx.Err()
+	}
+}
+
+func TestTurnRunnerAskUserBeforeParallelTools(t *testing.T) {
+	askRelease := make(chan struct{})
+	toolRelease := make(chan struct{})
+	ask := &blockingAskUser{started: make(chan struct{}, 1), release: askRelease}
+	work := &barrierTool{name: "tool_a", entered: make(chan struct{}, 1), release: toolRelease}
+
+	mockLLM := llm.NewMock().
+		AddParallelToolCalls(
+			llm.ParallelCall{Name: "ask_user", Args: map[string]any{"question": "ok?"}},
+			llm.ParallelCall{Name: "tool_a", Args: map[string]any{}},
+		).
+		AddText("done")
+
+	reg := tool.NewRegistry()
+	reg.Register(ask)
+	reg.Register(work)
+	tr := NewTurnRunner(mockLLM, NewStreamEventManager(nil), permission.NewGate(nil), reg, &testConfigStore{
+		cfg: &domain.ConfigFile{Runtime: domain.ConfigRuntimeSection{
+			Turn: domain.ConfigTurnSection{DoomLoopThreshold: 10, MaxStepsDefault: 20},
+		}},
+	})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _, _ = tr.Run(context.Background(), TurnContext{
+			SessionID: "s-ask", TurnID: "t-ask",
+			Agent: domain.Agent{ID: "a", Steps: 20}, Model: "mock", MaxSteps: 20,
+			Messages: []Message{{Role: RoleUser, Content: "go"}},
+		})
+	}()
+
+	select {
+	case <-ask.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("ask_user should start first")
+	}
+	// While ask_user is waiting, the parallel tool must not have started.
+	select {
+	case <-work.entered:
+		t.Fatal("tool_a must not Execute before ask_user finishes")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(askRelease)
+
+	select {
+	case <-work.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("tool_a should run after ask_user")
+	}
+	close(toolRelease)
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("turn did not finish")
+	}
+	if ask.calls.Load() != 1 || work.calls.Load() != 1 {
+		t.Fatalf("calls ask=%d tool=%d", ask.calls.Load(), work.calls.Load())
+	}
+}
+
 func TestTurnRunnerStopsAfterMaxLLMFailures(t *testing.T) {
 	failing := &failingLLM{}
 	stream := NewStreamEventManager(nil)

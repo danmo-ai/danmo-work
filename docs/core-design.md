@@ -271,17 +271,20 @@ Doom-loop 检测、权限门禁、审批阻塞、`ask_user` 阻塞均在此层�
 
 #### 6.3.0 LLM 并行 Tool Call 规范
 
-模型在同一条 assistant 消息里返回多个 `tool_calls` 时，视为**显式并行意图**。实现刻意保持三段式，避免把状态机并行化：
+模型在同一条 assistant 消息里返回多个 `tool_calls` 时，视为**显式并行意图**。人机交互前置，避免和副作用 tool 赛跑：
 
 ```
-1. 串行门禁：doom / unknown / permission / approval（含 ask）
-2. 并行 Execute：仅 handler.Execute 并发
-3. 串行提交：全部 Execute 结束后，按 call 顺序更新 pending→running→completed|error，写入 messages / Turn Log
+1. 串行门禁：doom / unknown / permission / approval（审批全部问完）
+2. 串行 Execute：ask_user 等 interactive tools（全部答完）
+3. 并行 Execute：其余 tools 的 handler.Execute
+4. 串行提交：全部结束后按 call 顺序 pending→running→completed|error + messages / Turn Log
 ```
 
 | 规则 | 行为 |
 |------|------|
-| 并行范围 | **只有** `Execute`；门禁与 stream 状态更新均串行 |
+| 并行范围 | **只有**非交互 `Execute`；门禁、审批、`ask_user`、stream 状态均串行 |
+| 审批 | 前置：同批所有需审批的 call 先 `WaitApproval`，再进入 Execute |
+| `ask_user` | 前置：同批 ask_user 串行跑完，再并行其余 tool |
 | 提交顺序 | tool result 按原始 `tool_calls` 顺序（配对靠 `tool_call_id`） |
 | Doom | 按 call 顺序累计；命中后该 call 及后续不再 Execute |
 | 取消 | ctx 取消后为未完成 call 补 `cancelled` |

@@ -421,11 +421,23 @@ type toolCallSlot struct {
 	doom     bool
 }
 
+// interactiveToolNames must finish before any parallel Execute. They block on
+// humans; running them alongside side-effect tools races the user's answer.
+var interactiveToolNames = map[string]struct{}{
+	"ask_user": {},
+}
+
+func isInteractiveTool(name string) bool {
+	_, ok := interactiveToolNames[name]
+	return ok
+}
+
 // runToolCallBatch implements the LLM parallel tool-call contract with a
 // minimal shape:
-//  1. serial gate (doom / unknown / permission / approval)
-//  2. parallel Execute only
-//  3. serial status + message commit in call order
+//  1. serial gate (doom / unknown / permission / approval) — approvals 前置
+//  2. serial Execute for interactive tools (ask_user) — also 前置
+//  3. parallel Execute for the remaining tools
+//  4. serial status + message commit in call order
 func (p *TurnRunner) runToolCallBatch(
 	ctx context.Context,
 	tctx TurnContext,
@@ -435,7 +447,7 @@ func (p *TurnRunner) runToolCallBatch(
 ) (msgs []Message, doomSummary string, err error) {
 	slots := make([]toolCallSlot, len(calls))
 
-	// --- 1) serial gate ---
+	// --- 1) serial gate (includes permission approval waits) ---
 	for i, call := range calls {
 		select {
 		case <-ctx.Done():
@@ -495,43 +507,67 @@ func (p *TurnRunner) runToolCallBatch(
 		slots[i].exec = true
 	}
 
-	// --- 2) parallel Execute only (no stream status here) ---
+	// --- 2) serial Execute for interactive tools (ask_user) before parallel ---
+	for i := range slots {
+		slot := &slots[i]
+		if !slot.exec || !isInteractiveTool(slot.call.Name) {
+			continue
+		}
+		if err := p.executeToolSlot(ctx, cfg, slot); err != nil {
+			msgs = p.commitToolSlots(ctx, tctx, slots, true)
+			msgs = p.closeUnfinishedToolCalls(tctx, msgs, assistantToolCalls)
+			return msgs, "", err
+		}
+		// Already executed; keep exec=true so commit still emits run status.
+	}
+
+	// --- 3) parallel Execute for non-interactive tools only ---
 	var wg sync.WaitGroup
 	for i := range slots {
-		if !slots[i].exec {
+		slot := &slots[i]
+		if !slot.exec || slot.done || isInteractiveTool(slot.call.Name) {
 			continue
 		}
 		wg.Add(1)
 		go func(slot *toolCallSlot) {
 			defer wg.Done()
-			result, execErr := slot.handler.Execute(ctx, slot.args)
-			if execErr != nil {
-				errContent := limitToolOutput(execErr.Error()+toolErrorHint, cfg.maxToolOutputChars)
-				errLabel := execErr.Error()
-				if errors.Is(execErr, context.Canceled) || ctx.Err() != nil {
-					errLabel = "cancelled"
-					errContent = "cancelled" + toolErrorHint
-				}
-				slot.content = errContent
-				slot.errLabel = errLabel
-				slot.done = true
-				return
-			}
-			result.Content = limitToolOutput(result.Content, cfg.maxToolOutputChars)
-			slot.result = result
-			slot.content = result.Content
-			slot.done = true
+			_ = p.executeToolSlot(ctx, cfg, slot)
 		}(&slots[i])
 	}
 	wg.Wait()
 
-	// --- 3) serial status + message commit (after all Executes finish) ---
+	// --- 4) serial status + message commit (after all Executes finish) ---
 	msgs = p.commitToolSlots(ctx, tctx, slots, true)
 	if ctx.Err() != nil {
 		msgs = p.closeUnfinishedToolCalls(tctx, msgs, assistantToolCalls)
 		return msgs, "", ctx.Err()
 	}
 	return msgs, doomSummary, nil
+}
+
+func (p *TurnRunner) executeToolSlot(ctx context.Context, cfg turnRunCfg, slot *toolCallSlot) error {
+	result, execErr := slot.handler.Execute(ctx, slot.args)
+	if execErr != nil {
+		errContent := limitToolOutput(execErr.Error()+toolErrorHint, cfg.maxToolOutputChars)
+		errLabel := execErr.Error()
+		if errors.Is(execErr, context.Canceled) || ctx.Err() != nil {
+			errLabel = "cancelled"
+			errContent = "cancelled" + toolErrorHint
+			slot.content = errContent
+			slot.errLabel = errLabel
+			slot.done = true
+			return ctx.Err()
+		}
+		slot.content = errContent
+		slot.errLabel = errLabel
+		slot.done = true
+		return nil
+	}
+	result.Content = limitToolOutput(result.Content, cfg.maxToolOutputChars)
+	slot.result = result
+	slot.content = result.Content
+	slot.done = true
+	return nil
 }
 
 // commitToolSlots publishes pending/running/completed|error and appends tool
