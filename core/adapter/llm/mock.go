@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -10,11 +11,21 @@ import (
 
 var _ port.LLMProvider = (*MockProvider)(nil)
 
+type mockToolCall struct {
+	Name string
+	Args map[string]any
+}
+
 type callStep struct {
-	ToolCall  string
-	Args      map[string]any
+	ToolCalls []mockToolCall
 	Text      string
 	Reasoning string
+}
+
+// ParallelCall is one tool_call inside a parallel batch step.
+type ParallelCall struct {
+	Name string
+	Args map[string]any
 }
 
 type MockProvider struct {
@@ -29,14 +40,30 @@ func NewMock() *MockProvider { return &MockProvider{} }
 func (p *MockProvider) AddToolCall(tool string, args map[string]any) *MockProvider {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.steps = append(p.steps, callStep{ToolCall: tool, Args: args})
+	p.steps = append(p.steps, callStep{ToolCalls: []mockToolCall{{Name: tool, Args: args}}})
+	return p
+}
+
+// AddParallelToolCalls queues one model step that returns multiple tool_calls
+// in a single assistant message (LLM parallel tool-call contract).
+func (p *MockProvider) AddParallelToolCalls(calls ...ParallelCall) *MockProvider {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	step := callStep{ToolCalls: make([]mockToolCall, 0, len(calls))}
+	for _, c := range calls {
+		step.ToolCalls = append(step.ToolCalls, mockToolCall{Name: c.Name, Args: c.Args})
+	}
+	p.steps = append(p.steps, step)
 	return p
 }
 
 func (p *MockProvider) AddToolCallWithReasoning(tool string, args map[string]any, reasoning string) *MockProvider {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.steps = append(p.steps, callStep{ToolCall: tool, Args: args, Reasoning: reasoning})
+	p.steps = append(p.steps, callStep{
+		ToolCalls: []mockToolCall{{Name: tool, Args: args}},
+		Reasoning: reasoning,
+	})
 	return p
 }
 
@@ -78,10 +105,16 @@ func (p *MockProvider) Chat(_ context.Context, req port.LLMChatRequest) (port.LL
 	if step.Text != "" {
 		return port.LLMChatResponse{Content: step.Text, ReasoningContent: step.Reasoning, Done: true}, nil
 	}
+	tcs := make([]port.ChatToolCall, len(step.ToolCalls))
+	for i, tc := range step.ToolCalls {
+		id := tc.Name + "-id"
+		if len(step.ToolCalls) > 1 {
+			id = fmt.Sprintf("%s-id-%d", tc.Name, i)
+		}
+		tcs[i] = port.ChatToolCall{ID: id, Name: tc.Name, Arguments: tc.Args}
+	}
 	return port.LLMChatResponse{
 		ReasoningContent: step.Reasoning,
-		ToolCalls: []port.ChatToolCall{{
-			ID: step.ToolCall + "-id", Name: step.ToolCall, Arguments: step.Args,
-		}},
+		ToolCalls:        tcs,
 	}, nil
 }

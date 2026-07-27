@@ -262,12 +262,30 @@ Step 循环 1..MaxSteps (Agent.Steps 或默认 20):
   1. 可选 Turn 内压缩（tool result 去重/截断/配对）
   2. LLM Chat（含 function calling）
   3. 无 tool call → 最终文本报告，结束
-  4. 有 tool call → 权限门禁 → 审批等待（如需）→ 执行 Tool
+  4. 有 tool_calls[] → 按 LLM 并行 tool-call 规范执行（见 6.3.0）
   5. 立即 hard-cap Tool Result（见 6.3.1）→ 注入 messages / Stream / Turn Log
   末步强制 toolChoice=none + 最大步数提醒
 ```
 
 Doom-loop 检测、权限门禁、审批阻塞、`ask_user` 阻塞均在此层完成。
+
+#### 6.3.0 LLM 并行 Tool Call 规范
+
+模型在同一条 assistant 消息里返回多个 `tool_calls` 时，视为**显式并行意图**。实现刻意保持三段式，避免把状态机并行化：
+
+```
+1. 串行门禁：doom / unknown / permission / approval（含 ask）
+2. 并行 Execute：仅 handler.Execute 并发
+3. 串行提交：全部 Execute 结束后，按 call 顺序更新 pending→running→completed|error，写入 messages / Turn Log
+```
+
+| 规则 | 行为 |
+|------|------|
+| 并行范围 | **只有** `Execute`；门禁与 stream 状态更新均串行 |
+| 提交顺序 | tool result 按原始 `tool_calls` 顺序（配对靠 `tool_call_id`） |
+| Doom | 按 call 顺序累计；命中后该 call 及后续不再 Execute |
+| 取消 | ctx 取消后为未完成 call 补 `cancelled` |
+| `delegate_agent` | 独立 child `TurnRunner`，不改写父 Registry |
 
 #### 6.3.1 本地 Tool 输出硬上限
 

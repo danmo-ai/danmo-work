@@ -358,8 +358,6 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentThinking, domain.AgentThinkingPayload{Text: resp.ReasoningContent})
 		}
 
-		processedCalls := make([]ToolCall, 0, len(resp.ToolCalls))
-
 		// IMPORTANT: Append the assistant message with tool_calls BEFORE any
 		// tool result messages. OpenAI-compatible APIs require the message
 		// order: assistant(tool_calls) → tool(result) → tool(result) → ...
@@ -371,189 +369,28 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		messages = append(messages, assistantMsg)
 		p.logAssistantMessage(assistantMsg)
 
-		for _, call := range resp.ToolCalls {
-			select {
-			case <-ctx.Done():
-				messages = p.closeUnfinishedToolCalls(tctx, messages, assistantToolCalls)
-				return domain.Report{}, messages, ctx.Err()
-			default:
-			}
-
-			handler, ok := p.Registry.Get(call.Name)
-			describe := call.Name
-			if ok {
-				describe = handler.Describe(call.Arguments)
-			}
-
-			if p.trackDoom(tctx.TurnID, call.Name, describe, cfg.doomLoopThreshold) >= cfg.doomLoopThreshold {
-				finalReport = domain.Report{Status: domain.ReportFailed, Summary: "doom loop for " + call.Name, MaxPromptTokens: maxPromptTokens}
-				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
-				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventTurnFailed, domain.TurnEndedPayload{
-					TurnID: tctx.TurnID, Status: "failed", Summary: "doom loop for " + call.Name,
-				})
-				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventError, domain.ErrorPayload{
-					Message: "doom loop for " + call.Name, Kind: "doom_loop",
-				})
-				// Synthetic tool result to maintain assistant(tool_calls) ↔ tool pairing.
-				messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "doom loop detected"})
-				p.logToolResult(call.ID, call.Name, "doom loop detected")
-				reportCaptured = true
-				break
-			}
-
-			if !ok {
-				messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "unknown tool: " + call.Name + toolErrorHint})
-				p.logToolResult(call.ID, call.Name, "unknown tool: "+call.Name+toolErrorHint)
-				processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
-				continue
-			}
-
-			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolPending, domain.ToolPart{
-				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolPending, Input: call.Arguments,
-			})
-
-			cmdStr, _ := call.Arguments["command"].(string)
-			sbStatus := domain.SandboxStatus{}
-			if p.SandboxStatus != nil {
-				sbStatus = p.SandboxStatus()
-			}
-			allowNet := false
-			if p.SessionAllowNetwork != nil {
-				allowNet = p.SessionAllowNetwork(tctx.SessionID)
-			}
-			risk := handler.RiskLevel()
-			if call.Name == "http_request" {
-				method, _ := call.Arguments["method"].(string)
-				risk = permission.EffectiveHTTPRequestRisk(risk, method, permission.ParseHTTPHeadersFromArgs(call.Arguments))
-			}
-			permResult := p.Perm.CheckRequest(permission.Request{
-				ToolName:            call.Name,
-				Risk:                risk,
-				Command:             cmdStr,
-				Sandbox:             sbStatus,
-				SessionAllowNetwork: allowNet,
-				Mode:                cfg.permissionMode,
-			})
-			decision := permResult.Decision
-			if decision == permission.DecisionDeny {
-				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
-					CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "permission denied",
-				})
-				messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "permission denied" + toolErrorHint})
-				p.logToolResult(call.ID, call.Name, "permission denied"+toolErrorHint)
-				processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
-				continue
-			}
-
-			allowNetworkForRun := allowNet
-			if decision == permission.DecisionAsk && !cfg.autoApprove && p.Approval != nil {
-				description := describe
-				approvalID := p.Approval.CreateApproval(tctx.SessionID, tctx.TurnID, call.Name, description, permResult.Reason)
-				scopeOpts := []string{"once"}
-				if permResult.Reason == permission.ReasonNetwork {
-					scopeOpts = append(scopeOpts, "session")
-				}
-				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventPermissionAsk, domain.PermissionAskPayload{
-					ApprovalID: approvalID, CallID: call.ID, Tool: call.Name, Description: description,
-					Reason: permResult.Reason, ScopeOptions: scopeOpts,
-				})
-				outcome, err := p.Approval.WaitApproval(ctx, approvalID)
-				if err != nil {
-					// Turn cancel during approval is a hard stop (not a soft deny).
-					if errors.Is(err, context.Canceled) || ctx.Err() != nil {
-						p.Stream.Publish(context.Background(), tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
-							CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "cancelled",
-						})
-						messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "cancelled"})
-						p.logToolResult(call.ID, call.Name, "cancelled")
-						messages = p.closeUnfinishedToolCalls(tctx, messages, assistantToolCalls)
-						return domain.Report{}, messages, ctx.Err()
-					}
-					msg := "approval wait failed: " + err.Error() + toolErrorHint
-					p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
-						CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "approval wait failed",
-					})
-					messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: msg})
-					p.logToolResult(call.ID, call.Name, msg)
-					processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
-					continue
-				}
-				if !outcome.Approved {
-					// Soft deny: return a tool error and let the agent continue
-					// (mainstream UX — rejection must not kill the whole turn).
-					msg := "User rejected this tool call. Do not retry the same command; choose a safer alternative or ask the user." + toolErrorHint
-					p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
-						CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: "approval rejected",
-					})
-					messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: msg})
-					p.logToolResult(call.ID, call.Name, msg)
-					processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
-					continue
-				}
-				if permResult.Reason == permission.ReasonNetwork {
-					allowNetworkForRun = true
-				}
-			} else if decision == permission.DecisionAsk && cfg.autoApprove && permResult.Reason == permission.ReasonNetwork {
-				allowNetworkForRun = true
-			}
-
-			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolRunning, domain.ToolPart{
-				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolRunning, Input: call.Arguments,
-			})
-
-			args := cloneMap(call.Arguments)
-			if args == nil {
-				args = map[string]any{}
-			}
-			args["__session_id"] = tctx.SessionID
-			args["__turn_id"] = tctx.TurnID
-			args["__agent_id"] = tctx.Agent.ID
-			args["__project_id"] = tctx.ProjectID
-			args["__model_id"] = tctx.Model
-			args["__work_dir"] = tctx.WorkDir
-			args["__call_id"] = call.ID
-			args["__file_tracker"] = p.FileTracker
-			if allowNetworkForRun {
-				args["__sandbox_allow_network"] = true
-			}
-
-			result, err := handler.Execute(ctx, args)
-			if err != nil {
-				errContent := limitToolOutput(err.Error()+toolErrorHint, cfg.maxToolOutputChars)
-				errLabel := err.Error()
-				if errors.Is(err, context.Canceled) || ctx.Err() != nil {
-					errLabel = "cancelled"
-					errContent = "cancelled" + toolErrorHint
-				}
-				// Use Background so tool.error survives a cancelled turn ctx.
-				p.Stream.Publish(context.Background(), tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
-					CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolError, Error: errLabel,
-				})
-				messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: errContent})
-				processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
-				p.logToolResult(call.ID, call.Name, errContent)
-				if errors.Is(err, context.Canceled) || ctx.Err() != nil {
-					messages = p.closeUnfinishedToolCalls(tctx, messages, assistantToolCalls)
-					return domain.Report{}, messages, ctx.Err()
-				}
-				continue
-			}
-
-			result.Content = limitToolOutput(result.Content, cfg.maxToolOutputChars)
-			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolCompleted, domain.ToolPart{
-				CallID: call.ID, Name: call.Name, Description: describe, Status: domain.ToolCompleted, Output: result.Content,
-			})
-			messages = append(messages, Message{Role: RoleTool, ToolCallID: call.ID, Name: call.Name, Content: result.Content})
-			processedCalls = append(processedCalls, ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
-			p.logToolResult(call.ID, call.Name, result.Content)
-			p.recordFileChanges(tctx, call.ID, call.Name, call.Arguments, result)
+		// Parallelism is Execute-only. Gate/permission stay serial; stream
+		// status + messages are committed in call order after all Executes finish.
+		batchMsgs, doomSummary, err := p.runToolCallBatch(ctx, tctx, cfg, resp.ToolCalls, assistantToolCalls)
+		messages = append(messages, batchMsgs...)
+		if err != nil {
+			return domain.Report{}, messages, err
 		}
-		if reportCaptured {
+		if doomSummary != "" {
+			finalReport = domain.Report{
+				Status: domain.ReportFailed, Summary: doomSummary, MaxPromptTokens: maxPromptTokens,
+			}
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventTurnFailed, domain.TurnEndedPayload{
+				TurnID: tctx.TurnID, Status: "failed", Summary: doomSummary,
+			})
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventError, domain.ErrorPayload{
+				Message: doomSummary, Kind: "doom_loop",
+			})
+			reportCaptured = true
 			break
 		}
-		if !reportCaptured {
-			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
-		}
+		p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
 	}
 
 	if !reportCaptured {
@@ -569,6 +406,257 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		TurnID: tctx.TurnID, Status: string(finalReport.Status), Summary: finalReport.Summary,
 	})
 	return finalReport, messages, nil
+}
+
+type toolCallSlot struct {
+	call     port.ChatToolCall
+	handler  tool.Handler
+	describe string
+	args     map[string]any
+	exec     bool // passed gate; needs Execute
+	content  string
+	errLabel string
+	result   domain.ToolResult
+	done     bool
+	doom     bool
+}
+
+// runToolCallBatch implements the LLM parallel tool-call contract with a
+// minimal shape:
+//  1. serial gate (doom / unknown / permission / approval)
+//  2. parallel Execute only
+//  3. serial status + message commit in call order
+func (p *TurnRunner) runToolCallBatch(
+	ctx context.Context,
+	tctx TurnContext,
+	cfg turnRunCfg,
+	calls []port.ChatToolCall,
+	assistantToolCalls []ToolCall,
+) (msgs []Message, doomSummary string, err error) {
+	slots := make([]toolCallSlot, len(calls))
+
+	// --- 1) serial gate ---
+	for i, call := range calls {
+		select {
+		case <-ctx.Done():
+			msgs = p.closeUnfinishedToolCalls(tctx, msgs, assistantToolCalls)
+			return msgs, "", ctx.Err()
+		default:
+		}
+
+		slots[i].call = call
+		handler, ok := p.Registry.Get(call.Name)
+		describe := call.Name
+		if ok {
+			describe = handler.Describe(call.Arguments)
+			slots[i].handler = handler
+		}
+		slots[i].describe = describe
+
+		if p.trackDoom(tctx.TurnID, call.Name, describe, cfg.doomLoopThreshold) >= cfg.doomLoopThreshold {
+			slots[i].content = "doom loop detected"
+			slots[i].done = true
+			slots[i].doom = true
+			doomSummary = "doom loop for " + call.Name
+			for j := i + 1; j < len(calls); j++ {
+				slots[j].call = calls[j]
+				slots[j].describe = calls[j].Name
+				if h, ok := p.Registry.Get(calls[j].Name); ok {
+					slots[j].describe = h.Describe(calls[j].Arguments)
+				}
+				slots[j].content = "cancelled"
+				slots[j].errLabel = "cancelled"
+				slots[j].done = true
+			}
+			break
+		}
+		if !ok {
+			slots[i].content = "unknown tool: " + call.Name + toolErrorHint
+			slots[i].done = true
+			continue
+		}
+
+		args, content, errLabel, exec, gateErr := p.gateToolCall(ctx, tctx, cfg, call, handler, describe)
+		if gateErr != nil {
+			slots[i].content = "cancelled"
+			slots[i].errLabel = "cancelled"
+			slots[i].done = true
+			msgs = p.commitToolSlots(ctx, tctx, slots[:i+1], false)
+			msgs = p.closeUnfinishedToolCalls(tctx, msgs, assistantToolCalls)
+			return msgs, "", gateErr
+		}
+		if !exec {
+			slots[i].content = content
+			slots[i].errLabel = errLabel
+			slots[i].done = true
+			continue
+		}
+		slots[i].args = args
+		slots[i].exec = true
+	}
+
+	// --- 2) parallel Execute only (no stream status here) ---
+	var wg sync.WaitGroup
+	for i := range slots {
+		if !slots[i].exec {
+			continue
+		}
+		wg.Add(1)
+		go func(slot *toolCallSlot) {
+			defer wg.Done()
+			result, execErr := slot.handler.Execute(ctx, slot.args)
+			if execErr != nil {
+				errContent := limitToolOutput(execErr.Error()+toolErrorHint, cfg.maxToolOutputChars)
+				errLabel := execErr.Error()
+				if errors.Is(execErr, context.Canceled) || ctx.Err() != nil {
+					errLabel = "cancelled"
+					errContent = "cancelled" + toolErrorHint
+				}
+				slot.content = errContent
+				slot.errLabel = errLabel
+				slot.done = true
+				return
+			}
+			result.Content = limitToolOutput(result.Content, cfg.maxToolOutputChars)
+			slot.result = result
+			slot.content = result.Content
+			slot.done = true
+		}(&slots[i])
+	}
+	wg.Wait()
+
+	// --- 3) serial status + message commit (after all Executes finish) ---
+	msgs = p.commitToolSlots(ctx, tctx, slots, true)
+	if ctx.Err() != nil {
+		msgs = p.closeUnfinishedToolCalls(tctx, msgs, assistantToolCalls)
+		return msgs, "", ctx.Err()
+	}
+	return msgs, doomSummary, nil
+}
+
+// commitToolSlots publishes pending/running/completed|error and appends tool
+// messages in call order. emitRunStatus controls whether pending+running are
+// emitted for executed slots (true after a parallel batch finishes).
+func (p *TurnRunner) commitToolSlots(ctx context.Context, tctx TurnContext, slots []toolCallSlot, emitRunStatus bool) []Message {
+	var msgs []Message
+	for i := range slots {
+		slot := &slots[i]
+		if !slot.done {
+			continue
+		}
+		if emitRunStatus && slot.exec {
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolPending, domain.ToolPart{
+				CallID: slot.call.ID, Name: slot.call.Name, Description: slot.describe,
+				Status: domain.ToolPending, Input: slot.call.Arguments,
+			})
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolRunning, domain.ToolPart{
+				CallID: slot.call.ID, Name: slot.call.Name, Description: slot.describe,
+				Status: domain.ToolRunning, Input: slot.call.Arguments,
+			})
+		}
+		if slot.errLabel != "" {
+			pubCtx := ctx
+			if slot.errLabel == "cancelled" || (ctx != nil && ctx.Err() != nil) {
+				pubCtx = context.Background()
+			}
+			p.Stream.Publish(pubCtx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
+				CallID: slot.call.ID, Name: slot.call.Name, Description: slot.describe,
+				Status: domain.ToolError, Error: slot.errLabel,
+			})
+		} else if slot.exec && !slot.doom {
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolCompleted, domain.ToolPart{
+				CallID: slot.call.ID, Name: slot.call.Name, Description: slot.describe,
+				Status: domain.ToolCompleted, Output: slot.content,
+			})
+			p.recordFileChanges(tctx, slot.call.ID, slot.call.Name, slot.call.Arguments, slot.result)
+		}
+		msgs = append(msgs, Message{Role: RoleTool, ToolCallID: slot.call.ID, Name: slot.call.Name, Content: slot.content})
+		p.logToolResult(slot.call.ID, slot.call.Name, slot.content)
+	}
+	return msgs
+}
+
+// gateToolCall runs permission / approval for one call. On success with exec=true,
+// args are ready for Execute. Soft denials return exec=false with tool content.
+func (p *TurnRunner) gateToolCall(
+	ctx context.Context,
+	tctx TurnContext,
+	cfg turnRunCfg,
+	call port.ChatToolCall,
+	handler tool.Handler,
+	describe string,
+) (args map[string]any, content, errLabel string, exec bool, err error) {
+	cmdStr, _ := call.Arguments["command"].(string)
+	sbStatus := domain.SandboxStatus{}
+	if p.SandboxStatus != nil {
+		sbStatus = p.SandboxStatus()
+	}
+	allowNet := false
+	if p.SessionAllowNetwork != nil {
+		allowNet = p.SessionAllowNetwork(tctx.SessionID)
+	}
+	risk := handler.RiskLevel()
+	if call.Name == "http_request" {
+		method, _ := call.Arguments["method"].(string)
+		risk = permission.EffectiveHTTPRequestRisk(risk, method, permission.ParseHTTPHeadersFromArgs(call.Arguments))
+	}
+	permResult := p.Perm.CheckRequest(permission.Request{
+		ToolName:            call.Name,
+		Risk:                risk,
+		Command:             cmdStr,
+		Sandbox:             sbStatus,
+		SessionAllowNetwork: allowNet,
+		Mode:                cfg.permissionMode,
+	})
+	decision := permResult.Decision
+	if decision == permission.DecisionDeny {
+		return nil, "permission denied" + toolErrorHint, "permission denied", false, nil
+	}
+
+	allowNetworkForRun := allowNet
+	if decision == permission.DecisionAsk && !cfg.autoApprove && p.Approval != nil {
+		approvalID := p.Approval.CreateApproval(tctx.SessionID, tctx.TurnID, call.Name, describe, permResult.Reason)
+		scopeOpts := []string{"once"}
+		if permResult.Reason == permission.ReasonNetwork {
+			scopeOpts = append(scopeOpts, "session")
+		}
+		p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventPermissionAsk, domain.PermissionAskPayload{
+			ApprovalID: approvalID, CallID: call.ID, Tool: call.Name, Description: describe,
+			Reason: permResult.Reason, ScopeOptions: scopeOpts,
+		})
+		outcome, waitErr := p.Approval.WaitApproval(ctx, approvalID)
+		if waitErr != nil {
+			if errors.Is(waitErr, context.Canceled) || ctx.Err() != nil {
+				return nil, "", "", false, ctx.Err()
+			}
+			return nil, "approval wait failed: " + waitErr.Error() + toolErrorHint, "approval wait failed", false, nil
+		}
+		if !outcome.Approved {
+			return nil, "User rejected this tool call. Do not retry the same command; choose a safer alternative or ask the user." + toolErrorHint, "approval rejected", false, nil
+		}
+		if permResult.Reason == permission.ReasonNetwork {
+			allowNetworkForRun = true
+		}
+	} else if decision == permission.DecisionAsk && cfg.autoApprove && permResult.Reason == permission.ReasonNetwork {
+		allowNetworkForRun = true
+	}
+
+	args = cloneMap(call.Arguments)
+	if args == nil {
+		args = map[string]any{}
+	}
+	args["__session_id"] = tctx.SessionID
+	args["__turn_id"] = tctx.TurnID
+	args["__agent_id"] = tctx.Agent.ID
+	args["__project_id"] = tctx.ProjectID
+	args["__model_id"] = tctx.Model
+	args["__work_dir"] = tctx.WorkDir
+	args["__call_id"] = call.ID
+	args["__file_tracker"] = p.FileTracker
+	if allowNetworkForRun {
+		args["__sandbox_allow_network"] = true
+	}
+	return args, "", "", true, nil
 }
 
 // closeUnfinishedToolCalls appends cancelled tool results for any call in the
