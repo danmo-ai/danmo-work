@@ -24,7 +24,7 @@ var (
 
 const disableMaxPrivilege = 0x1
 
-func selectBackend(cfg domain.ConfigSandboxSection) (domain.SandboxBackend, runner, bool, string, []string) {
+func selectBackend(cfg domain.ConfigSandboxSection, allowlistProxyActive bool) (domain.SandboxBackend, runner, bool, string, []string) {
 	force := strings.ToLower(strings.TrimSpace(cfg.Backend))
 	switch force {
 	case "host-weak", "host":
@@ -43,7 +43,8 @@ func selectBackend(cfg domain.ConfigSandboxSection) (domain.SandboxBackend, runn
 	if tokenSandboxAvailable() {
 		caps := []string{"win-token", "privilege-restricted"}
 		degraded, reason := false, ""
-		if cfg.Network == domain.SandboxNetworkDeny {
+		// Kernel network deny is unavailable; allowlist proxy covers allowlist mode.
+		if needNetDeny(cfg, allowlistProxyActive) && cfg.Network == domain.SandboxNetworkDeny {
 			degraded = true
 			reason = "win-token unelevated mode does not enforce kernel network deny; set runtime.sandbox.backend=wsl2 for stronger isolation"
 		}

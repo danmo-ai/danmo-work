@@ -64,6 +64,23 @@ func TestGateNetworkAskAndSessionAllow(t *testing.T) {
 	}
 }
 
+func TestGateAllowlistDoesNotAskNetwork(t *testing.T) {
+	g := NewGate(nil)
+	r := g.CheckRequest(Request{
+		ToolName: "exec_shell",
+		Risk:     domain.RiskHigh,
+		Command:  "npm install lodash",
+		Sandbox:  strongSB(domain.SandboxNetworkAllowlist),
+	})
+	// Proxy enforces domains; no ReasonNetwork ask (still may ask for other reasons).
+	if r.Reason == ReasonNetwork {
+		t.Fatalf("allowlist should not ask for network: %+v", r)
+	}
+	if r.Decision != DecisionAllow {
+		t.Fatalf("expected allow for sandboxed npm under allowlist, got %+v", r)
+	}
+}
+
 func TestGateHostWeakAsk(t *testing.T) {
 	g := NewGate(nil)
 	r := g.CheckRequest(Request{

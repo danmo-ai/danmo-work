@@ -45,6 +45,9 @@ type ConfigSandboxSection struct {
 	Enabled bool           `json:"enabled" mapstructure:"enabled" yaml:"enabled"`
 	Mode    SandboxMode    `json:"mode" mapstructure:"mode" yaml:"mode"`
 	Network SandboxNetwork `json:"network" mapstructure:"network" yaml:"network"`
+	// AllowlistDomains is used when Network=allowlist. Exact hosts or "*.example.com" suffixes.
+	// Empty with allowlist fails closed (treated as deny).
+	AllowlistDomains []string `json:"allowlistDomains,omitempty" mapstructure:"allowlist_domains" yaml:"allowlist_domains,omitempty"`
 	// Backend forces a backend when non-empty (e.g. "bwrap", "wsl2", "host-weak").
 	// Empty means auto-probe.
 	Backend string `json:"backend,omitempty" mapstructure:"backend" yaml:"backend,omitempty"`
@@ -63,6 +66,12 @@ type SandboxStatus struct {
 	DegradedReason string         `json:"degradedReason,omitempty"`
 	Platform       string         `json:"platform"`
 	Capabilities   []string       `json:"capabilities,omitempty"`
+	// AllowlistActive is true when network=allowlist and the host-side proxy is running.
+	AllowlistActive bool `json:"allowlistActive,omitempty"`
+	// AllowlistProxy is the loopback proxy address (e.g. "127.0.0.1:41234") when active.
+	AllowlistProxy string `json:"allowlistProxy,omitempty"`
+	// AllowlistDomains echoes the normalized domain rules in effect.
+	AllowlistDomains []string `json:"allowlistDomains,omitempty"`
 	// Shell is the human-readable interpreter label (e.g. "cmd (Coreutils)", "bash (Git for Windows)", "cmd", "sh").
 	Shell string `json:"shell,omitempty"`
 	// ShellPath is the absolute path to bash.exe when using Git Bash; empty for cmd/sh/WSL2.

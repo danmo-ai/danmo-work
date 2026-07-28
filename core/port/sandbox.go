@@ -19,6 +19,10 @@ type SandboxRunOptions struct {
 	Env []string
 	// AllowNetwork overrides config network=deny for this invocation (after user approval).
 	AllowNetwork bool
+	// AllowlistProxy is the host:port of the loopback allowlist proxy. Set by
+	// sandbox.Manager when network=allowlist is active; opens OS network and
+	// signals runners not to unshare/deny net.
+	AllowlistProxy string
 }
 
 // Sandbox executes commands under the platform sandbox policy.

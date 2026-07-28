@@ -193,6 +193,7 @@ export interface ConfigFile {
       enabled: boolean
       mode: 'read-only' | 'workspace-write' | 'danger-full-access'
       network: 'deny' | 'allow' | 'allowlist'
+      allowlistDomains?: string[]
       backend?: string
       shell?: 'auto' | 'bash' | 'cmd' | string
     }
@@ -292,6 +293,9 @@ export interface SandboxStatus {
   degradedReason?: string
   platform: string
   capabilities?: string[]
+  allowlistActive?: boolean
+  allowlistProxy?: string
+  allowlistDomains?: string[]
   shell?: string
   shellPath?: string
   coreutilsBin?: string
@@ -321,6 +325,7 @@ export interface RuntimeConfigForm {
   sandboxEnabled: boolean
   sandboxMode: 'read-only' | 'workspace-write' | 'danger-full-access'
   sandboxNetwork: 'deny' | 'allow' | 'allowlist'
+  sandboxAllowlistDomains?: string
   sandboxBackend?: string
   sandboxShell?: 'auto' | 'bash' | 'cmd' | string
   browserEnabled?: boolean

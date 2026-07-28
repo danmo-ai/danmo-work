@@ -25,7 +25,11 @@ runtime:
   permission_mode: "interactive"
   # OS sandbox for exec_shell (Seatbelt / Landlock|bwrap / win-token|WSL2).
   # Modes: read-only | workspace-write | danger-full-access
-  # Network: deny | allow | allowlist (allowlist treated as allow in v1)
+  # Network: deny | allow | allowlist
+  # allowlist: OS net stays open so the process can reach a host-side loopback proxy;
+  #   only hosts in allowlist_domains are permitted (exact or "*.example.com").
+  #   Empty allowlist_domains fails closed (treated as deny). Clients that ignore
+  #   HTTP(S)_PROXY / ALL_PROXY can bypass; v1 does not add iptables/pf redirection.
   # Backend: empty = auto-probe; or seatbelt | landlock | bwrap | win-token | wsl2 | host-weak
   # Shell (Windows host/win-token only): auto | bash | cmd
   # auto prefers bundled/system Microsoft Coreutils with cmd, then Git Bash, else cmd.
@@ -35,6 +39,11 @@ runtime:
     enabled: true
     mode: "workspace-write"
     network: "deny"
+    # allowlist_domains:
+    #   - "pypi.org"
+    #   - "*.pythonhosted.org"
+    #   - "proxy.golang.org"
+    #   - "registry.npmjs.org"
     backend: ""
     shell: "auto"
   # Headless browser for web_fetch JS rendering (chromedp + system Chrome/Edge).

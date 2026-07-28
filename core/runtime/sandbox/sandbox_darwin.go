@@ -14,7 +14,7 @@ import (
 	"danmo-work/core/port"
 )
 
-func selectBackend(cfg domain.ConfigSandboxSection) (domain.SandboxBackend, runner, bool, string, []string) {
+func selectBackend(cfg domain.ConfigSandboxSection, _ bool) (domain.SandboxBackend, runner, bool, string, []string) {
 	force := strings.ToLower(strings.TrimSpace(cfg.Backend))
 	switch force {
 	case "host-weak", "host":

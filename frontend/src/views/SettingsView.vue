@@ -168,6 +168,7 @@ const runtimeForm = ref({
   sandboxEnabled: true,
   sandboxMode: 'workspace-write' as 'read-only' | 'workspace-write' | 'danger-full-access',
   sandboxNetwork: 'deny' as 'deny' | 'allow' | 'allowlist',
+  sandboxAllowlistDomains: '',
   sandboxBackend: '',
   sandboxShell: 'auto',
   browserEnabled: true,
@@ -198,7 +199,8 @@ const sandboxStatusText = computed(() => {
   const shell = st.shell ? ` · ${st.shell}` : ''
   const path = st.shellPath ? ` @ ${st.shellPath}` : ''
   const cu = st.coreutilsBin ? ` · coreutils ${st.coreutilsBin}` : ''
-  return `${st.backend}${caps}${shell}${path}${cu}`
+  const proxy = st.allowlistActive && st.allowlistProxy ? ` · allowlist ${st.allowlistProxy}` : ''
+  return `${st.backend}${caps}${shell}${path}${cu}${proxy}`
 })
 
 const showGitBashHint = computed(() => {
@@ -1137,9 +1139,22 @@ const hasFooterActions = computed(() => {
                   <DqSelect v-model="runtimeForm.sandboxNetwork">
                     <DqOption value="deny" :label="$t('settings.sandboxNetworkDeny')" />
                     <DqOption value="allow" :label="$t('settings.sandboxNetworkAllow')" />
+                    <DqOption value="allowlist" :label="$t('settings.sandboxNetworkAllowlist')" />
                   </DqSelect>
                 </div>
               </div>
+              <template v-if="runtimeForm.sandboxNetwork === 'allowlist'">
+                <div class="settings-field">
+                  <span class="settings-field__label">{{ $t('settings.sandboxAllowlistDomains') }}</span>
+                  <DqInput
+                    v-model="runtimeForm.sandboxAllowlistDomains"
+                    type="textarea"
+                    :rows="4"
+                    :placeholder="$t('settings.sandboxAllowlistDomainsPlaceholder')"
+                  />
+                </div>
+                <p class="settings-form-group__desc">{{ $t('settings.sandboxAllowlistDomainsDesc') }}</p>
+              </template>
               <div class="settings-form-row">
                 <div class="settings-field settings-field--half">
                   <span class="settings-field__label">{{ $t('settings.sandboxShell') }}</span>
