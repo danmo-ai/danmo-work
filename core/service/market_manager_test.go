@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"danmo-work/core/domain"
@@ -147,7 +148,59 @@ func TestMarketManagerInstallLocal(t *testing.T) {
 	}
 }
 
-func TestMarketUninstallRestoresBuiltinSkill(t *testing.T) {
+func TestMarketInstallNormalizesBodyWithCatalogID(t *testing.T) {
+	root := t.TempDir()
+	pkg := filepath.Join(root, "skills", "pr-review")
+	if err := os.MkdirAll(filepath.Join(pkg, "references"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	md := "---\nname: pr-review\ndescription: Review PRs\n---\n\nSee `references/guide.md`.\n"
+	if err := os.WriteFile(filepath.Join(pkg, "SKILL.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkg, "references", "guide.md"), []byte("g"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cat := `{
+  "version": 1,
+  "skills": [{"id":"tlc__pr-review","name":"PR Review","path":"skills/pr-review","kind":"skill"}]
+}`
+	if err := os.MkdirAll(filepath.Join(root, "catalog"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "catalog", "index.json"), []byte(cat), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfgStore := &memConfigStore{cfg: &domain.ConfigFile{
+		Market: domain.ConfigMarketSection{
+			Sources: []domain.MarketSource{{ID: "local", Kind: "git", Enabled: true}},
+		},
+	}}
+	skills := NewSkillManager(newMemSkillRepo(), newMemSkillFileRepo())
+	agents := NewAgentManager(newMemAgentRepo())
+	mgr := NewMarketManager(NewConfigManager(cfgStore), &fakeRegistry{m: &fakeMarket{id: "local", root: root}}, skills, agents)
+
+	res, err := mgr.Install(context.Background(), domain.InstallMarketRequest{
+		SourceID: "local", Kind: "skill", ID: "tlc__pr-review", Overwrite: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Installed) != 1 || res.Installed[0] != "tlc__pr-review" {
+		t.Fatalf("install = %+v", res)
+	}
+	sk, err := skills.Get(context.Background(), "tlc__pr-review")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sk.Body, "`tlc__pr-review/references/guide.md`") {
+		t.Fatalf("body should use catalog id prefix: %q", sk.Body)
+	}
+	if strings.Contains(sk.Body, "`pr-review/references/") || strings.Contains(sk.Body, "`references/guide.md`") {
+		t.Fatalf("body still has pre-override refs: %q", sk.Body)
+	}
+}
 	ctx := context.Background()
 	cfgStore := &memConfigStore{cfg: &domain.ConfigFile{}}
 	configMgr := NewConfigManager(cfgStore)

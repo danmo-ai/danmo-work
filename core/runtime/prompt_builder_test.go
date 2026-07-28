@@ -10,24 +10,33 @@ import (
 func TestBuildSkillMetadataIncludesCategory(t *testing.T) {
 	out := buildSkillMetadata([]domain.Skill{
 		{
+			ID:          "writing-plans",
 			Name:        "writing-plans",
 			Description: "File-level implementation plans",
 			Metadata:    map[string]string{"category": "coding"},
 		},
 		{
+			ID:          "brainstorming",
 			Name:        "brainstorming",
 			Description: "Clarify requirements before building",
 			Metadata:    map[string]string{"category": "work"},
 		},
 		{
+			ID:          "skill-creator",
 			Name:        "skill-creator",
 			Description: "Create new skills",
 			Metadata:    map[string]string{"category": "general"},
 			SystemHint:  "use for skill authoring",
 		},
 		{
+			ID:          "legacy",
 			Name:        "legacy",
 			Description: "No category",
+		},
+		{
+			ID:          "tlc__pr-review",
+			Name:        "PR Review",
+			Description: "Review pull requests",
 		},
 	})
 
@@ -45,6 +54,18 @@ func TestBuildSkillMetadataIncludesCategory(t *testing.T) {
 	}
 	if !strings.Contains(out, "<hint>use for skill authoring</hint>") {
 		t.Fatalf("missing system hint:\n%s", out)
+	}
+	if !strings.Contains(out, "<path>tlc__pr-review</path>") {
+		t.Fatalf("path must use skill id:\n%s", out)
+	}
+	if !strings.Contains(out, "<name>PR Review</name>") {
+		t.Fatalf("display name should appear when distinct from id:\n%s", out)
+	}
+	if strings.Contains(out, "<name>legacy</name>") {
+		t.Fatalf("name omitted when equal to id:\n%s", out)
+	}
+	if !strings.Contains(out, `read_skill(path="<path>")`) {
+		t.Fatalf("comment should refer to <path> id:\n%s", out)
 	}
 }
 

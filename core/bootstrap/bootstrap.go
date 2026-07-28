@@ -424,6 +424,7 @@ func ensureBuiltinSkills(skills *service.SkillManager) {
 	for _, tmpl := range templates {
 		skill := tmpl.Skill
 		skill.Builtin = true
+		skill.Body = service.NormalizeSkillBodyRefs(skill.Body, skill.ID)
 		if existing, err := skills.Get(ctx, skill.ID); err == nil && existing != nil {
 			// Preserve user edits; only backfill the builtin flag if missing.
 			// Builtin is also computed at read time from the embedded template.

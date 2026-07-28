@@ -222,11 +222,14 @@ func buildSkillMetadata(skills []domain.Skill) string {
 	}
 	var b strings.Builder
 	b.WriteString("<available_skills>\n")
-	b.WriteString("  <!-- Use read_skill tool with path to load instructions: read_skill(path=\"skill-name\") -->\n")
-	b.WriteString("  <!-- Resource files: read_skill(path=\"skill-name/references/file.md\") -->\n")
+	b.WriteString("  <!-- Use read_skill with the skill id from <path>: read_skill(path=\"<path>\") -->\n")
+	b.WriteString("  <!-- Resource files: read_skill(path=\"<path>/references/file.md\") — never bare references/… -->\n")
 	for _, sk := range skills {
 		fmt.Fprintf(&b, "  <skill>\n")
-		fmt.Fprintf(&b, "    <path>%s</path>\n", escapeXML(sk.Name))
+		fmt.Fprintf(&b, "    <path>%s</path>\n", escapeXML(sk.ID))
+		if sk.Name != "" && sk.Name != sk.ID {
+			fmt.Fprintf(&b, "    <name>%s</name>\n", escapeXML(sk.Name))
+		}
 		if cat := skillCategory(sk); cat != "" {
 			fmt.Fprintf(&b, "    <category>%s</category>\n", escapeXML(cat))
 		}
