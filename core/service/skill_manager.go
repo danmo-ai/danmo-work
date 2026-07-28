@@ -228,6 +228,7 @@ func (m *SkillManager) ResetFromTemplate(ctx context.Context, id string) (*domai
 	}
 	tmpl.Builtin = true
 	tmpl.TemplateDiverged = false
+	tmpl.Body = NormalizeSkillBodyRefs(tmpl.Body, tmpl.ID)
 	if err := m.store.Upsert(ctx, *tmpl); err != nil {
 		return nil, err
 	}

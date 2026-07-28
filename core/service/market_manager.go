@@ -254,12 +254,19 @@ func (m *MarketManager) installSkill(
 		return err
 	}
 	// Market catalog id is authoritative (ClawHub uses owner__slug / clawhub__slug).
+	prevID := skill.ID
 	if item.ID != "" && skill.ID != item.ID {
 		skill.ID = item.ID
 		for i := range files {
 			files[i].SkillID = item.ID
 			files[i].ID = item.ID + ":" + files[i].Path
 		}
+	}
+	// Re-normalize against the final meta id (Import may have prefixed with frontmatter name).
+	if prevID != skill.ID {
+		skill.Body = NormalizeSkillBodyRefsAfterIDChange(skill.Body, skill.ID, prevID)
+	} else {
+		skill.Body = NormalizeSkillBodyRefs(skill.Body, skill.ID)
 	}
 	if item.Name != "" {
 		skill.Name = item.Name

@@ -14,10 +14,11 @@ import (
 // Prefers per-turn filesystem skills (scanned on New Turn); falls back to DB.
 //
 // Path convention:
-//   - "git-workflow"              → returns the skill's body (instructions)
-//   - "debugging/references/patterns.md" → returns the resource file content
-//   - Resource paths are relative to the skill directory
+//   - "git-workflow"              → skill body (first segment = skill meta id)
+//   - "debugging/references/patterns.md" → resource file (id + relative path)
+//   - Skill id matches <available_skills><path>, not display name / directory name
 //   - Valid resource subdirectories: scripts/, references/, assets/
+//   - Bare paths like "references/foo.md" are rejected (no current-skill context)
 type ReadSkill struct {
 	Skills *service.SkillManager
 
@@ -47,18 +48,27 @@ func (h *ReadSkill) Schema() domain.ToolSchema {
 		Name: "read_skill",
 		Description: "Read a skill's instructions or bundled resource files.\n\n" +
 			"**Path format:**\n" +
-			"- Skill instructions: path=\"git-workflow\" (skill name only)\n" +
-			"- Resource file: path=\"debugging/references/patterns.md\" (skill name + relative path)\n" +
+			"- First path segment is the skill **meta id** from <available_skills><path> (not display name, not folder name).\n" +
+			"- Skill instructions: path=\"git-workflow\" (id only)\n" +
+			"- Resource file: path=\"debugging/references/patterns.md\" (id + relative path)\n" +
+			"- Market skills often use namespaced ids (e.g. path=\"tlc__pr-review/references/guide.md\").\n" +
 			"- Resource subdirectories: scripts/, references/, assets/\n" +
-			"- See <available_skills> in system prompt for available skill paths and descriptions.\n\n" +
+			"- Do **not** use bare resource paths (references/…, scripts/…, assets/…) — there is no current-skill context.\n" +
+			"- Do **not** use read_file / exec_shell to load skill pack files; use read_skill.\n\n" +
 			"**Examples:**\n" +
 			"- path=\"git-workflow\"                       → skill instructions\n" +
 			"- path=\"debugging/references/patterns.md\"   → reference file\n" +
-			"- path=\"git-workflow/scripts/commit.sh\"     → script file",
+			"- path=\"tlc__pr-review/references/guide.md\" → market skill resource\n\n" +
+			"**Anti-examples (invalid):**\n" +
+			"- path=\"references/patterns.md\"             → missing skill id\n" +
+			"- path=\"scripts/run.sh\"                     → missing skill id",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"path": map[string]any{"type": "string", "description": "Skill name (e.g. \"git-workflow\") or skill name + resource path (e.g. \"debugging/references/patterns.md\")"},
+				"path": map[string]any{
+					"type":        "string",
+					"description": "Skill meta id from <available_skills><path> (e.g. \"git-workflow\"), or id + resource path (e.g. \"debugging/references/patterns.md\", \"tlc__pr-review/references/guide.md\"). Never bare references/… / scripts/… / assets/….",
+				},
 			},
 			"required": []string{"path"},
 		},
@@ -74,6 +84,10 @@ func (h *ReadSkill) Execute(ctx context.Context, input map[string]any) (domain.T
 	// Security: reject path traversal
 	if strings.Contains(path, "..") {
 		return domain.ToolResult{}, fmt.Errorf("invalid path: must not contain \"..\"")
+	}
+
+	if err := rejectBareSkillResourcePath(path); err != nil {
+		return domain.ToolResult{}, err
 	}
 
 	// Split path: first segment is skill ID, rest is resource path
@@ -155,4 +169,19 @@ func isValidResourcePath(p string) bool {
 		}
 	}
 	return false
+}
+
+// rejectBareSkillResourcePath fails fast when the model omits the skill id.
+func rejectBareSkillResourcePath(path string) error {
+	p := strings.TrimSpace(path)
+	p = strings.TrimPrefix(p, "./")
+	for _, root := range []string{"scripts", "references", "assets"} {
+		if p == root || strings.HasPrefix(p, root+"/") {
+			return fmt.Errorf(
+				"bare resource path %q: include the skill id from <available_skills><path> (e.g. \"<skill-id>/%s\")",
+				path, p,
+			)
+		}
+	}
+	return nil
 }

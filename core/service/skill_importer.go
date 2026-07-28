@@ -41,6 +41,8 @@ func (i *SkillImporter) Import(dirPath string) (*domain.Skill, []domain.SkillFil
 		return nil, nil, fmt.Errorf("invalid SKILL.md: missing or empty name in frontmatter")
 	}
 	skill.SourcePath = dirPath
+	// Prefix bare resource refs with skill meta id so read_skill paths match.
+	skill.Body = NormalizeSkillBodyRefs(skill.Body, skill.ID)
 
 	var files []domain.SkillFile
 	_ = filepath.WalkDir(dirPath, func(fullPath string, d os.DirEntry, walkErr error) error {
