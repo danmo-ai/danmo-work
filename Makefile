@@ -14,6 +14,7 @@ export DQ_APP_NAME := $(APP_NAME)
 	frontend-install frontend-dev frontend-build frontend-typecheck \
 	check-layers test test-integration \
 	build-go build-server build-cli build-tui build-sidecar build build-all clean \
+	build-env-tar \
 	pack-prereqs pack-macos-desktop pack-linux-server pack-windows-desktop \
 	eval-harbor-bin eval-harbor-base eval-harbor-sync-tb2 eval-harbor-smoke eval-harbor-suite eval-harbor-compare
 
@@ -42,7 +43,7 @@ help:
 	@echo "Frontend:  frontend-install | frontend-dev | frontend-build | frontend-typecheck"
 	@echo "Test:      check-layers | test | test-integration"
 	@echo "Eval:      eval-harbor-bin | eval-harbor-base | eval-harbor-sync-tb2 | eval-harbor-smoke | eval-harbor-suite | eval-harbor-compare"
-	@echo "Build:     build | build-all | build-go | build-server | build-cli | build-tui | build-sidecar | clean"
+	@echo "Build:     build | build-all | build-go | build-server | build-cli | build-tui | build-sidecar | build-env-tar | clean"
 	@echo "Release:   pack-macos-desktop | pack-linux-server | pack-windows-desktop"
 
 # Backend only (for Go debugger or separate frontend)
@@ -124,6 +125,11 @@ pack-prereqs:
 pack-macos-desktop: pack-prereqs frontend-build
 	@chmod +x scripts/*.sh
 	@RELEASE_VERSION=$(RELEASE_VERSION) ./scripts/pack_desktop_macos.sh
+
+# Bundled agent OCI image → out/env/danmo-work-env-linux-<arch>.tar (no registry).
+build-env-tar:
+	@chmod +x scripts/*.sh
+	@./scripts/build_env_tar.sh
 
 pack-linux-server: frontend-build build-go
 	@chmod +x scripts/*.sh

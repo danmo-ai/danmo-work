@@ -203,10 +203,9 @@ metadata:
 spec:
   backend: local | container | remote   # local 忽略 image
   container:
-    image: "ghcr.io/…/danmo-work-env:ubuntu-24.04"
-    # 或 build:
-    #   dockerfile: .danmo-work/Dockerfile
-    #   context: .
+    # 本地标签；镜像来自 CI 内置 tar（load），禁止 registry pull
+    image: "localhost/danmo-work-env:bundled"
+    tarPath: ""  # 空则自动发现 WORK_ENV_TAR / ~/.danmo-work/env / out/env
     workspaceMount: /workspace
     network: deny | allow | allowlist
     allowlistDomains: ["pypi.org", "proxy.golang.org", "registry.npmjs.org"]
@@ -244,15 +243,17 @@ spec:
 2. ~~扩展 sandbox 状态：`allowlistActive` / `allowlistProxy` / `allowlistDomains` + degraded reason。~~
 3. Go 内生实现（未嵌入 `@anthropic-ai/sandbox-runtime`）；未做 SOCKS5 / 内核层强制代理。
 
-### Phase 2 — Container backend MVP（标准化环境）
+### Phase 2 — Container backend MVP（标准化环境 / 进行中）
 
-1. 新增 `port.ExecutionBackend`（或扩展 `Sandbox` 为「Runner + Env」）。
-2. Podman 优先（与 Harbor 一致；rootless 友好），Docker 作兼容。
-3. 全局/项目可选：`runtime.environment.backend=container` + 默认镜像（可从 Harbor base 衍生产品镜像：`danmo-work-env`）。
-4. Session 级：挂载 project workdir；`exec_shell` → `podman exec`。
-5. UI：Settings 增加「运行环境：本机沙箱 / 容器」与镜像名；状态页显示 image id / digest。
+**镜像分发：不走 registry pull。** CI（`make build-env-tar`）构建轻量 agent 友好镜像并 `podman/docker save` 为 `out/env/danmo-work-env-linux-<arch>.tar`；随 Linux server 包与 Release 资产分发。运行时仅 `load -i`，标签 `localhost/danmo-work-env:bundled`。
 
-验收：同一项目在「干净机器 + 仅 Podman」上，Agent 能完成 `go test` / 前端 build，而不依赖宿主预装 Go/Node。
+1. ~~新增 `port.ExecutionBackend`~~ → `core/runtime/execution` + `core/adapter/container`
+2. Podman 优先探测，Docker 兼容；**禁止 pull**
+3. `runtime.environment.backend=local|container`；一项目一长生命周期容器（`danmo-work-proj-{id}`），bind-mount workdir → `/workspace`
+4. `exec_shell` 经 ExecutionBackend；缺引擎/缺 tar 时 degraded → LocalOS
+5. `GET /api/v1/environment/status`；Settings UI 后续补
+
+验收：安装包内带 env tar + 本机 Podman/Docker 时，`backend=container` 下 `node -v` / `python3 -v` 不依赖宿主工具链。
 
 ### Phase 3 — 声明式 EnvironmentSpec
 

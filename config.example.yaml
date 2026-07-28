@@ -53,6 +53,15 @@ runtime:
     #   - "registry.npmjs.org"
     backend: ""
     shell: "auto"
+  # Optional OCI execution environment (one long-lived container per project).
+  # Image is NEVER pulled from a registry — CI builds a tar (make build-env-tar)
+  # and the runtime loads it via podman/docker load.
+  # backend: local (default) | container
+  environment:
+    backend: "local"
+    image: "localhost/danmo-work-env:bundled"
+    # tar_path: ""   # empty = WORK_ENV_TAR / ~/.danmo-work/env/ / out/env/
+    workspace_mount: "/workspace"
   # Headless browser for web_fetch JS rendering (chromedp + system Chrome/Edge).
   # Does not ship a browser binary. Leave cdp_url empty to auto-launch a local browser.
   browser:

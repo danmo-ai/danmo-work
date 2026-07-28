@@ -1,0 +1,67 @@
+package execution
+
+import (
+	"testing"
+
+	"danmo-work/core/domain"
+	"danmo-work/core/port"
+)
+
+func TestNormalizeEnvDefaultsLocal(t *testing.T) {
+	cfg := normalizeEnv(domain.ConfigEnvironmentSection{})
+	if cfg.Backend != domain.EnvironmentBackendLocal {
+		t.Fatalf("backend=%q", cfg.Backend)
+	}
+	if cfg.Image != defaultImage {
+		t.Fatalf("image=%q", cfg.Image)
+	}
+	if cfg.WorkspaceMount != defaultMount {
+		t.Fatalf("mount=%q", cfg.WorkspaceMount)
+	}
+}
+
+func TestNormalizeEnvContainerAliases(t *testing.T) {
+	for _, b := range []string{"container", "oci", "docker", "podman"} {
+		cfg := normalizeEnv(domain.ConfigEnvironmentSection{Backend: domain.EnvironmentBackend(b)})
+		if cfg.Backend != domain.EnvironmentBackendContainer {
+			t.Fatalf("%s → %q", b, cfg.Backend)
+		}
+	}
+}
+
+func TestSanitizeID(t *testing.T) {
+	got := sanitizeID("abc_DEF-12")
+	if got != "abc_DEF-12" {
+		t.Fatalf("got %q", got)
+	}
+	got = sanitizeID("proj/../x")
+	if got != "proj----x" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestStatusDegradesWithoutEngine(t *testing.T) {
+	m := New(domain.ConfigEnvironmentSection{Backend: domain.EnvironmentBackendContainer}, domain.ConfigSandboxSection{}, nil)
+	st := m.Status()
+	if !st.Degraded {
+		t.Fatal("expected degraded without podman/docker or tar")
+	}
+	if st.Backend != domain.EnvironmentBackendLocal {
+		t.Fatalf("effective backend=%q", st.Backend)
+	}
+}
+
+func TestContainerNetwork(t *testing.T) {
+	deny := containerNetwork(domain.ConfigSandboxSection{Network: domain.SandboxNetworkDeny}, port.ExecRunOptions{})
+	if deny != "none" {
+		t.Fatalf("deny=%q", deny)
+	}
+	alist := containerNetwork(domain.ConfigSandboxSection{Network: domain.SandboxNetworkAllowlist}, port.ExecRunOptions{})
+	if alist != "host" {
+		t.Fatalf("allowlist=%q", alist)
+	}
+	allow := containerNetwork(domain.ConfigSandboxSection{Network: domain.SandboxNetworkAllow}, port.ExecRunOptions{})
+	if allow != "" {
+		t.Fatalf("allow=%q", allow)
+	}
+}

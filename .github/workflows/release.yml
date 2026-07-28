@@ -167,6 +167,12 @@ jobs:
           rm -f desktop/src-tauri/tauri.conf.json.bak desktop/src-tauri/Cargo.toml.bak frontend/package.json.bak
           echo "Version set to $V"
 
+      - name: Build bundled agent env tar (OCI, no registry)
+        working-directory: ${{ env.REPO_DIR }}
+        run: |
+          chmod +x scripts/*.sh
+          make build-env-tar
+
       - name: Build Linux server bundle
         working-directory: ${{ env.REPO_DIR }}
         run: |
@@ -178,6 +184,13 @@ jobs:
         with:
           name: danmo-work-server-linux
           path: ${{ env.REPO_DIR }}/out/dist/${{ env.APP_NAME }}-linux-*.tar.gz
+          if-no-files-found: error
+
+      - name: Upload env image tar
+        uses: actions/upload-artifact@v6
+        with:
+          name: danmo-work-env-linux
+          path: ${{ env.REPO_DIR }}/out/env/danmo-work-env-linux-*.tar
           if-no-files-found: error
 
   windows-desktop:
@@ -386,6 +399,12 @@ jobs:
           name: danmo-work-server-linux
           path: release-assets/linux
 
+      - name: Download env image tar
+        uses: actions/download-artifact@v7
+        with:
+          name: danmo-work-env-linux
+          path: release-assets/env
+
       - name: Download Windows desktop artifact
         uses: actions/download-artifact@v7
         with:
@@ -436,6 +455,7 @@ jobs:
             release-assets/macos/**/*.app.tar.gz
             release-assets/macos/**/*.app.tar.gz.sig
             release-assets/linux/**/*.tar.gz
+            release-assets/env/**/*.tar
             release-assets/windows/**/*.exe
             release-assets/windows/**/*.nsis.zip
             release-assets/windows/**/*.sig
