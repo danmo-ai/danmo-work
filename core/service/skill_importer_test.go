@@ -1,6 +1,8 @@
 package service
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -56,5 +58,44 @@ x
 	}
 	if sk.Metadata["version"] != "1.0" {
 		t.Fatalf("metadata = %#v", sk.Metadata)
+	}
+}
+
+func TestImportWalksAllResourceDirs(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite := func(rel, body string) {
+		p := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite("SKILL.md", "---\nname: demo\ndescription: d\n---\n\nBody\n")
+	mustWrite("references/a.md", "a")
+	mustWrite("templates/b.md", "b")
+	mustWrite("rules/c.md", "c")
+	mustWrite("_meta.json", `{}`)
+	mustWrite(".hidden", "x")
+
+	sk, files, err := NewSkillImporter().Import(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sk.ID != "demo" {
+		t.Fatalf("id = %q", sk.ID)
+	}
+	got := map[string]bool{}
+	for _, f := range files {
+		got[f.Path] = true
+	}
+	for _, want := range []string{"references/a.md", "templates/b.md", "rules/c.md"} {
+		if !got[want] {
+			t.Fatalf("missing file %s in %#v", want, got)
+		}
+	}
+	if got["_meta.json"] || got[".hidden"] || got["SKILL.md"] {
+		t.Fatalf("unexpected files: %#v", got)
 	}
 }

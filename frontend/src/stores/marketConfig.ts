@@ -22,18 +22,22 @@ function emptySource(): MarketSourceConfig {
 function normalizeMarket(m?: ConfigMarketSection | null): ConfigMarketSection {
   return {
     cacheTtlHours: m?.cacheTtlHours && m.cacheTtlHours > 0 ? m.cacheTtlHours : 6,
-    sources: (m?.sources ?? []).map((s) => ({
-      id: s.id ?? '',
-      name: s.name ?? '',
-      kind: s.kind || 'git',
-      platform: s.platform || (s.kind === 'clawhub' ? '' : 'github'),
-      repo: s.repo ?? '',
-      ref: s.ref || (s.kind === 'clawhub' ? '' : 'main'),
-      catalogPath: s.catalogPath || (s.kind === 'clawhub' ? '' : 'catalog/index.json'),
-      token: s.token ?? '',
-      enabled: !!s.enabled,
-      priority: typeof s.priority === 'number' ? s.priority : 50,
-    })),
+    sources: (m?.sources ?? []).map((s) => {
+      const kind = s.kind || 'git'
+      const isRegistry = kind === 'clawhub' || kind === 'techleads' || kind === 'tlc' || kind === 'tech-leads-club'
+      return {
+        id: s.id ?? '',
+        name: s.name ?? '',
+        kind,
+        platform: s.platform || (isRegistry ? '' : 'github'),
+        repo: s.repo ?? '',
+        ref: s.ref || (kind === 'techleads' || kind === 'tlc' || kind === 'tech-leads-club' ? 'latest' : isRegistry ? '' : 'main'),
+        catalogPath: s.catalogPath || (isRegistry ? '' : 'catalog/index.json'),
+        token: s.token ?? '',
+        enabled: !!s.enabled,
+        priority: typeof s.priority === 'number' ? s.priority : 50,
+      }
+    }),
   }
 }
 
@@ -44,6 +48,7 @@ export const useMarketConfigStore = defineStore('marketConfig', () => {
 
   const kindOptions = [
     { value: 'git', label: 'Git catalog' },
+    { value: 'techleads', label: 'Tech Leads Club' },
     { value: 'clawhub', label: 'ClawHub' },
   ]
 
@@ -81,6 +86,18 @@ export const useMarketConfigStore = defineStore('marketConfig', () => {
                 name: s.name.trim() || s.id.trim(),
                 kind: 'clawhub',
                 repo: (s.repo ?? '').trim() || 'https://clawhub.ai',
+                token: s.token?.trim() || undefined,
+                enabled: !!s.enabled,
+                priority: typeof s.priority === 'number' ? s.priority : 50,
+              }
+            }
+            if (kind === 'techleads' || kind === 'tlc' || kind === 'tech-leads-club') {
+              return {
+                id: s.id.trim(),
+                name: s.name.trim() || s.id.trim(),
+                kind: 'techleads',
+                repo: (s.repo ?? '').trim() || '@tech-leads-club/skills-catalog',
+                ref: s.ref?.trim() || 'latest',
                 token: s.token?.trim() || undefined,
                 enabled: !!s.enabled,
                 priority: typeof s.priority === 'number' ? s.priority : 50,

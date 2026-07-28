@@ -745,6 +745,22 @@ function addMarketSource() {
   marketForm.value.sources.push(marketConfig.emptySource())
 }
 
+function isGitMarketKind(kind?: string) {
+  return !kind || kind === 'git'
+}
+
+function marketRepoLabel(kind?: string) {
+  if (kind === 'clawhub') return 'settings.marketClawhubRepo'
+  if (kind === 'techleads' || kind === 'tlc' || kind === 'tech-leads-club') return 'settings.marketTechleadsRepo'
+  return 'settings.marketRepo'
+}
+
+function marketRepoPlaceholder(kind?: string) {
+  if (kind === 'clawhub') return 'https://clawhub.ai'
+  if (kind === 'techleads' || kind === 'tlc' || kind === 'tech-leads-club') return '@tech-leads-club/skills-catalog'
+  return undefined
+}
+
 function removeMarketSource(idx: number) {
   marketForm.value.sources.splice(idx, 1)
 }
@@ -2184,7 +2200,7 @@ const hasFooterActions = computed(() => {
                 </label>
               </div>
 
-              <div v-if="src.kind !== 'clawhub'" class="settings-form-row">
+              <div v-if="isGitMarketKind(src.kind)" class="settings-form-row">
                 <label class="settings-field settings-field--half">
                   <span class="settings-field__label">{{ $t('settings.marketPlatform') }}</span>
                   <DqSelect v-model="src.platform">
@@ -2199,14 +2215,14 @@ const hasFooterActions = computed(() => {
               </div>
 
               <label class="settings-field">
-                <span class="settings-field__label">{{ src.kind === 'clawhub' ? $t('settings.marketClawhubRepo') : $t('settings.marketRepo') }}</span>
+                <span class="settings-field__label">{{ $t(marketRepoLabel(src.kind)) }}</span>
                 <DqInput
                   v-model="src.repo"
-                  :placeholder="src.kind === 'clawhub' ? 'https://clawhub.ai' : $t('settings.marketRepoPlaceholder')"
+                  :placeholder="marketRepoPlaceholder(src.kind) || $t('settings.marketRepoPlaceholder')"
                 />
               </label>
 
-              <div v-if="src.kind !== 'clawhub'" class="settings-form-row">
+              <div v-if="isGitMarketKind(src.kind)" class="settings-form-row">
                 <label class="settings-field settings-field--half">
                   <span class="settings-field__label">{{ $t('settings.marketRef') }}</span>
                   <DqInput v-model="src.ref" placeholder="main" />
@@ -2217,9 +2233,23 @@ const hasFooterActions = computed(() => {
                 </label>
               </div>
 
+              <div
+                v-else-if="src.kind === 'techleads' || src.kind === 'tlc' || src.kind === 'tech-leads-club'"
+                class="settings-form-row"
+              >
+                <label class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.marketNpmRef') }}</span>
+                  <DqInput v-model="src.ref" placeholder="latest" />
+                </label>
+              </div>
+
               <label class="settings-field">
                 <span class="settings-field__label">{{ $t('settings.marketToken') }}</span>
-                <DqInput v-model="src.token" type="password" :placeholder="src.kind === 'clawhub' ? 'clh_…' : 'ghp_…'" />
+                <DqInput
+                  v-model="src.token"
+                  type="password"
+                  :placeholder="src.kind === 'clawhub' ? 'clh_…' : 'ghp_…'"
+                />
               </label>
             </article>
           </div>

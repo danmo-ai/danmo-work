@@ -43,36 +43,45 @@ func (i *SkillImporter) Import(dirPath string) (*domain.Skill, []domain.SkillFil
 	skill.SourcePath = dirPath
 
 	var files []domain.SkillFile
-	for _, sub := range []string{"scripts", "references", "assets"} {
-		subDir := filepath.Join(dirPath, sub)
-		_ = filepath.WalkDir(subDir, func(fullPath string, d os.DirEntry, walkErr error) error {
-			if walkErr != nil || d.IsDir() {
-				return nil
-			}
-			rel, err := filepath.Rel(dirPath, fullPath)
-			if err != nil {
-				return nil
-			}
-			relPath := filepath.ToSlash(rel)
-			data, err := os.ReadFile(fullPath)
-			if err != nil {
-				return nil
-			}
-			info, _ := d.Info()
-			size := int64(0)
-			if info != nil {
-				size = info.Size()
-			}
-			files = append(files, domain.SkillFile{
-				ID:      skill.ID + ":" + relPath,
-				SkillID: skill.ID,
-				Path:    relPath,
-				Content: data,
-				Size:    size,
-			})
+	_ = filepath.WalkDir(dirPath, func(fullPath string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() {
 			return nil
+		}
+		rel, err := filepath.Rel(dirPath, fullPath)
+		if err != nil {
+			return nil
+		}
+		relPath := filepath.ToSlash(rel)
+		base := filepath.Base(relPath)
+		// Skip the skill body itself and common meta/junk files.
+		if relPath == "SKILL.md" || relPath == "skill.md" || relPath == "skills.md" {
+			return nil
+		}
+		if strings.HasPrefix(base, ".") || base == "_meta.json" || base == ".DS_Store" {
+			return nil
+		}
+		// Skip nested VCS / lock junk if present.
+		if strings.Contains(relPath, "/.git/") || strings.HasPrefix(relPath, ".git/") {
+			return nil
+		}
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			return nil
+		}
+		info, _ := d.Info()
+		size := int64(0)
+		if info != nil {
+			size = info.Size()
+		}
+		files = append(files, domain.SkillFile{
+			ID:      skill.ID + ":" + relPath,
+			SkillID: skill.ID,
+			Path:    relPath,
+			Content: data,
+			Size:    size,
 		})
-	}
+		return nil
+	})
 
 	return skill, files, nil
 }
