@@ -22,4 +22,6 @@ type Engine interface {
 	ResolveApproval(id string, approved bool, scope string)
 	PublishPermissionDecided(sessionID, turnID, approvalID string, approved bool, scope string)
 	ResolveAskUser(askID, answer string) error
+	// RevokeSessionNetworkGrants clears Soft + Hard session network grants.
+	RevokeSessionNetworkGrants(sessionID string)
 }

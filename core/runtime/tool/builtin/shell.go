@@ -8,6 +8,7 @@ import (
 
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
+	"danmo-work/core/runtime/egress"
 )
 
 type ExecShell struct {
@@ -64,21 +65,26 @@ func (h *ExecShell) Execute(ctx context.Context, input map[string]any) (domain.T
 	allowNet := boolFromInput(input, "__sandbox_allow_network")
 	workDir := workDirFromInput(input)
 	projectID, _ := input["__project_id"].(string)
+	grantedDomain, _ := input["__granted_domain"].(string)
 
 	var out []byte
 	var err error
 	if h.Runner != nil {
 		opts := port.ExecRunOptions{
-			ProjectID:    projectID,
-			Command:      cmdStr,
-			WorkDir:      workDir,
-			Timeout:      timeout,
-			AllowNetwork: allowNet,
+			ProjectID: projectID,
+			SandboxRunOptions: port.SandboxRunOptions{
+				Command:      cmdStr,
+				WorkDir:      workDir,
+				Timeout:      timeout,
+				AllowNetwork: allowNet,
+			},
+		}
+		if grantedDomain != "" {
+			opts.ExtraDomains = []string{grantedDomain}
 		}
 		if h.Sandbox != nil {
 			if u := strings.TrimSpace(h.Sandbox.ProxyURL()); u != "" {
-				opts.AllowlistProxy = strings.TrimPrefix(u, "http://")
-				opts.AllowlistProxy = strings.TrimPrefix(opts.AllowlistProxy, "https://")
+				opts.AllowlistProxy = egress.ProxyAddrFromURL(u)
 			}
 		}
 		out, err = h.Runner.Run(ctx, opts)
@@ -88,6 +94,9 @@ func (h *ExecShell) Execute(ctx context.Context, input map[string]any) (domain.T
 			WorkDir:      workDir,
 			Timeout:      timeout,
 			AllowNetwork: allowNet,
+		}
+		if grantedDomain != "" {
+			opts.ExtraDomains = []string{grantedDomain}
 		}
 		if h.Sandbox != nil {
 			out, err = h.Sandbox.Run(ctx, opts)

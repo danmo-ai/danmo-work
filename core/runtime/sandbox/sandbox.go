@@ -15,6 +15,7 @@ import (
 
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
+	"danmo-work/core/runtime/egress"
 	"danmo-work/core/runtime/sandbox/netproxy"
 )
 
@@ -31,7 +32,8 @@ type Manager struct {
 	status         domain.SandboxStatus
 	runner         runner
 	proxy          *netproxy.Server
-	grantedDomains []string // session / runtime grants (merged into allowlist)
+	sessionDomains map[string][]string // sessionID → Hard grants (scope=session)
+	turnDomains    map[string][]string // turnID → once-scope Hard grants
 }
 
 type runner interface {
@@ -43,7 +45,11 @@ type runner interface {
 // missing fields get safe defaults (enabled, workspace-write, network deny).
 func New(cfg domain.ConfigSandboxSection) *Manager {
 	cfg = normalizeConfig(cfg)
-	m := &Manager{cfg: cfg}
+	m := &Manager{
+		cfg:            cfg,
+		sessionDomains: make(map[string][]string),
+		turnDomains:    make(map[string][]string),
+	}
 	m.reprobe()
 	return m
 }
@@ -82,30 +88,88 @@ func (m *Manager) Close() error {
 	return m.stopProxyLocked()
 }
 
-// GrantDomains merges hosts into the runtime allowlist and refreshes the proxy.
-func (m *Manager) GrantDomains(domains []string) {
+// GrantSessionDomains merges hosts into the Hard allowlist for one session.
+func (m *Manager) GrantSessionDomains(sessionID string, domains []string) {
+	sessionID = strings.TrimSpace(sessionID)
 	domains = netproxy.NormalizeDomains(domains)
-	if len(domains) == 0 {
+	if sessionID == "" || len(domains) == 0 {
 		return
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.grantedDomains = netproxy.NormalizeDomains(append(m.grantedDomains, domains...))
-	if m.cfg.Network == domain.SandboxNetworkAllowlist {
-		_, _ = m.syncProxyLocked(m.cfg)
-		if m.proxy != nil {
-			m.proxy.UpdateDomains(m.effectiveDomainsLocked())
-		}
-		m.status.AllowlistDomains = m.effectiveDomainsLocked()
-		if m.proxy != nil {
-			m.status.AllowlistActive = true
-			m.status.AllowlistProxy = m.proxy.Addr()
-		}
+	cur := append([]string{}, m.sessionDomains[sessionID]...)
+	m.sessionDomains[sessionID] = netproxy.NormalizeDomains(append(cur, domains...))
+	m.refreshAllowlistLocked()
+}
+
+// RevokeSessionDomains drops Hard grants for a session.
+func (m *Manager) RevokeSessionDomains(sessionID string) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.sessionDomains[sessionID]; !ok {
+		return
+	}
+	delete(m.sessionDomains, sessionID)
+	m.refreshAllowlistLocked()
+}
+
+// GrantTurnDomains merges once-scope domains for the active turn.
+func (m *Manager) GrantTurnDomains(turnID string, domains []string) {
+	turnID = strings.TrimSpace(turnID)
+	domains = netproxy.NormalizeDomains(domains)
+	if turnID == "" || len(domains) == 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cur := append([]string{}, m.turnDomains[turnID]...)
+	m.turnDomains[turnID] = netproxy.NormalizeDomains(append(cur, domains...))
+	m.refreshAllowlistLocked()
+}
+
+// ClearTurnDomains drops once-scope domains when the turn ends.
+func (m *Manager) ClearTurnDomains(turnID string) {
+	turnID = strings.TrimSpace(turnID)
+	if turnID == "" {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.turnDomains[turnID]; !ok {
+		return
+	}
+	delete(m.turnDomains, turnID)
+	m.refreshAllowlistLocked()
+}
+
+func (m *Manager) refreshAllowlistLocked() {
+	if m.cfg.Network != domain.SandboxNetworkAllowlist {
+		return
+	}
+	_, _ = m.syncProxyLocked(m.cfg)
+	if m.proxy != nil {
+		m.proxy.UpdateDomains(m.effectiveDomainsLocked())
+	}
+	m.status.AllowlistDomains = m.effectiveDomainsLocked()
+	if m.proxy != nil {
+		m.status.AllowlistActive = true
+		m.status.AllowlistProxy = m.proxy.Addr()
 	}
 }
 
 func (m *Manager) effectiveDomainsLocked() []string {
-	return netproxy.NormalizeDomains(append(append([]string{}, m.cfg.AllowlistDomains...), m.grantedDomains...))
+	out := append([]string{}, m.cfg.AllowlistDomains...)
+	for _, ds := range m.sessionDomains {
+		out = append(out, ds...)
+	}
+	for _, ds := range m.turnDomains {
+		out = append(out, ds...)
+	}
+	return netproxy.NormalizeDomains(out)
 }
 
 // CheckHost applies Hard egress for host-side HTTP tools.
@@ -114,24 +178,7 @@ func (m *Manager) CheckHost(host string) error {
 	cfg := m.cfg
 	domains := m.effectiveDomainsLocked()
 	m.mu.RUnlock()
-	host = strings.ToLower(strings.TrimSpace(host))
-	if host == "" {
-		return fmt.Errorf("egress: empty host")
-	}
-	if !cfg.Enabled || cfg.Mode == domain.SandboxModeDangerFullAccess {
-		return nil
-	}
-	switch cfg.Network {
-	case domain.SandboxNetworkAllow:
-		return nil
-	case domain.SandboxNetworkAllowlist:
-		if netproxy.Match(host, domains) {
-			return nil
-		}
-		return fmt.Errorf("egress: host %q not in allowlist", host)
-	default: // deny
-		return fmt.Errorf("egress: network deny blocks host %q", host)
-	}
+	return egress.CheckHost(cfg, domains, host)
 }
 
 // ProxyURL returns http://addr when allowlist proxy is active.
@@ -164,26 +211,14 @@ func (m *Manager) ApplyMCPEnv(base []string, networkOverride string) (env []stri
 	switch netMode {
 	case domain.SandboxNetworkAllowlist:
 		if proxyAddr != "" {
-			env = applyAllowlistProxyEnv(env, proxyAddr)
+			env = egress.BuildProxyEnv(env, egress.ProxyEnvOpts{ProxyAddr: proxyAddr, ForContainer: false})
 		}
 	case domain.SandboxNetworkDeny:
 		wrapBwrapNetDeny = lookPath("bwrap")
 		// Strip proxies so the child cannot widen via host proxy.
-		env = stripProxyEnv(env)
+		env = egress.StripProxyEnv(env)
 	}
 	return env, wrapBwrapNetDeny
-}
-
-func stripProxyEnv(environ []string) []string {
-	out := make([]string, 0, len(environ))
-	for _, e := range environ {
-		key, _, _ := strings.Cut(e, "=")
-		if _, drop := proxyEnvKeys[key]; drop {
-			continue
-		}
-		out = append(out, e)
-	}
-	return out
 }
 
 // Run executes a shell command under the selected sandbox backend.
@@ -210,7 +245,24 @@ func (m *Manager) Run(ctx context.Context, opts port.SandboxRunOptions) ([]byte,
 
 	if !opts.AllowNetwork && proxyAddr != "" && cfg.Network == domain.SandboxNetworkAllowlist {
 		opts.AllowlistProxy = proxyAddr
-		opts.Env = applyAllowlistProxyEnv(opts.Env, proxyAddr)
+		opts.Env = egress.BuildProxyEnv(opts.Env, egress.ProxyEnvOpts{ProxyAddr: proxyAddr, ForContainer: false})
+	}
+	if len(opts.ExtraDomains) > 0 && cfg.Network == domain.SandboxNetworkAllowlist {
+		// Merge once extras into proxy for this Run (also covered if GrantTurnDomains already ran).
+		m.mu.Lock()
+		extra := netproxy.NormalizeDomains(opts.ExtraDomains)
+		combined := netproxy.NormalizeDomains(append(m.effectiveDomainsLocked(), extra...))
+		if m.proxy != nil {
+			m.proxy.UpdateDomains(combined)
+		}
+		m.mu.Unlock()
+		defer func() {
+			m.mu.Lock()
+			if m.proxy != nil {
+				m.proxy.UpdateDomains(m.effectiveDomainsLocked())
+			}
+			m.mu.Unlock()
+		}()
 	}
 
 	if !cfg.Enabled || cfg.Mode == domain.SandboxModeDangerFullAccess || status.Backend == domain.SandboxBackendDisabled {
@@ -373,32 +425,13 @@ func filterEnv(environ []string) []string {
 	return out
 }
 
-var proxyEnvKeys = map[string]struct{}{
-	"HTTP_PROXY": {}, "HTTPS_PROXY": {}, "ALL_PROXY": {}, "NO_PROXY": {},
-	"http_proxy": {}, "https_proxy": {}, "all_proxy": {}, "no_proxy": {},
+func networkAllowed(cfg domain.ConfigSandboxSection, opts port.SandboxRunOptions) bool {
+	return egress.OSNetworkOpen(cfg.Network, opts.AllowNetwork, opts.AllowlistProxy)
 }
 
-func applyAllowlistProxyEnv(environ []string, proxyAddr string) []string {
-	proxyURL := "http://" + proxyAddr
-	out := make([]string, 0, len(environ)+4)
-	for _, e := range environ {
-		key, _, _ := strings.Cut(e, "=")
-		if _, drop := proxyEnvKeys[key]; drop {
-			continue
-		}
-		out = append(out, e)
-	}
-	out = append(out,
-		"HTTP_PROXY="+proxyURL,
-		"HTTPS_PROXY="+proxyURL,
-		"ALL_PROXY="+proxyURL,
-		"NO_PROXY=",
-		"http_proxy="+proxyURL,
-		"https_proxy="+proxyURL,
-		"all_proxy="+proxyURL,
-		"no_proxy=",
-	)
-	return out
+// needNetDeny reports whether backend selection should prefer network isolation.
+func needNetDeny(cfg domain.ConfigSandboxSection, allowlistProxyActive bool) bool {
+	return egress.NeedNetDeny(cfg.Network, allowlistProxyActive)
 }
 
 type hostRunner struct{}
@@ -432,30 +465,4 @@ func runHost(ctx context.Context, opts port.SandboxRunOptions, cfg domain.Config
 func lookPath(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
-}
-
-func networkAllowed(cfg domain.ConfigSandboxSection, opts port.SandboxRunOptions) bool {
-	if opts.AllowNetwork {
-		return true
-	}
-	if cfg.Network == domain.SandboxNetworkAllow {
-		return true
-	}
-	// allowlist opens OS network only while the host-side proxy is active.
-	if cfg.Network == domain.SandboxNetworkAllowlist && opts.AllowlistProxy != "" {
-		return true
-	}
-	return false
-}
-
-// needNetDeny reports whether backend selection should prefer network isolation.
-func needNetDeny(cfg domain.ConfigSandboxSection, allowlistProxyActive bool) bool {
-	switch cfg.Network {
-	case domain.SandboxNetworkAllow:
-		return false
-	case domain.SandboxNetworkAllowlist:
-		return !allowlistProxyActive
-	default:
-		return true
-	}
 }

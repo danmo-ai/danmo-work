@@ -161,6 +161,9 @@ func (m *SessionManager) UpdateSession(ctx context.Context, s domain.Session) er
 }
 
 func (m *SessionManager) Delete(ctx context.Context, id string) error {
+	if m.engine != nil {
+		m.engine.RevokeSessionNetworkGrants(id)
+	}
 	return m.store.Sessions().Delete(ctx, id)
 }
 

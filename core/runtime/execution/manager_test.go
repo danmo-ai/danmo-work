@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"danmo-work/core/domain"
-	"danmo-work/core/port"
+	"danmo-work/core/runtime/egress"
 )
 
 func TestNormalizeEnvDefaultsLocal(t *testing.T) {
@@ -72,19 +72,19 @@ func TestStatusDegradesWithoutEngine(t *testing.T) {
 }
 
 func TestContainerNetwork(t *testing.T) {
-	deny := containerNetwork(domain.ConfigSandboxSection{Network: domain.SandboxNetworkDeny}, port.ExecRunOptions{}, "podman")
+	deny := egress.ContainerNetworkMode(domain.SandboxNetworkDeny, false, "podman")
 	if deny != "none" {
 		t.Fatalf("deny=%q", deny)
 	}
-	alist := containerNetwork(domain.ConfigSandboxSection{Network: domain.SandboxNetworkAllowlist}, port.ExecRunOptions{}, "docker")
+	alist := egress.ContainerNetworkMode(domain.SandboxNetworkAllowlist, false, "docker")
 	if alist != "host" {
 		t.Fatalf("allowlist=%q", alist)
 	}
-	appleAlist := containerNetwork(domain.ConfigSandboxSection{Network: domain.SandboxNetworkAllowlist}, port.ExecRunOptions{}, "apple-container")
+	appleAlist := egress.ContainerNetworkMode(domain.SandboxNetworkAllowlist, false, "apple-container")
 	if appleAlist != "" {
 		t.Fatalf("apple allowlist=%q", appleAlist)
 	}
-	allow := containerNetwork(domain.ConfigSandboxSection{Network: domain.SandboxNetworkAllow}, port.ExecRunOptions{}, "podman")
+	allow := egress.ContainerNetworkMode(domain.SandboxNetworkAllow, false, "podman")
 	if allow != "" {
 		t.Fatalf("allow=%q", allow)
 	}

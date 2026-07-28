@@ -848,7 +848,11 @@ func updateProject(h *Handler) gin.HandlerFunc {
 
 func deleteProject(h *Handler) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if err := h.Projects.Delete(c, c.Param("id")); err != nil {
+		id := c.Param("id")
+		if h.Execution != nil {
+			_ = h.Execution.Teardown(c.Request.Context(), id)
+		}
+		if err := h.Projects.Delete(c, id); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}

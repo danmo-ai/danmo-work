@@ -12,6 +12,7 @@ import (
 	"danmo-work/core/adapter/container"
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
+	"danmo-work/core/runtime/egress"
 )
 
 const (
@@ -35,16 +36,18 @@ func resolveWorkspaceMount(cfgMount, workDirAbs string) string {
 
 // Manager routes exec_shell to LocalOS sandbox or per-project OCI containers.
 type Manager struct {
-	mu         sync.Mutex
-	envCfg     domain.ConfigEnvironmentSection
-	sandboxCfg domain.ConfigSandboxSection
-	sandbox    port.Sandbox
-	runtime    container.Runtime
-	imageReady bool
-	tarPath    string
-	degraded   bool
-	degradeMsg string
-	active     map[string]struct{} // projectIDs with containers
+	mu           sync.Mutex
+	envCfg       domain.ConfigEnvironmentSection
+	sandboxCfg   domain.ConfigSandboxSection
+	sandbox      port.Sandbox
+	runtime      container.Runtime
+	imageReady   bool
+	tarPath      string
+	degraded     bool
+	degradeMsg   string
+	active       map[string]struct{} // projectIDs with containers
+	detectEngine domain.EnvironmentEngine
+	detectOK     bool
 }
 
 // New wraps an existing Sandbox for local mode and optional container backend.
@@ -61,27 +64,52 @@ func (m *Manager) Configure(envCfg domain.ConfigEnvironmentSection, sandboxCfg d
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	envCfg = normalizeEnv(envCfg)
-	m.envCfg = envCfg
+	prev := m.envCfg
 	m.sandboxCfg = sandboxCfg
-	m.imageReady = false
-	m.degraded = false
-	m.degradeMsg = ""
-	m.tarPath = container.ResolveTarPath(envCfg.TarPath)
+
+	engineChanged := prev.Engine != envCfg.Engine || prev.Backend != envCfg.Backend
+	imageChanged := prev.Image != envCfg.Image
+	tarOverrideChanged := prev.TarPath != envCfg.TarPath
+
+	m.envCfg = envCfg
+	newTar := container.ResolveTarPath(envCfg.TarPath)
+	tarPathChanged := newTar != m.tarPath || tarOverrideChanged
+	m.tarPath = newTar
+
 	if envCfg.Backend != domain.EnvironmentBackendContainer {
 		m.runtime = nil
+		m.detectOK = false
+		m.degraded = false
+		m.degradeMsg = ""
+		m.imageReady = false
 		return
 	}
-	rt, err := container.Detect(envCfg.Engine)
-	if err != nil {
-		m.runtime = nil
-		m.degraded = true
-		m.degradeMsg = "container backend requested but no engine: " + err.Error()
-		return
+
+	needDetect := !m.detectOK || engineChanged || m.runtime == nil
+	if needDetect {
+		rt, err := container.Detect(envCfg.Engine)
+		if err != nil {
+			m.runtime = nil
+			m.detectOK = false
+			m.degraded = true
+			m.degradeMsg = "container backend requested but no engine: " + err.Error()
+			return
+		}
+		m.runtime = rt
+		m.detectEngine = envCfg.Engine
+		m.detectOK = true
 	}
-	m.runtime = rt
+
 	if m.tarPath == "" {
 		m.degraded = true
 		m.degradeMsg = "container backend requested but env tar not found — download danmo-work-env-linux-*.tar from GitHub Releases into ~/.danmo-work/env/ (or set WORK_ENV_TAR / make build-env-tar)"
+	} else if m.degraded && strings.Contains(m.degradeMsg, "env tar not found") {
+		m.degraded = false
+		m.degradeMsg = ""
+	}
+
+	if imageChanged || tarPathChanged || engineChanged {
+		m.imageReady = false
 	}
 }
 
@@ -105,7 +133,6 @@ func normalizeEnv(cfg domain.ConfigEnvironmentSection) domain.ConfigEnvironmentS
 	if strings.TrimSpace(cfg.Image) == "" {
 		cfg.Image = defaultImage
 	}
-	// WorkspaceMount empty means "same as host project abs path" (resolved per exec).
 	return cfg
 }
 
@@ -231,16 +258,8 @@ func isFatalEngineErr(err error) bool {
 }
 
 func (m *Manager) runLocal(ctx context.Context, opts port.ExecRunOptions, sb port.Sandbox) ([]byte, error) {
-	sopts := port.SandboxRunOptions{
-		Command:        opts.Command,
-		WorkDir:        opts.WorkDir,
-		Timeout:        opts.Timeout,
-		Env:            opts.Env,
-		AllowNetwork:   opts.AllowNetwork,
-		AllowlistProxy: opts.AllowlistProxy,
-	}
 	if sb != nil {
-		return sb.Run(ctx, sopts)
+		return sb.Run(ctx, opts.SandboxRunOptions)
 	}
 	return nil, fmt.Errorf("execution: no sandbox and container unavailable")
 }
@@ -261,7 +280,11 @@ func (m *Manager) runContainer(ctx context.Context, opts port.ExecRunOptions) ([
 		engineName = m.runtime.Name()
 	}
 	m.mu.Unlock()
-	proxyEnv := proxyEnvFor(opts, engineName)
+	proxyEnv := egress.BuildProxyEnv(nil, egress.ProxyEnvOpts{
+		ProxyAddr:    opts.AllowlistProxy,
+		Engine:       engineName,
+		ForContainer: true,
+	})
 	return m.engineExec(execCtx, name, mount, opts.Command, proxyEnv)
 }
 
@@ -315,7 +338,7 @@ func (m *Manager) ensureProjectContainer(ctx context.Context, opts port.ExecRunO
 	if m.runtime != nil {
 		engineName = m.runtime.Name()
 	}
-	netMode := containerNetwork(m.sandboxCfg, opts, engineName)
+	netMode := egress.ContainerNetworkMode(m.sandboxCfg.Network, opts.AllowNetwork, engineName)
 	rt := m.runtime
 	m.mu.Unlock()
 
@@ -357,7 +380,11 @@ func (m *Manager) ensureProjectContainer(ctx context.Context, opts port.ExecRunO
 		WorkDir:   workDir,
 		Mount:     mount,
 		Network:   netMode,
-		Env:       proxyEnvFor(opts, engineName),
+		Env: egress.BuildProxyEnv(nil, egress.ProxyEnvOpts{
+			ProxyAddr:    opts.AllowlistProxy,
+			Engine:       engineName,
+			ForContainer: true,
+		}),
 		Resources: resources,
 	}
 	if err := rt.CreateDetached(ctx, create); err != nil {
@@ -370,44 +397,6 @@ func (m *Manager) ensureProjectContainer(ctx context.Context, opts port.ExecRunO
 	m.active[projectID] = struct{}{}
 	m.mu.Unlock()
 	return name, mount, nil
-}
-
-func containerNetwork(cfg domain.ConfigSandboxSection, opts port.ExecRunOptions, engine string) string {
-	if opts.AllowNetwork {
-		return ""
-	}
-	apple := engine == string(domain.EnvironmentEngineAppleContainer)
-	switch cfg.Network {
-	case domain.SandboxNetworkAllow:
-		return ""
-	case domain.SandboxNetworkAllowlist:
-		if apple {
-			// No host network on Apple Container — default vmnet + host.container.internal DNS.
-			return ""
-		}
-		return "host"
-	default:
-		return "none"
-	}
-}
-
-func proxyEnvFor(opts port.ExecRunOptions, engine string) []string {
-	var out []string
-	if p := strings.TrimSpace(opts.AllowlistProxy); p != "" {
-		u := p
-		if engine == string(domain.EnvironmentEngineAppleContainer) {
-			u = container.RewriteProxyForApple(p)
-		} else if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
-			u = "http://" + u
-		}
-		out = append(out,
-			"HTTP_PROXY="+u,
-			"HTTPS_PROXY="+u,
-			"ALL_PROXY="+u,
-			"NO_PROXY=localhost,127.0.0.1,host.container.internal",
-		)
-	}
-	return out
 }
 
 func sanitizeID(id string) string {
@@ -449,4 +438,21 @@ func (m *Manager) Teardown(ctx context.Context, projectID string) error {
 	delete(m.active, id)
 	m.mu.Unlock()
 	return err
+}
+
+// Close stops and removes all tracked project containers.
+func (m *Manager) Close() error {
+	m.mu.Lock()
+	ids := make([]string, 0, len(m.active))
+	for id := range m.active {
+		ids = append(ids, id)
+	}
+	m.mu.Unlock()
+	var first error
+	for _, id := range ids {
+		if err := m.Teardown(context.Background(), id); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
 }

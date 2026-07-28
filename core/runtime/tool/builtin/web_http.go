@@ -75,6 +75,7 @@ func upgradeToHTTPS(raw string) string {
 var testSkipSSRF bool
 
 // HostEgressChecker is optional Hard egress policy (sandbox network allowlist/deny).
+// Satisfied by port.EgressAuthority / port.Sandbox (CheckHost + ProxyURL).
 type HostEgressChecker interface {
 	CheckHost(host string) error
 	ProxyURL() string

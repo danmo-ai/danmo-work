@@ -25,6 +25,7 @@ const (
 	ReasonNetworkDomain    = "network_domain" // allowlist: add one domain
 	ReasonUnsandboxed      = "unsandboxed"
 	ReasonRuleAsk          = "rule_ask"
+	ReasonRuleDeny         = "rule_deny"
 	ReasonHighRisk         = "high_risk"
 	ReasonExternal         = "external"
 	ReasonModeDeny         = "mode_deny"
@@ -36,9 +37,12 @@ type Request struct {
 	Risk                 domain.RiskLevel
 	Command              string // exec_shell command when applicable
 	URL                  string // host-egress tools (http_request / web_fetch)
+	SearchProvider       string // web_search configured provider (for Soft allowlist)
+	SearchBaseURL        string // web_search base_url (SearXNG / custom DDG)
 	Sandbox              domain.SandboxStatus
-	SessionAllowNetwork  bool     // deny-mode full open for session
-	SessionAllowDomains  []string // allowlist session grants
+	Isolation            domain.EffectiveIsolation // preferred over Sandbox for strength
+	SessionAllowNetwork  bool                      // deny-mode full open for session
+	SessionAllowDomains  []string                  // allowlist session grants
 	Mode                 domain.PermissionMode
 }
 
@@ -106,7 +110,7 @@ func (g *Gate) CheckRequest(req Request) Result {
 			continue
 		}
 		if r.Action == domain.PermDeny {
-			return Result{Decision: DecisionDeny, Reason: ReasonRuleAsk}
+			return Result{Decision: DecisionDeny, Reason: ReasonRuleDeny}
 		}
 		if r.Action == domain.PermAsk {
 			return Result{Decision: DecisionAsk, Reason: ReasonRuleAsk}
@@ -134,7 +138,7 @@ func (g *Gate) CheckRequest(req Request) Result {
 		return Result{Decision: DecisionAllow}
 	}
 
-	if req.ToolName == "exec_shell" && isStrongSandbox(req.Sandbox) {
+	if req.ToolName == "exec_shell" && isStrongIsolation(req) {
 		if LooksDangerous(req.Command) {
 			return Result{Decision: DecisionAsk, Reason: ReasonDangerousCommand}
 		}
@@ -167,8 +171,22 @@ func isHostEgressTool(name string) bool {
 	}
 }
 
+func networkOf(req Request) domain.SandboxNetwork {
+	if req.Isolation.Network != "" {
+		return req.Isolation.Network
+	}
+	return req.Sandbox.Network
+}
+
+func allowlistDomainsOf(req Request) []string {
+	if len(req.Isolation.AllowlistDomains) > 0 {
+		return mergeDomains(req.Isolation.AllowlistDomains, req.SessionAllowDomains)
+	}
+	return mergeDomains(req.Sandbox.AllowlistDomains, req.SessionAllowDomains)
+}
+
 func checkShellNetwork(req Request) Result {
-	switch req.Sandbox.Network {
+	switch networkOf(req) {
 	case domain.SandboxNetworkDeny:
 		if !LooksLikeNetwork(req.Command) {
 			return Result{Decision: DecisionAllow}
@@ -179,7 +197,7 @@ func checkShellNetwork(req Request) Result {
 		return Result{Decision: DecisionAsk, Reason: ReasonNetwork}
 	case domain.SandboxNetworkAllowlist:
 		hosts := ExtractHosts(req.Command)
-		domains := mergeDomains(req.Sandbox.AllowlistDomains, req.SessionAllowDomains)
+		domains := allowlistDomainsOf(req)
 		for _, h := range hosts {
 			if !netproxy.Match(h, domains) {
 				return Result{Decision: DecisionAsk, Reason: ReasonNetworkDomain, Domain: h}
@@ -192,37 +210,42 @@ func checkShellNetwork(req Request) Result {
 }
 
 func checkHostEgress(req Request) Result {
-	host := hostFromURL(req.URL)
-	if host == "" && req.ToolName == "web_search" {
-		// Provider endpoint is configured separately; still subject to network mode.
-		switch req.Sandbox.Network {
+	hosts := []string{}
+	if h := hostFromURL(req.URL); h != "" {
+		hosts = append(hosts, h)
+	}
+	if req.ToolName == "web_search" && len(hosts) == 0 {
+		hosts = SearchProviderHosts(req.SearchProvider, req.SearchBaseURL)
+	}
+	if len(hosts) == 0 && req.ToolName == "web_search" {
+		// Unknown provider endpoint — still subject to deny mode.
+		switch networkOf(req) {
 		case domain.SandboxNetworkDeny:
 			if req.SessionAllowNetwork {
 				return Result{Decision: DecisionAllow}
 			}
 			return Result{Decision: DecisionAsk, Reason: ReasonNetwork}
-		case domain.SandboxNetworkAllowlist:
-			// web_search uses configured provider; allow Soft, Hard Match happens in client if URL known.
-			return Result{Decision: DecisionAllow}
 		default:
 			return Result{Decision: DecisionAllow}
 		}
 	}
-	if host == "" {
+	if len(hosts) == 0 {
 		return Result{Decision: DecisionAllow}
 	}
-	switch req.Sandbox.Network {
+	switch networkOf(req) {
 	case domain.SandboxNetworkDeny:
 		if req.SessionAllowNetwork {
 			return Result{Decision: DecisionAllow}
 		}
 		return Result{Decision: DecisionAsk, Reason: ReasonNetwork}
 	case domain.SandboxNetworkAllowlist:
-		domains := mergeDomains(req.Sandbox.AllowlistDomains, req.SessionAllowDomains)
-		if netproxy.Match(host, domains) {
-			return Result{Decision: DecisionAllow}
+		domains := allowlistDomainsOf(req)
+		for _, host := range hosts {
+			if !netproxy.Match(host, domains) {
+				return Result{Decision: DecisionAsk, Reason: ReasonNetworkDomain, Domain: host}
+			}
 		}
-		return Result{Decision: DecisionAsk, Reason: ReasonNetworkDomain, Domain: host}
+		return Result{Decision: DecisionAllow}
 	default:
 		return Result{Decision: DecisionAllow}
 	}
@@ -255,20 +278,11 @@ func isConsequentialRisk(risk domain.RiskLevel) bool {
 	return risk == domain.RiskHigh || risk == domain.RiskExternal || risk == domain.RiskMedium
 }
 
-func isStrongSandbox(st domain.SandboxStatus) bool {
-	if !st.Enabled {
-		return false
+func isStrongIsolation(req Request) bool {
+	if req.Isolation.Source != "" || req.Isolation.Strong {
+		return req.Isolation.Strong
 	}
-	switch st.Backend {
-	case domain.SandboxBackendHostWeak, domain.SandboxBackendDisabled, "":
-		return false
-	}
-	switch st.Mode {
-	case domain.SandboxModeWorkspaceWrite, domain.SandboxModeReadOnly:
-		return true
-	default:
-		return false
-	}
+	return domain.ComputeEffectiveIsolation(req.Sandbox, domain.EnvironmentStatus{}).Strong
 }
 
 func matchPattern(pattern, name string) bool {
@@ -276,5 +290,19 @@ func matchPattern(pattern, name string) bool {
 		return true
 	}
 	ok, _ := filepath.Match(pattern, name)
-	return ok || strings.Contains(name, strings.Trim(pattern, "*"))
+	if ok {
+		return true
+	}
+	// Exact suffix/prefix wildcards only — avoid bare substring false positives.
+	p := strings.TrimSpace(pattern)
+	if strings.HasPrefix(p, "*") && strings.HasSuffix(p, "*") && len(p) > 2 {
+		return strings.Contains(name, p[1:len(p)-1])
+	}
+	if strings.HasPrefix(p, "*") {
+		return strings.HasSuffix(name, strings.TrimPrefix(p, "*"))
+	}
+	if strings.HasSuffix(p, "*") {
+		return strings.HasPrefix(name, strings.TrimSuffix(p, "*"))
+	}
+	return false
 }

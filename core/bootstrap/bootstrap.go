@@ -216,6 +216,7 @@ func New(cfg Config) *Core {
 	eng.SetSandbox(sb)
 	mcpDialer.PrepareStdio = sb.PrepareMCPStdio
 	execBackend := execution.New(appCfg.Runtime.Environment, appCfg.Runtime.Sandbox, sb)
+	eng.SetExecution(execBackend)
 	br := dqbrowser.New(appCfg.Runtime.Browser)
 	eng.RegisterTool(&builtin.ExecShell{Sandbox: sb, Runner: execBackend})
 	eng.RegisterTool(&builtin.ReadFile{})
@@ -363,6 +364,16 @@ func (c *Core) Close() error {
 		c.Weixin.Stop()
 	}
 	var first error
+	if c.Execution != nil {
+		if err := c.Execution.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	if c.Sandbox != nil {
+		if err := c.Sandbox.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
 	if c.TableStore != nil {
 		if err := c.TableStore.Close(); err != nil && first == nil {
 			first = err
