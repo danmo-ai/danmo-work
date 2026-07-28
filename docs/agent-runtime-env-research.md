@@ -251,9 +251,10 @@ spec:
 2. **禁止 pull**；macOS 可优先 Apple Container CLI
 3. 一项目一容器；bind `/workspace`；**资源默认无限制**（不按主机推断），Settings/`resources.cpus|memory` 可配
 4. `exec_shell` 经 ExecutionBackend；缺引擎/缺 tar → LocalOS
-5. `GET /api/v1/environment/status` + Settings「执行环境」
+5. `GET /api/v1/environment/status` + Settings「执行环境」+ **下载环境镜像**（`POST /environment/tar/download` → `~/.danmo-work/env/`）
+6. Apple Container：`system start`、正确 `image load/tag/inspect`、`--network none` / default + `host.container.internal` 代理（allowlist）
 
-验收：用户下载 env tar + 本机引擎时，`apt-get update && apt-get install -y nodejs` 等可在容器内完成。
+验收：Settings 一键下载 tar；macOS Apple Container / Linux Podman 下可 `apt-get install`。
 
 ### Phase 3 — 声明式 EnvironmentSpec
 
