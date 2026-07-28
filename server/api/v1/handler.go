@@ -76,6 +76,7 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api := r.Group("/api/v1")
 	api.POST("/sessions", createSession(h))
 	api.GET("/sessions", listSessions(h))
+	api.GET("/sessions/activity", listSessionActivity(h))
 	api.GET("/sessions/:id", getSession(h))
 	api.PATCH("/sessions/:id", updateSession(h))
 	api.DELETE("/sessions/:id", deleteSession(h))
@@ -253,6 +254,63 @@ func listSessions(h *Handler) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, sessions)
+	}
+}
+
+// sessionActivityItem is a lightweight cross-session status for the UI board.
+type sessionActivityItem struct {
+	SessionID            string `json:"sessionId"`
+	State                string `json:"state"` // running | awaiting_approval
+	RunningTurnID        string `json:"runningTurnId,omitempty"`
+	PendingApprovalCount int    `json:"pendingApprovalCount,omitempty"`
+}
+
+func listSessionActivity(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.Store == nil {
+			c.JSON(http.StatusOK, []sessionActivityItem{})
+			return
+		}
+		bySession := map[string]*sessionActivityItem{}
+
+		if turns, err := h.Store.Turns().ListByStatus(c, domain.TurnRunning); err == nil {
+			for _, t := range turns {
+				if t.SessionID == "" {
+					continue
+				}
+				item := bySession[t.SessionID]
+				if item == nil {
+					item = &sessionActivityItem{SessionID: t.SessionID, State: "running"}
+					bySession[t.SessionID] = item
+				}
+				if item.RunningTurnID == "" {
+					item.RunningTurnID = t.ID
+				}
+				item.State = "running"
+			}
+		}
+
+		if approvals, err := h.Store.Approvals().ListByStatus(c, "pending"); err == nil {
+			for _, a := range approvals {
+				if a.SessionID == "" {
+					continue
+				}
+				item := bySession[a.SessionID]
+				if item == nil {
+					item = &sessionActivityItem{SessionID: a.SessionID}
+					bySession[a.SessionID] = item
+				}
+				item.PendingApprovalCount++
+				// Waiting on the human is more actionable than "still running".
+				item.State = "awaiting_approval"
+			}
+		}
+
+		out := make([]sessionActivityItem, 0, len(bySession))
+		for _, item := range bySession {
+			out = append(out, *item)
+		}
+		c.JSON(http.StatusOK, out)
 	}
 }
 

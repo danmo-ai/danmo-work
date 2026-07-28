@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSessionsStore } from '@/stores/sessions'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import { fetchJSON } from '@/api/client'
@@ -27,6 +28,7 @@ interface GitBranches {
   code?: string
 }
 
+const { t } = useI18n()
 const sessions = useSessionsStore()
 const workspaceUi = useWorkspaceUiStore()
 const data = ref<GitChanges | null>(null)
@@ -134,6 +136,13 @@ function changeLabel(c: GitFileChange): string {
   return c.file
 }
 
+function askAboutFile(c: GitFileChange, e: Event) {
+  e.stopPropagation()
+  const stagedHint = c.staged ? t('sessions.askAboutStaged') : t('sessions.askAboutUnstaged')
+  workspaceUi.prefillComposer(t('sessions.askAboutFilePrompt', { file: c.file, hint: stagedHint }))
+  workspaceUi.setRightTab('changes')
+}
+
 function openDiff(c: GitFileChange) {
   workspaceUi.openStage({
     kind: 'diff',
@@ -204,6 +213,11 @@ defineExpose({ refresh, totalCount })
             <span class="changes-panel__item-status">{{ statusLabel(c.status) }}</span>
             <span class="changes-panel__item-file" :title="changeLabel(c)">{{ changeLabel(c) }}</span>
             <span
+              class="changes-panel__item-ask"
+              :title="$t('sessions.askAboutFile')"
+              @click="askAboutFile(c, $event)"
+            >{{ $t('sessions.askAboutFileShort') }}</span>
+            <span
               class="changes-panel__item-copy"
               :title="$t('sessions.copyPath')"
               @click="copyPath(c.file, $event)"
@@ -223,6 +237,11 @@ defineExpose({ refresh, totalCount })
           >
             <span class="changes-panel__item-status">{{ statusLabel(c.status) }}</span>
             <span class="changes-panel__item-file" :title="changeLabel(c)">{{ changeLabel(c) }}</span>
+            <span
+              class="changes-panel__item-ask"
+              :title="$t('sessions.askAboutFile')"
+              @click="askAboutFile(c, $event)"
+            >{{ $t('sessions.askAboutFileShort') }}</span>
             <span
               class="changes-panel__item-copy"
               :title="$t('sessions.copyPath')"
@@ -390,11 +409,23 @@ defineExpose({ refresh, totalCount })
   line-height: 1.45;
 }
 
-.changes-panel__item:hover .changes-panel__item-copy {
+.changes-panel__item-ask {
+  flex-shrink: 0;
+  opacity: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dq-accent);
+  padding: 0 4px;
+  line-height: 1.45;
+}
+
+.changes-panel__item:hover .changes-panel__item-copy,
+.changes-panel__item:hover .changes-panel__item-ask {
   opacity: 1;
 }
 
-.changes-panel__item-copy:hover {
+.changes-panel__item-copy:hover,
+.changes-panel__item-ask:hover {
   color: var(--dq-accent);
 }
 </style>

@@ -42,6 +42,9 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   const stage = ref<OfficeStageState | null>(null)
   /** Bumped when Stage should reload file from disk (e.g. after AI turn). */
   const stageReloadToken = ref(0)
+  /** One-shot composer prefill (Changes / Diff “ask about this”). */
+  const composerPrefill = ref<string | null>(null)
+  const composerPrefillToken = ref(0)
 
   /** Left rail collapsed UI state (may be temporary while Stage is open). */
   const leftRailCollapsed = ref(readPersistedLeftRailCollapsed())
@@ -132,6 +135,19 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     paletteOpen.value = !paletteOpen.value
   }
 
+  function prefillComposer(text: string) {
+    const trimmed = text.trim()
+    if (!trimmed) return
+    composerPrefill.value = trimmed
+    composerPrefillToken.value++
+  }
+
+  function consumeComposerPrefill(): string | null {
+    const text = composerPrefill.value
+    composerPrefill.value = null
+    return text
+  }
+
   return {
     rightTab,
     changesCount,
@@ -140,6 +156,8 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     layoutMode,
     stage,
     stageReloadToken,
+    composerPrefill,
+    composerPrefillToken,
     leftRailCollapsed,
     leftRailCollapsedBeforeStage,
     setRightTab,
@@ -154,5 +172,7 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     openPalette,
     closePalette,
     togglePalette,
+    prefillComposer,
+    consumeComposerPrefill,
   }
 })

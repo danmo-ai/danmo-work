@@ -204,6 +204,12 @@ export const useSessionsStore = defineStore('sessions', () => {
       subscribeEvents(t.id)
       void pollSession(t.id)
       void loadTurns(t.id)
+      try {
+        const { useSessionActivityStore } = await import('@/stores/sessionActivity')
+        void useSessionActivityStore().refresh()
+      } catch {
+        /* optional */
+      }
       return t
     } finally {
       loading.value = false
