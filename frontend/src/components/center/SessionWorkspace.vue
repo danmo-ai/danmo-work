@@ -5,9 +5,11 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSessionsStore } from '@/stores/sessions'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
+import { useSessionActivityStore } from '@/stores/sessionActivity'
 import FloatingComposer from '@/components/composer/FloatingComposer.vue'
 import WelcomeEmpty from '@/components/center/WelcomeEmpty.vue'
 import ApprovalRail from '@/components/center/ApprovalRail.vue'
+import ActiveSessionsBar from '@/components/center/ActiveSessionsBar.vue'
 import ToolCardBlock from '@/components/center/ToolCardBlock.vue'
 import ToolCardGroup from '@/components/center/ToolCardGroup.vue'
 import TurnSection from '@/components/center/TurnSection.vue'
@@ -33,6 +35,7 @@ const router = useRouter()
 const { t } = useI18n()
 const sessions = useSessionsStore()
 const workspaceUi = useWorkspaceUiStore()
+const sessionActivity = useSessionActivityStore()
 const { rightTab, stage, layoutMode } = storeToRefs(workspaceUi)
 const rightPanelRef = ref<InstanceType<typeof RightWorkspacePanel> | null>(null)
 const { tokensForTurn } = useSessionContextUsage()
@@ -1362,6 +1365,19 @@ watch(
   { immediate: true },
 )
 
+watch(
+  () => ({
+    sessionId: sessions.currentSessionId,
+    askPending: approvalAnchors.value.some((a) => a.pending && a.kind === 'ask'),
+  }),
+  ({ sessionId, askPending }) => {
+    if (sessionId && askPending) sessionActivity.setLocalAsk(sessionId)
+    else sessionActivity.setLocalAsk(null)
+    void sessionActivity.refresh()
+  },
+  { immediate: true },
+)
+
 function onTitleKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter') {
     e.preventDefault()
@@ -1391,6 +1407,11 @@ function onTitleKeydown(e: KeyboardEvent) {
           </h2>
         </template>
         <DqTag :type="statusType">{{ statusLabel }}</DqTag>
+        <ActiveSessionsBar
+          class="session-workspace__active"
+          @select="(id) => { sessions.selectSession(id); router.push({ name: 'sessions', params: { id } }) }"
+          @jump-pending="jumpToFirstPendingApproval"
+        />
       </div>
       <div class="session-workspace__actions">
         <DqButton v-if="sessions.runningTurnId" type="warning" size="sm" @click="cancelRunning">
@@ -1651,6 +1672,11 @@ function onTitleKeydown(e: KeyboardEvent) {
   gap: 10px;
   min-width: 0;
   flex: 1;
+  flex-wrap: wrap;
+}
+
+.session-workspace__active {
+  flex-shrink: 0;
 }
 
 .session-workspace__title {

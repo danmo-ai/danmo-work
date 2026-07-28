@@ -8,6 +8,7 @@ import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import ComposerAttachmentTray from '@/components/composer/ComposerAttachmentTray.vue'
 import ComposerSkillChips from '@/components/composer/ComposerSkillChips.vue'
 import ComposerSkillPicker from '@/components/composer/ComposerSkillPicker.vue'
+import ComposerSlashPicker from '@/components/composer/ComposerSlashPicker.vue'
 import ContextUsageBar from '@/components/center/ContextUsageBar.vue'
 import { asArray, fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
@@ -29,6 +30,12 @@ import {
   prependSkillSummon,
   removeAtSkillQuery,
 } from '@/types/composer-skills'
+import {
+  COMPOSER_SLASH_COMMANDS,
+  detectSlashQuery,
+  removeSlashQuery,
+  type ComposerSlashCommand,
+} from '@/types/composer-slash'
 
 const { t } = useI18n()
 const content = ref('')
@@ -47,11 +54,19 @@ const buttonPickerOpen = ref(false)
 const atMenuOpen = ref(false)
 const atQuery = ref('')
 const atStart = ref(-1)
+const slashMenuOpen = ref(false)
+const slashQuery = ref('')
+const slashStart = ref(-1)
 const skillPickerRef = ref<{ onKeydown: (e: KeyboardEvent) => void } | null>(null)
+const slashPickerRef = ref<{ onKeydown: (e: KeyboardEvent) => void } | null>(null)
 const sessions = useSessionsStore()
 const projects = useProjectsStore()
 const llm = useLLMStore()
 const workspaceUi = useWorkspaceUiStore()
+
+const emit = defineEmits<{
+  'jump-pending': []
+}>()
 
 const isMac =
   typeof navigator !== 'undefined' &&
@@ -123,6 +138,7 @@ const selectedSkills = computed(() => {
 })
 
 const skillPickerOpen = computed(() => buttonPickerOpen.value || atMenuOpen.value)
+const anyPickerOpen = computed(() => skillPickerOpen.value || slashMenuOpen.value)
 
 const hasPendingApproval = computed(() => workspaceUi.pendingApprovals > 0)
 
@@ -334,7 +350,7 @@ function clearComposer() {
   editingId.value = null
   editingAnnotation.value = ''
   selectedSkillIds.value = []
-  closeSkillPickers()
+  closeAllPickers()
 }
 
 function getTextarea(): HTMLTextAreaElement | null {
@@ -348,11 +364,32 @@ function closeSkillPickers() {
   atStart.value = -1
 }
 
-function onDocPointerDown(e: MouseEvent) {
-  if (!skillPickerOpen.value) return
-  const root = (e.target as HTMLElement | null)?.closest?.('.composer-skill-pop, .composer-tool-btn--skill')
-  if (!root) closeSkillPickers()
+function closeSlashPicker() {
+  slashMenuOpen.value = false
+  slashQuery.value = ''
+  slashStart.value = -1
 }
+
+function closeAllPickers() {
+  closeSkillPickers()
+  closeSlashPicker()
+}
+
+function onDocPointerDown(e: MouseEvent) {
+  if (!anyPickerOpen.value) return
+  const root = (e.target as HTMLElement | null)?.closest?.(
+    '.composer-skill-pop, .composer-tool-btn--skill, .composer-slash-pop',
+  )
+  if (!root) closeAllPickers()
+}
+
+watch(
+  () => workspaceUi.composerPrefillToken,
+  () => {
+    const text = workspaceUi.consumeComposerPrefill()
+    if (text) appendContent(text)
+  },
+)
 
 async function loadAvailableSkills() {
   const agentId = sessions.selectedAgentId
@@ -381,24 +418,38 @@ async function loadAvailableSkills() {
 function syncAtMenuFromCaret() {
   if (hasPendingApproval.value || isTurnRunning.value) {
     atMenuOpen.value = false
+    slashMenuOpen.value = false
     return
   }
   const ta = getTextarea()
   if (!ta) {
     atMenuOpen.value = false
+    slashMenuOpen.value = false
     return
   }
-  const detected = detectAtSkillQuery(content.value, ta.selectionStart ?? 0)
-  if (!detected) {
-    atMenuOpen.value = false
-    atQuery.value = ''
-    atStart.value = -1
+  const caret = ta.selectionStart ?? 0
+  const at = detectAtSkillQuery(content.value, caret)
+  if (at) {
+    buttonPickerOpen.value = false
+    closeSlashPicker()
+    atMenuOpen.value = true
+    atQuery.value = at.query
+    atStart.value = at.start
     return
   }
-  buttonPickerOpen.value = false
-  atMenuOpen.value = true
-  atQuery.value = detected.query
-  atStart.value = detected.start
+  atMenuOpen.value = false
+  atQuery.value = ''
+  atStart.value = -1
+
+  const slash = detectSlashQuery(content.value, caret)
+  if (slash) {
+    buttonPickerOpen.value = false
+    slashMenuOpen.value = true
+    slashQuery.value = slash.query
+    slashStart.value = slash.start
+    return
+  }
+  closeSlashPicker()
 }
 
 watch(content, () => {
@@ -407,6 +458,7 @@ watch(content, () => {
 
 function toggleButtonSkillPicker() {
   if (hasPendingApproval.value || isTurnRunning.value) return
+  closeSlashPicker()
   atMenuOpen.value = false
   buttonPickerOpen.value = !buttonPickerOpen.value
 }
@@ -430,6 +482,44 @@ function onPickSkill(sk: AvailableSkill) {
   } else {
     selectedSkillIds.value = [...selectedSkillIds.value, sk.id]
   }
+}
+
+async function onPickSlash(cmd: ComposerSlashCommand) {
+  if (slashStart.value >= 0) {
+    const ta = getTextarea()
+    const caret = ta?.selectionStart ?? content.value.length
+    content.value = removeSlashQuery(content.value, slashStart.value, caret)
+  }
+  closeSlashPicker()
+  switch (cmd.id) {
+    case 'changes':
+      workspaceUi.setRightTab('changes')
+      break
+    case 'plan':
+      workspaceUi.setRightTab('plan')
+      break
+    case 'files':
+      workspaceUi.setRightTab('files')
+      break
+    case 'memory':
+      workspaceUi.setRightTab('memory')
+      break
+    case 'terminal':
+      workspaceUi.setRightTab('terminal')
+      break
+    case 'approve':
+      emit('jump-pending')
+      break
+    case 'stop':
+      if (sessions.runningTurnId) await stop()
+      break
+    case 'new':
+      sessions.startCompose(sessions.selectedProjectId)
+      break
+    default:
+      break
+  }
+  void nextTick(() => focusInput())
 }
 
 function removeSelectedSkill(id: string) {
@@ -473,8 +563,8 @@ async function send() {
     toast.warning(t('sessions.pendingApprovalHint'))
     return
   }
-  if (skillPickerOpen.value && atMenuOpen.value) {
-    closeSkillPickers()
+  if (anyPickerOpen.value) {
+    closeAllPickers()
   }
   let text = buildComposerUserInput(content.value, attachments.value)
   text = prependSkillSummon(
@@ -524,6 +614,14 @@ async function stop() {
 }
 
 function onKeydown(e: KeyboardEvent) {
+  if (slashMenuOpen.value && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape')) {
+    slashPickerRef.value?.onKeydown(e)
+    return
+  }
+  if (slashMenuOpen.value && e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+    slashPickerRef.value?.onKeydown(e)
+    return
+  }
   if (skillPickerOpen.value && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape')) {
     skillPickerRef.value?.onKeydown(e)
     return
@@ -597,10 +695,6 @@ function onDrop(e: DragEvent) {
   for (const f of files) addLocalFile(f)
 }
 
-const emit = defineEmits<{
-  'jump-pending': []
-}>()
-
 defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelectionAttachment })
 </script>
 
@@ -612,6 +706,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
       'is-blocked': hasPendingApproval,
       'is-compose': sessions.composingNew,
       'is-skill-picker-open': skillPickerOpen,
+      'is-slash-picker-open': slashMenuOpen,
     }"
     role="form"
     aria-label="Session composer"
@@ -636,11 +731,22 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
         @close="closeSkillPickers"
       />
     </div>
+    <div v-if="slashMenuOpen && !hasPendingApproval" class="composer-slash-pop">
+      <ComposerSlashPicker
+        ref="slashPickerRef"
+        :commands="COMPOSER_SLASH_COMMANDS"
+        :query="slashQuery"
+        @select="onPickSlash"
+        @close="closeSlashPicker"
+      />
+    </div>
 
     <!-- Compact bar while ask_user / permission cards need attention -->
     <div v-if="hasPendingApproval" class="composer-float__card composer-float__card--blocked">
       <div class="composer-float__banner composer-float__banner--warn">
-        <span class="composer-float__banner-text">{{ t('sessions.pendingApprovalHint') }}</span>
+        <span class="composer-float__banner-text">{{
+          t('sessions.pendingApprovalHintCount', { n: workspaceUi.pendingApprovals })
+        }}</span>
         <button
           type="button"
           class="composer-float__jump"
@@ -1255,6 +1361,21 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
   display: flex;
   justify-content: flex-start;
   pointer-events: none;
+}
+
+.composer-slash-pop {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% + 8px);
+  z-index: 41;
+  display: flex;
+  justify-content: flex-start;
+  pointer-events: none;
+}
+
+.composer-slash-pop > * {
+  pointer-events: auto;
 }
 
 .composer-skill-pop > * {

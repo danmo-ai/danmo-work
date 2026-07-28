@@ -88,6 +88,11 @@ function openFile() {
   workspaceUi.openStage(routed)
 }
 
+function askAboutDiff() {
+  const hint = props.staged ? t('sessions.askAboutStaged') : t('sessions.askAboutUnstaged')
+  workspaceUi.prefillComposer(t('sessions.askAboutFilePrompt', { file: props.path, hint }))
+}
+
 watch(
   () => [props.projectId, props.path, props.staged, props.reloadToken] as const,
   () => {
@@ -109,6 +114,9 @@ watch(
         t('office.diffTruncated')
       }}</span>
       <span class="diff-surface__spacer" />
+      <button type="button" class="diff-surface__btn" @click="askAboutDiff">
+        {{ t('sessions.askAboutFile') }}
+      </button>
       <button type="button" class="diff-surface__btn" @click="openFile">
         {{ t('office.diffOpenFile') }}
       </button>

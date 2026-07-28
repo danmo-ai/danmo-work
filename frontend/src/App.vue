@@ -8,6 +8,7 @@ import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
 import { useLLMStore } from '@/stores/llm'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
+import { useSessionActivityStore } from '@/stores/sessionActivity'
 import { initAppVersion, startSilentUpdateCheck } from '@/composables/useAppUpdater'
 import { isTauriRuntime, waitForBackend } from '@/utils/desktop'
 import type { AppModule } from '@/types/app-module'
@@ -19,6 +20,7 @@ const sessions = useSessionsStore()
 const projects = useProjectsStore()
 const llm = useLLMStore()
 const workspaceUi = useWorkspaceUiStore()
+const sessionActivity = useSessionActivityStore()
 const bootstrapping = ref(isTauriRuntime())
 const bootError = ref('')
 
@@ -70,6 +72,7 @@ onMounted(async () => {
     }
     sessions.syncModelSelection(llm.models, new Set())
     await sessions.loadSessions()
+    sessionActivity.startPolling()
   } catch (e) {
     bootError.value = e instanceof Error ? e.message : t('desktop.backendStartFailed')
   } finally {
@@ -78,6 +81,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  sessionActivity.stopPolling()
   window.removeEventListener('keydown', onGlobalKeydown)
 })
 

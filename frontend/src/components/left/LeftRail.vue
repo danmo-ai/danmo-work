@@ -12,6 +12,7 @@ import {
 } from '@danqing/dq-shell'
 import { useResizableWidth } from '@/composables/useResizableWidth'
 import { useSessionsStore } from '@/stores/sessions'
+import { useSessionActivityStore } from '@/stores/sessionActivity'
 import { useProjectsStore } from '@/stores/projects'
 import { useWeixinStore } from '@/stores/weixin'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
@@ -22,6 +23,7 @@ import { useAppUpdater } from '@/composables/useAppUpdater'
 import type { AppModule } from '@/types/app-module'
 import type { Project } from '@/types'
 import type { Session } from '@/types/mission'
+import type { SessionActivityState } from '@/types/session-activity'
 
 const emit = defineEmits<{
   navigate: [module: AppModule]
@@ -50,8 +52,16 @@ function collapseLeftRail() {
 }
 
 const sessions = useSessionsStore()
+const sessionActivity = useSessionActivityStore()
 const projects = useProjectsStore()
 const weixin = useWeixinStore()
+
+type SessionViewMode = 'tree' | 'board'
+const SESSION_VIEW_KEY = 'app-session-view'
+const sessionViewMode = ref<SessionViewMode>(
+  (localStorage.getItem(SESSION_VIEW_KEY) as SessionViewMode) === 'board' ? 'board' : 'tree',
+)
+watch(sessionViewMode, (v) => localStorage.setItem(SESSION_VIEW_KEY, v))
 
 function isWeixinSession(sessionId: string): boolean {
   return weixin.isWeixinSession(sessionId)
@@ -269,11 +279,65 @@ const filteredProjects = computed(() => {
   })
 })
 
+function sessionActivityState(s: Session): SessionActivityState {
+  if (sessions.currentSessionId === s.id) {
+    if (workspaceUi.pendingApprovals > 0) {
+      const st = sessionActivity.stateFor(s.id)
+      if (st === 'awaiting_ask') return 'awaiting_ask'
+      return 'awaiting_approval'
+    }
+    if (sessions.runningTurnId) return 'running'
+  }
+  return sessionActivity.stateFor(s.id)
+}
+
 function sessionStatusClass(s: Session): string {
-  if (sessions.runningTurnId && sessions.currentSessionId === s.id) return 'is-running'
-  // pending approval on current session only (global pendingApprovals is for active stream)
+  const st = sessionActivityState(s)
+  if (st === 'running') return 'is-running'
+  if (st === 'awaiting_approval' || st === 'awaiting_ask') return 'is-waiting'
   return ''
 }
+
+function sessionStatusTitle(s: Session): string | undefined {
+  const st = sessionActivityState(s)
+  if (st === 'running') return t('navigation.sessionRunning')
+  if (st === 'awaiting_approval') return t('navigation.sessionNeedsApproval')
+  if (st === 'awaiting_ask') return t('navigation.sessionNeedsAsk')
+  return undefined
+}
+
+function sessionStatusLabel(s: Session): string {
+  return sessionStatusTitle(s) ?? ''
+}
+
+const boardGroups = computed(() => {
+  const waiting: Session[] = []
+  const running: Session[] = []
+  const idle: Session[] = []
+  const q = sidebarSearch.value.trim().toLowerCase()
+  const pool = sessions.sessions.filter((s) => s.status !== 'archived')
+  for (const s of pool) {
+    if (q) {
+      const title = sessionTitle(s).toLowerCase()
+      const projectName = projects.sortedProjects.find((p) => p.id === s.projectId)?.name?.toLowerCase() ?? ''
+      if (!title.includes(q) && !projectName.includes(q)) continue
+    }
+    const st = sessionActivityState(s)
+    if (st === 'awaiting_approval' || st === 'awaiting_ask') waiting.push(s)
+    else if (st === 'running') running.push(s)
+    else if (s.status === 'active' || !s.status) idle.push(s)
+  }
+  const byUpdated = (a: Session, b: Session) =>
+    new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime()
+  waiting.sort(byUpdated)
+  running.sort(byUpdated)
+  idle.sort(byUpdated)
+  return [
+    { key: 'waiting', label: t('navigation.boardWaiting'), items: waiting },
+    { key: 'running', label: t('navigation.boardRunning'), items: running },
+    { key: 'idle', label: t('navigation.boardIdle'), items: idle.slice(0, 40) },
+  ].filter((g) => g.items.length > 0)
+})
 
 const {
   appVersion,
@@ -372,6 +436,26 @@ watch(() => projects.projects.length, (len) => {
           <div class="module-sidebar__section">
             <div class="module-sidebar__section-head">
               <span class="module-sidebar__section-title">{{ $t('navigation.projects') }}</span>
+              <div class="module-sidebar__view-toggle" role="group" :aria-label="$t('navigation.sessionView')">
+                <button
+                  type="button"
+                  class="module-sidebar__view-btn"
+                  :class="{ 'is-active': sessionViewMode === 'tree' }"
+                  :title="$t('navigation.viewTree')"
+                  @click="sessionViewMode = 'tree'"
+                >
+                  {{ $t('navigation.viewTree') }}
+                </button>
+                <button
+                  type="button"
+                  class="module-sidebar__view-btn"
+                  :class="{ 'is-active': sessionViewMode === 'board' }"
+                  :title="$t('navigation.viewBoard')"
+                  @click="sessionViewMode = 'board'"
+                >
+                  {{ $t('navigation.viewBoard') }}
+                </button>
+              </div>
               <button type="button" class="module-sidebar__section-add" :aria-label="$t('navigation.newProject')" @click="openNewProjectForm">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M12 5v14M5 12h14" />
@@ -432,7 +516,45 @@ watch(() => projects.projects.length, (len) => {
 
             <div v-if="projects.loading" class="module-sidebar__empty">{{ $t('navigation.loading_') }}</div>
             <div v-else-if="!projects.sortedProjects.length" class="module-sidebar__empty">{{ $t('navigation.noProjects') }}</div>
-            <div v-else-if="!filteredProjects.length" class="module-sidebar__empty">{{ $t('navigation.noSearchResults') }}</div>
+            <div v-else-if="sessionViewMode === 'tree' && !filteredProjects.length" class="module-sidebar__empty">{{ $t('navigation.noSearchResults') }}</div>
+            <div v-else-if="sessionViewMode === 'board' && !boardGroups.length" class="module-sidebar__empty">{{ $t('navigation.boardEmpty') }}</div>
+
+            <nav v-else-if="sessionViewMode === 'board'" class="session-board" aria-label="会话看板">
+              <div v-for="g in boardGroups" :key="g.key" class="session-board__group">
+                <div class="session-board__label">
+                  <span>{{ g.label }}</span>
+                  <span class="session-board__count">{{ g.items.length }}</span>
+                </div>
+                <div
+                  v-for="t_ in g.items"
+                  :key="t_.id"
+                  class="project-tree__session-row"
+                >
+                  <button
+                    type="button"
+                    class="project-tree__session"
+                    :class="[
+                      { 'is-active': sessions.currentSessionId === t_.id && !sessions.composingNew },
+                      sessionStatusClass(t_),
+                    ]"
+                    @click="selectSession(t_.id)"
+                  >
+                    <span
+                      class="project-tree__session-dot"
+                      :class="{
+                        'is-running': sessionActivityState(t_) === 'running',
+                        'is-waiting': sessionActivityState(t_) === 'awaiting_approval' || sessionActivityState(t_) === 'awaiting_ask',
+                      }"
+                      :title="sessionStatusTitle(t_)"
+                    />
+                    <span class="project-tree__session-name">{{ sessionTitle(t_) }}</span>
+                    <span v-if="sessionStatusLabel(t_)" class="project-tree__session-badge">{{ sessionStatusLabel(t_) }}</span>
+                    <span class="project-tree__session-time">{{ formatRelativeTime(t_.updatedAt || t_.createdAt) }}</span>
+                  </button>
+                </div>
+              </div>
+            </nav>
+
             <nav v-else class="project-tree" aria-label="项目列表">
               <div v-for="p in filteredProjects" :key="p.id" class="project-tree__group">
                 <div class="project-tree__row" :class="{ 'is-active': false }" @click="toggleProject(p.id)">
@@ -490,12 +612,14 @@ watch(() => projects.projects.length, (len) => {
                       <span
                         class="project-tree__session-dot"
                         :class="{
-                          'is-running': sessions.runningTurnId && sessions.currentSessionId === t_.id,
+                          'is-running': sessionActivityState(t_) === 'running',
+                          'is-waiting': sessionActivityState(t_) === 'awaiting_approval' || sessionActivityState(t_) === 'awaiting_ask',
                         }"
-                        :title="sessions.runningTurnId && sessions.currentSessionId === t_.id ? $t('navigation.sessionRunning') : undefined"
+                        :title="sessionStatusTitle(t_)"
                       />
                       <span class="project-tree__session-name">{{ sessionTitle(t_) }}</span>
                       <span v-if="isWeixinSession(t_.id)" class="project-tree__weixin-badge">{{ $t('navigation.weixinBadge') }}</span>
+                      <span v-if="sessionStatusLabel(t_)" class="project-tree__session-badge">{{ sessionStatusLabel(t_) }}</span>
                       <span class="project-tree__session-time">{{ formatRelativeTime(t_.updatedAt || t_.createdAt) }}</span>
                     </button>
                     <DqDropdown @command="(cmd: string) => onSessionCommand(cmd, t_.id)">
@@ -712,16 +836,41 @@ watch(() => projects.projects.length, (len) => {
 .module-sidebar__section-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
   padding: 0 4px;
 }
 
 .module-sidebar__section-title {
+  flex: 1;
+  min-width: 0;
   font-size: var(--dq-font-size-caption);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--dq-label-tertiary);
+}
+
+.module-sidebar__view-toggle {
+  display: inline-flex;
+  flex-shrink: 0;
+  border: 1px solid var(--dq-separator-light);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.module-sidebar__view-btn {
+  border: none;
+  background: transparent;
+  color: var(--dq-label-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.module-sidebar__view-btn.is-active {
+  background: color-mix(in srgb, var(--dq-accent) 12%, transparent);
+  color: var(--dq-accent);
 }
 
 .module-sidebar__section-add {
@@ -1032,9 +1181,64 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .project-tree__session-dot.is-running {
+  background: var(--dq-accent);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--dq-accent) 30%, transparent);
+  animation: session-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.project-tree__session-dot.is-waiting {
   background: var(--dq-system-orange);
   box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--dq-system-orange) 30%, transparent);
   animation: session-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.project-tree__session-badge {
+  flex-shrink: 0;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--dq-label-tertiary);
+}
+
+.project-tree__session.is-running .project-tree__session-badge {
+  color: var(--dq-accent);
+}
+
+.project-tree__session.is-waiting .project-tree__session-badge {
+  color: var(--dq-system-orange);
+}
+
+.session-board {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px 0 8px;
+}
+
+.session-board__group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-board__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dq-label-quaternary);
+}
+
+.session-board__count {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
 }
 
 @keyframes session-dot-pulse {
