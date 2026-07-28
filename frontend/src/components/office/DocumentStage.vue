@@ -8,11 +8,14 @@ import DocSurface from '@/components/office/DocSurface.vue'
 import SlidesSurface from '@/components/office/SlidesSurface.vue'
 import SheetSurface from '@/components/office/SheetSurface.vue'
 import PreviewSurface from '@/components/office/PreviewSurface.vue'
+import CodeSurface from '@/components/office/CodeSurface.vue'
+import DiffSurface from '@/components/office/DiffSurface.vue'
 import OfficeAiToolbar from '@/components/office/OfficeAiToolbar.vue'
 import { confirm, toast } from '@/utils/feedback'
 import type { OfficeEditScope } from '@/utils/office-route'
 import { siblingSlidesMarkdownPath } from '@/utils/slides-render'
 import type { ElementAttachment } from '@/types/element-attachment'
+import type { CodeSelectionAttachment } from '@/types/code-attachment'
 
 const props = defineProps<{
   projectId: string
@@ -20,6 +23,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   attachElement: [att: ElementAttachment]
+  attachCodeSelection: [att: CodeSelectionAttachment]
 }>()
 
 const { t } = useI18n()
@@ -30,6 +34,7 @@ const { stage, stageReloadToken, layoutMode } = storeToRefs(workspaceUi)
 const docRef = ref<InstanceType<typeof DocSurface> | null>(null)
 const slidesRef = ref<InstanceType<typeof SlidesSurface> | null>(null)
 const sheetRef = ref<InstanceType<typeof SheetSurface> | null>(null)
+const codeRef = ref<InstanceType<typeof CodeSurface> | null>(null)
 const dirty = ref(false)
 const pageIndex = ref(0)
 const editScope = ref<OfficeEditScope>('document')
@@ -42,18 +47,24 @@ const turnRunning = computed(() => {
 })
 
 const isPreview = computed(() => stage.value?.kind === 'preview')
+const isDiff = computed(() => stage.value?.kind === 'diff')
+const isCodeKind = computed(() => stage.value?.kind === 'code')
+/** Office AI toolbar kinds (not code/diff). */
 const editableKind = computed(() => {
   const k = stage.value?.kind
   if (k === 'doc' || k === 'slides' || k === 'sheet') return k
   return null
 })
 const isEditableKind = computed(() => editableKind.value != null)
+/** Kinds that support view/edit chrome + save. */
+const canEditSave = computed(() => isEditableKind.value || isCodeKind.value)
 
 const activeSurface = computed(() => {
   if (!stage.value) return null
   if (stage.value.kind === 'doc') return docRef
   if (stage.value.kind === 'slides') return slidesRef
   if (stage.value.kind === 'sheet') return sheetRef
+  if (stage.value.kind === 'code') return codeRef
   return null
 })
 
@@ -66,7 +77,8 @@ const chromeLabel = computed(() => {
 })
 
 function getSelectionMarkdown(): string {
-  const surface = activeSurface.value?.value
+  if (stage.value?.kind === 'code' || stage.value?.kind === 'diff') return ''
+  const surface = activeSurface.value?.value as { getSelectionMarkdown?: () => string } | null | undefined
   return surface?.getSelectionMarkdown?.() || ''
 }
 
@@ -108,7 +120,7 @@ watch(
     if (kind === 'slides') editScope.value = 'slide'
     else if (kind === 'sheet') editScope.value = 'sheet'
     else editScope.value = 'document'
-    if (kind === 'preview') dirty.value = false
+    if (kind === 'preview' || kind === 'diff') dirty.value = false
   },
   { immediate: true },
 )
@@ -169,11 +181,11 @@ defineExpose({ save })
       <div class="document-stage__meta">
         <span class="document-stage__badge">{{ stage.kind }}</span>
         <span class="document-stage__path" :title="chromeLabel">{{ chromeLabel }}</span>
-        <span v-if="dirty && isEditableKind" class="document-stage__dirty">●</span>
+        <span v-if="dirty && canEditSave" class="document-stage__dirty">●</span>
         <span v-if="turnRunning && isEditableKind" class="document-stage__running">{{ t('office.aiRunning') }}</span>
       </div>
       <div class="document-stage__actions">
-        <div v-if="isEditableKind" class="document-stage__modes">
+        <div v-if="canEditSave" class="document-stage__modes">
           <button
             class="document-stage__chip"
             :class="{ 'is-active': stage.mode === 'view' }"
@@ -197,7 +209,7 @@ defineExpose({ save })
             {{ t('office.present') }}
           </button>
         </div>
-        <div v-if="stage.path.match(/\.md$/i) && !isPreview" class="document-stage__modes">
+        <div v-if="stage.path.match(/\.md$/i) && !isPreview && !isDiff" class="document-stage__modes">
           <button
             class="document-stage__chip"
             :class="{ 'is-active': stage.kind === 'doc' }"
@@ -214,7 +226,7 @@ defineExpose({ save })
           </button>
         </div>
         <button
-          v-if="isEditableKind"
+          v-if="canEditSave"
           class="document-stage__btn"
           :disabled="!dirty || turnRunning"
           @click="() => save()"
@@ -275,6 +287,24 @@ defineExpose({ save })
       :reload-token="stageReloadToken"
       :turn-running="turnRunning"
       @dirty="dirty = $event"
+    />
+    <CodeSurface
+      v-else-if="stage.kind === 'code'"
+      ref="codeRef"
+      :project-id="projectId"
+      :path="stage.path"
+      :mode="stage.mode"
+      :reload-token="stageReloadToken"
+      :turn-running="turnRunning"
+      @dirty="dirty = $event"
+      @attach-code-selection="emit('attachCodeSelection', $event)"
+    />
+    <DiffSurface
+      v-else-if="stage.kind === 'diff'"
+      :project-id="projectId"
+      :path="stage.path"
+      :staged="stage.staged"
+      :reload-token="stageReloadToken"
     />
     <PreviewSurface
       v-else-if="stage.kind === 'preview'"

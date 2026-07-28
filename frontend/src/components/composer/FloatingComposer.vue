@@ -20,8 +20,10 @@ import {
   MAX_IMAGE_ATTACHMENT_BYTES,
   toApiImageAttachments,
   type ComposerAttachment,
+  type CodeComposerAttachment,
   type ElementComposerAttachment,
 } from '@/types/composer-attachment'
+import type { CodeSelectionAttachment } from '@/types/code-attachment'
 import {
   detectAtSkillQuery,
   prependSkillSummon,
@@ -280,6 +282,16 @@ function addElementAttachment(att: ElementAttachment) {
   focusInput()
 }
 
+function addCodeSelectionAttachment(att: CodeSelectionAttachment) {
+  const wrapped: CodeComposerAttachment = {
+    id: att.id,
+    kind: 'code',
+    data: att,
+  }
+  attachments.value = [...attachments.value, wrapped]
+  focusInput()
+}
+
 function removeAttachment(id: string) {
   attachments.value = attachments.value.filter((a) => a.id !== id)
   if (editingId.value === id) {
@@ -288,7 +300,7 @@ function removeAttachment(id: string) {
   }
 }
 
-function startEditAnnotation(att: ElementComposerAttachment) {
+function startEditAnnotation(att: ElementComposerAttachment | CodeComposerAttachment) {
   editingId.value = att.id
   editingAnnotation.value = att.data.annotation
 }
@@ -296,9 +308,16 @@ function startEditAnnotation(att: ElementComposerAttachment) {
 function saveEditAnnotation() {
   const id = editingId.value
   if (!id) return
-  attachments.value = attachments.value.map((a) => {
-    if (a.id !== id || a.kind !== 'element') return a
-    return { ...a, data: { ...a.data, annotation: editingAnnotation.value.trim() } }
+  const note = editingAnnotation.value.trim()
+  attachments.value = attachments.value.map((a): ComposerAttachment => {
+    if (a.id !== id) return a
+    if (a.kind === 'element') {
+      return { ...a, data: { ...a.data, annotation: note } }
+    }
+    if (a.kind === 'code') {
+      return { ...a, data: { ...a.data, annotation: note } }
+    }
+    return a
   })
   editingId.value = null
   editingAnnotation.value = ''
@@ -582,7 +601,7 @@ const emit = defineEmits<{
   'jump-pending': []
 }>()
 
-defineExpose({ focusInput, appendContent, addElementAttachment })
+defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelectionAttachment })
 </script>
 
 <template>

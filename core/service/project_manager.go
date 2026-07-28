@@ -564,6 +564,160 @@ func (m *ProjectManager) ListGitBranches(ctx context.Context, projectID string) 
 	return result, nil
 }
 
+// MaxGitDiffBytes caps patch payload returned to clients.
+const MaxGitDiffBytes = 512 * 1024
+
+type GitDiff struct {
+	Path      string `json:"path"`
+	Staged    bool   `json:"staged"`
+	Patch     string `json:"patch"`
+	Truncated bool   `json:"truncated,omitempty"`
+	Binary    bool   `json:"binary,omitempty"`
+	Untracked bool   `json:"untracked,omitempty"`
+	Error     string `json:"error,omitempty"`
+	Code      string `json:"code,omitempty"` // git_missing | init_failed | not_found
+}
+
+// GetGitDiff returns a unified diff for a project-relative path.
+// staged=true → git diff --cached; otherwise working-tree vs index (or /dev/null for untracked).
+func (m *ProjectManager) GetGitDiff(ctx context.Context, projectID, subPath string, staged bool) (*GitDiff, error) {
+	subPath = strings.TrimSpace(strings.ReplaceAll(subPath, "\\", "/"))
+	if subPath == "" || strings.Contains(subPath, "..") {
+		return nil, fmt.Errorf("invalid path")
+	}
+
+	gitRoot, workDir, code, msg, err := m.ensureGitRepo(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if code != "" {
+		return &GitDiff{Path: subPath, Staged: staged, Error: msg, Code: code}, nil
+	}
+
+	// Resolve project-relative path to absolute and ensure it stays under workDir.
+	absFile := filepath.Clean(filepath.Join(workDir, filepath.FromSlash(subPath)))
+	if absFile != workDir && !strings.HasPrefix(absFile, workDir+string(os.PathSeparator)) {
+		return nil, fmt.Errorf("path escapes project directory")
+	}
+
+	gitPath := subPath
+	if gitRoot != workDir {
+		rel, relErr := filepath.Rel(gitRoot, absFile)
+		if relErr != nil {
+			return nil, fmt.Errorf("invalid path")
+		}
+		gitPath = filepath.ToSlash(rel)
+	}
+
+	result := &GitDiff{Path: subPath, Staged: staged}
+
+	// Untracked: synthesize a diff from file contents (unstaged only).
+	if !staged {
+		st := exec.Command("git", "status", "--porcelain", "--", gitPath)
+		st.Dir = gitRoot
+		if out, err := st.Output(); err == nil {
+			line := strings.TrimSpace(string(out))
+			if strings.HasPrefix(line, "??") {
+				result.Untracked = true
+				data, readErr := os.ReadFile(absFile)
+				if readErr != nil {
+					if os.IsNotExist(readErr) {
+						result.Code = "not_found"
+						result.Error = "file not found"
+						return result, nil
+					}
+					return nil, readErr
+				}
+				if isLikelyBinary(data) {
+					result.Binary = true
+					result.Patch = "Binary file (untracked)\n"
+					return result, nil
+				}
+				result.Patch = synthesizeAddPatch(gitPath, string(data))
+				result.Patch, result.Truncated = truncatePatch(result.Patch, MaxGitDiffBytes)
+				return result, nil
+			}
+		}
+	}
+
+	args := []string{"diff", "--no-color", "--find-renames"}
+	if staged {
+		args = append(args, "--cached")
+	}
+	args = append(args, "--", gitPath)
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = gitRoot
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		detail := strings.TrimSpace(stderr.String())
+		if detail == "" {
+			detail = err.Error()
+		}
+		result.Error = detail
+		return result, nil
+	}
+
+	patch := string(out)
+	if patch == "" {
+		// Deleted staged/unstaged may still produce empty if path wrong; try once without path filter hints.
+		result.Patch = ""
+		return result, nil
+	}
+	if strings.Contains(patch, "Binary files ") || strings.Contains(patch, "GIT binary patch") {
+		result.Binary = true
+	}
+	result.Patch, result.Truncated = truncatePatch(patch, MaxGitDiffBytes)
+	return result, nil
+}
+
+func synthesizeAddPatch(path, content string) string {
+	var b strings.Builder
+	b.WriteString("diff --git a/" + path + " b/" + path + "\n")
+	b.WriteString("new file mode 100644\n")
+	b.WriteString("--- /dev/null\n")
+	b.WriteString("+++ b/" + path + "\n")
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	// Drop trailing empty from Split on final newline.
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	b.WriteString(fmt.Sprintf("@@ -0,0 +1,%d @@\n", len(lines)))
+	for _, line := range lines {
+		b.WriteByte('+')
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+func truncatePatch(patch string, max int) (string, bool) {
+	if max <= 0 || len(patch) <= max {
+		return patch, false
+	}
+	cut := patch[:max]
+	// Prefer cutting at a line boundary.
+	if i := strings.LastIndexByte(cut, '\n'); i > max/2 {
+		cut = cut[:i+1]
+	}
+	return cut + "\n... (diff truncated)\n", true
+}
+
+func isLikelyBinary(data []byte) bool {
+	n := len(data)
+	if n > 8000 {
+		n = 8000
+	}
+	for i := 0; i < n; i++ {
+		if data[i] == 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *ProjectManager) CheckoutGitBranch(ctx context.Context, projectID, branch string) (*GitBranches, error) {
 	branch = strings.TrimSpace(branch)
 	if branch == "" {
@@ -638,20 +792,27 @@ func parseGitStatus(output []byte, gitRoot, projectRoot, prefix string) *GitChan
 		}
 
 		if stagedStatus != " " {
-			change := parseChange(stagedStatus, true)
-			if changeInRoot(change.File, gitRoot, projectRoot) {
-				if prefix != "" {
-					change.File = strings.TrimPrefix(change.File, prefix)
-					if change.OrigFile != "" {
-						change.OrigFile = strings.TrimPrefix(change.OrigFile, prefix)
+			// Untracked `??` is never staged; porcelain uses '?' in both columns.
+			if !(stagedStatus == "?" && unstagedStatus == "?") {
+				change := parseChange(stagedStatus, true)
+				if changeInRoot(change.File, gitRoot, projectRoot) {
+					if prefix != "" {
+						change.File = strings.TrimPrefix(change.File, prefix)
+						if change.OrigFile != "" {
+							change.OrigFile = strings.TrimPrefix(change.OrigFile, prefix)
+						}
 					}
+					result.Changes = append(result.Changes, change)
 				}
-				result.Changes = append(result.Changes, change)
 			}
 		}
 
-		if unstagedStatus != " " && unstagedStatus != stagedStatus {
-			change := parseChange(unstagedStatus, false)
+		if unstagedStatus != " " && (unstagedStatus != stagedStatus || (stagedStatus == "?" && unstagedStatus == "?")) {
+			status := unstagedStatus
+			if stagedStatus == "?" && unstagedStatus == "?" {
+				status = "??"
+			}
+			change := parseChange(status, false)
 			if changeInRoot(change.File, gitRoot, projectRoot) {
 				if prefix != "" {
 					change.File = strings.TrimPrefix(change.File, prefix)

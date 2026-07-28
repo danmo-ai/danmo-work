@@ -59,7 +59,7 @@ function shortSummary(): string {
 </script>
 
 <template>
-  <div v-if="open" class="el-annotate" role="dialog" aria-label="元素批注" @keydown="onKeydown">
+  <div v-if="open" class="el-annotate" role="dialog" aria-label="提交到创作器" @keydown="onKeydown">
     <div class="el-annotate__backdrop" @click="cancel" />
     <div class="el-annotate__panel">
       <div class="el-annotate__header">

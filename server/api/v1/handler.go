@@ -98,6 +98,7 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/projects/:id/raw/*filepath", serveProjectFile(h))
 	api.GET("/proxy/*target", proxyDevServer(h))
 	api.GET("/projects/:id/git-changes", getProjectGitChanges(h))
+	api.GET("/projects/:id/git-diff", getProjectGitDiff(h))
 	api.GET("/projects/:id/git-branches", getProjectGitBranches(h))
 	api.POST("/projects/:id/git-checkout", checkoutProjectGitBranch(h))
 	api.GET("/projects/:id/terminal", projectTerminal(h))
@@ -1302,6 +1303,23 @@ func getProjectGitChanges(h *Handler) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, changes)
+	}
+}
+
+func getProjectGitDiff(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		path := strings.TrimSpace(c.Query("path"))
+		if path == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "path required"})
+			return
+		}
+		staged := c.Query("staged") == "1" || strings.EqualFold(c.Query("staged"), "true")
+		diff, err := h.Projects.GetGitDiff(c, c.Param("id"), path, staged)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, diff)
 	}
 }
 

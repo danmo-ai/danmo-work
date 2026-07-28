@@ -11,6 +11,8 @@ export interface OfficeStageState {
   mode: OfficeMode
   /** Preview kind: project raw URL or proxied external URL. */
   url?: string
+  /** Diff kind: staged (index) vs unstaged (working tree) patch. */
+  staged?: boolean
 }
 
 const LEFT_RAIL_COLLAPSED_KEY = 'app-left-collapsed'

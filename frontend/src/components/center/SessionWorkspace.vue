@@ -22,6 +22,7 @@ import { renderMarkdown } from '@/utils/markdown-render'
 import { toast } from '@/utils/feedback'
 import { apiBaseUrl, saveBlobAs } from '@/utils/desktop'
 import type { ElementAttachment } from '@/types/element-attachment'
+import type { CodeSelectionAttachment } from '@/types/code-attachment'
 import { fetchJSON } from '@/api/client'
 import { formatTokenCount, useSessionContextUsage } from '@/composables/useSessionContextUsage'
 import { routeOfficeFile } from '@/utils/office-route'
@@ -101,6 +102,10 @@ async function openFileInOffice(filePath: string) {
 
 function onStageAttachElement(att: ElementAttachment) {
   composerRef.value?.addElementAttachment(att)
+}
+
+function onStageAttachCodeSelection(att: CodeSelectionAttachment) {
+  composerRef.value?.addCodeSelectionAttachment(att)
 }
 
 /** Manual expand/collapse overrides for individual tool cards. */
@@ -1588,6 +1593,7 @@ function onTitleKeydown(e: KeyboardEvent) {
         class="session-workspace__stage"
         :project-id="sessions.selectedProjectId"
         @attach-element="onStageAttachElement"
+        @attach-code-selection="onStageAttachCodeSelection"
       />
 
       <div
