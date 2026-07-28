@@ -21,11 +21,18 @@ func TestNormalizeEnvDefaultsLocal(t *testing.T) {
 }
 
 func TestNormalizeEnvContainerAliases(t *testing.T) {
-	for _, b := range []string{"container", "oci", "docker", "podman"} {
+	for _, b := range []string{"container", "oci"} {
 		cfg := normalizeEnv(domain.ConfigEnvironmentSection{Backend: domain.EnvironmentBackend(b)})
 		if cfg.Backend != domain.EnvironmentBackendContainer {
 			t.Fatalf("%s → %q", b, cfg.Backend)
 		}
+	}
+	cfg := normalizeEnv(domain.ConfigEnvironmentSection{
+		Backend: domain.EnvironmentBackendContainer,
+		Engine:  "apple",
+	})
+	if cfg.Engine != domain.EnvironmentEngineAppleContainer {
+		t.Fatalf("engine=%q", cfg.Engine)
 	}
 }
 

@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
-import type { ConfigFile, UpdateConfigFileRequest, SandboxStatus, BrowserStatus } from '@/types/mission'
+import type { ConfigFile, UpdateConfigFileRequest, SandboxStatus, BrowserStatus, EnvironmentStatus } from '@/types/mission'
 
 export interface RuntimeForm {
   autoApprove: boolean
@@ -13,6 +13,10 @@ export interface RuntimeForm {
   sandboxAllowlistDomains: string
   sandboxBackend: string
   sandboxShell: string
+  envBackend: 'local' | 'container'
+  envEngine: 'auto' | 'podman' | 'docker' | 'apple-container'
+  envCpus: string
+  envMemory: string
   browserEnabled: boolean
   browserExecutablePath: string
   browserCdpUrl: string
@@ -37,6 +41,8 @@ export interface RuntimeForm {
 function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
   const sb = rt.sandbox
   const br = rt.browser
+  const env = rt.environment
+  const eng = (env?.engine || 'auto') as RuntimeForm['envEngine']
   return {
     autoApprove: rt.autoApprove,
     permissionMode: rt.permissionMode || 'interactive',
@@ -46,6 +52,10 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     sandboxAllowlistDomains: (sb?.allowlistDomains ?? []).join('\n'),
     sandboxBackend: sb?.backend ?? '',
     sandboxShell: sb?.shell ?? 'auto',
+    envBackend: env?.backend === 'container' ? 'container' : 'local',
+    envEngine: ['podman', 'docker', 'apple-container'].includes(eng) ? eng : 'auto',
+    envCpus: env?.resources?.cpus ?? '',
+    envMemory: env?.resources?.memory ?? '',
     browserEnabled: br?.enabled ?? true,
     browserExecutablePath: br?.executablePath ?? '',
     browserCdpUrl: br?.cdpUrl ?? '',
@@ -71,6 +81,7 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
 export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
   const config = ref<RuntimeForm | null>(null)
   const sandboxStatus = ref<SandboxStatus | null>(null)
+  const environmentStatus = ref<EnvironmentStatus | null>(null)
   const browserStatus = ref<BrowserStatus | null>(null)
   const loading = ref(false)
   const saving = ref(false)
@@ -80,6 +91,14 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
       sandboxStatus.value = await fetchJSON<SandboxStatus>('/sandbox/status')
     } catch {
       sandboxStatus.value = null
+    }
+  }
+
+  async function loadEnvironmentStatus() {
+    try {
+      environmentStatus.value = await fetchJSON<EnvironmentStatus>('/environment/status')
+    } catch {
+      environmentStatus.value = null
     }
   }
 
@@ -96,7 +115,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
     try {
       const cfg = await fetchJSON<ConfigFile>('/config')
       config.value = formFromRuntime(cfg.runtime)
-      await Promise.all([loadSandboxStatus(), loadBrowserStatus()])
+      await Promise.all([loadSandboxStatus(), loadEnvironmentStatus(), loadBrowserStatus()])
     } catch {
       config.value = null
     } finally {
@@ -120,6 +139,14 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
             .filter(Boolean),
           backend: form.sandboxBackend || undefined,
           shell: form.sandboxShell || undefined,
+        },
+        environment: {
+          backend: form.envBackend,
+          engine: form.envEngine,
+          resources: {
+            cpus: form.envCpus.trim() || undefined,
+            memory: form.envMemory.trim() || undefined,
+          },
         },
         browser: {
           enabled: form.browserEnabled,
@@ -162,7 +189,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
         body: JSON.stringify(req),
       })
       config.value = formFromRuntime(cfg.runtime)
-      await Promise.all([loadSandboxStatus(), loadBrowserStatus()])
+      await Promise.all([loadSandboxStatus(), loadEnvironmentStatus(), loadBrowserStatus()])
       toast.success('运行时配置已保存')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '保存失败')
@@ -175,11 +202,13 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
   return {
     config,
     sandboxStatus,
+    environmentStatus,
     browserStatus,
     loading,
     saving,
     loadConfig,
     loadSandboxStatus,
+    loadEnvironmentStatus,
     loadBrowserStatus,
     saveConfig,
   }

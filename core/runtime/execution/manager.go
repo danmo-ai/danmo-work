@@ -26,7 +26,7 @@ type Manager struct {
 	envCfg     domain.ConfigEnvironmentSection
 	sandboxCfg domain.ConfigSandboxSection
 	sandbox    port.Sandbox
-	engine     *container.Engine
+	runtime    container.Runtime
 	imageReady bool
 	tarPath    string
 	degraded   bool
@@ -55,17 +55,17 @@ func (m *Manager) Configure(envCfg domain.ConfigEnvironmentSection, sandboxCfg d
 	m.degradeMsg = ""
 	m.tarPath = container.ResolveTarPath(envCfg.TarPath)
 	if envCfg.Backend != domain.EnvironmentBackendContainer {
-		m.engine = nil
+		m.runtime = nil
 		return
 	}
-	eng, err := container.Detect()
+	rt, err := container.Detect(envCfg.Engine)
 	if err != nil {
-		m.engine = nil
+		m.runtime = nil
 		m.degraded = true
-		m.degradeMsg = "container backend requested but no podman/docker: " + err.Error()
+		m.degradeMsg = "container backend requested but no engine: " + err.Error()
 		return
 	}
-	m.engine = eng
+	m.runtime = rt
 	if m.tarPath == "" {
 		m.degraded = true
 		m.degradeMsg = "container backend requested but bundled env tar not found (build with make build-env-tar)"
@@ -74,10 +74,20 @@ func (m *Manager) Configure(envCfg domain.ConfigEnvironmentSection, sandboxCfg d
 
 func normalizeEnv(cfg domain.ConfigEnvironmentSection) domain.ConfigEnvironmentSection {
 	switch strings.ToLower(strings.TrimSpace(string(cfg.Backend))) {
-	case "container", "oci", "docker", "podman":
+	case "container", "oci":
 		cfg.Backend = domain.EnvironmentBackendContainer
 	default:
 		cfg.Backend = domain.EnvironmentBackendLocal
+	}
+	switch strings.ToLower(strings.TrimSpace(string(cfg.Engine))) {
+	case "podman":
+		cfg.Engine = domain.EnvironmentEnginePodman
+	case "docker":
+		cfg.Engine = domain.EnvironmentEngineDocker
+	case "apple-container", "apple", "container":
+		cfg.Engine = domain.EnvironmentEngineAppleContainer
+	default:
+		cfg.Engine = domain.EnvironmentEngineAuto
 	}
 	if strings.TrimSpace(cfg.Image) == "" {
 		cfg.Image = defaultImage
@@ -97,11 +107,12 @@ func (m *Manager) Status() domain.EnvironmentStatus {
 		ImageLoaded:    m.imageReady,
 		TarPath:        m.tarPath,
 		WorkspaceMount: m.envCfg.WorkspaceMount,
+		Resources:      m.envCfg.Resources,
 		Degraded:       m.degraded,
 		DegradedReason: m.degradeMsg,
 	}
-	if m.engine != nil {
-		st.Engine = m.engine.Name()
+	if m.runtime != nil {
+		st.Engine = m.runtime.Name()
 	}
 	if m.degraded && m.envCfg.Backend == domain.EnvironmentBackendContainer {
 		st.Backend = domain.EnvironmentBackendLocal // effective
@@ -117,7 +128,7 @@ func (m *Manager) Run(ctx context.Context, opts port.ExecRunOptions) ([]byte, er
 		opts.Timeout = 30 * time.Second
 	}
 	m.mu.Lock()
-	useContainer := m.envCfg.Backend == domain.EnvironmentBackendContainer && m.engine != nil && !m.degraded
+	useContainer := m.envCfg.Backend == domain.EnvironmentBackendContainer && m.runtime != nil && !m.degraded
 	sb := m.sandbox
 	m.mu.Unlock()
 
@@ -126,7 +137,6 @@ func (m *Manager) Run(ctx context.Context, opts port.ExecRunOptions) ([]byte, er
 	}
 	out, err := m.runContainer(ctx, opts)
 	if err != nil && isFatalEngineErr(err) {
-		// one-shot degrade for this process if engine breaks mid-flight
 		m.mu.Lock()
 		m.degraded = true
 		m.degradeMsg = err.Error()
@@ -175,38 +185,36 @@ func (m *Manager) runContainer(ctx context.Context, opts port.ExecRunOptions) ([
 
 func (m *Manager) engineExec(ctx context.Context, name, mount, command string, env []string) ([]byte, error) {
 	m.mu.Lock()
-	eng := m.engine
+	rt := m.runtime
 	m.mu.Unlock()
-	if eng == nil {
+	if rt == nil {
 		return nil, fmt.Errorf("execution: engine missing")
 	}
-	return eng.Exec(ctx, name, mount, command, env)
+	return rt.Exec(ctx, name, mount, command, env)
 }
 
 func (m *Manager) ensureImage(ctx context.Context) error {
 	m.mu.Lock()
-	eng := m.engine
+	rt := m.runtime
 	image := m.envCfg.Image
 	tarPath := m.tarPath
 	ready := m.imageReady
 	m.mu.Unlock()
-	if eng == nil {
+	if rt == nil {
 		return fmt.Errorf("execution: no container engine")
 	}
 	if ready {
 		return nil
 	}
-	ok, _ := eng.ImageExists(ctx, image)
+	ok, _ := rt.ImageExists(ctx, image)
 	if !ok {
 		if tarPath == "" {
 			return fmt.Errorf("execution: image %q missing and no tar to load", image)
 		}
-		if err := eng.LoadTar(ctx, tarPath); err != nil {
+		if err := rt.LoadTar(ctx, tarPath); err != nil {
 			return fmt.Errorf("execution: load tar: %w", err)
 		}
-		if err := eng.EnsureTag(ctx, image); err != nil {
-			// load may have imported under a different name — try retag from docker-archive
-			// Best-effort: if tag missing, surface error (build script tags correctly).
+		if err := rt.EnsureTag(ctx, image); err != nil {
 			return err
 		}
 	}
@@ -220,8 +228,9 @@ func (m *Manager) ensureProjectContainer(ctx context.Context, opts port.ExecRunO
 	m.mu.Lock()
 	image := m.envCfg.Image
 	mount = m.envCfg.WorkspaceMount
+	resources := m.envCfg.Resources
 	netMode := containerNetwork(m.sandboxCfg, opts)
-	eng := m.engine
+	rt := m.runtime
 	m.mu.Unlock()
 
 	projectID := strings.TrimSpace(opts.ProjectID)
@@ -237,7 +246,7 @@ func (m *Manager) ensureProjectContainer(ctx context.Context, opts port.ExecRunO
 		return "", "", fmt.Errorf("execution: workdir %q not a directory", workDir)
 	}
 
-	state, _ := eng.ContainerInspectState(ctx, name)
+	state, _ := rt.ContainerInspectState(ctx, name)
 	switch state {
 	case "running":
 		m.mu.Lock()
@@ -245,9 +254,8 @@ func (m *Manager) ensureProjectContainer(ctx context.Context, opts port.ExecRunO
 		m.mu.Unlock()
 		return name, mount, nil
 	case "created", "exited", "paused":
-		if err := eng.Start(ctx, name); err != nil {
-			// recreate if broken
-			_ = eng.Rm(ctx, name)
+		if err := rt.Start(ctx, name); err != nil {
+			_ = rt.Rm(ctx, name)
 		} else {
 			m.mu.Lock()
 			m.active[projectID] = struct{}{}
@@ -256,11 +264,19 @@ func (m *Manager) ensureProjectContainer(ctx context.Context, opts port.ExecRunO
 		}
 	}
 
-	env := proxyEnvFor(opts)
-	if err := eng.CreateDetached(ctx, name, image, workDir, mount, netMode, env); err != nil {
+	create := container.CreateOpts{
+		Name:      name,
+		Image:     image,
+		WorkDir:   workDir,
+		Mount:     mount,
+		Network:   netMode,
+		Env:       proxyEnvFor(opts),
+		Resources: resources,
+	}
+	if err := rt.CreateDetached(ctx, create); err != nil {
 		return "", "", err
 	}
-	if err := eng.Start(ctx, name); err != nil {
+	if err := rt.Start(ctx, name); err != nil {
 		return "", "", err
 	}
 	m.mu.Lock()
@@ -271,13 +287,12 @@ func (m *Manager) ensureProjectContainer(ctx context.Context, opts port.ExecRunO
 
 func containerNetwork(cfg domain.ConfigSandboxSection, opts port.ExecRunOptions) string {
 	if opts.AllowNetwork {
-		return "" // default bridge
+		return ""
 	}
 	switch cfg.Network {
 	case domain.SandboxNetworkAllow:
 		return ""
 	case domain.SandboxNetworkAllowlist:
-		// Host net so loopback HTTP proxy on 127.0.0.1 is reachable (MVP).
 		return "host"
 	default:
 		return "none"
@@ -324,9 +339,9 @@ func sanitizeID(id string) string {
 // Teardown stops and removes the per-project container.
 func (m *Manager) Teardown(ctx context.Context, projectID string) error {
 	m.mu.Lock()
-	eng := m.engine
+	rt := m.runtime
 	m.mu.Unlock()
-	if eng == nil {
+	if rt == nil {
 		return nil
 	}
 	id := strings.TrimSpace(projectID)
@@ -334,8 +349,8 @@ func (m *Manager) Teardown(ctx context.Context, projectID string) error {
 		id = "default"
 	}
 	name := containerPref + sanitizeID(id)
-	_ = eng.Stop(ctx, name)
-	err := eng.Rm(ctx, name)
+	_ = rt.Stop(ctx, name)
+	err := rt.Rm(ctx, name)
 	m.mu.Lock()
 	delete(m.active, id)
 	m.mu.Unlock()

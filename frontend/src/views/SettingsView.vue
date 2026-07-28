@@ -171,6 +171,10 @@ const runtimeForm = ref({
   sandboxAllowlistDomains: '',
   sandboxBackend: '',
   sandboxShell: 'auto',
+  envBackend: 'local' as 'local' | 'container',
+  envEngine: 'auto' as 'auto' | 'podman' | 'docker' | 'apple-container',
+  envCpus: '',
+  envMemory: '',
   browserEnabled: true,
   browserExecutablePath: '',
   browserCdpUrl: '',
@@ -201,6 +205,18 @@ const sandboxStatusText = computed(() => {
   const cu = st.coreutilsBin ? ` · coreutils ${st.coreutilsBin}` : ''
   const proxy = st.allowlistActive && st.allowlistProxy ? ` · allowlist ${st.allowlistProxy}` : ''
   return `${st.backend}${caps}${shell}${path}${cu}${proxy}`
+})
+
+const environmentStatusText = computed(() => {
+  const st = runtimeConfig.environmentStatus
+  if (!st) return ''
+  const eng = st.engine ? ` · ${st.engine}` : ''
+  const img = st.imageLoaded ? ' · image loaded' : ''
+  const res = [st.resources?.cpus && `cpus=${st.resources.cpus}`, st.resources?.memory && `mem=${st.resources.memory}`]
+    .filter(Boolean)
+    .join(' ')
+  const resPart = res ? ` · ${res}` : ' · unlimited'
+  return `${st.backend}${eng}${img}${resPart}`
 })
 
 const showGitBashHint = computed(() => {
@@ -1209,6 +1225,48 @@ const hasFooterActions = computed(() => {
                 </p>
                 <p v-if="showGitBashHint" class="settings-sandbox-status__degraded">
                   {{ $t('settings.sandboxShellHint') }}
+                </p>
+              </div>
+            </template>
+            <p class="settings-form-group__desc">{{ $t('settings.envBackendDesc') }}</p>
+            <div class="settings-form-row">
+              <div class="settings-field settings-field--half">
+                <span class="settings-field__label">{{ $t('settings.envBackend') }}</span>
+                <DqSelect v-model="runtimeForm.envBackend">
+                  <DqOption value="local" :label="$t('settings.envBackendLocal')" />
+                  <DqOption value="container" :label="$t('settings.envBackendContainer')" />
+                </DqSelect>
+              </div>
+              <div v-if="runtimeForm.envBackend === 'container'" class="settings-field settings-field--half">
+                <span class="settings-field__label">{{ $t('settings.envEngine') }}</span>
+                <DqSelect v-model="runtimeForm.envEngine">
+                  <DqOption value="auto" :label="$t('settings.envEngineAuto')" />
+                  <DqOption value="podman" label="Podman" />
+                  <DqOption value="docker" label="Docker" />
+                  <DqOption value="apple-container" :label="$t('settings.envEngineApple')" />
+                </DqSelect>
+              </div>
+            </div>
+            <template v-if="runtimeForm.envBackend === 'container'">
+              <p class="settings-form-group__desc">{{ $t('settings.envResourcesDesc') }}</p>
+              <div class="settings-form-row">
+                <div class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.envCpus') }}</span>
+                  <DqInput v-model="runtimeForm.envCpus" :placeholder="$t('settings.envCpusPlaceholder')" />
+                </div>
+                <div class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.envMemory') }}</span>
+                  <DqInput v-model="runtimeForm.envMemory" :placeholder="$t('settings.envMemoryPlaceholder')" />
+                </div>
+              </div>
+              <div v-if="environmentStatusText" class="settings-sandbox-status">
+                <span class="settings-field__label">{{ $t('settings.envStatus') }}</span>
+                <code class="settings-sandbox-status__value">{{ environmentStatusText }}</code>
+                <p
+                  v-if="runtimeConfig.environmentStatus?.degraded && runtimeConfig.environmentStatus.degradedReason"
+                  class="settings-sandbox-status__degraded"
+                >
+                  {{ $t('settings.sandboxDegraded') }}: {{ runtimeConfig.environmentStatus.degradedReason }}
                 </p>
               </div>
             </template>
