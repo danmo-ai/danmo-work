@@ -39,14 +39,15 @@ func main() {
 		MCPServers:  core.MCPServers,
 		Automations: core.Automations,
 		Weixin:      core.Weixin,
-		Feishu:     core.Feishu,
-		Wecom:      core.Wecom,
-		QQ:         core.QQ,
-		Channels:   core.Channels,
-		Sandbox:    core.Sandbox,
-		Browser:    core.Browser,
-		Store:      core.Store,
-		TableStore: core.TableStore,
+		Feishu:      core.Feishu,
+		Wecom:       core.Wecom,
+		QQ:          core.QQ,
+		Channels:    core.Channels,
+		Sandbox:     core.Sandbox,
+		Execution:   core.Execution,
+		Browser:     core.Browser,
+		Store:       core.Store,
+		TableStore:  core.TableStore,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

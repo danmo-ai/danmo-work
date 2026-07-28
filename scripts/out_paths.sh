@@ -14,6 +14,7 @@ export DQ_SERVER_DIR="$DQ_OUT/server"
 export DQ_DESKTOP_BUNDLE="$DQ_OUT/desktop/bundle"
 export DQ_DESKTOP_CARGO="$DQ_OUT/desktop/cargo"
 export DQ_RELEASE_DIST="$DQ_OUT/dist"
+export DQ_ENV_DIR="$DQ_OUT/env"
 export DQ_RUN_DIR="$DQ_OUT/run"
 export DQ_PROJECT="${DQ_PROJECT:-danmo-work}"
 # Port convention: backend 78xx / frontend 58xx (same suffix per project)
@@ -27,5 +28,6 @@ dq_ensure_out_layout() {
     "$DQ_DESKTOP_BUNDLE" \
     "$DQ_DESKTOP_CARGO" \
     "$DQ_RELEASE_DIST" \
+    "$DQ_ENV_DIR" \
     "$DQ_RUN_DIR"
 }

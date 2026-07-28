@@ -46,13 +46,37 @@ runtime:
     enabled: true
     mode: "workspace-write"
     network: "deny"
+    # allowlist_domains:  # empty = fail closed when network=allowlist
+    # Settings presets (additive):
+    #   开发依赖 — Debian/apt + npm + Go + PyPI + GitHub
+    #   网络搜索 — DuckDuckGo / Bing / Brave / Google / Baidu / Tavily
+    #   单生态 — debian | npm | go | pypi | crates | github
     # allowlist_domains:
-    #   - "pypi.org"
-    #   - "*.pythonhosted.org"
-    #   - "proxy.golang.org"
+    #   - "deb.debian.org"
+    #   - "security.debian.org"
+    #   - "*.debian.org"
     #   - "registry.npmjs.org"
+    #   - "pypi.org"
     backend: ""
     shell: "auto"
+  # Optional OCI execution environment (one long-lived container per project).
+  # Image tar is NOT shipped in app packages — download danmo-work-env-linux-*.tar
+  # from GitHub Releases into ~/.danmo-work/env/ (or set WORK_ENV_TAR / tar_path).
+  # Never registry-pulled; runtime only load (podman|docker|apple-container).
+  # backend: local (default) | container
+  # engine: auto | podman | docker | apple-container
+  # resources: empty = unlimited (no host auto-infer); set cpus/memory in Settings
+  environment:
+    backend: "local"
+    engine: "auto"
+    image: "localhost/danmo-work-env:bundled"
+    # workspace_mount: ""  # empty/same = host project abs path (file tools & shell agree)
+    # workspace_mount: "/workspace"  # optional fixed in-container path
+    workspace_mount: ""
+    resources:
+      cpus: ""      # e.g. "2" — empty = unlimited
+      memory: ""    # e.g. "2g" — empty = unlimited
+      # pids: 0     # docker/podman --pids-limit; 0 = omit
   # Headless browser for web_fetch JS rendering (chromedp + system Chrome/Edge).
   # Does not ship a browser binary. Leave cdp_url empty to auto-launch a local browser.
   browser:

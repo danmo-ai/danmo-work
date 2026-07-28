@@ -203,11 +203,10 @@ metadata:
 spec:
   backend: local | container | remote   # local 忽略 image
   container:
-    image: "ghcr.io/…/danmo-work-env:ubuntu-24.04"
-    # 或 build:
-    #   dockerfile: .danmo-work/Dockerfile
-    #   context: .
-    workspaceMount: /workspace
+    # 本地标签；镜像来自 CI 内置 tar（load），禁止 registry pull
+    image: "localhost/danmo-work-env:bundled"
+    tarPath: ""  # 空则自动发现 WORK_ENV_TAR / ~/.danmo-work/env / out/env
+    workspaceMount: ""   # empty = same abs path as host project (path parity with file tools)
     network: deny | allow | allowlist
     allowlistDomains: ["pypi.org", "proxy.golang.org", "registry.npmjs.org"]
   install: |
@@ -244,15 +243,18 @@ spec:
 2. ~~扩展 sandbox 状态：`allowlistActive` / `allowlistProxy` / `allowlistDomains` + degraded reason。~~
 3. Go 内生实现（未嵌入 `@anthropic-ai/sandbox-runtime`）；未做 SOCKS5 / 内核层强制代理。
 
-### Phase 2 — Container backend MVP（标准化环境）
+### Phase 2 — Container backend MVP（标准化环境 / 进行中）
 
-1. 新增 `port.ExecutionBackend`（或扩展 `Sandbox` 为「Runner + Env」）。
-2. Podman 优先（与 Harbor 一致；rootless 友好），Docker 作兼容。
-3. 全局/项目可选：`runtime.environment.backend=container` + 默认镜像（可从 Harbor base 衍生产品镜像：`danmo-work-env`）。
-4. Session 级：挂载 project workdir；`exec_shell` → `podman exec`。
-5. UI：Settings 增加「运行环境：本机沙箱 / 容器」与镜像名；状态页显示 image id / digest。
+**镜像分发：旁路下载，不进安装包。** CI 矩阵产出两套 tar：`danmo-work-env-linux-amd64.tar` 与 `danmo-work-env-linux-arm64.tar`（`debian:bookworm-slim` + apt）挂到 GitHub Release；**不打进** server/desktop 包。Settings 提供两种下载；用户也可放到 `~/.danmo-work/env/`。运行时仅 load。
 
-验收：同一项目在「干净机器 + 仅 Podman」上，Agent 能完成 `go test` / 前端 build，而不依赖宿主预装 Go/Node。
+1. ~~`port.ExecutionBackend`~~ + 可插拔 `container.Runtime`：`podman` / `docker` / `apple-container`（`engine=auto|…`）
+2. **禁止 pull**；macOS 可优先 Apple Container CLI
+3. 一项目一容器；项目目录 **同路径 bind**（宿主机 abs = 容器内 abs，文件工具与 shell 路径一致）；**资源默认无限制**
+4. `exec_shell` 经 ExecutionBackend；缺引擎/缺 tar → LocalOS
+5. `GET /api/v1/environment/status` + Settings「执行环境」+ **下载环境镜像**（`POST /environment/tar/download` → `~/.danmo-work/env/`）
+6. Apple Container：`system start`、正确 `image load/tag/inspect`、`--network none` / default + `host.container.internal` 代理（allowlist）
+
+验收：Settings 一键下载 tar；macOS Apple Container / Linux Podman 下可 `apt-get install`。
 
 ### Phase 3 — 声明式 EnvironmentSpec
 

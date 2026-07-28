@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	containerpkg "danmo-work/core/adapter/container"
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
 	"danmo-work/core/service"
@@ -22,11 +23,11 @@ import (
 var Version = "dev"
 
 type Handler struct {
-	Sessions     *service.SessionManager
-	Projects     *service.ProjectManager
-	LLMConfig    *service.LLMConfigManager
-	Config       *service.ConfigManager
-	SearchConfig *service.SearchConfigManager
+	Sessions      *service.SessionManager
+	Projects      *service.ProjectManager
+	LLMConfig     *service.LLMConfigManager
+	Config        *service.ConfigManager
+	SearchConfig  *service.SearchConfigManager
 	Agents        *service.AgentManager
 	Skills        *service.SkillManager
 	SkillHandler  *SkillHandler
@@ -41,6 +42,7 @@ type Handler struct {
 	QQ            *service.QQBridge
 	Channels      *service.ChannelManager
 	Sandbox       port.Sandbox
+	Execution     port.ExecutionBackend
 	Browser       port.Browser
 	Store         port.Repository
 	TableStore    port.TableStoreRepo
@@ -127,6 +129,8 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/channels/qq/status", qqStatus(h))
 	api.PUT("/channels/qq", qqConfigure(h))
 	api.GET("/sandbox/status", getSandboxStatus(h))
+	api.GET("/environment/status", getEnvironmentStatus(h))
+	api.POST("/environment/tar/download", downloadEnvironmentTar(h))
 	api.GET("/browser/status", getBrowserStatus(h))
 	api.GET("/model-configs", getModelConfigs(h))
 	api.PUT("/model-configs", updateModelConfigs(h))
@@ -844,7 +848,11 @@ func updateProject(h *Handler) gin.HandlerFunc {
 
 func deleteProject(h *Handler) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if err := h.Projects.Delete(c, c.Param("id")); err != nil {
+		id := c.Param("id")
+		if h.Execution != nil {
+			_ = h.Execution.Teardown(c.Request.Context(), id)
+		}
+		if err := h.Projects.Delete(c, id); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -1032,6 +1040,9 @@ func updateConfig(h *Handler) gin.HandlerFunc {
 		if h.Sandbox != nil && req.Runtime != nil {
 			h.Sandbox.Configure(cfg.Runtime.Sandbox)
 		}
+		if h.Execution != nil && req.Runtime != nil {
+			h.Execution.Configure(cfg.Runtime.Environment, cfg.Runtime.Sandbox)
+		}
 		if h.Browser != nil && req.Runtime != nil {
 			h.Browser.Configure(cfg.Runtime.Browser)
 		}
@@ -1057,6 +1068,60 @@ func getSandboxStatus(h *Handler) gin.HandlerFunc {
 			}
 		}
 		c.JSON(http.StatusOK, h.Sandbox.Status())
+	}
+}
+
+func getEnvironmentStatus(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.Execution == nil {
+			c.JSON(http.StatusOK, domain.EnvironmentStatus{
+				Backend:        domain.EnvironmentBackendLocal,
+				Degraded:       true,
+				DegradedReason: "execution backend not initialized",
+			})
+			return
+		}
+		if h.Config != nil {
+			if cfg, err := h.Config.Get(c); err == nil {
+				h.Execution.Configure(cfg.Runtime.Environment, cfg.Runtime.Sandbox)
+			}
+		}
+		c.JSON(http.StatusOK, h.Execution.StatusWithTar(Version))
+	}
+}
+
+func downloadEnvironmentTar(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Arch string `json:"arch"`
+		}
+		_ = c.ShouldBindJSON(&req)
+		arch := containerpkg.NormalizeArch(req.Arch)
+		info, err := containerpkg.DownloadEnvTar(c.Request.Context(), Version, arch)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error":       err.Error(),
+				"downloadUrl": containerpkg.ReleaseDownloadURL(Version, arch),
+				"arch":        arch,
+			})
+			return
+		}
+		if h.Execution != nil {
+			h.Execution.NotifyTarInstalled()
+			if h.Config != nil {
+				if cfg, err := h.Config.Get(c); err == nil {
+					h.Execution.Configure(cfg.Runtime.Environment, cfg.Runtime.Sandbox)
+				}
+			}
+		}
+		st := domain.EnvironmentStatus{}
+		if h.Execution != nil {
+			st = h.Execution.StatusWithTar(Version)
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"tar":    info,
+			"status": st,
+		})
 	}
 }
 

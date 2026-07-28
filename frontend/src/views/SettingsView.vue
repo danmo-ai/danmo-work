@@ -171,6 +171,10 @@ const runtimeForm = ref({
   sandboxAllowlistDomains: '',
   sandboxBackend: '',
   sandboxShell: 'auto',
+  envBackend: 'local' as 'local' | 'container',
+  envEngine: 'auto' as 'auto' | 'podman' | 'docker' | 'apple-container',
+  envCpus: '',
+  envMemory: '',
   browserEnabled: true,
   browserExecutablePath: '',
   browserCdpUrl: '',
@@ -203,6 +207,19 @@ const sandboxStatusText = computed(() => {
   return `${st.backend}${caps}${shell}${path}${cu}${proxy}`
 })
 
+const environmentStatusText = computed(() => {
+  const st = runtimeConfig.environmentStatus
+  if (!st) return ''
+  const eng = st.engine ? ` · ${st.engine}` : ''
+  const tar = st.tarPresent ? ' · tar ok' : ' · tar missing'
+  const img = st.imageLoaded ? ' · image loaded' : ''
+  const res = [st.resources?.cpus && `cpus=${st.resources.cpus}`, st.resources?.memory && `mem=${st.resources.memory}`]
+    .filter(Boolean)
+    .join(' ')
+  const resPart = res ? ` · ${res}` : ' · unlimited'
+  return `${st.backend}${eng}${tar}${img}${resPart}`
+})
+
 const showGitBashHint = computed(() => {
   const st = runtimeConfig.sandboxStatus
   if (!st || st.platform !== 'windows') return false
@@ -212,12 +229,89 @@ const showGitBashHint = computed(() => {
   return true
 })
 
-const ALLOWLIST_PRESETS: Record<string, string[]> = {
-  npm: ['registry.npmjs.org', '*.npmjs.org', 'registry.yarnpkg.com'],
-  go: ['proxy.golang.org', 'sum.golang.org', 'github.com', '*.githubusercontent.com'],
-  pypi: ['pypi.org', '*.pythonhosted.org', 'files.pythonhosted.org'],
-  github: ['github.com', 'api.github.com', '*.githubusercontent.com', 'codeload.github.com'],
-}
+const ALLOWLIST_PRESET_GROUPS: {
+  id: string
+  presets: { id: string; domains: string[] }[]
+}[] = [
+  {
+    id: 'combo',
+    presets: [
+      {
+        // Debian apt + common language registries + GitHub (container / agent install path)
+        id: 'devDeps',
+        domains: [
+          'deb.debian.org',
+          'security.debian.org',
+          '*.debian.org',
+          'registry.npmjs.org',
+          '*.npmjs.org',
+          'registry.yarnpkg.com',
+          'proxy.golang.org',
+          'sum.golang.org',
+          'pypi.org',
+          '*.pythonhosted.org',
+          'files.pythonhosted.org',
+          'github.com',
+          'api.github.com',
+          '*.githubusercontent.com',
+          'codeload.github.com',
+        ],
+      },
+      {
+        // Default + common web_search / web_fetch providers
+        id: 'webSearch',
+        domains: [
+          'duckduckgo.com',
+          'html.duckduckgo.com',
+          '*.duckduckgo.com',
+          'www.bing.com',
+          'bing.com',
+          'api.search.brave.com',
+          'search.brave.com',
+          'www.google.com',
+          'google.com',
+          '*.google.com',
+          'www.baidu.com',
+          'baidu.com',
+          'api.tavily.com',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'dev',
+    presets: [
+      {
+        id: 'debian',
+        domains: ['deb.debian.org', 'security.debian.org', '*.debian.org'],
+      },
+      {
+        id: 'npm',
+        domains: ['registry.npmjs.org', '*.npmjs.org', 'registry.yarnpkg.com'],
+      },
+      {
+        id: 'go',
+        domains: ['proxy.golang.org', 'sum.golang.org', 'github.com', '*.githubusercontent.com'],
+      },
+      {
+        id: 'pypi',
+        domains: ['pypi.org', '*.pythonhosted.org', 'files.pythonhosted.org'],
+      },
+      {
+        id: 'crates',
+        domains: ['static.crates.io', 'index.crates.io', 'crates.io'],
+      },
+      {
+        id: 'github',
+        domains: ['github.com', 'api.github.com', '*.githubusercontent.com', 'codeload.github.com'],
+      },
+    ],
+  },
+]
+
+const ALLOWLIST_PRESETS: Record<string, string[]> = Object.fromEntries(
+  ALLOWLIST_PRESET_GROUPS.flatMap((g) => g.presets.map((p) => [p.id, p.domains])),
+)
 
 function applyAllowlistPreset(name: string) {
   const extra = ALLOWLIST_PRESETS[name]
@@ -236,6 +330,27 @@ function applyAllowlistPreset(name: string) {
   runtimeForm.value.sandboxAllowlistDomains = cur.join('\n')
   runtimeForm.value.sandboxNetwork = 'allowlist'
 }
+
+function formatTarBytes(n: number) {
+  if (!n || n < 0) return '0 B'
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+async function downloadEnvTar(arch?: string) {
+  await runtimeConfig.downloadEnvTar(arch)
+}
+
+const envTarVariants = computed(() => {
+  const list = runtimeConfig.environmentStatus?.tarVariants
+  if (list?.length) return list
+  // Fallback until status loads
+  return [
+    { arch: 'amd64', present: false, downloadUrl: '', assetName: 'danmo-work-env-linux-amd64.tar' },
+    { arch: 'arm64', present: false, downloadUrl: '', assetName: 'danmo-work-env-linux-arm64.tar' },
+  ]
+})
 
 const browserStatusText = computed(() => {
   const st = runtimeConfig.browserStatus
@@ -1175,15 +1290,28 @@ const hasFooterActions = computed(() => {
                   <DqInput
                     v-model="runtimeForm.sandboxAllowlistDomains"
                     type="textarea"
-                    :rows="4"
+                    :rows="5"
                     :placeholder="$t('settings.sandboxAllowlistDomainsPlaceholder')"
                   />
                 </div>
-                <div class="settings-form-row" style="margin-top: 8px; gap: 8px; flex-wrap: wrap;">
-                  <DqButton size="sm" @click="applyAllowlistPreset('npm')">{{ $t('settings.sandboxPresetNpm') }}</DqButton>
-                  <DqButton size="sm" @click="applyAllowlistPreset('go')">{{ $t('settings.sandboxPresetGo') }}</DqButton>
-                  <DqButton size="sm" @click="applyAllowlistPreset('pypi')">{{ $t('settings.sandboxPresetPypi') }}</DqButton>
-                  <DqButton size="sm" @click="applyAllowlistPreset('github')">{{ $t('settings.sandboxPresetGithub') }}</DqButton>
+                <p class="settings-form-group__desc">{{ $t('settings.sandboxAllowlistPresetsDesc') }}</p>
+                <div
+                  v-for="group in ALLOWLIST_PRESET_GROUPS"
+                  :key="group.id"
+                  class="settings-allowlist-presets"
+                  style="margin-top: 10px"
+                >
+                  <span class="settings-field__label">{{ $t(`settings.sandboxPresetGroup_${group.id}`) }}</span>
+                  <div class="settings-form-row" style="margin-top: 6px; gap: 8px; flex-wrap: wrap">
+                    <DqButton
+                      v-for="p in group.presets"
+                      :key="p.id"
+                      size="sm"
+                      @click="applyAllowlistPreset(p.id)"
+                    >
+                      {{ $t(`settings.sandboxPreset_${p.id}`) }}
+                    </DqButton>
+                  </div>
                 </div>
                 <p class="settings-form-group__desc">{{ $t('settings.sandboxAllowlistDomainsDesc') }}</p>
               </template>
@@ -1209,6 +1337,87 @@ const hasFooterActions = computed(() => {
                 </p>
                 <p v-if="showGitBashHint" class="settings-sandbox-status__degraded">
                   {{ $t('settings.sandboxShellHint') }}
+                </p>
+              </div>
+            </template>
+            <p class="settings-form-group__desc">{{ $t('settings.envBackendDesc') }}</p>
+            <div class="settings-form-row">
+              <div class="settings-field settings-field--half">
+                <span class="settings-field__label">{{ $t('settings.envBackend') }}</span>
+                <DqSelect v-model="runtimeForm.envBackend">
+                  <DqOption value="local" :label="$t('settings.envBackendLocal')" />
+                  <DqOption value="container" :label="$t('settings.envBackendContainer')" />
+                </DqSelect>
+              </div>
+              <div v-if="runtimeForm.envBackend === 'container'" class="settings-field settings-field--half">
+                <span class="settings-field__label">{{ $t('settings.envEngine') }}</span>
+                <DqSelect v-model="runtimeForm.envEngine">
+                  <DqOption value="auto" :label="$t('settings.envEngineAuto')" />
+                  <DqOption value="podman" label="Podman" />
+                  <DqOption value="docker" label="Docker" />
+                  <DqOption value="apple-container" :label="$t('settings.envEngineApple')" />
+                </DqSelect>
+              </div>
+            </div>
+            <template v-if="runtimeForm.envBackend === 'container'">
+              <p class="settings-form-group__desc">{{ $t('settings.envTarVariantsDesc') }}</p>
+              <div
+                v-for="v in envTarVariants"
+                :key="v.arch"
+                class="settings-form-row"
+                style="align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px"
+              >
+                <DqButton
+                  size="sm"
+                  :loading="runtimeConfig.downloadingTar === v.arch"
+                  :disabled="!!runtimeConfig.downloadingTar"
+                  @click="downloadEnvTar(v.arch)"
+                >
+                  {{
+                    (v.present
+                      ? $t('settings.envTarRedownloadArch', { arch: v.arch })
+                      : $t('settings.envTarDownloadArch', { arch: v.arch }))
+                      + (v.recommended ? ` (${$t('settings.envTarRecommended')})` : '')
+                  }}
+                </DqButton>
+                <a
+                  v-if="v.downloadUrl"
+                  class="settings-link"
+                  :href="v.downloadUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {{ v.assetName }}
+                </a>
+                <span v-if="v.present" class="settings-form-group__desc" style="margin: 0">
+                  {{ $t('settings.envTarInstalled', {
+                    path: v.path || '',
+                    size: formatTarBytes(v.bytes || 0),
+                  }) }}
+                </span>
+                <span v-else class="settings-form-group__desc" style="margin: 0">
+                  {{ $t('settings.envTarMissingArch', { arch: v.arch }) }}
+                </span>
+              </div>
+              <p class="settings-form-group__desc">{{ $t('settings.envResourcesDesc') }}</p>
+              <div class="settings-form-row">
+                <div class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.envCpus') }}</span>
+                  <DqInput v-model="runtimeForm.envCpus" :placeholder="$t('settings.envCpusPlaceholder')" />
+                </div>
+                <div class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.envMemory') }}</span>
+                  <DqInput v-model="runtimeForm.envMemory" :placeholder="$t('settings.envMemoryPlaceholder')" />
+                </div>
+              </div>
+              <div v-if="environmentStatusText" class="settings-sandbox-status">
+                <span class="settings-field__label">{{ $t('settings.envStatus') }}</span>
+                <code class="settings-sandbox-status__value">{{ environmentStatusText }}</code>
+                <p
+                  v-if="runtimeConfig.environmentStatus?.degraded && runtimeConfig.environmentStatus.degradedReason"
+                  class="settings-sandbox-status__degraded"
+                >
+                  {{ $t('settings.sandboxDegraded') }}: {{ runtimeConfig.environmentStatus.degradedReason }}
                 </p>
               </div>
             </template>

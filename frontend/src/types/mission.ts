@@ -197,6 +197,18 @@ export interface ConfigFile {
       backend?: string
       shell?: 'auto' | 'bash' | 'cmd' | string
     }
+    environment?: {
+      backend?: 'local' | 'container' | string
+      engine?: 'auto' | 'podman' | 'docker' | 'apple-container' | string
+      image?: string
+      tarPath?: string
+      workspaceMount?: string
+      resources?: {
+        cpus?: string
+        memory?: string
+        pids?: number
+      }
+    }
     browser?: {
       enabled: boolean
       executablePath?: string
@@ -299,6 +311,35 @@ export interface SandboxStatus {
   shell?: string
   shellPath?: string
   coreutilsBin?: string
+}
+
+export interface EnvironmentTarVariant {
+  arch: string
+  present: boolean
+  path?: string
+  bytes?: number
+  downloadUrl: string
+  assetName: string
+  recommended?: boolean
+}
+
+export interface EnvironmentStatus {
+  backend: string
+  engine?: string
+  image?: string
+  imageLoaded?: boolean
+  tarPath?: string
+  tarPresent?: boolean
+  tarBytes?: number
+  tarArch?: string
+  downloadUrl?: string
+  assetName?: string
+  tarVariants?: EnvironmentTarVariant[]
+  workspaceMount?: string
+  resources?: { cpus?: string; memory?: string; pids?: number }
+  degraded?: boolean
+  degradedReason?: string
+  activeProjects?: string[]
 }
 
 export interface BrowserStatus {

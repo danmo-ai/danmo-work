@@ -127,7 +127,7 @@ func TestPermissionRuleDeny(t *testing.T) {
 		URL:      "https://x.com",
 		Sandbox:  strongSB(domain.SandboxNetworkAllow),
 	})
-	if r.Decision != DecisionDeny {
+	if r.Decision != DecisionDeny || r.Reason != ReasonRuleDeny {
 		t.Fatalf("got %+v", r)
 	}
 }
@@ -196,6 +196,49 @@ func TestGateDiscussDenyWrite(t *testing.T) {
 	g := NewGate(nil)
 	r := g.CheckRequest(Request{ToolName: "write", Risk: domain.RiskMedium, Mode: domain.PermModeDiscuss})
 	if r.Decision != DecisionDeny {
+		t.Fatalf("got %+v", r)
+	}
+}
+
+func TestGateContainerIsolationStrong(t *testing.T) {
+	g := NewGate(nil)
+	weak := domain.SandboxStatus{
+		Enabled: true,
+		Mode:    domain.SandboxModeWorkspaceWrite,
+		Network: domain.SandboxNetworkDeny,
+		Backend: domain.SandboxBackendHostWeak,
+	}
+	iso := domain.ComputeEffectiveIsolation(weak, domain.EnvironmentStatus{
+		Backend:  domain.EnvironmentBackendContainer,
+		Engine:   "podman",
+		Degraded: false,
+	})
+	if !iso.Strong || iso.Source != domain.IsolationContainer {
+		t.Fatalf("iso=%+v", iso)
+	}
+	r := g.CheckRequest(Request{
+		ToolName:  "exec_shell",
+		Risk:      domain.RiskHigh,
+		Command:   "ls",
+		Sandbox:   weak,
+		Isolation: iso,
+	})
+	if r.Decision != DecisionAllow {
+		t.Fatalf("container should be strong: %+v", r)
+	}
+}
+
+func TestGateWebSearchAllowlistAsksProviderHost(t *testing.T) {
+	g := NewGate(nil)
+	sb := strongSB(domain.SandboxNetworkAllowlist)
+	sb.AllowlistDomains = []string{"example.com"}
+	r := g.CheckRequest(Request{
+		ToolName:       "web_search",
+		Risk:           domain.RiskLow,
+		SearchProvider: string(domain.SearchProviderTavily),
+		Sandbox:        sb,
+	})
+	if r.Decision != DecisionAsk || r.Reason != ReasonNetworkDomain || r.Domain != "api.tavily.com" {
 		t.Fatalf("got %+v", r)
 	}
 }

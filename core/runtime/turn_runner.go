@@ -169,12 +169,15 @@ type TurnRunner struct {
 	Log                 func(typ string, data map[string]any)
 	FileTracker         *tool.FileTracker
 	FileChanges         FileChangeAppender
-	SandboxStatus        func() domain.SandboxStatus
-	SessionAllowNetwork  func(sessionID string) bool
-	SessionAllowDomains  func(sessionID string) []string
-	GrantDomains         func(domains []string)
-	mu                   sync.Mutex
-	doomState            map[string]*doomTurnState
+	SandboxStatus       func() domain.SandboxStatus
+	EffectiveIsolation  func() domain.EffectiveIsolation
+	SessionAllowNetwork func(sessionID string) bool
+	SessionAllowDomains func(sessionID string) []string
+	GrantSessionDomains func(sessionID string, domains []string)
+	GrantTurnDomains    func(turnID string, domains []string)
+	ClearTurnDomains    func(turnID string)
+	mu                  sync.Mutex
+	doomState           map[string]*doomTurnState
 }
 
 // doomTurnState tracks consecutive identical tool signatures (mainstream-style).
@@ -246,6 +249,10 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 
 func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, []Message, error) {
 	cfg := p.loadRunCfg(ctx)
+
+	if p.ClearTurnDomains != nil && tctx.TurnID != "" {
+		defer p.ClearTurnDomains(tctx.TurnID)
+	}
 
 	p.FileTracker = tool.NewFileTracker(tctx.WorkDir)
 
@@ -639,6 +646,10 @@ func (p *TurnRunner) gateToolCall(
 	if p.SandboxStatus != nil {
 		sbStatus = p.SandboxStatus()
 	}
+	isolation := domain.ComputeEffectiveIsolation(sbStatus, domain.EnvironmentStatus{})
+	if p.EffectiveIsolation != nil {
+		isolation = p.EffectiveIsolation()
+	}
 	allowNet := false
 	if p.SessionAllowNetwork != nil {
 		allowNet = p.SessionAllowNetwork(tctx.SessionID)
@@ -646,6 +657,13 @@ func (p *TurnRunner) gateToolCall(
 	var sessionDomains []string
 	if p.SessionAllowDomains != nil {
 		sessionDomains = p.SessionAllowDomains(tctx.SessionID)
+	}
+	searchProvider, searchBaseURL := "", ""
+	if call.Name == "web_search" && p.ConfigStore != nil {
+		if c, err := p.ConfigStore.Load(ctx); err == nil {
+			searchProvider = string(c.Search.Provider)
+			searchBaseURL = c.Search.BaseURL
+		}
 	}
 	risk := handler.RiskLevel()
 	if call.Name == "http_request" {
@@ -657,7 +675,10 @@ func (p *TurnRunner) gateToolCall(
 		Risk:                risk,
 		Command:             cmdStr,
 		URL:                 urlStr,
+		SearchProvider:      searchProvider,
+		SearchBaseURL:       searchBaseURL,
 		Sandbox:             sbStatus,
+		Isolation:           isolation,
 		SessionAllowNetwork: allowNet,
 		SessionAllowDomains: sessionDomains,
 		Mode:                cfg.permissionMode,
@@ -669,6 +690,7 @@ func (p *TurnRunner) gateToolCall(
 
 	allowNetworkForRun := allowNet
 	grantedDomain := ""
+	grantScope := "once"
 	if decision == permission.DecisionAsk {
 		canAuto := cfg.autoApprove && permission.AutoApprovable(permResult.Reason)
 		if !canAuto && p.Approval != nil {
@@ -700,6 +722,9 @@ func (p *TurnRunner) gateToolCall(
 			if !outcome.Approved {
 				return nil, "User rejected this tool call. Do not retry the same command; choose a safer alternative or ask the user." + toolErrorHint, "approval rejected", false, nil
 			}
+			if outcome.Scope != "" {
+				grantScope = outcome.Scope
+			}
 		} else if !canAuto {
 			return nil, "permission ask required but approval gate unavailable" + toolErrorHint, "approval unavailable", false, nil
 		}
@@ -727,8 +752,12 @@ func (p *TurnRunner) gateToolCall(
 		args["__sandbox_allow_network"] = true
 	}
 	if grantedDomain != "" {
-		if p.GrantDomains != nil {
-			p.GrantDomains([]string{grantedDomain})
+		if grantScope == "session" {
+			if p.GrantSessionDomains != nil {
+				p.GrantSessionDomains(tctx.SessionID, []string{grantedDomain})
+			}
+		} else if p.GrantTurnDomains != nil {
+			p.GrantTurnDomains(tctx.TurnID, []string{grantedDomain})
 		}
 		args["__granted_domain"] = grantedDomain
 	}

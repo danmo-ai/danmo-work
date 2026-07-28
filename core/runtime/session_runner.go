@@ -49,6 +49,7 @@ type Engine struct {
 	llm           port.LLMProvider
 	stream        port.EventStream
 	sandbox       port.Sandbox
+	execution     port.ExecutionBackend
 	turnRunner    *TurnRunner
 	toolCatalog   *tool.Registry
 	compactionMgr *CompactionManager
@@ -151,9 +152,12 @@ func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, pro
 	}
 	turnRunner.Approval = e
 	turnRunner.SandboxStatus = e.sandboxStatus
+	turnRunner.EffectiveIsolation = e.effectiveIsolation
 	turnRunner.SessionAllowNetwork = e.sessionAllowsNetwork
 	turnRunner.SessionAllowDomains = e.sessionAllowDomains
-	turnRunner.GrantDomains = e.grantSandboxDomains
+	turnRunner.GrantSessionDomains = e.grantSessionDomains
+	turnRunner.GrantTurnDomains = e.grantTurnDomains
+	turnRunner.ClearTurnDomains = e.clearTurnDomains
 	return e
 }
 
@@ -251,6 +255,13 @@ func (e *Engine) SetSandbox(sb port.Sandbox) {
 	e.sandbox = sb
 }
 
+// SetExecution wires the LocalOS / OCI execution backend for EffectiveIsolation.
+func (e *Engine) SetExecution(ex port.ExecutionBackend) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.execution = ex
+}
+
 func (e *Engine) sandboxStatus() domain.SandboxStatus {
 	e.mu.Lock()
 	sb := e.sandbox
@@ -259,6 +270,22 @@ func (e *Engine) sandboxStatus() domain.SandboxStatus {
 		return domain.SandboxStatus{Enabled: false, Backend: domain.SandboxBackendDisabled}
 	}
 	return sb.Status()
+}
+
+func (e *Engine) effectiveIsolation() domain.EffectiveIsolation {
+	e.mu.Lock()
+	sb := e.sandbox
+	ex := e.execution
+	e.mu.Unlock()
+	sbSt := domain.SandboxStatus{Enabled: false, Backend: domain.SandboxBackendDisabled}
+	if sb != nil {
+		sbSt = sb.Status()
+	}
+	envSt := domain.EnvironmentStatus{}
+	if ex != nil {
+		envSt = ex.Status()
+	}
+	return domain.ComputeEffectiveIsolation(sbSt, envSt)
 }
 
 func (e *Engine) sessionAllowsNetwork(sessionID string) bool {
@@ -279,12 +306,41 @@ func (e *Engine) sessionAllowDomains(sessionID string) []string {
 	return out
 }
 
-func (e *Engine) grantSandboxDomains(domains []string) {
+func (e *Engine) grantSessionDomains(sessionID string, domains []string) {
 	e.mu.Lock()
 	sb := e.sandbox
 	e.mu.Unlock()
 	if sb != nil {
-		sb.GrantDomains(domains)
+		sb.GrantSessionDomains(sessionID, domains)
+	}
+}
+
+func (e *Engine) grantTurnDomains(turnID string, domains []string) {
+	e.mu.Lock()
+	sb := e.sandbox
+	e.mu.Unlock()
+	if sb != nil {
+		sb.GrantTurnDomains(turnID, domains)
+	}
+}
+
+func (e *Engine) clearTurnDomains(turnID string) {
+	e.mu.Lock()
+	sb := e.sandbox
+	e.mu.Unlock()
+	if sb != nil {
+		sb.ClearTurnDomains(turnID)
+	}
+}
+
+// RevokeSessionNetworkGrants clears Soft + Hard session network grants.
+func (e *Engine) RevokeSessionNetworkGrants(sessionID string) {
+	e.mu.Lock()
+	delete(e.sessionPerm, sessionID)
+	sb := e.sandbox
+	e.mu.Unlock()
+	if sb != nil {
+		sb.RevokeSessionDomains(sessionID)
 	}
 }
 
@@ -1174,9 +1230,12 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			childRunner := NewTurnRunner(e.llm, e.stream, e.turnRunner.Perm, childReg, e.configStore)
 			childRunner.Approval = e
 			childRunner.SandboxStatus = e.sandboxStatus
+			childRunner.EffectiveIsolation = e.effectiveIsolation
 			childRunner.SessionAllowNetwork = e.sessionAllowsNetwork
 			childRunner.SessionAllowDomains = e.sessionAllowDomains
-			childRunner.GrantDomains = e.grantSandboxDomains
+			childRunner.GrantSessionDomains = e.grantSessionDomains
+			childRunner.GrantTurnDomains = e.grantTurnDomains
+			childRunner.ClearTurnDomains = e.clearTurnDomains
 			childRunner.FileChanges = e.turnRunner.FileChanges
 			childRunner.SkillList = skills
 			childRunner.ToolBindings = workerAgent.Tools
@@ -1339,9 +1398,8 @@ func (e *Engine) ResolveApproval(id string, approved bool, scope string) {
 		case permission.ReasonNetworkDomain:
 			if meta.Domain != "" {
 				st.AllowedDomains = append(st.AllowedDomains, meta.Domain)
-				if e.sandbox != nil {
-					e.sandbox.GrantDomains([]string{meta.Domain})
-				}
+				// Hard grant is applied in gateToolCall via GrantSessionDomains
+				// after WaitApproval returns with scope=session.
 			}
 		}
 		e.sessionPerm[meta.SessionID] = st

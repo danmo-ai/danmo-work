@@ -8,10 +8,14 @@ import (
 
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
+	"danmo-work/core/runtime/egress"
 )
 
 type ExecShell struct {
 	Sandbox port.Sandbox
+	// Runner routes to LocalOS sandbox or per-project OCI container.
+	// When nil, falls back to Sandbox (or host).
+	Runner port.ExecutionBackend
 }
 
 func (h *ExecShell) Name() string                { return "exec_shell" }
@@ -30,7 +34,7 @@ func (h *ExecShell) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
 		Name: "exec_shell",
 		Description: "Execute a shell command and return its stdout/stderr. HIGH RISK — requires user approval.\n\n" +
-			"**Important**: Commands run in the project root directory under the OS sandbox when enabled. Use relative paths when referencing project files.\n\n" +
+			"**Important**: Commands run in the project root. Under OCI container mode the project is bind-mounted at the same absolute path as on the host, so paths match file tools (read_file/write/edit). Prefer relative paths from the project root.\n\n" +
 			"- Use only for builds, tests, git operations, or commands with no tool alternative.\n" +
 			"- Do NOT use for reading/writing files — use read_file, write, edit, or apply_patch instead.\n" +
 			"- Do NOT use for searching file contents — use grep or glob instead.\n" +
@@ -58,19 +62,47 @@ func (h *ExecShell) Execute(ctx context.Context, input map[string]any) (domain.T
 		timeout = time.Duration(t) * time.Second
 	}
 
-	opts := port.SandboxRunOptions{
-		Command:      cmdStr,
-		WorkDir:      workDirFromInput(input),
-		Timeout:      timeout,
-		AllowNetwork: boolFromInput(input, "__sandbox_allow_network"),
-	}
+	allowNet := boolFromInput(input, "__sandbox_allow_network")
+	workDir := workDirFromInput(input)
+	projectID, _ := input["__project_id"].(string)
+	grantedDomain, _ := input["__granted_domain"].(string)
 
 	var out []byte
 	var err error
-	if h.Sandbox != nil {
-		out, err = h.Sandbox.Run(ctx, opts)
+	if h.Runner != nil {
+		opts := port.ExecRunOptions{
+			ProjectID: projectID,
+			SandboxRunOptions: port.SandboxRunOptions{
+				Command:      cmdStr,
+				WorkDir:      workDir,
+				Timeout:      timeout,
+				AllowNetwork: allowNet,
+			},
+		}
+		if grantedDomain != "" {
+			opts.ExtraDomains = []string{grantedDomain}
+		}
+		if h.Sandbox != nil {
+			if u := strings.TrimSpace(h.Sandbox.ProxyURL()); u != "" {
+				opts.AllowlistProxy = egress.ProxyAddrFromURL(u)
+			}
+		}
+		out, err = h.Runner.Run(ctx, opts)
 	} else {
-		out, err = hostRunShell(ctx, opts)
+		opts := port.SandboxRunOptions{
+			Command:      cmdStr,
+			WorkDir:      workDir,
+			Timeout:      timeout,
+			AllowNetwork: allowNet,
+		}
+		if grantedDomain != "" {
+			opts.ExtraDomains = []string{grantedDomain}
+		}
+		if h.Sandbox != nil {
+			out, err = h.Sandbox.Run(ctx, opts)
+		} else {
+			out, err = hostRunShell(ctx, opts)
+		}
 	}
 
 	content := strings.TrimSpace(string(out))

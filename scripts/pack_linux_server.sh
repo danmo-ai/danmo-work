@@ -33,6 +33,9 @@ cp "$DQ_SERVER_DIR/$APP_NAME-cli" "$STAGE/out/server/"
 cp "$DQ_SERVER_DIR/$APP_NAME-tui" "$STAGE/out/server/"
 cp -R "$DQ_FRONTEND_DIST/." "$STAGE/out/frontend/dist/"
 
+# OCI env image tar is NOT packed here — published as a separate GitHub Release
+# asset for optional user download (see make build-env-tar / release job env artifact).
+
 ARCHIVE="$DQ_RELEASE_DIST/${APP_NAME}-${OS}-${ARCH}-${VERSION}.tar.gz"
 tar -czf "$ARCHIVE" -C "$STAGE" .
 rm -rf "$STAGE"

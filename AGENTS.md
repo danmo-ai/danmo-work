@@ -16,6 +16,7 @@
 | CLI entry | `cli/main.go` |
 | TUI entry | `tui/main.go` |
 | Frontend | `frontend/` → build to `out/frontend/dist/` |
+| Optional OCI env | `environments/agent-base/` → CI Release asset (not in app packs); `make build-env-tar` locally |
 | Dev scripts | `scripts/start_backend.sh`, `scripts/start_web.sh`, `scripts/start_desktop.sh`, `scripts/stop.sh` |
 | Paths | `scripts/out_paths.sh` |
 
@@ -35,6 +36,7 @@ make build-go             # all 3 Go binaries
 make build-server         # server only
 make build-cli            # cli only
 make build-tui            # tui only
+make build-env-tar        # optional OCI env tar → out/env/*.tar (Release asset; not in app packs)
 make pack-linux-server
 make pack-macos-desktop
 make pack-windows-desktop
@@ -53,6 +55,7 @@ out/server/          # Go binaries (danmo-work, danmo-work-cli, danmo-work-tui)
 out/desktop/bundle/  # Tauri installers
 out/desktop/cargo/   # Cargo intermediate
 out/dist/            # pack-linux-server tar.gz
+out/env/             # optional OCI image tar (dev/CI; user downloads to ~/.danmo-work/env/)
 out/run/             # dev PIDs, logs, wrappers (DQ_DEV markers)
 ```
 

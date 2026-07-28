@@ -9,14 +9,15 @@ import (
 	"danmo-work/core/adapter/config"
 	"danmo-work/core/adapter/feishu"
 	"danmo-work/core/adapter/llm"
+	gitmarket "danmo-work/core/adapter/market/git"
 	adaptermcp "danmo-work/core/adapter/mcp"
 	"danmo-work/core/adapter/qq"
-	gitmarket "danmo-work/core/adapter/market/git"
 	"danmo-work/core/domain"
 	"danmo-work/core/paths"
 	"danmo-work/core/port"
 	dqruntime "danmo-work/core/runtime"
 	dqbrowser "danmo-work/core/runtime/browser"
+	"danmo-work/core/runtime/execution"
 	"danmo-work/core/runtime/prompt"
 	"danmo-work/core/runtime/sandbox"
 	"danmo-work/core/runtime/tool/builtin"
@@ -43,6 +44,7 @@ type Core struct {
 	TableStore    port.TableStoreRepo
 	Engine        port.Engine
 	Sandbox       port.Sandbox
+	Execution     port.ExecutionBackend
 	Browser       port.Browser
 	Config        *domain.ConfigFile
 	Loader        *config.Loader
@@ -213,8 +215,10 @@ func New(cfg Config) *Core {
 	sb := sandbox.New(appCfg.Runtime.Sandbox)
 	eng.SetSandbox(sb)
 	mcpDialer.PrepareStdio = sb.PrepareMCPStdio
+	execBackend := execution.New(appCfg.Runtime.Environment, appCfg.Runtime.Sandbox, sb)
+	eng.SetExecution(execBackend)
 	br := dqbrowser.New(appCfg.Runtime.Browser)
-	eng.RegisterTool(&builtin.ExecShell{Sandbox: sb})
+	eng.RegisterTool(&builtin.ExecShell{Sandbox: sb, Runner: execBackend})
 	eng.RegisterTool(&builtin.ReadFile{})
 	eng.RegisterTool(&builtin.Edit{})
 	eng.RegisterTool(&builtin.Write{})
@@ -322,6 +326,7 @@ func New(cfg Config) *Core {
 		TableStore:    tableStore,
 		Engine:        eng,
 		Sandbox:       sb,
+		Execution:     execBackend,
 		Browser:       br,
 		Config:        appCfg,
 		Loader:        loader,
@@ -359,6 +364,16 @@ func (c *Core) Close() error {
 		c.Weixin.Stop()
 	}
 	var first error
+	if c.Execution != nil {
+		if err := c.Execution.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	if c.Sandbox != nil {
+		if err := c.Sandbox.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
 	if c.TableStore != nil {
 		if err := c.TableStore.Close(); err != nil && first == nil {
 			first = err
