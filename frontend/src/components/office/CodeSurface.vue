@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
@@ -9,6 +10,17 @@ import {
   selectionLineRange,
   type CodeSelectionAttachment,
 } from '@/types/code-attachment'
+import {
+  createCodeMirror,
+  getCodeMirrorSelection,
+  loadLanguageExtension,
+  setCodeMirrorDoc,
+  setCodeMirrorLanguage,
+  setCodeMirrorReadOnly,
+  setCodeMirrorTheme,
+  type CodeMirrorHost,
+} from '@/utils/codemirror-setup'
+import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
 import ElementAnnotatePopover from '@/components/center/ElementAnnotatePopover.vue'
 
 const props = defineProps<{
@@ -26,34 +38,25 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const themeStore = useThemeStore()
+const { currentTheme } = storeToRefs(themeStore)
+
 const loading = ref(false)
 const saving = ref(false)
 const content = ref('')
 const dirty = ref(false)
-const textareaRef = ref<HTMLTextAreaElement | null>(null)
-const gutterRef = ref<HTMLElement | null>(null)
+const hostEl = ref<HTMLElement | null>(null)
 const selStart = ref(0)
 const selEnd = ref(0)
 const annotateOpen = ref(false)
+let host: CodeMirrorHost | null = null
+let suppressDocEvent = false
 
 const language = computed(() => languageFromPath(props.path))
 const readOnly = computed(() => props.mode !== 'edit' || !!props.turnRunning)
-
-const lineCount = computed(() => {
-  const text = content.value
-  if (!text) return 1
-  let n = 1
-  for (let i = 0; i < text.length; i++) {
-    if (text.charCodeAt(i) === 10) n++
-  }
-  return n
-})
-
-const lineNumbers = computed(() => {
-  const n = lineCount.value
-  const parts: string[] = new Array(n)
-  for (let i = 0; i < n; i++) parts[i] = String(i + 1)
-  return parts.join('\n')
+const isDark = computed(() => {
+  const opt = THEME_OPTIONS.find((o) => o.id === currentTheme.value)
+  return !!opt?.dark
 })
 
 const selectionRange = computed(() =>
@@ -69,6 +72,30 @@ const annotateSummary = computed(() => {
   return `${base}:${startLine}–${endLine}`
 })
 
+async function ensureEditor() {
+  if (host || !hostEl.value) return
+  const languageExt = await loadLanguageExtension(props.path, language.value)
+  host = createCodeMirror({
+    parent: hostEl.value,
+    doc: content.value,
+    readOnly: readOnly.value,
+    dark: isDark.value,
+    languageExt,
+    onDocChanged: (doc) => {
+      if (suppressDocEvent) return
+      content.value = doc
+      if (!dirty.value) {
+        dirty.value = true
+        emit('dirty', true)
+      }
+    },
+    onSelectionChanged: (from, to) => {
+      selStart.value = from
+      selEnd.value = to
+    },
+  })
+}
+
 async function load() {
   if (!props.projectId || !props.path) return
   loading.value = true
@@ -82,6 +109,15 @@ async function load() {
     emit('dirty', false)
     selStart.value = 0
     selEnd.value = 0
+    await nextTick()
+    await ensureEditor()
+    if (host) {
+      suppressDocEvent = true
+      setCodeMirrorDoc(host, content.value)
+      suppressDocEvent = false
+      await setCodeMirrorLanguage(host, props.path, language.value)
+      setCodeMirrorReadOnly(host, readOnly.value)
+    }
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('office.loadFailed'))
   } finally {
@@ -91,6 +127,7 @@ async function load() {
 
 async function save(opts?: { quiet?: boolean }) {
   if (!props.projectId || readOnly.value) return
+  if (host) content.value = host.view.state.doc.toString()
   saving.value = true
   try {
     await fetchJSON(`/projects/${props.projectId}/files/content`, {
@@ -109,54 +146,12 @@ async function save(opts?: { quiet?: boolean }) {
   }
 }
 
-function onInput(e: Event) {
-  const el = e.target as HTMLTextAreaElement
-  content.value = el.value
-  if (!dirty.value) {
-    dirty.value = true
-    emit('dirty', true)
-  }
-  syncSelection(el)
-}
-
-function syncSelection(el?: HTMLTextAreaElement | null) {
-  const ta = el ?? textareaRef.value
-  if (!ta) return
-  selStart.value = ta.selectionStart
-  selEnd.value = ta.selectionEnd
-}
-
-function onScroll() {
-  const ta = textareaRef.value
-  const gut = gutterRef.value
-  if (ta && gut) gut.scrollTop = ta.scrollTop
-}
-
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Tab' && !readOnly.value) {
-    e.preventDefault()
-    const ta = textareaRef.value
-    if (!ta) return
-    const start = ta.selectionStart
-    const end = ta.selectionEnd
-    const v = content.value
-    content.value = v.slice(0, start) + '  ' + v.slice(end)
-    dirty.value = true
-    emit('dirty', true)
-    void nextTick(() => {
-      ta.selectionStart = ta.selectionEnd = start + 2
-      syncSelection(ta)
-    })
-    return
-  }
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && hasSelection.value) {
-    e.preventDefault()
-    openAnnotate()
-  }
-}
-
 function openAnnotate() {
-  syncSelection()
+  if (host) {
+    const sel = getCodeMirrorSelection(host)
+    selStart.value = sel.from
+    selEnd.value = sel.to
+  }
   if (!hasSelection.value) {
     toast.warning(t('office.codeNeedSelection'))
     return
@@ -167,7 +162,9 @@ function openAnnotate() {
 function onAnnotateConfirm(annotation: string) {
   annotateOpen.value = false
   const { startLine, endLine } = selectionRange.value
-  const text = content.value.slice(selStart.value, selEnd.value)
+  const text = host
+    ? getCodeMirrorSelection(host).text
+    : content.value.slice(selStart.value, selEnd.value)
   const att = createCodeSelectionAttachment({
     path: props.path,
     language: language.value,
@@ -184,6 +181,13 @@ function onAnnotateCancel() {
   annotateOpen.value = false
 }
 
+function onKeydown(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && hasSelection.value) {
+    e.preventDefault()
+    openAnnotate()
+  }
+}
+
 watch(
   () => [props.projectId, props.path, props.reloadToken] as const,
   () => {
@@ -192,15 +196,31 @@ watch(
   { immediate: true },
 )
 
-onMounted(() => {
-  void nextTick(() => textareaRef.value?.focus())
+watch(readOnly, (v) => {
+  if (host) setCodeMirrorReadOnly(host, v)
+})
+
+watch(isDark, (v) => {
+  if (host) setCodeMirrorTheme(host, v)
+})
+
+watch(
+  () => [props.path, language.value] as const,
+  ([, lang]) => {
+    if (host) void setCodeMirrorLanguage(host, props.path, lang)
+  },
+)
+
+onBeforeUnmount(() => {
+  host?.view.destroy()
+  host = null
 })
 
 defineExpose({ save })
 </script>
 
 <template>
-  <div class="code-surface">
+  <div class="code-surface" @keydown="onKeydown">
     <div class="code-surface__toolbar">
       <span class="code-surface__lang">{{ language }}</span>
       <span v-if="hasSelection" class="code-surface__sel">
@@ -221,23 +241,12 @@ defineExpose({ save })
     </div>
 
     <div v-if="loading" class="code-surface__status">{{ t('office.loading') }}</div>
-    <div v-else class="code-surface__editor">
-      <pre ref="gutterRef" class="code-surface__gutter" aria-hidden="true">{{ lineNumbers }}</pre>
-      <textarea
-        ref="textareaRef"
-        class="code-surface__textarea"
-        :value="content"
-        :readonly="readOnly"
-        spellcheck="false"
-        wrap="off"
-        @input="onInput"
-        @scroll="onScroll"
-        @keydown="onKeydown"
-        @keyup="syncSelection()"
-        @click="syncSelection()"
-        @select="syncSelection()"
-      />
-    </div>
+    <div
+      v-show="!loading"
+      ref="hostEl"
+      class="code-surface__editor"
+      :class="{ 'is-readonly': readOnly }"
+    />
 
     <ElementAnnotatePopover
       :open="annotateOpen"
@@ -311,44 +320,18 @@ defineExpose({ save })
   font-size: 13px;
 }
 .code-surface__editor {
-  display: flex;
   min-height: 0;
   flex: 1;
   overflow: hidden;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-  font-size: 13px;
-  line-height: 1.5;
 }
-.code-surface__gutter {
-  margin: 0;
-  padding: 12px 8px 12px 12px;
-  min-width: 3.2em;
-  text-align: right;
-  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
-  background: color-mix(in srgb, var(--dq-label-primary) 3%, transparent);
-  border-right: 1px solid var(--dq-separator-light);
-  overflow: hidden;
-  user-select: none;
-  white-space: pre;
-  font-variant-numeric: tabular-nums;
-}
-.code-surface__textarea {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  padding: 12px;
-  border: 0;
-  resize: none;
+.code-surface__editor :deep(.cm-editor) {
+  height: 100%;
   outline: none;
-  background: transparent;
-  color: var(--dq-label-primary);
-  font: inherit;
-  line-height: inherit;
-  white-space: pre;
-  overflow: auto;
-  tab-size: 2;
 }
-.code-surface__textarea:read-only {
-  cursor: default;
+.code-surface__editor :deep(.cm-editor.cm-focused) {
+  outline: none;
+}
+.code-surface__editor.is-readonly :deep(.cm-content) {
+  caret-color: transparent;
 }
 </style>

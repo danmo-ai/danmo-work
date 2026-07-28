@@ -660,7 +660,7 @@ Files 树点击 → `routeOfficeFile`（`frontend/src/utils/office-route.ts`）�
 | `doc` | GFM `.md` | TipTap（编辑会话 MD ↔ HTML） | edit |
 | `slides` | Markdown SoT（Marp 兼容子集：`type: slides` + `---` 分页）；`*-slides.html` 为 Stage **程序**派生物 | 编辑 Markdown；Present 时脏检查同步 HTML | edit 或 present |
 | `sheet` | `.csv` / `.danmo-sheet.json` | 网格编辑 | edit |
-| `code` | 常见源码 / 配置文本 | 轻量 CodeSurface（行号 + 读写）；选区可批注到 Composer（含行号） | view |
+| `code` | 常见源码 / 配置文本 | CodeMirror 6（语法高亮 + 行号 + 读写）；选区可批注到 Composer（含行号） | view |
 | `diff` | `git diff` / 未跟踪合成 patch | DiffSurface（unified）；可「打开文件」 | view |
 | `preview` | 通用 `.html`、图片、外链等 | iframe / 图片预览；URL 栏 + Design mode | view |
 

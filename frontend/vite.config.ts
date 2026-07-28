@@ -27,7 +27,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     // Linked file: packages — exclude so Vite loads fresh dist (avoids stale Dq* exports).
-    include: ['reka-ui'],
+    include: ['reka-ui', 'codemirror', '@codemirror/language-data', '@codemirror/view', '@codemirror/state'],
     exclude: ['@danqing/dq-tokens', '@danqing/dq-ui', '@danqing/dq-shell'],
   },
   server: {

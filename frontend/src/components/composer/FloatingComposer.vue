@@ -308,10 +308,14 @@ function startEditAnnotation(att: ElementComposerAttachment | CodeComposerAttach
 function saveEditAnnotation() {
   const id = editingId.value
   if (!id) return
-  attachments.value = attachments.value.map((a) => {
+  const note = editingAnnotation.value.trim()
+  attachments.value = attachments.value.map((a): ComposerAttachment => {
     if (a.id !== id) return a
-    if (a.kind === 'element' || a.kind === 'code') {
-      return { ...a, data: { ...a.data, annotation: editingAnnotation.value.trim() } }
+    if (a.kind === 'element') {
+      return { ...a, data: { ...a.data, annotation: note } }
+    }
+    if (a.kind === 'code') {
+      return { ...a, data: { ...a.data, annotation: note } }
     }
     return a
   })

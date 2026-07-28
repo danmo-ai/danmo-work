@@ -77,7 +77,8 @@ const chromeLabel = computed(() => {
 })
 
 function getSelectionMarkdown(): string {
-  const surface = activeSurface.value?.value
+  if (stage.value?.kind === 'code' || stage.value?.kind === 'diff') return ''
+  const surface = activeSurface.value?.value as { getSelectionMarkdown?: () => string } | null | undefined
   return surface?.getSelectionMarkdown?.() || ''
 }
 
