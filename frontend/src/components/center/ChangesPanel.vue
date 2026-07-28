@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted } from 'vue'
 import { useSessionsStore } from '@/stores/sessions'
+import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
 import Skeleton from '@/components/common/Skeleton.vue'
@@ -27,6 +28,7 @@ interface GitBranches {
 }
 
 const sessions = useSessionsStore()
+const workspaceUi = useWorkspaceUiStore()
 const data = ref<GitChanges | null>(null)
 const loading = ref(false)
 const branches = ref<GitBranches | null>(null)
@@ -132,9 +134,19 @@ function changeLabel(c: GitFileChange): string {
   return c.file
 }
 
-function jumpToFile(file: string) {
-  // Expose selection for future file open; copy path for now
+function openDiff(c: GitFileChange) {
+  workspaceUi.openStage({
+    kind: 'diff',
+    path: c.file,
+    mode: 'view',
+    staged: c.staged,
+  })
+}
+
+function copyPath(file: string, e: Event) {
+  e.stopPropagation()
   void navigator.clipboard?.writeText(file).catch(() => {})
+  toast.success('已复制路径')
 }
 
 defineExpose({ refresh, totalCount })
@@ -183,14 +195,19 @@ defineExpose({ refresh, totalCount })
           <div class="changes-panel__group-label">{{ $t('sessions.changesStaged') }}</div>
           <button
             v-for="c in stagedChanges"
-            :key="c.file"
+            :key="'s-' + c.file"
             type="button"
             class="changes-panel__item"
             :class="`is-${statusType(c.status)}`"
-            @click="jumpToFile(c.file)"
+            @click="openDiff(c)"
           >
             <span class="changes-panel__item-status">{{ statusLabel(c.status) }}</span>
             <span class="changes-panel__item-file" :title="changeLabel(c)">{{ changeLabel(c) }}</span>
+            <span
+              class="changes-panel__item-copy"
+              :title="$t('sessions.copyPath')"
+              @click="copyPath(c.file, $event)"
+            >⎘</span>
           </button>
         </template>
 
@@ -198,14 +215,19 @@ defineExpose({ refresh, totalCount })
           <div class="changes-panel__group-label">{{ $t('sessions.changesUnstaged') }}</div>
           <button
             v-for="c in unstagedChanges"
-            :key="c.file"
+            :key="'u-' + c.file"
             type="button"
             class="changes-panel__item"
             :class="`is-${statusType(c.status)}`"
-            @click="jumpToFile(c.file)"
+            @click="openDiff(c)"
           >
             <span class="changes-panel__item-status">{{ statusLabel(c.status) }}</span>
             <span class="changes-panel__item-file" :title="changeLabel(c)">{{ changeLabel(c) }}</span>
+            <span
+              class="changes-panel__item-copy"
+              :title="$t('sessions.copyPath')"
+              @click="copyPath(c.file, $event)"
+            >⎘</span>
           </button>
         </template>
       </div>
@@ -352,8 +374,27 @@ defineExpose({ refresh, totalCount })
 }
 
 .changes-panel__item-file {
+  flex: 1;
+  min-width: 0;
   word-break: break-word;
   font-size: var(--dq-font-size-footnote);
   font-family: var(--dq-font-mono);
+}
+
+.changes-panel__item-copy {
+  flex-shrink: 0;
+  opacity: 0;
+  font-size: 12px;
+  color: var(--dq-label-tertiary);
+  padding: 0 2px;
+  line-height: 1.45;
+}
+
+.changes-panel__item:hover .changes-panel__item-copy {
+  opacity: 1;
+}
+
+.changes-panel__item-copy:hover {
+  color: var(--dq-accent);
 }
 </style>

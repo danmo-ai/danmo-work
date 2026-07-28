@@ -2,8 +2,12 @@ import {
   buildUserInputWithAttachments,
   type ElementAttachment,
 } from '@/types/element-attachment'
+import {
+  serializeCodeSelectionAttachments,
+  type CodeSelectionAttachment,
+} from '@/types/code-attachment'
 
-export type ComposerAttachmentKind = 'image' | 'file' | 'element'
+export type ComposerAttachmentKind = 'image' | 'file' | 'element' | 'code'
 
 export interface ImageComposerAttachment {
   id: string
@@ -30,10 +34,17 @@ export interface ElementComposerAttachment {
   data: ElementAttachment
 }
 
+export interface CodeComposerAttachment {
+  id: string
+  kind: 'code'
+  data: CodeSelectionAttachment
+}
+
 export type ComposerAttachment =
   | ImageComposerAttachment
   | FileComposerAttachment
   | ElementComposerAttachment
+  | CodeComposerAttachment
 
 /** API payload for vision models (matches domain.UserAttachment). */
 export interface ApiUserAttachment {
@@ -55,7 +66,7 @@ export function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
-/** Text + element/file placeholders; images are sent as structured attachments. */
+/** Text + element/code/file placeholders; images are sent as structured attachments. */
 export function buildComposerUserInput(
   text: string,
   atts: ComposerAttachment[],
@@ -63,9 +74,17 @@ export function buildComposerUserInput(
   const elements = atts
     .filter((a): a is ElementComposerAttachment => a.kind === 'element')
     .map((a) => a.data)
+  const codes = atts
+    .filter((a): a is CodeComposerAttachment => a.kind === 'code')
+    .map((a) => a.data)
   const files = atts.filter((a): a is FileComposerAttachment => a.kind === 'file')
 
   let body = buildUserInputWithAttachments(text, elements)
+
+  const codeBlocks = serializeCodeSelectionAttachments(codes)
+  if (codeBlocks) {
+    body = body ? `${body}\n\n${codeBlocks}` : codeBlocks
+  }
 
   if (files.length) {
     const blocks = files

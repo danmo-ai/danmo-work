@@ -4,6 +4,8 @@
 > 问题：是否需要引入强大的程序文件编辑器（Monaco 等），以及文件级 git diff 差异对比？  
 > 结论先行：**不要做完整 IDE 级编辑器；应做轻量代码阅读/轻改 + Changes→Diff 审阅。** 与产品定位「不是 IDE」一致，同时补上 Agent 写码场景下人机共审的关键缺口。
 
+**落地状态（已实现）**：`kind: code` / `kind: diff` Document Stage、`GET .../git-diff`、Changes 打开 Diff、CodeSurface 选区批注（含行号）→ Composer。编辑器为轻量 textarea+行号（零新依赖），非 Monaco/CM6。
+
 ---
 
 ## 1. 现状盘点

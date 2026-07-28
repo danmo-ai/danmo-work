@@ -3,9 +3,11 @@ import { useI18n } from 'vue-i18n'
 import {
   formatBytes,
   type ComposerAttachment,
+  type CodeComposerAttachment,
   type ElementComposerAttachment,
 } from '@/types/composer-attachment'
 import { chipLabel, chipTooltip } from '@/types/element-attachment'
+import { codeChipLabel, codeChipTooltip } from '@/types/code-attachment'
 
 defineProps<{
   attachments: ComposerAttachment[]
@@ -15,7 +17,7 @@ defineProps<{
 
 const emit = defineEmits<{
   remove: [id: string]
-  'edit-start': [att: ElementComposerAttachment]
+  'edit-start': [att: ElementComposerAttachment | CodeComposerAttachment]
   'edit-save': []
   'edit-cancel': []
   'update:editingAnnotation': [value: string]
@@ -57,6 +59,31 @@ const { t } = useI18n()
               <span class="att-card__badge">{{ t('composer.attachPending') }}</span>
             </span>
           </div>
+        </template>
+
+        <!-- Code selection -->
+        <template v-else-if="att.kind === 'code'">
+          <div class="att-card__icon att-card__icon--code" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="16 18 22 12 16 6" />
+              <polyline points="8 6 2 12 8 18" />
+            </svg>
+          </div>
+          <div class="att-card__meta" :title="codeChipTooltip(att.data)">
+            <span class="att-card__name">{{ codeChipLabel(att.data) }}</span>
+            <span class="att-card__sub">
+              {{ t('composer.attachCode') }}
+              <template v-if="att.data.annotation"> · {{ att.data.annotation }}</template>
+            </span>
+          </div>
+          <button
+            type="button"
+            class="att-card__action"
+            :title="t('composer.editAnnotation')"
+            @click="emit('edit-start', att)"
+          >
+            ✎
+          </button>
         </template>
 
         <!-- DOM element -->
@@ -148,54 +175,44 @@ const { t } = useI18n()
   background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
 }
 
-.att-card--image {
-  border-color: color-mix(in srgb, var(--dq-accent) 28%, transparent);
-  background: color-mix(in srgb, var(--dq-accent) 6%, transparent);
-}
-
-.att-card--element {
-  border-color: color-mix(in srgb, var(--dq-accent) 22%, transparent);
-}
-
-.att-card--file {
-  border-style: dashed;
-}
-
 .att-card__thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background-size: cover;
+  background-position: center;
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  border-radius: 7px;
-  background: var(--dq-bg-base) center/cover no-repeat;
-  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
 }
 
 .att-card__icon {
-  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
   color: var(--dq-label-secondary);
+  flex-shrink: 0;
 }
 
 .att-card__icon--el {
   color: var(--dq-accent);
 }
 
+.att-card__icon--code {
+  color: var(--dq-accent);
+}
+
 .att-card__meta {
   min-width: 0;
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
 .att-card__name {
-  font-size: var(--dq-font-size-caption);
+  font-size: 12px;
   font-weight: 600;
   color: var(--dq-label-primary);
   overflow: hidden;
@@ -204,37 +221,39 @@ const { t } = useI18n()
 }
 
 .att-card__sub {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--dq-label-tertiary);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .att-card__badge {
-  padding: 0 5px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--dq-system-orange) 16%, transparent);
-  color: var(--dq-system-orange);
-  font-weight: 650;
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.8;
 }
 
 .att-card__action,
 .att-card__remove {
-  border: none;
+  position: absolute;
+  top: 4px;
+  border: 0;
   background: transparent;
   color: var(--dq-label-tertiary);
   cursor: pointer;
-  padding: 0 4px;
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1;
+  padding: 2px 4px;
+}
+
+.att-card__action {
+  right: 22px;
 }
 
 .att-card__remove {
-  position: absolute;
-  top: 4px;
   right: 4px;
+  font-size: 14px;
 }
 
 .att-card__action:hover,
@@ -250,28 +269,27 @@ const { t } = useI18n()
 
 .att-tray__edit-input {
   flex: 1;
-  height: 28px;
-  padding: 0 8px;
+  height: 30px;
+  padding: 0 10px;
   border-radius: 6px;
-  border: 1px solid var(--dq-separator-light);
-  background: transparent;
+  border: 1px solid var(--dq-border);
+  background: var(--dq-bg-elevated);
   color: var(--dq-label-primary);
-  font-size: var(--dq-font-size-caption);
+  font-size: 13px;
 }
 
 .att-tray__edit-btn {
-  border: none;
-  border-radius: 6px;
+  height: 30px;
   padding: 0 10px;
-  height: 28px;
-  background: var(--dq-accent);
-  color: var(--dq-color-white);
+  border-radius: 6px;
+  border: 1px solid var(--dq-border);
+  background: var(--dq-fill-tertiary);
+  color: var(--dq-label-primary);
+  font-size: 12px;
   cursor: pointer;
-  font-size: var(--dq-font-size-caption);
 }
 
 .att-tray__edit-btn--ghost {
   background: transparent;
-  color: var(--dq-label-secondary);
 }
 </style>

@@ -647,7 +647,7 @@ Zone C — Scratch:  当前 Turn 的 user + Step 消息
 
 ## 13. Document Stage（统一画布）
 
-中间画布为唯一内容视图 **Document Stage**：按文件类型切换 toolbar + surface（文档 / 幻灯片 / 表格 / 预览）。AI 改稿走**普通 session turn**，不另开 `/office/ai`。右侧不再有独立 Browser tab。
+中间画布为唯一内容视图 **Document Stage**：按文件类型切换 toolbar + surface（文档 / 幻灯片 / 表格 / 源码 / 差异 / 预览）。AI 改稿（doc/slides/sheet）走**普通 session turn**，不另开 `/office/ai`。右侧不再有独立 Browser tab。
 
 Agent 自动化无头浏览器（Settings / `web_fetch` CDP）与此 UI 无关，保持独立。
 
@@ -660,9 +660,13 @@ Files 树点击 → `routeOfficeFile`（`frontend/src/utils/office-route.ts`）�
 | `doc` | GFM `.md` | TipTap（编辑会话 MD ↔ HTML） | edit |
 | `slides` | Markdown SoT（Marp 兼容子集：`type: slides` + `---` 分页）；`*-slides.html` 为 Stage **程序**派生物 | 编辑 Markdown；Present 时脏检查同步 HTML | edit 或 present |
 | `sheet` | `.csv` / `.danmo-sheet.json` | 网格编辑 | edit |
+| `code` | 常见源码 / 配置文本 | 轻量 CodeSurface（行号 + 读写）；选区可批注到 Composer（含行号） | view |
+| `diff` | `git diff` / 未跟踪合成 patch | DiffSurface（unified）；可「打开文件」 | view |
 | `preview` | 通用 `.html`、图片、外链等 | iframe / 图片预览；URL 栏 + Design mode | view |
 
 布局：`stage` 时 Stream | Stage | 右侧；`immersive`（Present / 沉浸）时仅 Stage。默认打开文件不隐藏 Stream。
+
+Changes 面板点击变更文件 → 打开 `diff` Stage（`GET /projects/:id/git-diff?path=&staged=`）。
 
 ### 13.2 AI 编辑回合
 
@@ -684,9 +688,11 @@ Stage 工具栏（润色 / 修改 / …）
 
 保存 API：`PUT /api/v1/projects/:id/files/content`。
 
+源码改码：不挂 Office AI 工具栏；用户通过 Composer 选区批注（`## Selected Code` + File/Lines）或对话驱动 Agent `edit`/`apply_patch`。
+
 ### 13.3 非目标（本阶段）
 
-OOXML 作 SoT / OfficeCLI 导出、独立 Office AI 端点、Yjs 协同。
+OOXML 作 SoT / OfficeCLI 导出、独立 Office AI 端点、Yjs 协同、LSP / IDE 壳、完整 Git 客户端（commit/push/conflict UI）。
 
 ---
 

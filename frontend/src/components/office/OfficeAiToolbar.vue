@@ -9,7 +9,7 @@ import {
 } from '@/utils/office-route'
 import { toast } from '@/utils/feedback'
 
-type EditableOfficeKind = Exclude<OfficeKind, 'preview'>
+type EditableOfficeKind = Exclude<OfficeKind, 'preview' | 'code' | 'diff'>
 
 const props = defineProps<{
   path: string
