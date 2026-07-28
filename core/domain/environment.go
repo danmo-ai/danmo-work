@@ -51,20 +51,33 @@ type ConfigEnvironmentSection struct {
 
 // EnvironmentStatus is exposed via API for Settings / diagnostics.
 type EnvironmentStatus struct {
-	Backend        EnvironmentBackend   `json:"backend"`
-	Engine         string               `json:"engine,omitempty"` // podman | docker | apple-container
-	Image          string               `json:"image,omitempty"`
-	ImageLoaded    bool                 `json:"imageLoaded"`
-	TarPath        string               `json:"tarPath,omitempty"`
-	TarPresent     bool                 `json:"tarPresent"`
-	TarBytes       int64                `json:"tarBytes,omitempty"`
-	TarArch        string               `json:"tarArch,omitempty"`
-	DownloadURL    string               `json:"downloadUrl,omitempty"`
-	AssetName      string               `json:"assetName,omitempty"`
-	WorkspaceMount string               `json:"workspaceMount,omitempty"`
-	Resources      EnvironmentResources `json:"resources,omitempty"`
-	Degraded       bool                 `json:"degraded"`
-	DegradedReason string               `json:"degradedReason,omitempty"`
+	Backend     EnvironmentBackend `json:"backend"`
+	Engine      string             `json:"engine,omitempty"` // podman | docker | apple-container
+	Image       string             `json:"image,omitempty"`
+	ImageLoaded bool               `json:"imageLoaded"`
+	TarPath     string             `json:"tarPath,omitempty"`
+	TarPresent  bool               `json:"tarPresent"`
+	TarBytes    int64              `json:"tarBytes,omitempty"`
+	TarArch     string             `json:"tarArch,omitempty"`
+	DownloadURL string             `json:"downloadUrl,omitempty"`
+	AssetName   string             `json:"assetName,omitempty"`
+	// TarVariants lists linux/amd64 and linux/arm64 download options.
+	TarVariants    []EnvironmentTarVariant `json:"tarVariants,omitempty"`
+	WorkspaceMount string                  `json:"workspaceMount,omitempty"`
+	Resources      EnvironmentResources    `json:"resources,omitempty"`
+	Degraded       bool                    `json:"degraded"`
+	DegradedReason string                  `json:"degradedReason,omitempty"`
 	// ActiveProjects lists project IDs with a running/created container.
 	ActiveProjects []string `json:"activeProjects,omitempty"`
+}
+
+// EnvironmentTarVariant is one arch-specific env image download option.
+type EnvironmentTarVariant struct {
+	Arch        string `json:"arch"`
+	Present     bool   `json:"present"`
+	Path        string `json:"path,omitempty"`
+	Bytes       int64  `json:"bytes,omitempty"`
+	DownloadURL string `json:"downloadUrl"`
+	AssetName   string `json:"assetName"`
+	Recommended bool   `json:"recommended,omitempty"`
 }

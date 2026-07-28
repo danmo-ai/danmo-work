@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Build the bundled agent OCI image and save as a local tar (no registry push/pull).
+# Build the agent OCI image and save as a local tar (no registry push/pull).
 # Output: out/env/danmo-work-env-linux-<arch>.tar
+#
+# Cross-build:
+#   DQ_ENV_PLATFORM=linux/arm64 DQ_ENV_OUT_ARCH=arm64 ./scripts/build_env_tar.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=out_paths.sh
 source "$SCRIPT_DIR/out_paths.sh"
 
-IMAGE_TAG="${DQ_ENV_IMAGE_TAG:-localhost/danmo-work-env:bundled}"
 DOCKERFILE="${DQ_ENV_DOCKERFILE:-$DQ_ROOT/environments/agent-base/Dockerfile}"
 CONTEXT="${DQ_ENV_CONTEXT:-$DQ_ROOT/environments/agent-base}"
 
@@ -17,35 +19,58 @@ case "$ARCH_RAW" in
   aarch64|arm64) ARCH=arm64 ;;
   *) ARCH="$ARCH_RAW" ;;
 esac
-# Allow CI cross-build override (linux/amd64, linux/arm64).
 PLATFORM="${DQ_ENV_PLATFORM:-linux/${ARCH}}"
 OUT_ARCH="${DQ_ENV_OUT_ARCH:-$ARCH}"
+# Tag uniquely per arch so parallel CI matrix jobs don't collide when saving.
+IMAGE_TAG_ARCH="${DQ_ENV_IMAGE_TAG:-localhost/danmo-work-env:bundled}-${OUT_ARCH}"
 
 dq_ensure_out_layout
 mkdir -p "$DQ_OUT/env"
 OUT_TAR="${DQ_ENV_TAR_OUT:-$DQ_OUT/env/danmo-work-env-linux-${OUT_ARCH}.tar}"
 
 ENGINE=""
-if command -v podman >/dev/null 2>&1; then
-  ENGINE=podman
-elif command -v docker >/dev/null 2>&1; then
+if command -v docker >/dev/null 2>&1; then
   ENGINE=docker
+elif command -v podman >/dev/null 2>&1; then
+  ENGINE=podman
 else
-  echo "ERROR: need podman or docker to build env tar" >&2
+  echo "ERROR: need docker or podman to build env tar" >&2
   exit 1
 fi
 
-echo "==> Building $IMAGE_TAG via $ENGINE (platform=$PLATFORM)"
-BUILD_ARGS=(build -t "$IMAGE_TAG" -f "$DOCKERFILE" --build-arg "TARGETARCH=${OUT_ARCH}")
-if [[ "$ENGINE" == "docker" ]]; then
-  BUILD_ARGS+=(--platform "$PLATFORM")
-elif podman build --help 2>&1 | grep -q -- '--platform'; then
-  BUILD_ARGS+=(--platform "$PLATFORM")
+echo "==> Building $IMAGE_TAG_ARCH via $ENGINE (platform=$PLATFORM)"
+
+if [[ "$ENGINE" == "docker" ]] && docker buildx version >/dev/null 2>&1; then
+  docker buildx build \
+    --platform "$PLATFORM" \
+    -t "$IMAGE_TAG_ARCH" \
+    -f "$DOCKERFILE" \
+    --build-arg "TARGETARCH=${OUT_ARCH}" \
+    --load \
+    "$CONTEXT"
+elif [[ "$ENGINE" == "podman" ]]; then
+  podman build \
+    --platform "$PLATFORM" \
+    -t "$IMAGE_TAG_ARCH" \
+    -f "$DOCKERFILE" \
+    --build-arg "TARGETARCH=${OUT_ARCH}" \
+    "$CONTEXT"
+else
+  docker build \
+    --platform "$PLATFORM" \
+    -t "$IMAGE_TAG_ARCH" \
+    -f "$DOCKERFILE" \
+    --build-arg "TARGETARCH=${OUT_ARCH}" \
+    "$CONTEXT"
 fi
-"$ENGINE" "${BUILD_ARGS[@]}" "$CONTEXT"
+
+# Also tag the canonical name for local load expectations on native arch builds.
+if [[ "$OUT_ARCH" == "$ARCH" ]]; then
+  "$ENGINE" tag "$IMAGE_TAG_ARCH" "${DQ_ENV_IMAGE_TAG:-localhost/danmo-work-env:bundled}" || true
+fi
 
 echo "==> Saving image → $OUT_TAR"
 rm -f "$OUT_TAR"
-"$ENGINE" save -o "$OUT_TAR" "$IMAGE_TAG"
+"$ENGINE" save -o "$OUT_TAR" "$IMAGE_TAG_ARCH"
 ls -lh "$OUT_TAR"
-echo "==> Done (tag=$IMAGE_TAG engine=$ENGINE)"
+echo "==> Done (tag=$IMAGE_TAG_ARCH engine=$ENGINE arch=$OUT_ARCH)"

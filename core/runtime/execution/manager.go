@@ -132,6 +132,7 @@ func (m *Manager) StatusWithTar(version string) domain.EnvironmentStatus {
 	st.TarArch = info.Arch
 	st.DownloadURL = info.DownloadURL
 	st.AssetName = info.AssetName
+	st.TarVariants = tarVariantsFrom(version)
 	if info.Path != "" {
 		st.TarPath = info.Path
 	}
@@ -150,8 +151,26 @@ func (m *Manager) StatusWithTar(version string) domain.EnvironmentStatus {
 		st.DownloadURL = info.DownloadURL
 		st.AssetName = info.AssetName
 		st.TarPath = info.Path
+		st.TarVariants = tarVariantsFrom(version)
 	}
 	return st
+}
+
+func tarVariantsFrom(version string) []domain.EnvironmentTarVariant {
+	list := container.ListTarVariants(version)
+	out := make([]domain.EnvironmentTarVariant, 0, len(list))
+	for _, t := range list {
+		out = append(out, domain.EnvironmentTarVariant{
+			Arch:        t.Arch,
+			Present:     t.Present,
+			Path:        t.Path,
+			Bytes:       t.Bytes,
+			DownloadURL: t.DownloadURL,
+			AssetName:   t.AssetName,
+			Recommended: t.Recommended,
+		})
+	}
+	return out
 }
 
 // NotifyTarInstalled re-resolves tar path after Settings download.

@@ -19,6 +19,9 @@ const (
 	envDirName        = "env"
 )
 
+// SupportedLinuxArches are Release env-tar architectures.
+var SupportedLinuxArches = []string{"amd64", "arm64"}
+
 // EnvDir is ~/.danmo-work/env (created if needed).
 func EnvDir() string {
 	dir := filepath.Join(paths.Home(), envDirName)
@@ -26,22 +29,33 @@ func EnvDir() string {
 	return dir
 }
 
-// LinuxArch returns amd64/arm64 for the env tar asset name.
+// LinuxArch returns amd64/arm64 for the env tar asset name (host GOARCH).
 func LinuxArch() string {
 	switch runtime.GOARCH {
 	case "amd64", "arm64":
 		return runtime.GOARCH
 	default:
-		return runtime.GOARCH
+		return "amd64"
+	}
+}
+
+// NormalizeArch maps aliases to amd64|arm64; empty → host arch.
+func NormalizeArch(arch string) string {
+	switch strings.ToLower(strings.TrimSpace(arch)) {
+	case "":
+		return LinuxArch()
+	case "amd64", "x86_64", "x64":
+		return "amd64"
+	case "arm64", "aarch64":
+		return "arm64"
+	default:
+		return strings.ToLower(strings.TrimSpace(arch))
 	}
 }
 
 // AssetFileName is danmo-work-env-linux-<arch>.tar
 func AssetFileName(arch string) string {
-	if arch == "" {
-		arch = LinuxArch()
-	}
-	return "danmo-work-env-linux-" + arch + ".tar"
+	return "danmo-work-env-linux-" + NormalizeArch(arch) + ".tar"
 }
 
 // InstallPath is the canonical download destination under ~/.danmo-work/env/.
@@ -70,7 +84,7 @@ func ReleaseDownloadURL(version, arch string) string {
 	return fmt.Sprintf("https://github.com/%s/releases/download/v%s/%s", repo, v, name)
 }
 
-// TarInfo describes local install + download URL for Settings.
+// TarInfo describes one arch's local install + download URL for Settings.
 type TarInfo struct {
 	Present     bool   `json:"present"`
 	Path        string `json:"path,omitempty"`
@@ -78,39 +92,62 @@ type TarInfo struct {
 	Arch        string `json:"arch"`
 	DownloadURL string `json:"downloadUrl"`
 	AssetName   string `json:"assetName"`
+	Recommended bool   `json:"recommended,omitempty"`
 }
 
-// InspectTar reports whether the env tar is installed under ~/.danmo-work/env
-// (or already discoverable via ResolveTarPath).
+// InspectTar reports host-arch install status (and discoverable ResolveTarPath).
 func InspectTar(version string) TarInfo {
-	arch := LinuxArch()
+	return InspectTarArch(version, LinuxArch())
+}
+
+// InspectTarArch reports install status for one linux arch.
+func InspectTarArch(version, arch string) TarInfo {
+	arch = NormalizeArch(arch)
 	info := TarInfo{
 		Arch:        arch,
 		DownloadURL: ReleaseDownloadURL(version, arch),
 		AssetName:   AssetFileName(arch),
-	}
-	if p := ResolveTarPath(""); p != "" {
-		if st, err := os.Stat(p); err == nil && !st.IsDir() {
-			info.Present = true
-			info.Path = p
-			info.Bytes = st.Size()
-			return info
-		}
+		Recommended: arch == LinuxArch(),
+		Path:        InstallPath(arch),
 	}
 	p := InstallPath(arch)
 	if st, err := os.Stat(p); err == nil && !st.IsDir() {
 		info.Present = true
 		info.Path = p
 		info.Bytes = st.Size()
-	} else {
-		info.Path = p
+		return info
+	}
+	// Host arch: also accept generic ResolveTarPath / alias.
+	if arch == LinuxArch() {
+		if rp := ResolveTarPath(""); rp != "" {
+			if st, err := os.Stat(rp); err == nil && !st.IsDir() {
+				info.Present = true
+				info.Path = rp
+				info.Bytes = st.Size()
+			}
+		}
 	}
 	return info
 }
 
-// DownloadEnvTar fetches the Release asset into ~/.danmo-work/env/.
-func DownloadEnvTar(ctx context.Context, version string) (TarInfo, error) {
-	arch := LinuxArch()
+// ListTarVariants returns amd64 + arm64 download options.
+func ListTarVariants(version string) []TarInfo {
+	out := make([]TarInfo, 0, len(SupportedLinuxArches))
+	for _, a := range SupportedLinuxArches {
+		out = append(out, InspectTarArch(version, a))
+	}
+	return out
+}
+
+// DownloadEnvTar fetches the Release asset for arch into ~/.danmo-work/env/.
+// Empty arch uses the host architecture.
+func DownloadEnvTar(ctx context.Context, version, arch string) (TarInfo, error) {
+	arch = NormalizeArch(arch)
+	switch arch {
+	case "amd64", "arm64":
+	default:
+		return TarInfo{}, fmt.Errorf("download env tar: unsupported arch %q (amd64|arm64)", arch)
+	}
 	url := ReleaseDownloadURL(version, arch)
 	dest := InstallPath(arch)
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
@@ -157,16 +194,16 @@ func DownloadEnvTar(ctx context.Context, version string) (TarInfo, error) {
 		_ = os.Remove(tmp)
 		return TarInfo{}, err
 	}
-	// Convenience alias for ResolveTarPath.
-	alias := filepath.Join(EnvDir(), "danmo-work-env.tar")
-	_ = os.Remove(alias)
-	_ = os.Symlink(dest, alias)
-	if _, err := os.Stat(alias); err != nil {
-		// Windows / no symlink: copy is fine but expensive; hardlink or skip.
-		_ = copyFile(dest, alias)
+	// Host-arch download also refreshes the generic alias used by ResolveTarPath.
+	if arch == LinuxArch() {
+		alias := filepath.Join(EnvDir(), "danmo-work-env.tar")
+		_ = os.Remove(alias)
+		if err := os.Symlink(dest, alias); err != nil {
+			_ = copyFile(dest, alias)
+		}
 	}
 
-	info := InspectTar(version)
+	info := InspectTarArch(version, arch)
 	info.Present = true
 	info.Path = dest
 	info.Bytes = n

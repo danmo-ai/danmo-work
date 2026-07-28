@@ -23,6 +23,32 @@ func TestReleaseDownloadURLTagged(t *testing.T) {
 	}
 }
 
+func TestListTarVariants(t *testing.T) {
+	list := ListTarVariants("1.2.3")
+	if len(list) != 2 {
+		t.Fatalf("len=%d", len(list))
+	}
+	seen := map[string]bool{}
+	for _, v := range list {
+		seen[v.Arch] = true
+		if !strings.Contains(v.DownloadURL, "danmo-work-env-linux-"+v.Arch+".tar") {
+			t.Fatalf("url=%s", v.DownloadURL)
+		}
+	}
+	if !seen["amd64"] || !seen["arm64"] {
+		t.Fatalf("seen=%v", seen)
+	}
+}
+
+func TestNormalizeArch(t *testing.T) {
+	if NormalizeArch("x86_64") != "amd64" {
+		t.Fatal("x86_64")
+	}
+	if NormalizeArch("aarch64") != "arm64" {
+		t.Fatal("aarch64")
+	}
+}
+
 func TestRewriteProxyForApple(t *testing.T) {
 	got := RewriteProxyForApple("127.0.0.1:1234")
 	if got != "http://host.container.internal:1234" {

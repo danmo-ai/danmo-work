@@ -2,9 +2,13 @@
 
 Ultra-light OCI image for `runtime.environment.backend=container`.
 
-**Not packaged inside app/server releases.** CI publishes
-`danmo-work-env-linux-<arch>.tar` as a separate GitHub Release asset. Users
-download it into `~/.danmo-work/env/` (or set `WORK_ENV_TAR`).
+**Not packaged inside app/server releases.** CI publishes **two** GitHub Release
+assets (matrix build):
+
+- `danmo-work-env-linux-amd64.tar`
+- `danmo-work-env-linux-arm64.tar`
+
+Download into `~/.danmo-work/env/` (Settings buttons or `WORK_ENV_TAR`).
 
 - **Base:** `debian:bookworm-slim` + apt (`bash`, `ca-certificates`, `curl`, `git`, `jq`, `xz-utils`)
 - **Not baked in:** Node, Python, Go — install via `apt-get` when needed

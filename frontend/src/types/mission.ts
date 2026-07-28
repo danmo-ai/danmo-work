@@ -313,6 +313,16 @@ export interface SandboxStatus {
   coreutilsBin?: string
 }
 
+export interface EnvironmentTarVariant {
+  arch: string
+  present: boolean
+  path?: string
+  bytes?: number
+  downloadUrl: string
+  assetName: string
+  recommended?: boolean
+}
+
 export interface EnvironmentStatus {
   backend: string
   engine?: string
@@ -324,6 +334,7 @@ export interface EnvironmentStatus {
   tarArch?: string
   downloadUrl?: string
   assetName?: string
+  tarVariants?: EnvironmentTarVariant[]
   workspaceMount?: string
   resources?: { cpus?: string; memory?: string; pids?: number }
   degraded?: boolean

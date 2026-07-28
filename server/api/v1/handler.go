@@ -1088,9 +1088,18 @@ func getEnvironmentStatus(h *Handler) gin.HandlerFunc {
 
 func downloadEnvironmentTar(h *Handler) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		info, err := containerpkg.DownloadEnvTar(c.Request.Context(), Version)
+		var req struct {
+			Arch string `json:"arch"`
+		}
+		_ = c.ShouldBindJSON(&req)
+		arch := containerpkg.NormalizeArch(req.Arch)
+		info, err := containerpkg.DownloadEnvTar(c.Request.Context(), Version, arch)
 		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error(), "downloadUrl": containerpkg.ReleaseDownloadURL(Version, containerpkg.LinuxArch())})
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error":       err.Error(),
+				"downloadUrl": containerpkg.ReleaseDownloadURL(Version, arch),
+				"arch":        arch,
+			})
 			return
 		}
 		if h.Execution != nil {

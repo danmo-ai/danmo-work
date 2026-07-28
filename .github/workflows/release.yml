@@ -180,27 +180,42 @@ jobs:
           path: ${{ env.REPO_DIR }}/out/dist/${{ env.APP_NAME }}-linux-*.tar.gz
           if-no-files-found: error
 
-  # Optional OCI env image — separate Release asset for user download (NOT in app packages).
+  # Optional OCI env image — separate Release assets (amd64 + arm64), NOT in app packages.
   linux-env-tar:
-    name: Linux env image tar
+    name: Linux env image tar (${{ matrix.arch }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           path: ${{ env.REPO_DIR }}
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build agent env tar (OCI save, no registry)
         working-directory: ${{ env.REPO_DIR }}
+        env:
+          DQ_ENV_PLATFORM: linux/${{ matrix.arch }}
+          DQ_ENV_OUT_ARCH: ${{ matrix.arch }}
         run: |
           chmod +x scripts/*.sh
+          # Prefer buildx for cross-arch; fall back handled inside script.
+          docker buildx version
           make build-env-tar
 
       - name: Upload env image tar
         uses: actions/upload-artifact@v6
         with:
-          name: danmo-work-env-linux
-          path: ${{ env.REPO_DIR }}/out/env/danmo-work-env-linux-*.tar
+          name: danmo-work-env-linux-${{ matrix.arch }}
+          path: ${{ env.REPO_DIR }}/out/env/danmo-work-env-linux-${{ matrix.arch }}.tar
           if-no-files-found: error
 
   windows-desktop:
@@ -409,10 +424,16 @@ jobs:
           name: danmo-work-server-linux
           path: release-assets/linux
 
-      - name: Download env image tar
+      - name: Download env image tar (amd64)
         uses: actions/download-artifact@v7
         with:
-          name: danmo-work-env-linux
+          name: danmo-work-env-linux-amd64
+          path: release-assets/env
+
+      - name: Download env image tar (arm64)
+        uses: actions/download-artifact@v7
+        with:
+          name: danmo-work-env-linux-arm64
           path: release-assets/env
 
       - name: Download Windows desktop artifact

@@ -261,9 +261,19 @@ function formatTarBytes(n: number) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
-async function downloadEnvTar() {
-  await runtimeConfig.downloadEnvTar()
+async function downloadEnvTar(arch?: string) {
+  await runtimeConfig.downloadEnvTar(arch)
 }
+
+const envTarVariants = computed(() => {
+  const list = runtimeConfig.environmentStatus?.tarVariants
+  if (list?.length) return list
+  // Fallback until status loads
+  return [
+    { arch: 'amd64', present: false, downloadUrl: '', assetName: 'danmo-work-env-linux-amd64.tar' },
+    { arch: 'arm64', present: false, downloadUrl: '', assetName: 'danmo-work-env-linux-arm64.tar' },
+  ]
+})
 
 const browserStatusText = computed(() => {
   const st = runtimeConfig.browserStatus
@@ -1260,36 +1270,43 @@ const hasFooterActions = computed(() => {
               </div>
             </div>
             <template v-if="runtimeForm.envBackend === 'container'">
-              <div class="settings-form-row" style="align-items: center; gap: 12px; flex-wrap: wrap">
+              <p class="settings-form-group__desc">{{ $t('settings.envTarVariantsDesc') }}</p>
+              <div
+                v-for="v in envTarVariants"
+                :key="v.arch"
+                class="settings-form-row"
+                style="align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px"
+              >
                 <DqButton
                   size="sm"
-                  :loading="runtimeConfig.downloadingTar"
-                  :disabled="runtimeConfig.downloadingTar"
-                  @click="downloadEnvTar"
+                  :loading="runtimeConfig.downloadingTar === v.arch"
+                  :disabled="!!runtimeConfig.downloadingTar"
+                  @click="downloadEnvTar(v.arch)"
                 >
                   {{
-                    runtimeConfig.environmentStatus?.tarPresent
-                      ? $t('settings.envTarRedownload')
-                      : $t('settings.envTarDownload')
+                    (v.present
+                      ? $t('settings.envTarRedownloadArch', { arch: v.arch })
+                      : $t('settings.envTarDownloadArch', { arch: v.arch }))
+                      + (v.recommended ? ` (${$t('settings.envTarRecommended')})` : '')
                   }}
                 </DqButton>
                 <a
-                  v-if="runtimeConfig.environmentStatus?.downloadUrl"
+                  v-if="v.downloadUrl"
                   class="settings-link"
-                  :href="runtimeConfig.environmentStatus.downloadUrl"
+                  :href="v.downloadUrl"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  {{ $t('settings.envTarOpenRelease') }}
+                  {{ v.assetName }}
                 </a>
-                <span v-if="runtimeConfig.environmentStatus?.tarPresent" class="settings-form-group__desc" style="margin: 0">
+                <span v-if="v.present" class="settings-form-group__desc" style="margin: 0">
                   {{ $t('settings.envTarInstalled', {
-                    path: runtimeConfig.environmentStatus.tarPath || '',
-                    size: formatTarBytes(runtimeConfig.environmentStatus.tarBytes || 0),
+                    path: v.path || '',
+                    size: formatTarBytes(v.bytes || 0),
                   }) }}
                 </span>
                 <span v-else class="settings-form-group__desc" style="margin: 0">
-                  {{ $t('settings.envTarMissing') }}
+                  {{ $t('settings.envTarMissingArch', { arch: v.arch }) }}
                 </span>
               </div>
               <p class="settings-form-group__desc">{{ $t('settings.envResourcesDesc') }}</p>
