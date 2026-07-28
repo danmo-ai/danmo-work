@@ -47,7 +47,7 @@
 | M4 | 主机出站合流 | web/http 工具走同一 allowlist |
 | S1 | PermissionRule 接线 | `runtime.permission_rules` |
 | S2 | MCP stdio 网络隔离 | inherit 沙箱网络 + proxy/unshare |
-| S3 | allowlist 推荐与预设 | Settings UI |
+| S3 | allowlist 推荐与预设 | Settings UI：快速组合（开发依赖 / 网络搜索）+ 单生态（debian/npm/go/pypi/crates/github），可叠加追加 |
 | S4 | auto_approve 天花板 | 不跳过 dangerous/unsandboxed |
 
 ## 5. 相关代码
