@@ -85,7 +85,10 @@ watch(items, () => ensureSelection())
           >
             <span class="resource-rail__avatar">{{ initial(item.name) }}</span>
             <span class="resource-rail__meta">
-              <span class="resource-rail__name">{{ item.name }}</span>
+              <span class="resource-rail__name">
+                {{ item.name }}
+                <span v-if="item.compatibility" class="market-rail__warn" :title="item.compatibility">!</span>
+              </span>
               <span class="resource-rail__desc">{{ item.sourceName || item.sourceId }}</span>
             </span>
           </button>
@@ -105,7 +108,10 @@ watch(items, () => ensureSelection())
           >
             <span class="resource-rail__avatar">{{ initial(item.name) }}</span>
             <span class="resource-rail__meta">
-              <span class="resource-rail__name">{{ item.name }}</span>
+              <span class="resource-rail__name">
+                {{ item.name }}
+                <span v-if="item.compatibility" class="market-rail__warn" :title="item.compatibility">!</span>
+              </span>
               <span class="resource-rail__desc">{{ item.sourceName || item.sourceId }}</span>
             </span>
           </button>

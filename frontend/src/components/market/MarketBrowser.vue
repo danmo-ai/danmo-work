@@ -29,6 +29,24 @@ const selected = computed(() => {
 
 const enabledSources = computed(() => store.sources.filter((s) => s.enabled))
 
+const isClawhubItem = computed(() => {
+  const item = selected.value
+  if (!item) return false
+  const src = store.sources.find((s) => s.id === item.sourceId)
+  return src?.kind === 'clawhub' || item.sourceId === 'clawhub'
+})
+
+const clawhubListingURL = computed(() => {
+  const item = selected.value
+  if (!item || !isClawhubItem.value) return ''
+  const slug = item.path || item.id.replace(/^clawhub__/, '').replace(/^[^_]+__/, '')
+  if (item.author && slug) {
+    return `https://clawhub.ai/${item.author}/skills/${slug}`
+  }
+  if (slug) return `https://clawhub.ai/skills/${slug}`
+  return 'https://clawhub.ai'
+})
+
 async function installItem(item: MarketListing, overwrite = false) {
   try {
     await store.install(item.sourceId, item.kind, item.id, overwrite)
@@ -75,13 +93,28 @@ async function uninstallItem(item: MarketListing) {
       <div class="market-card__head">
         <h3 class="market-card__title">{{ selected.name }}</h3>
         <span v-if="selected.installed" class="market-card__badge">{{ $t('market.installed') }}</span>
+        <span v-if="selected.compatibility" class="market-card__badge market-card__badge--warn" :title="selected.compatibility">
+          {{ $t('market.compatWarn') }}
+        </span>
       </div>
       <p class="market-card__desc">{{ selected.description || selected.id }}</p>
+      <p v-if="selected.compatibility" class="market-card__compat">
+        {{ $t('market.compatHint') }}: {{ selected.compatibility }}
+      </p>
       <div class="market-card__meta">
         <code>{{ selected.id }}</code>
         <span v-if="selected.version">v{{ selected.version }}</span>
         <span>{{ selected.sourceName || selected.sourceId }}</span>
         <span v-if="selected.author">{{ selected.author }}</span>
+        <a
+          v-if="clawhubListingURL"
+          class="market-card__link"
+          :href="clawhubListingURL"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {{ $t('market.openOnClawhub') }}
+        </a>
       </div>
       <div v-if="selected.skillDeps?.length" class="market-card__deps">
         {{ $t('market.skillDeps') }}:
@@ -169,11 +202,21 @@ async function uninstallItem(item: MarketListing) {
   background: var(--dq-accent-soft, rgba(16, 185, 129, 0.12));
   color: var(--dq-accent, #059669);
 }
+.market-card__badge--warn {
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+}
 .market-card__desc {
   margin: 10px 0 0;
   font-size: 14px;
   color: var(--dq-text-secondary, #666);
   line-height: 1.5;
+}
+.market-card__compat {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #b45309;
+  line-height: 1.4;
 }
 .market-card__meta {
   display: flex;
@@ -182,9 +225,17 @@ async function uninstallItem(item: MarketListing) {
   margin-top: 12px;
   font-size: 12px;
   color: var(--dq-text-tertiary, #999);
+  align-items: center;
 }
 .market-card__meta code {
   font-size: 11px;
+}
+.market-card__link {
+  color: var(--dq-accent, #059669);
+  text-decoration: none;
+}
+.market-card__link:hover {
+  text-decoration: underline;
 }
 .market-card__deps {
   margin-top: 10px;

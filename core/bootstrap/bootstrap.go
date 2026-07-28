@@ -9,7 +9,7 @@ import (
 	"danmo-work/core/adapter/config"
 	"danmo-work/core/adapter/feishu"
 	"danmo-work/core/adapter/llm"
-	gitmarket "danmo-work/core/adapter/market/git"
+	marketadapter "danmo-work/core/adapter/market"
 	adaptermcp "danmo-work/core/adapter/mcp"
 	"danmo-work/core/adapter/qq"
 	"danmo-work/core/domain"
@@ -199,7 +199,7 @@ func New(cfg Config) *Core {
 	ensureBuiltinAgents(agents)
 	ensureBuiltinSkills(skills)
 
-	marketReg := gitmarket.NewRegistry(appCfg.Market.Sources)
+	marketReg := marketadapter.NewRegistry(appCfg.Market.Sources)
 	marketMgr := service.NewMarketManager(configManager, marketReg, skills, agents)
 
 	stream := dqruntime.NewStreamEventManager(st.StreamEvents())

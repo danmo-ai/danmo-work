@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -251,6 +253,23 @@ func (m *MarketManager) installSkill(
 	if err != nil {
 		return err
 	}
+	// Market catalog id is authoritative (ClawHub uses owner__slug / clawhub__slug).
+	if item.ID != "" && skill.ID != item.ID {
+		skill.ID = item.ID
+		for i := range files {
+			files[i].SkillID = item.ID
+			files[i].ID = item.ID + ":" + files[i].Path
+		}
+	}
+	if item.Name != "" {
+		skill.Name = item.Name
+	}
+	if item.Description != "" && skill.Description == "" {
+		skill.Description = item.Description
+	}
+	if item.Compatibility != "" && skill.Compatibility == "" {
+		skill.Compatibility = item.Compatibility
+	}
 	if skill.Metadata == nil {
 		skill.Metadata = map[string]string{}
 	}
@@ -266,6 +285,26 @@ func (m *MarketManager) installSkill(
 		skill.Metadata["market.version"] = item.Version
 		if skill.Metadata["version"] == "" {
 			skill.Metadata["version"] = item.Version
+		}
+	}
+	if market.Kind() == "clawhub" {
+		slug := strings.Trim(strings.ReplaceAll(item.Path, "\\", "/"), "/")
+		if slug == "" {
+			slug = item.ID
+		}
+		owner := strings.TrimSpace(item.Author)
+		if owner != "" {
+			skill.Metadata["clawhub.owner"] = owner
+		}
+		skill.Metadata["clawhub.slug"] = slug
+		if owner != "" {
+			skill.Metadata["clawhub.url"] = "https://clawhub.ai/" + owner + "/skills/" + slug
+		} else {
+			skill.Metadata["clawhub.url"] = "https://clawhub.ai/skills/" + slug
+		}
+		// Soft compatibility from nested openclaw/clawdbot install specs in SKILL.md.
+		if skill.Compatibility == "" {
+			skill.Compatibility = compatibilityFromSkillMetadata(skill.Metadata)
 		}
 	}
 	if err := m.skills.Upsert(ctx, *skill); err != nil {
@@ -366,4 +405,48 @@ func (m *MarketManager) Uninstall(ctx context.Context, req domain.UninstallMarke
 	m.cacheWarnings = nil
 	m.mu.Unlock()
 	return nil
+}
+
+// compatibilityFromSkillMetadata derives a soft tip from nested ClawHub runtime metadata.
+func compatibilityFromSkillMetadata(meta map[string]string) string {
+	if len(meta) == 0 {
+		return ""
+	}
+	var parts []string
+	for _, key := range []string{"openclaw", "clawdbot", "clawdis"} {
+		raw, ok := meta[key]
+		if !ok || strings.TrimSpace(raw) == "" {
+			continue
+		}
+		var nested map[string]any
+		if err := json.Unmarshal([]byte(raw), &nested); err != nil {
+			continue
+		}
+		if install, ok := nested["install"].([]any); ok && len(install) > 0 {
+			seen := map[string]bool{}
+			var kinds []string
+			for _, x := range install {
+				obj, ok := x.(map[string]any)
+				if !ok {
+					continue
+				}
+				k, _ := obj["kind"].(string)
+				k = strings.TrimSpace(k)
+				if k == "" || seen[k] {
+					continue
+				}
+				seen[k] = true
+				kinds = append(kinds, k)
+			}
+			if len(kinds) > 0 {
+				parts = append(parts, "needs:"+strings.Join(kinds, ","))
+			} else {
+				parts = append(parts, "needs:deps")
+			}
+		}
+		if cfg, ok := nested["config"]; ok && cfg != nil {
+			parts = append(parts, "openclaw-config")
+		}
+	}
+	return strings.Join(parts, "; ")
 }

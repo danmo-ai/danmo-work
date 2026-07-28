@@ -26,10 +26,10 @@ function normalizeMarket(m?: ConfigMarketSection | null): ConfigMarketSection {
       id: s.id ?? '',
       name: s.name ?? '',
       kind: s.kind || 'git',
-      platform: s.platform || 'github',
+      platform: s.platform || (s.kind === 'clawhub' ? '' : 'github'),
       repo: s.repo ?? '',
-      ref: s.ref || 'main',
-      catalogPath: s.catalogPath || 'catalog/index.json',
+      ref: s.ref || (s.kind === 'clawhub' ? '' : 'main'),
+      catalogPath: s.catalogPath || (s.kind === 'clawhub' ? '' : 'catalog/index.json'),
       token: s.token ?? '',
       enabled: !!s.enabled,
       priority: typeof s.priority === 'number' ? s.priority : 50,
@@ -41,6 +41,11 @@ export const useMarketConfigStore = defineStore('marketConfig', () => {
   const config = ref<ConfigMarketSection | null>(null)
   const loading = ref(false)
   const saving = ref(false)
+
+  const kindOptions = [
+    { value: 'git', label: 'Git catalog' },
+    { value: 'clawhub', label: 'ClawHub' },
+  ]
 
   const platformOptions = [
     { value: 'github', label: 'GitHub' },
@@ -68,17 +73,31 @@ export const useMarketConfigStore = defineStore('marketConfig', () => {
         cacheTtlHours: payload.cacheTtlHours > 0 ? payload.cacheTtlHours : 6,
         sources: payload.sources
           .filter((s) => s.id.trim() && (s.repo ?? '').trim())
-          .map((s) => ({
-            ...s,
-            id: s.id.trim(),
-            name: s.name.trim() || s.id.trim(),
-            kind: s.kind || 'git',
-            platform: s.platform || 'github',
-            repo: (s.repo ?? '').trim(),
-            ref: s.ref?.trim() || 'main',
-            catalogPath: s.catalogPath?.trim() || 'catalog/index.json',
-            token: s.token?.trim() || undefined,
-          })),
+          .map((s) => {
+            const kind = s.kind || 'git'
+            if (kind === 'clawhub') {
+              return {
+                id: s.id.trim(),
+                name: s.name.trim() || s.id.trim(),
+                kind: 'clawhub',
+                repo: (s.repo ?? '').trim() || 'https://clawhub.ai',
+                token: s.token?.trim() || undefined,
+                enabled: !!s.enabled,
+                priority: typeof s.priority === 'number' ? s.priority : 50,
+              }
+            }
+            return {
+              ...s,
+              id: s.id.trim(),
+              name: s.name.trim() || s.id.trim(),
+              kind: 'git',
+              platform: s.platform || 'github',
+              repo: (s.repo ?? '').trim(),
+              ref: s.ref?.trim() || 'main',
+              catalogPath: s.catalogPath?.trim() || 'catalog/index.json',
+              token: s.token?.trim() || undefined,
+            }
+          }),
       }
       const req: UpdateConfigFileRequest = { market: cleaned }
       const cfg = await fetchJSON<ConfigFile>('/config', {
@@ -99,6 +118,7 @@ export const useMarketConfigStore = defineStore('marketConfig', () => {
     config,
     loading,
     saving,
+    kindOptions,
     platformOptions,
     emptySource,
     loadConfig,
