@@ -15,8 +15,21 @@ func TestNormalizeEnvDefaultsLocal(t *testing.T) {
 	if cfg.Image != defaultImage {
 		t.Fatalf("image=%q", cfg.Image)
 	}
-	if cfg.WorkspaceMount != defaultMount {
-		t.Fatalf("mount=%q", cfg.WorkspaceMount)
+	if cfg.WorkspaceMount != "" {
+		t.Fatalf("mount should stay empty (same-as-host), got %q", cfg.WorkspaceMount)
+	}
+}
+
+func TestResolveWorkspaceMount(t *testing.T) {
+	host := "/Users/me/proj"
+	if got := resolveWorkspaceMount("", host); got != host {
+		t.Fatalf("empty → %q", got)
+	}
+	if got := resolveWorkspaceMount("same", host); got != host {
+		t.Fatalf("same → %q", got)
+	}
+	if got := resolveWorkspaceMount("/workspace", host); got != "/workspace" {
+		t.Fatalf("explicit → %q", got)
 	}
 }
 

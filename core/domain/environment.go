@@ -43,7 +43,8 @@ type ConfigEnvironmentSection struct {
 	// Release asset, not shipped inside the app package). Empty = auto
 	// (WORK_ENV_TAR, ~/.danmo-work/env/, out/env/ for local builds).
 	TarPath string `json:"tarPath" mapstructure:"tar_path" yaml:"tar_path"`
-	// WorkspaceMount is the path inside the container (default /workspace).
+	// WorkspaceMount is the path inside the container. Empty / "same" = use the
+	// host project absolute path so file tools and exec_shell share paths.
 	WorkspaceMount string `json:"workspaceMount" mapstructure:"workspace_mount" yaml:"workspace_mount"`
 	// Resources: default unlimited; optional user overrides (Settings / config).
 	Resources EnvironmentResources `json:"resources" mapstructure:"resources" yaml:"resources"`

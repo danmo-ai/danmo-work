@@ -206,7 +206,7 @@ spec:
     # 本地标签；镜像来自 CI 内置 tar（load），禁止 registry pull
     image: "localhost/danmo-work-env:bundled"
     tarPath: ""  # 空则自动发现 WORK_ENV_TAR / ~/.danmo-work/env / out/env
-    workspaceMount: /workspace
+    workspaceMount: ""   # empty = same abs path as host project (path parity with file tools)
     network: deny | allow | allowlist
     allowlistDomains: ["pypi.org", "proxy.golang.org", "registry.npmjs.org"]
   install: |
@@ -249,7 +249,7 @@ spec:
 
 1. ~~`port.ExecutionBackend`~~ + 可插拔 `container.Runtime`：`podman` / `docker` / `apple-container`（`engine=auto|…`）
 2. **禁止 pull**；macOS 可优先 Apple Container CLI
-3. 一项目一容器；bind `/workspace`；**资源默认无限制**（不按主机推断），Settings/`resources.cpus|memory` 可配
+3. 一项目一容器；项目目录 **同路径 bind**（宿主机 abs = 容器内 abs，文件工具与 shell 路径一致）；**资源默认无限制**
 4. `exec_shell` 经 ExecutionBackend；缺引擎/缺 tar → LocalOS
 5. `GET /api/v1/environment/status` + Settings「执行环境」+ **下载环境镜像**（`POST /environment/tar/download` → `~/.danmo-work/env/`）
 6. Apple Container：`system start`、正确 `image load/tag/inspect`、`--network none` / default + `host.container.internal` 代理（allowlist）

@@ -64,8 +64,9 @@ runtime:
     backend: "local"
     engine: "auto"
     image: "localhost/danmo-work-env:bundled"
-    # tar_path: ""   # empty = WORK_ENV_TAR / ~/.danmo-work/env/ / out/env/ (dev)
-    workspace_mount: "/workspace"
+    # workspace_mount: ""  # empty/same = host project abs path (file tools & shell agree)
+    # workspace_mount: "/workspace"  # optional fixed in-container path
+    workspace_mount: ""
     resources:
       cpus: ""      # e.g. "2" — empty = unlimited
       memory: ""    # e.g. "2g" — empty = unlimited

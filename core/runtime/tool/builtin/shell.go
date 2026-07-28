@@ -33,7 +33,7 @@ func (h *ExecShell) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
 		Name: "exec_shell",
 		Description: "Execute a shell command and return its stdout/stderr. HIGH RISK — requires user approval.\n\n" +
-			"**Important**: Commands run in the project root directory under the OS sandbox or bundled OCI environment when enabled. Use relative paths when referencing project files.\n\n" +
+			"**Important**: Commands run in the project root. Under OCI container mode the project is bind-mounted at the same absolute path as on the host, so paths match file tools (read_file/write/edit). Prefer relative paths from the project root.\n\n" +
 			"- Use only for builds, tests, git operations, or commands with no tool alternative.\n" +
 			"- Do NOT use for reading/writing files — use read_file, write, edit, or apply_patch instead.\n" +
 			"- Do NOT use for searching file contents — use grep or glob instead.\n" +

@@ -15,6 +15,7 @@ Download into `~/.danmo-work/env/` (Settings buttons or `WORK_ENV_TAR`).
 - **Build / save (no push):** `make build-env-tar` → `out/env/danmo-work-env-linux-<arch>.tar`
 - **Runtime:** `podman|docker|container image load` then per-project `exec` (never `pull`)
 - **Tag:** `localhost/danmo-work-env:bundled`
-- **Workspace:** bind-mount project directory at `/workspace`
+- **Workspace:** bind-mount project directory at the **same absolute path** as on the host
+  (so `read_file` / `exec_shell` paths match). Override with `workspace_mount` if needed.
 
 Expected packed size: roughly **80–120 MB**.

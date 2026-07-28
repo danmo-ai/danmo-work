@@ -15,10 +15,23 @@ import (
 )
 
 const (
-	defaultImage  = "localhost/danmo-work-env:bundled"
-	defaultMount  = "/workspace"
-	containerPref = "danmo-work-proj-"
+	defaultImage = "localhost/danmo-work-env:bundled"
+	// containerPref v2: workspace bind uses host abs path (not /workspace).
+	containerPref = "danmo-wp-"
 )
+
+// resolveWorkspaceMount picks the in-container path for the project bind.
+// Empty / "same" / "host" → identical to the host absolute workDir so file tools
+// and exec_shell share the same absolute paths.
+func resolveWorkspaceMount(cfgMount, workDirAbs string) string {
+	m := strings.TrimSpace(cfgMount)
+	switch strings.ToLower(m) {
+	case "", "same", "host", "$workdir", "${workdir}":
+		return workDirAbs
+	default:
+		return m
+	}
+}
 
 // Manager routes exec_shell to LocalOS sandbox or per-project OCI containers.
 type Manager struct {
@@ -92,9 +105,7 @@ func normalizeEnv(cfg domain.ConfigEnvironmentSection) domain.ConfigEnvironmentS
 	if strings.TrimSpace(cfg.Image) == "" {
 		cfg.Image = defaultImage
 	}
-	if strings.TrimSpace(cfg.WorkspaceMount) == "" {
-		cfg.WorkspaceMount = defaultMount
-	}
+	// WorkspaceMount empty means "same as host project abs path" (resolved per exec).
 	return cfg
 }
 
@@ -110,6 +121,9 @@ func (m *Manager) Status() domain.EnvironmentStatus {
 		Resources:      m.envCfg.Resources,
 		Degraded:       m.degraded,
 		DegradedReason: m.degradeMsg,
+	}
+	if strings.TrimSpace(st.WorkspaceMount) == "" {
+		st.WorkspaceMount = "same-as-host"
 	}
 	if m.runtime != nil {
 		st.Engine = m.runtime.Name()
@@ -295,7 +309,7 @@ func (m *Manager) ensureImage(ctx context.Context) error {
 func (m *Manager) ensureProjectContainer(ctx context.Context, opts port.ExecRunOptions) (name, mount string, err error) {
 	m.mu.Lock()
 	image := m.envCfg.Image
-	mount = m.envCfg.WorkspaceMount
+	cfgMount := m.envCfg.WorkspaceMount
 	resources := m.envCfg.Resources
 	engineName := ""
 	if m.runtime != nil {
@@ -317,6 +331,7 @@ func (m *Manager) ensureProjectContainer(ctx context.Context, opts port.ExecRunO
 	if st, err := os.Stat(workDir); err != nil || !st.IsDir() {
 		return "", "", fmt.Errorf("execution: workdir %q not a directory", workDir)
 	}
+	mount = resolveWorkspaceMount(cfgMount, workDir)
 
 	state, _ := rt.ContainerInspectState(ctx, name)
 	switch state {

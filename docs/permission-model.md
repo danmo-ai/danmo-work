@@ -60,4 +60,4 @@
 
 交叉：`docs/agent-runtime-env-research.md`（Hard 环境层）、`docs/core-design.md` §8。
 
-可选 OCI（`runtime.environment.backend=container`）：镜像来自 CI 内置 tar（`load`，不 pull）；每项目一容器。Soft Gate 不变；Hard 边界变为容器 FS（bind `/workspace`）+ 容器 network（deny=`none`，allowlist 暂用 `host` 以达 loopback 代理）。
+可选 OCI（`runtime.environment.backend=container`）：镜像来自 CI 旁路 tar（`load`，不 pull）；每项目一容器。Soft Gate 不变；Hard 边界变为容器 FS（项目目录 **同路径 bind**）+ 容器 network（deny=`none`；allowlist 用 default 网 + 代理）。
