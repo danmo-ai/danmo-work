@@ -153,6 +153,13 @@ market:
       catalog_path: catalog/index.json
       enabled: false
       priority: 20
+    # Public ClawHub registry (skills only; nonSuspicious). Enable in Settings → Market.
+    - id: clawhub
+      name: ClawHub
+      kind: clawhub
+      repo: https://clawhub.ai
+      enabled: false
+      priority: 30
     # Local sibling repo for development (platform: local, repo = absolute path):
     # - id: local-dq-market
     #   name: Local dq-market

@@ -213,6 +213,14 @@ func defaultMarketSources() []domain.MarketSource {
 			Enabled:     false,
 			Priority:    20,
 		},
+		{
+			ID:       "clawhub",
+			Name:     "ClawHub",
+			Kind:     "clawhub",
+			Repo:     "https://clawhub.ai",
+			Enabled:  false,
+			Priority: 30,
+		},
 	}
 }
 

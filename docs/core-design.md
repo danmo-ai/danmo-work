@@ -378,6 +378,8 @@ Agent 可用能力按三层合成；Skill 与连接器共用同一 Ambient 开�
 
 同名 ID 覆盖顺序（后者赢）：绑定 DB → `~/.agents` → `~/.danmo-work` → 项目 `.agents` → 项目 `.danmo-work`。目录缺失或坏 `SKILL.md` 跳过。Skills 管理页仍只显示 DB（内置 / 手建 / 市场）。
 
+市场源（`market.sources`）除官方 git catalog（dq-market）外，可启用 `kind: clawhub` 对接 [ClawHub](https://clawhub.ai) 公共技能注册表（仅 skills、`nonSuspiciousOnly`；默认 disabled）。安装写入 SQLite 技能库，与 Ambient 磁盘扫描无关。
+
 #### 连接器绑定粒度：**按连接器 id（独立字段）**
 
 - Agent 侧：`mcpServers: ["github", "notion"]`（YAML `mcp_servers`，字段名保留技术 id）；**不支持通配符**。

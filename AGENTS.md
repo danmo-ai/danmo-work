@@ -96,6 +96,10 @@ Agent durable memories live in SQLite (`memories` table) via
 `memory_update` / `memory_read` (scopes: user / project / agent). UI: right
 workspace **Memory** tab. Config: `runtime.memory.read_top_k`.
 
+Skill marketplace: configure `market.sources` (git catalog and optional
+`kind: clawhub` → ClawHub registry; ClawHub defaults to disabled). Market
+installs land in the SQLite skill library (Skills → Market tab).
+
 Agent table store (`table_*` tools) persists schema-free business rows in
 `store.db` (isolated from `work.db`). See `docs/agent-table-store-plan.md`.
 

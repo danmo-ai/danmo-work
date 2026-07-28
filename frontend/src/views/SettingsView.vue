@@ -2168,10 +2168,10 @@ const hasFooterActions = computed(() => {
 
               <div class="settings-form-row">
                 <label class="settings-field settings-field--half">
-                  <span class="settings-field__label">{{ $t('settings.marketPlatform') }}</span>
-                  <DqSelect v-model="src.platform">
+                  <span class="settings-field__label">{{ $t('settings.marketKind') }}</span>
+                  <DqSelect v-model="src.kind">
                     <DqOption
-                      v-for="opt in marketConfig.platformOptions"
+                      v-for="opt in marketConfig.kindOptions"
                       :key="opt.value"
                       :value="opt.value"
                       :label="opt.label"
@@ -2184,12 +2184,29 @@ const hasFooterActions = computed(() => {
                 </label>
               </div>
 
+              <div v-if="src.kind !== 'clawhub'" class="settings-form-row">
+                <label class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.marketPlatform') }}</span>
+                  <DqSelect v-model="src.platform">
+                    <DqOption
+                      v-for="opt in marketConfig.platformOptions"
+                      :key="opt.value"
+                      :value="opt.value"
+                      :label="opt.label"
+                    />
+                  </DqSelect>
+                </label>
+              </div>
+
               <label class="settings-field">
-                <span class="settings-field__label">{{ $t('settings.marketRepo') }}</span>
-                <DqInput v-model="src.repo" :placeholder="$t('settings.marketRepoPlaceholder')" />
+                <span class="settings-field__label">{{ src.kind === 'clawhub' ? $t('settings.marketClawhubRepo') : $t('settings.marketRepo') }}</span>
+                <DqInput
+                  v-model="src.repo"
+                  :placeholder="src.kind === 'clawhub' ? 'https://clawhub.ai' : $t('settings.marketRepoPlaceholder')"
+                />
               </label>
 
-              <div class="settings-form-row">
+              <div v-if="src.kind !== 'clawhub'" class="settings-form-row">
                 <label class="settings-field settings-field--half">
                   <span class="settings-field__label">{{ $t('settings.marketRef') }}</span>
                   <DqInput v-model="src.ref" placeholder="main" />
@@ -2202,7 +2219,7 @@ const hasFooterActions = computed(() => {
 
               <label class="settings-field">
                 <span class="settings-field__label">{{ $t('settings.marketToken') }}</span>
-                <DqInput v-model="src.token" type="password" placeholder="ghp_…" />
+                <DqInput v-model="src.token" type="password" :placeholder="src.kind === 'clawhub' ? 'clh_…' : 'ghp_…'" />
               </label>
             </article>
           </div>

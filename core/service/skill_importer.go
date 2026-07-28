@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,12 +15,12 @@ import (
 type SkillImporter struct{}
 
 type skillFrontmatter struct {
-	Name          string            `yaml:"name"`
-	Description   string            `yaml:"description"`
-	License       string            `yaml:"license"`
-	Compatibility string            `yaml:"compatibility"`
-	Metadata      map[string]string `yaml:"metadata"`
-	AllowedTools  string            `yaml:"allowed-tools"`
+	Name          string `yaml:"name"`
+	Description   string `yaml:"description"`
+	License       string `yaml:"license"`
+	Compatibility string `yaml:"compatibility"`
+	Metadata      any    `yaml:"metadata"`
+	AllowedTools  string `yaml:"allowed-tools"`
 }
 
 func NewSkillImporter() *SkillImporter {
@@ -122,10 +123,76 @@ func (i *SkillImporter) ParseSkillMD(content string) (*domain.Skill, error) {
 		Description:   fm.Description,
 		License:       fm.License,
 		Compatibility: fm.Compatibility,
-		Metadata:      fm.Metadata,
+		Metadata:      coerceMetadata(fm.Metadata),
 		AllowedTools:  fm.AllowedTools,
 		Body:          strings.TrimSpace(parts[2]),
 	}, nil
+}
+
+// coerceMetadata flattens Agentskills / ClawHub frontmatter metadata into string map.
+// Nested objects (e.g. metadata.openclaw) are JSON-encoded so install tips survive.
+func coerceMetadata(raw any) map[string]string {
+	if raw == nil {
+		return nil
+	}
+	switch v := raw.(type) {
+	case map[string]string:
+		if len(v) == 0 {
+			return nil
+		}
+		out := make(map[string]string, len(v))
+		for k, val := range v {
+			out[k] = val
+		}
+		return out
+	case map[string]any:
+		return stringifyMetadataMap(v)
+	case map[any]any:
+		m := make(map[string]any, len(v))
+		for k, val := range v {
+			m[fmt.Sprint(k)] = val
+		}
+		return stringifyMetadataMap(m)
+	case string:
+		s := strings.TrimSpace(v)
+		if s == "" {
+			return nil
+		}
+		var nested map[string]any
+		if err := json.Unmarshal([]byte(s), &nested); err == nil {
+			return stringifyMetadataMap(nested)
+		}
+		return map[string]string{"value": s}
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil
+		}
+		return map[string]string{"value": string(b)}
+	}
+}
+
+func stringifyMetadataMap(m map[string]any) map[string]string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		switch t := v.(type) {
+		case string:
+			out[k] = t
+		case nil:
+			continue
+		default:
+			b, err := json.Marshal(t)
+			if err != nil {
+				out[k] = fmt.Sprint(t)
+			} else {
+				out[k] = string(b)
+			}
+		}
+	}
+	return out
 }
 
 func (i *SkillImporter) ToSkillMD(s domain.Skill) string {

@@ -4,7 +4,7 @@ package domain
 type MarketSource struct {
 	ID          string `json:"id" mapstructure:"id" yaml:"id"`
 	Name        string `json:"name" mapstructure:"name" yaml:"name"`
-	Kind        string `json:"kind" mapstructure:"kind" yaml:"kind"` // git | future http
+	Kind        string `json:"kind" mapstructure:"kind" yaml:"kind"` // git | clawhub
 	Platform    string `json:"platform,omitempty" mapstructure:"platform" yaml:"platform,omitempty"`
 	Repo        string `json:"repo,omitempty" mapstructure:"repo" yaml:"repo,omitempty"`
 	Ref         string `json:"ref,omitempty" mapstructure:"ref" yaml:"ref,omitempty"`
