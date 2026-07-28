@@ -54,8 +54,9 @@ runtime:
     backend: ""
     shell: "auto"
   # Optional OCI execution environment (one long-lived container per project).
-  # Image is NEVER pulled from a registry — CI builds a debian:bookworm-slim tar
-  # (make build-env-tar) and the runtime loads it (podman|docker|apple-container).
+  # Image tar is NOT shipped in app packages — download danmo-work-env-linux-*.tar
+  # from GitHub Releases into ~/.danmo-work/env/ (or set WORK_ENV_TAR / tar_path).
+  # Never registry-pulled; runtime only load (podman|docker|apple-container).
   # backend: local (default) | container
   # engine: auto | podman | docker | apple-container
   # resources: empty = unlimited (no host auto-infer); set cpus/memory in Settings
@@ -63,7 +64,7 @@ runtime:
     backend: "local"
     engine: "auto"
     image: "localhost/danmo-work-env:bundled"
-    # tar_path: ""   # empty = WORK_ENV_TAR / ~/.danmo-work/env/ / out/env/
+    # tar_path: ""   # empty = WORK_ENV_TAR / ~/.danmo-work/env/ / out/env/ (dev)
     workspace_mount: "/workspace"
     resources:
       cpus: ""      # e.g. "2" — empty = unlimited

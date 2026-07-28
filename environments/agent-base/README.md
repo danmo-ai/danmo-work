@@ -1,6 +1,10 @@
-# Bundled agent environment
+# Agent environment image (optional download)
 
 Ultra-light OCI image for `runtime.environment.backend=container`.
+
+**Not packaged inside app/server releases.** CI publishes
+`danmo-work-env-linux-<arch>.tar` as a separate GitHub Release asset. Users
+download it into `~/.danmo-work/env/` (or set `WORK_ENV_TAR`).
 
 - **Base:** `debian:bookworm-slim` + apt (`bash`, `ca-certificates`, `curl`, `git`, `jq`, `xz-utils`)
 - **Not baked in:** Node, Python, Go — install via `apt-get` when needed
@@ -9,4 +13,4 @@ Ultra-light OCI image for `runtime.environment.backend=container`.
 - **Tag:** `localhost/danmo-work-env:bundled`
 - **Workspace:** bind-mount project directory at `/workspace`
 
-Expected packed size: roughly **80–120 MB** (vs ~350–450 MB with Node+Python preinstalled).
+Expected packed size: roughly **80–120 MB**.

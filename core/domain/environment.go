@@ -30,7 +30,8 @@ type EnvironmentResources struct {
 }
 
 // ConfigEnvironmentSection is the optional OCI / local execution environment.
-// Container mode loads a CI-built image tar locally — never registry pull.
+// Container mode loads a user-downloaded CI image tar locally — never registry
+// pull, and the tar is not embedded in app release packages.
 type ConfigEnvironmentSection struct {
 	// Backend: local (default) | container
 	Backend EnvironmentBackend `json:"backend" mapstructure:"backend" yaml:"backend"`
@@ -38,8 +39,9 @@ type ConfigEnvironmentSection struct {
 	Engine EnvironmentEngine `json:"engine" mapstructure:"engine" yaml:"engine"`
 	// Image is the local tag after load (default localhost/danmo-work-env:bundled).
 	Image string `json:"image" mapstructure:"image" yaml:"image"`
-	// TarPath overrides discovery of the bundled OCI tar. Empty = auto
-	// (WORK_ENV_TAR, ~/.danmo-work/env/, next to binary, out/env/).
+	// TarPath overrides discovery of the optional OCI env tar (user-downloaded
+	// Release asset, not shipped inside the app package). Empty = auto
+	// (WORK_ENV_TAR, ~/.danmo-work/env/, out/env/ for local builds).
 	TarPath string `json:"tarPath" mapstructure:"tar_path" yaml:"tar_path"`
 	// WorkspaceMount is the path inside the container (default /workspace).
 	WorkspaceMount string `json:"workspaceMount" mapstructure:"workspace_mount" yaml:"workspace_mount"`

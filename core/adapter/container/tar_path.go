@@ -7,12 +7,12 @@ import (
 	"strings"
 )
 
-// ResolveTarPath finds the bundled env image tar. Order:
+// ResolveTarPath finds the optional env image tar (user-downloaded Release
+// asset or local make build-env-tar). Not shipped inside app packages. Order:
 //  1. explicit override
 //  2. WORK_ENV_TAR
-//  3. ~/.danmo-work/env/danmo-work-env.tar (and arch-specific names)
-//  4. next to executable: env/danmo-work-env*.tar
-//  5. $DQ_ROOT/out/env or ./out/env (dev)
+//  3. ~/.danmo-work/env/danmo-work-env*.tar
+//  4. $DQ_ROOT/out/env or ./out/env (dev builds only)
 func ResolveTarPath(override string) string {
 	if p := strings.TrimSpace(override); p != "" {
 		if fileExists(p) {
@@ -27,10 +27,6 @@ func ResolveTarPath(override string) string {
 	if home, err := os.UserHomeDir(); err == nil {
 		base := filepath.Join(home, ".danmo-work", "env")
 		candidates = append(candidates, archTarNames(base)...)
-	}
-	if exe, err := os.Executable(); err == nil {
-		dir := filepath.Join(filepath.Dir(exe), "env")
-		candidates = append(candidates, archTarNames(dir)...)
 	}
 	if root := strings.TrimSpace(os.Getenv("DQ_ROOT")); root != "" {
 		candidates = append(candidates, archTarNames(filepath.Join(root, "out", "env"))...)

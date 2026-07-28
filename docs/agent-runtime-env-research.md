@@ -245,7 +245,7 @@ spec:
 
 ### Phase 2 — Container backend MVP（标准化环境 / 进行中）
 
-**镜像分发：不走 registry pull。** CI（`make build-env-tar`）构建 **`debian:bookworm-slim` + apt 基础工具**（不预装 Node/Python）并 save 为 `out/env/danmo-work-env-linux-<arch>.tar`。运行时仅 load，标签 `localhost/danmo-work-env:bundled`。语言栈按需 `apt-get install`。
+**镜像分发：旁路下载，不进安装包。** CI 单独产出 `danmo-work-env-linux-<arch>.tar`（`debian:bookworm-slim` + apt，不预装 Node/Python）挂到 GitHub Release；**不打进** server/desktop 包。用户放到 `~/.danmo-work/env/` 或设 `WORK_ENV_TAR`。运行时仅 load，标签 `localhost/danmo-work-env:bundled`。语言栈按需 `apt-get install`。
 
 1. ~~`port.ExecutionBackend`~~ + 可插拔 `container.Runtime`：`podman` / `docker` / `apple-container`（`engine=auto|…`）
 2. **禁止 pull**；macOS 可优先 Apple Container CLI
@@ -253,7 +253,7 @@ spec:
 4. `exec_shell` 经 ExecutionBackend；缺引擎/缺 tar → LocalOS
 5. `GET /api/v1/environment/status` + Settings「执行环境」
 
-验收：有 env tar + 引擎时，`apt-get update && apt-get install -y nodejs` 等可在容器内完成。
+验收：用户下载 env tar + 本机引擎时，`apt-get update && apt-get install -y nodejs` 等可在容器内完成。
 
 ### Phase 3 — 声明式 EnvironmentSpec
 
