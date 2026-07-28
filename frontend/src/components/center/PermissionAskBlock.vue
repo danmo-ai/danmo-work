@@ -22,10 +22,16 @@ function approvalReason(payload: unknown): string {
   return String(asRecord(payload)?.reason ?? '')
 }
 
+const reason = computed(() => approvalReason(props.payload))
+
+const domain = computed(() => String(asRecord(props.payload)?.domain ?? ''))
+
 const reasonLabel = computed(() => {
-  switch (approvalReason(props.payload)) {
+  switch (reason.value) {
     case 'network':
-      return '需要网络访问'
+      return '需要完全出站（deny 逃生）'
+    case 'network_domain':
+      return domain.value ? `允许域名 ${domain.value}` : '允许新域名'
     case 'dangerous_command':
       return '危险命令'
     case 'unsandboxed':
@@ -46,7 +52,13 @@ const allowsSession = computed(() => {
   const p = asRecord(props.payload)
   const opts = p?.scopeOptions
   if (Array.isArray(opts)) return opts.includes('session')
-  return approvalReason(props.payload) === 'network'
+  return reason.value === 'network' || reason.value === 'network_domain'
+})
+
+const sessionButtonLabel = computed(() => {
+  if (reason.value === 'network_domain') return '本会话允许此域名'
+  if (reason.value === 'network') return '本会话允许完全出站'
+  return '本会话允许'
 })
 
 const pending = computed(() => Boolean(props.showActions) && !props.decided)
@@ -83,7 +95,7 @@ const pending = computed(() => Boolean(props.showActions) && !props.decided)
         :disabled="deciding"
         @click="emit('decide', { decision: 'allow', scope: 'session' })"
       >
-        本会话允许
+        {{ sessionButtonLabel }}
       </DqButton>
       <DqButton size="sm" :disabled="deciding" @click="emit('decide', { decision: 'deny', scope: 'once' })">
         拒绝

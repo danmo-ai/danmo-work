@@ -316,6 +316,7 @@ type mcpServerModel struct {
 	ToolTimeout         int    `gorm:"column:tool_timeout"`
 	Status              string
 	Enabled             bool
+	Network             string `gorm:"column:network"` // inherit | deny | allow | allowlist
 }
 
 func (mcpServerModel) TableName() string { return "mcp_servers" }
@@ -369,6 +370,7 @@ func mcpServerToDomain(m mcpServerModel) domain.MCPServer {
 		ToolTimeout:        m.ToolTimeout,
 		Status:             m.Status,
 		Enabled:            m.Enabled,
+		Network:            m.Network,
 	}
 }
 
@@ -428,6 +430,7 @@ func mcpServerFromDomain(s domain.MCPServer) mcpServerModel {
 		ToolTimeout:          timeout,
 		Status:              status,
 		Enabled:             s.Enabled,
+		Network:             s.Network,
 	}
 }
 

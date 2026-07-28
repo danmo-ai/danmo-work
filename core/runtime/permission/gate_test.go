@@ -64,20 +64,71 @@ func TestGateNetworkAskAndSessionAllow(t *testing.T) {
 	}
 }
 
-func TestGateAllowlistDoesNotAskNetwork(t *testing.T) {
+func TestGateAllowlistAsksUnknownDomain(t *testing.T) {
 	g := NewGate(nil)
+	sb := strongSB(domain.SandboxNetworkAllowlist)
+	sb.AllowlistDomains = []string{"example.com"}
 	r := g.CheckRequest(Request{
 		ToolName: "exec_shell",
 		Risk:     domain.RiskHigh,
 		Command:  "npm install lodash",
-		Sandbox:  strongSB(domain.SandboxNetworkAllowlist),
+		Sandbox:  sb,
 	})
-	// Proxy enforces domains; no ReasonNetwork ask (still may ask for other reasons).
-	if r.Reason == ReasonNetwork {
-		t.Fatalf("allowlist should not ask for network: %+v", r)
+	if r.Decision != DecisionAsk || r.Reason != ReasonNetworkDomain {
+		t.Fatalf("expected network_domain ask, got %+v", r)
 	}
+	if r.Domain != "registry.npmjs.org" {
+		t.Fatalf("domain=%q", r.Domain)
+	}
+}
+
+func TestGateAllowlistAllowsListedDomain(t *testing.T) {
+	g := NewGate(nil)
+	sb := strongSB(domain.SandboxNetworkAllowlist)
+	sb.AllowlistDomains = []string{"registry.npmjs.org", "*.npmjs.org"}
+	r := g.CheckRequest(Request{
+		ToolName: "exec_shell",
+		Risk:     domain.RiskHigh,
+		Command:  "npm install lodash",
+		Sandbox:  sb,
+	})
 	if r.Decision != DecisionAllow {
-		t.Fatalf("expected allow for sandboxed npm under allowlist, got %+v", r)
+		t.Fatalf("expected allow, got %+v", r)
+	}
+}
+
+func TestGateHostEgressDenyAsks(t *testing.T) {
+	g := NewGate(nil)
+	r := g.CheckRequest(Request{
+		ToolName: "web_fetch",
+		Risk:     domain.RiskLow,
+		URL:      "https://example.com/a",
+		Sandbox:  strongSB(domain.SandboxNetworkDeny),
+	})
+	if r.Decision != DecisionAsk || r.Reason != ReasonNetwork {
+		t.Fatalf("got %+v", r)
+	}
+}
+
+func TestAutoApprovableCeiling(t *testing.T) {
+	if AutoApprovable(ReasonDangerousCommand) || AutoApprovable(ReasonUnsandboxed) {
+		t.Fatal("dangerous/unsandboxed must not auto-approve")
+	}
+	if !AutoApprovable(ReasonNetwork) || !AutoApprovable(ReasonNetworkDomain) {
+		t.Fatal("network reasons should be auto-approvable")
+	}
+}
+
+func TestPermissionRuleDeny(t *testing.T) {
+	g := NewGate([]domain.PermissionRule{{Pattern: "web_*", Action: domain.PermDeny}})
+	r := g.CheckRequest(Request{
+		ToolName: "web_fetch",
+		Risk:     domain.RiskLow,
+		URL:      "https://x.com",
+		Sandbox:  strongSB(domain.SandboxNetworkAllow),
+	})
+	if r.Decision != DecisionDeny {
+		t.Fatalf("got %+v", r)
 	}
 }
 

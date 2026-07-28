@@ -212,6 +212,7 @@ func New(cfg Config) *Core {
 
 	sb := sandbox.New(appCfg.Runtime.Sandbox)
 	eng.SetSandbox(sb)
+	mcpDialer.PrepareStdio = sb.PrepareMCPStdio
 	br := dqbrowser.New(appCfg.Runtime.Browser)
 	eng.RegisterTool(&builtin.ExecShell{Sandbox: sb})
 	eng.RegisterTool(&builtin.ReadFile{})
@@ -224,9 +225,9 @@ func New(cfg Config) *Core {
 	searchCfgFn := func(ctx context.Context) (domain.SearchConfig, error) {
 		return searchConfig.Get(ctx)
 	}
-	eng.RegisterTool(&builtin.WebFetch{ConfigFunc: searchCfgFn, Browser: br})
-	eng.RegisterTool(&builtin.WebSearch{ConfigFunc: searchCfgFn})
-	eng.RegisterTool(&builtin.HTTPRequest{ConfigFunc: searchCfgFn})
+	eng.RegisterTool(&builtin.WebFetch{ConfigFunc: searchCfgFn, Browser: br, Egress: sb})
+	eng.RegisterTool(&builtin.WebSearch{ConfigFunc: searchCfgFn, Egress: sb})
+	eng.RegisterTool(&builtin.HTTPRequest{ConfigFunc: searchCfgFn, Egress: sb})
 	eng.RegisterTool(&builtin.AskUser{})
 	eng.RegisterTool(&builtin.Sleep{})
 	eng.RegisterTool(&builtin.ReadSkill{Skills: skills})

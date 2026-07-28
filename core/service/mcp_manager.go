@@ -68,6 +68,7 @@ func (m *MCPManager) Create(ctx context.Context, req domain.UpsertMCPServerReque
 		ToolTimeout:        req.ToolTimeout,
 		Status:             "disconnected",
 		Enabled:            req.Enabled,
+		Network:            req.Network,
 	}
 	normalizeMCPServer(&s)
 	if err := m.storeHeaderSecrets(ctx, s.ID, req.HeaderSecrets, &s); err != nil {
@@ -124,6 +125,9 @@ func (m *MCPManager) Update(ctx context.Context, id string, req domain.UpsertMCP
 	}
 	if req.Status != "" {
 		existing.Status = req.Status
+	}
+	if req.Network != "" {
+		existing.Network = req.Network
 	}
 	existing.Enabled = req.Enabled
 	normalizeMCPServer(&existing)

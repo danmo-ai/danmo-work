@@ -23,6 +23,7 @@ const (
 // HTTPRequest is a constrained HTTP client for text/JSON APIs (not a full curl).
 type HTTPRequest struct {
 	ConfigFunc func(context.Context) (domain.SearchConfig, error)
+	Egress     HostEgressChecker
 }
 
 func (h *HTTPRequest) Name() string                { return "http_request" }
@@ -168,7 +169,7 @@ func (h *HTTPRequest) Execute(ctx context.Context, input map[string]any) (domain
 		}
 	}
 
-	opts := clientOpts(cfg.Proxy, cfg.UserAgent, time.Duration(timeoutMs)*time.Millisecond, false)
+	opts := withToolEgress(clientOpts(cfg.Proxy, cfg.UserAgent, time.Duration(timeoutMs)*time.Millisecond, false), h.Egress, input)
 	resp, err := doRequest(ctx, req, opts)
 	if err != nil {
 		return domain.ToolResult{}, err

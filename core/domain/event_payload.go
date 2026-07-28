@@ -47,6 +47,7 @@ type PermissionAskPayload struct {
 	Tool         string   `json:"tool"`
 	Description  string   `json:"description"`
 	Reason       string   `json:"reason,omitempty"`
+	Domain       string   `json:"domain,omitempty"`       // for network_domain asks
 	ScopeOptions []string `json:"scopeOptions,omitempty"` // e.g. ["once","session"]
 }
 

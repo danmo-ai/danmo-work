@@ -154,7 +154,7 @@ type TurnContext struct {
 
 type approvalGate interface {
 	WaitApproval(ctx context.Context, approvalID string) (ApprovalOutcome, error)
-	CreateApproval(sessionID, turnID, toolName, description, reason string) string
+	CreateApproval(sessionID, turnID, toolName, description, reason, domain string) string
 }
 
 type TurnRunner struct {
@@ -169,10 +169,12 @@ type TurnRunner struct {
 	Log                 func(typ string, data map[string]any)
 	FileTracker         *tool.FileTracker
 	FileChanges         FileChangeAppender
-	SandboxStatus       func() domain.SandboxStatus
-	SessionAllowNetwork func(sessionID string) bool
-	mu                  sync.Mutex
-	doomState           map[string]*doomTurnState
+	SandboxStatus        func() domain.SandboxStatus
+	SessionAllowNetwork  func(sessionID string) bool
+	SessionAllowDomains  func(sessionID string) []string
+	GrantDomains         func(domains []string)
+	mu                   sync.Mutex
+	doomState            map[string]*doomTurnState
 }
 
 // doomTurnState tracks consecutive identical tool signatures (mainstream-style).
@@ -218,6 +220,9 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 			cfg.permissionMode = rt.PermissionMode
 			if cfg.permissionMode == "" {
 				cfg.permissionMode = domain.PermModeInteractive
+			}
+			if p.Perm != nil {
+				p.Perm = p.Perm.WithRules(rt.PermissionRules).WithMode(cfg.permissionMode)
 			}
 			if rt.Turn.DoomLoopThreshold > 0 {
 				cfg.doomLoopThreshold = rt.Turn.DoomLoopThreshold
@@ -629,6 +634,7 @@ func (p *TurnRunner) gateToolCall(
 	describe string,
 ) (args map[string]any, content, errLabel string, exec bool, err error) {
 	cmdStr, _ := call.Arguments["command"].(string)
+	urlStr, _ := call.Arguments["url"].(string)
 	sbStatus := domain.SandboxStatus{}
 	if p.SandboxStatus != nil {
 		sbStatus = p.SandboxStatus()
@@ -636,6 +642,10 @@ func (p *TurnRunner) gateToolCall(
 	allowNet := false
 	if p.SessionAllowNetwork != nil {
 		allowNet = p.SessionAllowNetwork(tctx.SessionID)
+	}
+	var sessionDomains []string
+	if p.SessionAllowDomains != nil {
+		sessionDomains = p.SessionAllowDomains(tctx.SessionID)
 	}
 	risk := handler.RiskLevel()
 	if call.Name == "http_request" {
@@ -646,8 +656,10 @@ func (p *TurnRunner) gateToolCall(
 		ToolName:            call.Name,
 		Risk:                risk,
 		Command:             cmdStr,
+		URL:                 urlStr,
 		Sandbox:             sbStatus,
 		SessionAllowNetwork: allowNet,
+		SessionAllowDomains: sessionDomains,
 		Mode:                cfg.permissionMode,
 	})
 	decision := permResult.Decision
@@ -656,31 +668,47 @@ func (p *TurnRunner) gateToolCall(
 	}
 
 	allowNetworkForRun := allowNet
-	if decision == permission.DecisionAsk && !cfg.autoApprove && p.Approval != nil {
-		approvalID := p.Approval.CreateApproval(tctx.SessionID, tctx.TurnID, call.Name, describe, permResult.Reason)
-		scopeOpts := []string{"once"}
-		if permResult.Reason == permission.ReasonNetwork {
-			scopeOpts = append(scopeOpts, "session")
-		}
-		p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventPermissionAsk, domain.PermissionAskPayload{
-			ApprovalID: approvalID, CallID: call.ID, Tool: call.Name, Description: describe,
-			Reason: permResult.Reason, ScopeOptions: scopeOpts,
-		})
-		outcome, waitErr := p.Approval.WaitApproval(ctx, approvalID)
-		if waitErr != nil {
-			if errors.Is(waitErr, context.Canceled) || ctx.Err() != nil {
-				return nil, "", "", false, ctx.Err()
+	grantedDomain := ""
+	if decision == permission.DecisionAsk {
+		canAuto := cfg.autoApprove && permission.AutoApprovable(permResult.Reason)
+		if !canAuto && p.Approval != nil {
+			approvalID := p.Approval.CreateApproval(tctx.SessionID, tctx.TurnID, call.Name, describe, permResult.Reason, permResult.Domain)
+			scopeOpts := []string{"once"}
+			// Full-network session grant only in deny mode (ReasonNetwork).
+			// Domain grants use ReasonNetworkDomain with session scope.
+			if permResult.Reason == permission.ReasonNetwork || permResult.Reason == permission.ReasonNetworkDomain {
+				scopeOpts = append(scopeOpts, "session")
 			}
-			return nil, "approval wait failed: " + waitErr.Error() + toolErrorHint, "approval wait failed", false, nil
+			desc := describe
+			if permResult.Reason == permission.ReasonNetworkDomain && permResult.Domain != "" {
+				desc = "allow domain " + permResult.Domain + " — " + describe
+			}
+			if permResult.Reason == permission.ReasonNetwork {
+				desc = "full outbound network (deny mode escape) — " + describe
+			}
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventPermissionAsk, domain.PermissionAskPayload{
+				ApprovalID: approvalID, CallID: call.ID, Tool: call.Name, Description: desc,
+				Reason: permResult.Reason, Domain: permResult.Domain, ScopeOptions: scopeOpts,
+			})
+			outcome, waitErr := p.Approval.WaitApproval(ctx, approvalID)
+			if waitErr != nil {
+				if errors.Is(waitErr, context.Canceled) || ctx.Err() != nil {
+					return nil, "", "", false, ctx.Err()
+				}
+				return nil, "approval wait failed: " + waitErr.Error() + toolErrorHint, "approval wait failed", false, nil
+			}
+			if !outcome.Approved {
+				return nil, "User rejected this tool call. Do not retry the same command; choose a safer alternative or ask the user." + toolErrorHint, "approval rejected", false, nil
+			}
+		} else if !canAuto {
+			return nil, "permission ask required but approval gate unavailable" + toolErrorHint, "approval unavailable", false, nil
 		}
-		if !outcome.Approved {
-			return nil, "User rejected this tool call. Do not retry the same command; choose a safer alternative or ask the user." + toolErrorHint, "approval rejected", false, nil
-		}
-		if permResult.Reason == permission.ReasonNetwork {
+		switch permResult.Reason {
+		case permission.ReasonNetwork:
 			allowNetworkForRun = true
+		case permission.ReasonNetworkDomain:
+			grantedDomain = permResult.Domain
 		}
-	} else if decision == permission.DecisionAsk && cfg.autoApprove && permResult.Reason == permission.ReasonNetwork {
-		allowNetworkForRun = true
 	}
 
 	args = cloneMap(call.Arguments)
@@ -697,6 +725,12 @@ func (p *TurnRunner) gateToolCall(
 	args["__file_tracker"] = p.FileTracker
 	if allowNetworkForRun {
 		args["__sandbox_allow_network"] = true
+	}
+	if grantedDomain != "" {
+		if p.GrantDomains != nil {
+			p.GrantDomains([]string{grantedDomain})
+		}
+		args["__granted_domain"] = grantedDomain
 	}
 	return args, "", "", true, nil
 }

@@ -74,6 +74,14 @@ func TestTurnRunnerHardCapsToolOutput(t *testing.T) {
 	}
 
 	tr := NewTurnRunner(mockLLM, stream, perm, reg, configStore)
+	tr.SandboxStatus = func() domain.SandboxStatus {
+		return domain.SandboxStatus{
+			Enabled: true,
+			Mode:    domain.SandboxModeWorkspaceWrite,
+			Network: domain.SandboxNetworkAllow,
+			Backend: domain.SandboxBackendSeatbelt,
+		}
+	}
 	rep, msgs, err := tr.Run(context.Background(), TurnContext{
 		SessionID: "test-session",
 		TurnID:    "turn-tool-cap",
@@ -104,7 +112,7 @@ func TestTurnRunnerHardCapsToolOutput(t *testing.T) {
 		t.Fatal("expected tool message")
 	}
 	if !strings.Contains(toolMsg.Content, "truncated") {
-		t.Fatalf("expected truncated tool output, len=%d", len(toolMsg.Content))
+		t.Fatalf("expected truncated tool output, len=%d content=%q", len(toolMsg.Content), toolMsg.Content)
 	}
 	if !strings.HasPrefix(toolMsg.Content, strings.Repeat("X", maxChars)) {
 		t.Fatal("truncated prefix mismatch")
@@ -425,7 +433,7 @@ func (g *mockApprovalGate) WaitApproval(_ context.Context, _ string) (ApprovalOu
 	return <-g.result, nil
 }
 
-func (g *mockApprovalGate) CreateApproval(_, _, _, _, _ string) string {
+func (g *mockApprovalGate) CreateApproval(_, _, _, _, _, _ string) string {
 	return "approval-1"
 }
 

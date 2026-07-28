@@ -69,9 +69,22 @@ func (s *Server) Addr() string {
 
 // Domains returns the normalized allowlist rules.
 func (s *Server) Domains() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	out := make([]string, len(s.domains))
 	copy(out, s.domains)
 	return out
+}
+
+// UpdateDomains replaces the allowlist used for subsequent connections.
+func (s *Server) UpdateDomains(domains []string) {
+	domains = NormalizeDomains(domains)
+	if len(domains) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.domains = domains
 }
 
 // Close stops accepting and closes active connections.
@@ -153,7 +166,7 @@ func (s *Server) handleConnect(client net.Conn, req *http.Request) {
 		writeProxyError(client, http.StatusBadRequest, "bad host")
 		return
 	}
-	if !Match(host, s.domains) {
+	if !s.hostAllowed(host) {
 		writeProxyError(client, http.StatusForbidden, "host not allowlisted")
 		return
 	}
@@ -179,7 +192,7 @@ func (s *Server) handleHTTP(client net.Conn, _ *bufio.Reader, req *http.Request)
 	if host == "" {
 		host, _, _ = SplitHostPort(req.Host)
 	}
-	if host == "" || !Match(host, s.domains) {
+	if host == "" || !s.hostAllowed(host) {
 		writeProxyError(client, http.StatusForbidden, "host not allowlisted")
 		return
 	}
@@ -212,6 +225,13 @@ func (s *Server) handleHTTP(client net.Conn, _ *bufio.Reader, req *http.Request)
 	_ = client.SetDeadline(time.Time{})
 	_ = up.SetDeadline(time.Time{})
 	_, _ = io.Copy(client, up)
+}
+
+func (s *Server) hostAllowed(host string) bool {
+	s.mu.Lock()
+	rules := s.domains
+	s.mu.Unlock()
+	return Match(host, rules)
 }
 
 func writeProxyError(w net.Conn, code int, msg string) {

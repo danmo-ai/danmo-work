@@ -22,7 +22,14 @@ runtime:
   auto_approve: false
   # Permission mode: discuss | plan | interactive (default) | auto
   # discuss/plan deny writes/exec/MCP; interactive asks on high/external; auto still asks dangerous shell & external MCP.
+  # auto_approve skips some waits but NEVER auto-approves dangerous_command or unsandboxed.
   permission_mode: "interactive"
+  # Optional Soft Gate rules (pattern → ask|deny). Example:
+  # permission_rules:
+  #   - pattern: "mcp_*"
+  #     action: ask
+  #   - pattern: "exec_shell"
+  #     action: ask
   # OS sandbox for exec_shell (Seatbelt / Landlock|bwrap / win-token|WSL2).
   # Modes: read-only | workspace-write | danger-full-access
   # Network: deny | allow | allowlist

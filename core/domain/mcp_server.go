@@ -39,6 +39,9 @@ type MCPServer struct {
 	ToolTimeout       int          `json:"toolTimeout"`     // seconds, default 300
 	Status            string       `json:"status"`          // connected | disconnected | error
 	Enabled           bool         `json:"enabled"`         // user toggle
+	// Network controls stdio process egress: inherit (default) | deny | allow | allowlist.
+	// inherit follows runtime.sandbox.network; allowlist uses the sandbox allowlist proxy.
+	Network string `json:"network,omitempty"`
 }
 
 // MCPToolDef describes a single tool exposed by an MCP server.
@@ -81,6 +84,7 @@ type UpsertMCPServerRequest struct {
 	ToolTimeout        int               `json:"toolTimeout"`
 	Status             string            `json:"status"`
 	Enabled            bool              `json:"enabled"`
+	Network            string            `json:"network,omitempty"`
 	// HeaderSecrets are plaintext header values to store encrypted (Phase 1).
 	HeaderSecrets map[string]string `json:"headerSecrets,omitempty"`
 }

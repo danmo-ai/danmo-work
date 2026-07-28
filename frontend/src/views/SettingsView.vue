@@ -212,6 +212,31 @@ const showGitBashHint = computed(() => {
   return true
 })
 
+const ALLOWLIST_PRESETS: Record<string, string[]> = {
+  npm: ['registry.npmjs.org', '*.npmjs.org', 'registry.yarnpkg.com'],
+  go: ['proxy.golang.org', 'sum.golang.org', 'github.com', '*.githubusercontent.com'],
+  pypi: ['pypi.org', '*.pythonhosted.org', 'files.pythonhosted.org'],
+  github: ['github.com', 'api.github.com', '*.githubusercontent.com', 'codeload.github.com'],
+}
+
+function applyAllowlistPreset(name: string) {
+  const extra = ALLOWLIST_PRESETS[name]
+  if (!extra) return
+  const cur = runtimeForm.value.sandboxAllowlistDomains
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const seen = new Set(cur.map((s) => s.toLowerCase()))
+  for (const d of extra) {
+    if (!seen.has(d.toLowerCase())) {
+      cur.push(d)
+      seen.add(d.toLowerCase())
+    }
+  }
+  runtimeForm.value.sandboxAllowlistDomains = cur.join('\n')
+  runtimeForm.value.sandboxNetwork = 'allowlist'
+}
+
 const browserStatusText = computed(() => {
   const st = runtimeConfig.browserStatus
   if (!st) return ''
@@ -1138,11 +1163,12 @@ const hasFooterActions = computed(() => {
                   <span class="settings-field__label">{{ $t('settings.sandboxNetwork') }}</span>
                   <DqSelect v-model="runtimeForm.sandboxNetwork">
                     <DqOption value="deny" :label="$t('settings.sandboxNetworkDeny')" />
+                    <DqOption value="allowlist" :label="$t('settings.sandboxNetworkAllowlistRecommended')" />
                     <DqOption value="allow" :label="$t('settings.sandboxNetworkAllow')" />
-                    <DqOption value="allowlist" :label="$t('settings.sandboxNetworkAllowlist')" />
                   </DqSelect>
                 </div>
               </div>
+              <p class="settings-form-group__desc">{{ $t('settings.sandboxNetworkDesc') }}</p>
               <template v-if="runtimeForm.sandboxNetwork === 'allowlist'">
                 <div class="settings-field">
                   <span class="settings-field__label">{{ $t('settings.sandboxAllowlistDomains') }}</span>
@@ -1152,6 +1178,12 @@ const hasFooterActions = computed(() => {
                     :rows="4"
                     :placeholder="$t('settings.sandboxAllowlistDomainsPlaceholder')"
                   />
+                </div>
+                <div class="settings-form-row" style="margin-top: 8px; gap: 8px; flex-wrap: wrap;">
+                  <DqButton size="sm" @click="applyAllowlistPreset('npm')">{{ $t('settings.sandboxPresetNpm') }}</DqButton>
+                  <DqButton size="sm" @click="applyAllowlistPreset('go')">{{ $t('settings.sandboxPresetGo') }}</DqButton>
+                  <DqButton size="sm" @click="applyAllowlistPreset('pypi')">{{ $t('settings.sandboxPresetPypi') }}</DqButton>
+                  <DqButton size="sm" @click="applyAllowlistPreset('github')">{{ $t('settings.sandboxPresetGithub') }}</DqButton>
                 </div>
                 <p class="settings-form-group__desc">{{ $t('settings.sandboxAllowlistDomainsDesc') }}</p>
               </template>

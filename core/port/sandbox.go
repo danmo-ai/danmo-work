@@ -31,4 +31,10 @@ type Sandbox interface {
 	Run(ctx context.Context, opts SandboxRunOptions) ([]byte, error)
 	// Configure replaces policy and re-probes the backend (e.g. after config save).
 	Configure(cfg domain.ConfigSandboxSection)
+	// GrantDomains merges hosts into the runtime allowlist (session grants).
+	GrantDomains(domains []string)
+	// CheckHost applies Hard egress policy for host-side HTTP tools.
+	CheckHost(host string) error
+	// ProxyURL returns the allowlist proxy URL (http://host:port) when active.
+	ProxyURL() string
 }

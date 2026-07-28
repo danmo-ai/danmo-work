@@ -27,10 +27,12 @@ const (
 )
 
 type webClientOpts struct {
-	Timeout   time.Duration
-	Proxy     string
-	UserAgent string
-	SkipSSRF  bool
+	Timeout    time.Duration
+	Proxy      string
+	UserAgent  string
+	SkipSSRF   bool
+	SkipEgress bool // session full-network grant under deny
+	Egress     HostEgressChecker
 }
 
 func effectiveUserAgent(opts webClientOpts) string {
@@ -72,7 +74,17 @@ func upgradeToHTTPS(raw string) string {
 // testSkipSSRF is set by unit tests that use httptest (loopback).
 var testSkipSSRF bool
 
+// HostEgressChecker is optional Hard egress policy (sandbox network allowlist/deny).
+type HostEgressChecker interface {
+	CheckHost(host string) error
+	ProxyURL() string
+}
+
 func assertPublicURL(raw string) error {
+	return assertPublicURLWithEgress(raw, nil)
+}
+
+func assertPublicURLWithEgress(raw string, egress HostEgressChecker) error {
 	if testSkipSSRF {
 		return nil
 	}
@@ -86,6 +98,11 @@ func assertPublicURL(raw string) error {
 	host := u.Hostname()
 	if host == "" {
 		return fmt.Errorf("missing host")
+	}
+	if egress != nil {
+		if err := egress.CheckHost(host); err != nil {
+			return err
+		}
 	}
 	if ip := net.ParseIP(host); ip != nil {
 		if !isPublicIP(ip) {
@@ -161,11 +178,26 @@ func setBrowserGETHeaders(req *http.Request, opts webClientOpts) {
 
 func doRequest(ctx context.Context, req *http.Request, opts webClientOpts) (*http.Response, error) {
 	if !opts.SkipSSRF {
-		if err := assertPublicURL(req.URL.String()); err != nil {
+		var eg HostEgressChecker
+		if !opts.SkipEgress {
+			eg = opts.Egress
+		}
+		if err := assertPublicURLWithEgress(req.URL.String(), eg); err != nil {
 			return nil, err
 		}
 	} else if err := validateURL(req.URL.String()); err != nil {
 		return nil, err
+	} else if opts.Egress != nil && !opts.SkipEgress && req.URL != nil {
+		if err := opts.Egress.CheckHost(req.URL.Hostname()); err != nil {
+			return nil, err
+		}
+	}
+
+	// Prefer sandbox allowlist proxy when active (unless caller set an explicit proxy).
+	if opts.Proxy == "" && opts.Egress != nil {
+		if p := opts.Egress.ProxyURL(); p != "" {
+			opts.Proxy = p
+		}
 	}
 
 	client := newWebClient(opts)
@@ -424,6 +456,16 @@ func firstString(m map[string]any, keys []string) string {
 		}
 	}
 	return ""
+}
+
+func withToolEgress(opts webClientOpts, egress HostEgressChecker, input map[string]any) webClientOpts {
+	opts.Egress = egress
+	if input != nil {
+		if v, ok := input["__sandbox_allow_network"].(bool); ok && v {
+			opts.SkipEgress = true
+		}
+	}
+	return opts
 }
 
 func clientOpts(proxy, userAgent string, timeout time.Duration, skipSSRF bool) webClientOpts {

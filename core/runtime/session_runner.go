@@ -71,10 +71,12 @@ type Engine struct {
 type approvalMeta struct {
 	SessionID string
 	Reason    string
+	Domain    string
 }
 
 type sessionPermState struct {
-	AllowNetwork bool
+	AllowNetwork    bool
+	AllowedDomains  []string
 }
 
 // ApprovalOutcome is returned when a pending approval is resolved.
@@ -150,6 +152,8 @@ func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, pro
 	turnRunner.Approval = e
 	turnRunner.SandboxStatus = e.sandboxStatus
 	turnRunner.SessionAllowNetwork = e.sessionAllowsNetwork
+	turnRunner.SessionAllowDomains = e.sessionAllowDomains
+	turnRunner.GrantDomains = e.grantSandboxDomains
 	return e
 }
 
@@ -261,6 +265,27 @@ func (e *Engine) sessionAllowsNetwork(sessionID string) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.sessionPerm[sessionID].AllowNetwork
+}
+
+func (e *Engine) sessionAllowDomains(sessionID string) []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	d := e.sessionPerm[sessionID].AllowedDomains
+	if len(d) == 0 {
+		return nil
+	}
+	out := make([]string, len(d))
+	copy(out, d)
+	return out
+}
+
+func (e *Engine) grantSandboxDomains(domains []string) {
+	e.mu.Lock()
+	sb := e.sandbox
+	e.mu.Unlock()
+	if sb != nil {
+		sb.GrantDomains(domains)
+	}
 }
 
 func (e *Engine) RegisterTool(h tool.Handler) {
@@ -1150,6 +1175,8 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			childRunner.Approval = e
 			childRunner.SandboxStatus = e.sandboxStatus
 			childRunner.SessionAllowNetwork = e.sessionAllowsNetwork
+			childRunner.SessionAllowDomains = e.sessionAllowDomains
+			childRunner.GrantDomains = e.grantSandboxDomains
 			childRunner.FileChanges = e.turnRunner.FileChanges
 			childRunner.SkillList = skills
 			childRunner.ToolBindings = workerAgent.Tools
@@ -1303,9 +1330,20 @@ func (e *Engine) ResolveApproval(id string, approved bool, scope string) {
 	meta := e.approvalMeta[id]
 	delete(e.approvalWait, id)
 	delete(e.approvalMeta, id)
-	if approved && scope == "session" && meta.Reason == permission.ReasonNetwork && meta.SessionID != "" {
+	if approved && scope == "session" && meta.SessionID != "" {
 		st := e.sessionPerm[meta.SessionID]
-		st.AllowNetwork = true
+		switch meta.Reason {
+		case permission.ReasonNetwork:
+			// Full egress escape — deny mode only.
+			st.AllowNetwork = true
+		case permission.ReasonNetworkDomain:
+			if meta.Domain != "" {
+				st.AllowedDomains = append(st.AllowedDomains, meta.Domain)
+				if e.sandbox != nil {
+					e.sandbox.GrantDomains([]string{meta.Domain})
+				}
+			}
+		}
 		e.sessionPerm[meta.SessionID] = st
 	}
 	e.mu.Unlock()
@@ -1330,12 +1368,13 @@ func (e *Engine) PublishPermissionDecided(sessionID, turnID, approvalID string, 
 	})
 }
 func (e *Engine) WaitApproval(ctx context.Context, id string) (ApprovalOutcome, error) {
-	if e.isAutoApprove() {
-		return ApprovalOutcome{Approved: true, Scope: "once"}, nil
-	}
 	e.mu.Lock()
 	ch := e.approvalWait[id]
+	meta := e.approvalMeta[id]
 	e.mu.Unlock()
+	if e.isAutoApprove() && permission.AutoApprovable(meta.Reason) {
+		return ApprovalOutcome{Approved: true, Scope: "once", Reason: meta.Reason}, nil
+	}
 	if ch == nil {
 		return ApprovalOutcome{}, fmt.Errorf("approval not found")
 	}
@@ -1346,12 +1385,12 @@ func (e *Engine) WaitApproval(ctx context.Context, id string) (ApprovalOutcome, 
 		return ApprovalOutcome{}, ctx.Err()
 	}
 }
-func (e *Engine) CreateApproval(sessionID, turnID, toolName, description, reason string) string {
+func (e *Engine) CreateApproval(sessionID, turnID, toolName, description, reason, hostDomain string) string {
 	id := fmt.Sprintf("appr-%d", time.Now().UnixNano())
 	ch := make(chan ApprovalOutcome, 1)
 	e.mu.Lock()
 	e.approvalWait[id] = ch
-	e.approvalMeta[id] = approvalMeta{SessionID: sessionID, Reason: reason}
+	e.approvalMeta[id] = approvalMeta{SessionID: sessionID, Reason: reason, Domain: hostDomain}
 	e.mu.Unlock()
 	_ = e.approvals.Create(context.Background(), domain.Approval{
 		ID: id, SessionID: sessionID, TurnID: turnID, ToolName: toolName,

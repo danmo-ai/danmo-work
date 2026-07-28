@@ -23,6 +23,8 @@
 
 一句话：**本地用轻量 OS 沙箱管安全；跨机 / 评测 / 云端用轻量 OCI 容器管环境一致性；两者通过同一 `Sandbox`/`Workspace` 接口切换。**
 
+权限 Soft/Hard 分工与网络三态见 **[permission-model.md](./permission-model.md)**。
+
 ---
 
 ## 2. 问题拆解：别把两件事揉成一件

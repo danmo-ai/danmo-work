@@ -118,6 +118,62 @@ func EffectiveHTTPRequestRisk(base domain.RiskLevel, method string, headers map[
 	return base
 }
 
+var reURLHost = regexp.MustCompile(`(?i)https?://([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(:\d+)?`)
+var reHostToken = regexp.MustCompile(`(?i)\b([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+(com|org|net|io|dev|ai|co|cn|app|cloud)\b`)
+
+// ExtractHosts finds likely outbound hostnames in a shell command for allowlist checks.
+func ExtractHosts(cmd string) []string {
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	var out []string
+	add := func(h string) {
+		h = strings.ToLower(strings.TrimSpace(h))
+		if h == "" {
+			return
+		}
+		if _, ok := seen[h]; ok {
+			return
+		}
+		seen[h] = struct{}{}
+		out = append(out, h)
+	}
+	for _, m := range reURLHost.FindAllStringSubmatch(cmd, -1) {
+		if len(m) > 0 {
+			u := m[0]
+			if i := strings.Index(u, "://"); i >= 0 {
+				rest := u[i+3:]
+				if j := strings.IndexAny(rest, "/:?"); j >= 0 {
+					rest = rest[:j]
+				}
+				add(rest)
+			}
+		}
+	}
+	// Package managers without explicit URL still need registry hosts — caller
+	// may Ask with a conventional domain when LooksLikeNetwork but ExtractHosts empty.
+	if LooksLikeNetwork(cmd) && len(out) == 0 {
+		lower := strings.ToLower(cmd)
+		switch {
+		case strings.Contains(lower, "npm ") || strings.Contains(lower, "npx ") || strings.Contains(lower, "yarn ") || strings.Contains(lower, "pnpm "):
+			add("registry.npmjs.org")
+		case strings.Contains(lower, "pip ") || strings.Contains(lower, "pip3 ") || strings.Contains(lower, "uv pip"):
+			add("pypi.org")
+		case strings.Contains(lower, "go get") || strings.Contains(lower, "go install") || strings.Contains(lower, "go mod"):
+			add("proxy.golang.org")
+		case strings.Contains(lower, "git clone") || strings.Contains(lower, "git pull") || strings.Contains(lower, "git fetch") || strings.Contains(lower, "git push"):
+			add("github.com")
+		default:
+			for _, m := range reHostToken.FindAllString(cmd, -1) {
+				add(m)
+			}
+		}
+	}
+	return out
+}
+
 // ParseHTTPHeadersFromArgs extracts string headers from tool-call arguments.
 func ParseHTTPHeadersFromArgs(args map[string]any) map[string]string {
 	if args == nil {
