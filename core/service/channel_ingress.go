@@ -751,7 +751,7 @@ func (ing *ChannelIngressService) handlePermissionAsk(ev domain.StreamEvent, p c
 		_, _ = ing.deliverOrReturn(context.Background(), p.msg, reason)
 		return
 	}
-	if p.autoApprove {
+	if p.autoApprove && domain.AutoApprovableReason(payload.Reason) {
 		_ = ing.sessions.DecideApproval(context.Background(), payload.ApprovalID, true, "once")
 		return
 	}

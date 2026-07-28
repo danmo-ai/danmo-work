@@ -23,6 +23,8 @@ import (
 type Dialer struct {
 	// ExtraHeaders merges into every HTTP request (e.g. resolved secrets).
 	HeaderResolver func(srv domain.MCPServer) map[string]string
+	// PrepareStdio optionally rewrites command/args/env for sandbox network policy.
+	PrepareStdio func(srv domain.MCPServer, baseEnv []string) (command string, args []string, env []string)
 }
 
 func NewDialer() *Dialer {
@@ -64,9 +66,14 @@ func (d *Dialer) dialStdio(ctx context.Context, srv domain.MCPServer) (port.MCPS
 	if srv.Command == "" {
 		return nil, fmt.Errorf("command is required for stdio transport")
 	}
+	command := srv.Command
 	args := splitArgs(srv.Args)
-	cmd := exec.CommandContext(ctx, srv.Command, args...)
-	cmd.Env = append(os.Environ(), parseEnv(srv.Env)...)
+	env := append(os.Environ(), parseEnv(srv.Env)...)
+	if d.PrepareStdio != nil {
+		command, args, env = d.PrepareStdio(srv, env)
+	}
+	cmd := exec.CommandContext(ctx, command, args...)
+	cmd.Env = env
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("stdin pipe: %w", err)

@@ -487,28 +487,14 @@ Tool:
 
 ## 8. 权限与审批
 
-### 8.1 权限门禁（`core/runtime/permission/gate.go`）
+完整模型见 **[permission-model.md](./permission-model.md)**（Soft Gate × Hard Enforcement）。
 
-| 条件 | 决策 |
-|------|------|
-| Tool `RiskHigh` | 始终 `Ask` |
-| 配置规则匹配（pattern → ask/deny） | 按规则 |
-| 默认 | Allow |
+摘要：
 
-### 8.2 审批流程
-
-```
-高危 / 规则匹配 Tool
-  → CreateApproval（SQLite + 内存 channel）
-  → 发布 permission.ask
-  → WaitApproval 阻塞
-  → ResolveApproval(id, approved)
-       approve → 继续执行
-       reject  → Turn 失败
-  runtime.autoApprove=true → 跳过等待
-```
-
-`ask_user` 是协作语义；Approval 是安全门禁——两者都是「暂停–恢复」，但职责不同。
+- **Soft**：`permission.Gate` — discuss/plan 拒绝写/执行；强沙箱内安全 shell 放行；危险命令 / 弱沙箱 / external·MCP 询问。
+- **Hard**：OS sandbox（FS）+ `network` 三态（deny / allowlist 正向代理 / allow）；主机 HTTP 与 shell 共用出站策略。
+- **`auto_approve`**：跳过部分审批等待，但**不**自动放行 `dangerous_command` / `unsandboxed`。
+- **`ask_user`** 是协作语义；Approval 是安全门禁。
 
 ---
 

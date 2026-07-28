@@ -1,10 +1,12 @@
 package permission
 
 import (
+	"net/url"
 	"path/filepath"
 	"strings"
 
 	"danmo-work/core/domain"
+	"danmo-work/core/runtime/sandbox/netproxy"
 )
 
 type Decision string
@@ -17,30 +19,34 @@ const (
 
 // Reason codes for Ask decisions (stable for UI / session memory).
 const (
-	ReasonNone              = ""
-	ReasonDangerousCommand  = "dangerous_command"
-	ReasonNetwork           = "network"
-	ReasonUnsandboxed       = "unsandboxed"
-	ReasonRuleAsk           = "rule_ask"
-	ReasonHighRisk          = "high_risk"
-	ReasonExternal          = "external"
-	ReasonModeDeny          = "mode_deny"
+	ReasonNone             = ""
+	ReasonDangerousCommand = "dangerous_command"
+	ReasonNetwork          = "network"        // deny mode: full egress ask
+	ReasonNetworkDomain    = "network_domain" // allowlist: add one domain
+	ReasonUnsandboxed      = "unsandboxed"
+	ReasonRuleAsk          = "rule_ask"
+	ReasonHighRisk         = "high_risk"
+	ReasonExternal         = "external"
+	ReasonModeDeny         = "mode_deny"
 )
 
 // Request is the structured input for permission checks.
 type Request struct {
-	ToolName            string
-	Risk                domain.RiskLevel
-	Command             string // exec_shell command when applicable
-	Sandbox             domain.SandboxStatus
-	SessionAllowNetwork bool
-	Mode                domain.PermissionMode
+	ToolName             string
+	Risk                 domain.RiskLevel
+	Command              string // exec_shell command when applicable
+	URL                  string // host-egress tools (http_request / web_fetch)
+	Sandbox              domain.SandboxStatus
+	SessionAllowNetwork  bool     // deny-mode full open for session
+	SessionAllowDomains  []string // allowlist session grants
+	Mode                 domain.PermissionMode
 }
 
 // Result is the gate outcome.
 type Result struct {
 	Decision Decision
 	Reason   string
+	Domain   string // set when ReasonNetworkDomain
 }
 
 type Gate struct {
@@ -65,15 +71,27 @@ func (g *Gate) WithMode(mode domain.PermissionMode) *Gate {
 	return &out
 }
 
+// WithRules returns a shallow copy with rules replaced.
+func (g *Gate) WithRules(rules []domain.PermissionRule) *Gate {
+	if g == nil {
+		return NewGate(rules)
+	}
+	out := *g
+	out.Rules = rules
+	return &out
+}
+
+// AutoApprovable reports whether auto_approve may skip waiting for this reason.
+func AutoApprovable(reason string) bool {
+	return domain.AutoApprovableReason(reason)
+}
+
 // Check evaluates tool permission. Prefer CheckRequest for sandbox-aware policy.
 func (g *Gate) Check(toolName string, risk domain.RiskLevel) Decision {
 	return g.CheckRequest(Request{ToolName: toolName, Risk: risk}).Decision
 }
 
-// CheckRequest applies mode + mainstream-aligned policy:
-// discuss/plan deny write/exec/external;
-// interactive asks on high/external;
-// auto allows medium writes but still asks dangerous shell / network-deny.
+// CheckRequest applies mode + Soft Gate policy (Hard enforcement is separate).
 func (g *Gate) CheckRequest(req Request) Result {
 	mode := req.Mode
 	if mode == "" && g != nil {
@@ -105,7 +123,14 @@ func (g *Gate) CheckRequest(req Request) Result {
 		return Result{Decision: DecisionAllow}
 	}
 
-	if !isAskRisk(req.Risk) {
+	// Host egress tools share sandbox network policy (M4).
+	if isHostEgressTool(req.ToolName) {
+		if r := checkHostEgress(req); r.Decision != DecisionAllow || r.Reason != "" {
+			return r
+		}
+	}
+
+	if !isAskRisk(req.Risk) && req.ToolName != "exec_shell" {
 		return Result{Decision: DecisionAllow}
 	}
 
@@ -113,14 +138,8 @@ func (g *Gate) CheckRequest(req Request) Result {
 		if LooksDangerous(req.Command) {
 			return Result{Decision: DecisionAsk, Reason: ReasonDangerousCommand}
 		}
-		if req.Sandbox.Network == domain.SandboxNetworkDeny && LooksLikeNetwork(req.Command) {
-			if req.SessionAllowNetwork {
-				return Result{Decision: DecisionAllow, Reason: ReasonNone}
-			}
-			return Result{Decision: DecisionAsk, Reason: ReasonNetwork}
-		}
-		if mode == domain.PermModeAuto {
-			return Result{Decision: DecisionAllow}
+		if r := checkShellNetwork(req); r.Decision != DecisionAllow || r.Reason != "" {
+			return r
 		}
 		return Result{Decision: DecisionAllow}
 	}
@@ -137,6 +156,95 @@ func (g *Gate) CheckRequest(req Request) Result {
 		return Result{Decision: DecisionAsk, Reason: ReasonExternal}
 	}
 	return Result{Decision: DecisionAsk, Reason: ReasonHighRisk}
+}
+
+func isHostEgressTool(name string) bool {
+	switch name {
+	case "http_request", "web_fetch", "web_search":
+		return true
+	default:
+		return false
+	}
+}
+
+func checkShellNetwork(req Request) Result {
+	switch req.Sandbox.Network {
+	case domain.SandboxNetworkDeny:
+		if !LooksLikeNetwork(req.Command) {
+			return Result{Decision: DecisionAllow}
+		}
+		if req.SessionAllowNetwork {
+			return Result{Decision: DecisionAllow}
+		}
+		return Result{Decision: DecisionAsk, Reason: ReasonNetwork}
+	case domain.SandboxNetworkAllowlist:
+		hosts := ExtractHosts(req.Command)
+		domains := mergeDomains(req.Sandbox.AllowlistDomains, req.SessionAllowDomains)
+		for _, h := range hosts {
+			if !netproxy.Match(h, domains) {
+				return Result{Decision: DecisionAsk, Reason: ReasonNetworkDomain, Domain: h}
+			}
+		}
+		return Result{Decision: DecisionAllow}
+	default:
+		return Result{Decision: DecisionAllow}
+	}
+}
+
+func checkHostEgress(req Request) Result {
+	host := hostFromURL(req.URL)
+	if host == "" && req.ToolName == "web_search" {
+		// Provider endpoint is configured separately; still subject to network mode.
+		switch req.Sandbox.Network {
+		case domain.SandboxNetworkDeny:
+			if req.SessionAllowNetwork {
+				return Result{Decision: DecisionAllow}
+			}
+			return Result{Decision: DecisionAsk, Reason: ReasonNetwork}
+		case domain.SandboxNetworkAllowlist:
+			// web_search uses configured provider; allow Soft, Hard Match happens in client if URL known.
+			return Result{Decision: DecisionAllow}
+		default:
+			return Result{Decision: DecisionAllow}
+		}
+	}
+	if host == "" {
+		return Result{Decision: DecisionAllow}
+	}
+	switch req.Sandbox.Network {
+	case domain.SandboxNetworkDeny:
+		if req.SessionAllowNetwork {
+			return Result{Decision: DecisionAllow}
+		}
+		return Result{Decision: DecisionAsk, Reason: ReasonNetwork}
+	case domain.SandboxNetworkAllowlist:
+		domains := mergeDomains(req.Sandbox.AllowlistDomains, req.SessionAllowDomains)
+		if netproxy.Match(host, domains) {
+			return Result{Decision: DecisionAllow}
+		}
+		return Result{Decision: DecisionAsk, Reason: ReasonNetworkDomain, Domain: host}
+	default:
+		return Result{Decision: DecisionAllow}
+	}
+}
+
+func hostFromURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
+}
+
+func mergeDomains(a, b []string) []string {
+	return netproxy.NormalizeDomains(append(append([]string{}, a...), b...))
 }
 
 func isAskRisk(risk domain.RiskLevel) bool {

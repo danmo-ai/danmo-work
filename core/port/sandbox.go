@@ -19,6 +19,10 @@ type SandboxRunOptions struct {
 	Env []string
 	// AllowNetwork overrides config network=deny for this invocation (after user approval).
 	AllowNetwork bool
+	// AllowlistProxy is the host:port of the loopback allowlist proxy. Set by
+	// sandbox.Manager when network=allowlist is active; opens OS network and
+	// signals runners not to unshare/deny net.
+	AllowlistProxy string
 }
 
 // Sandbox executes commands under the platform sandbox policy.
@@ -27,4 +31,10 @@ type Sandbox interface {
 	Run(ctx context.Context, opts SandboxRunOptions) ([]byte, error)
 	// Configure replaces policy and re-probes the backend (e.g. after config save).
 	Configure(cfg domain.ConfigSandboxSection)
+	// GrantDomains merges hosts into the runtime allowlist (session grants).
+	GrantDomains(domains []string)
+	// CheckHost applies Hard egress policy for host-side HTTP tools.
+	CheckHost(host string) error
+	// ProxyURL returns the allowlist proxy URL (http://host:port) when active.
+	ProxyURL() string
 }

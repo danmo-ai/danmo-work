@@ -38,6 +38,7 @@ type searchLocale struct {
 // WebSearch searches the web using configurable providers.
 type WebSearch struct {
 	ConfigFunc func(context.Context) (domain.SearchConfig, error)
+	Egress     HostEgressChecker
 }
 
 func (h *WebSearch) Name() string                { return "web_search" }
@@ -114,7 +115,7 @@ func (h *WebSearch) Execute(ctx context.Context, input map[string]any) (domain.T
 		Region:   strings.TrimSpace(stringArg(input, "region")),
 		Language: strings.TrimSpace(stringArg(input, "language")),
 	}
-	opts := clientOpts(cfg.Proxy, cfg.UserAgent, timeout, true)
+	opts := withToolEgress(clientOpts(cfg.Proxy, cfg.UserAgent, timeout, true), h.Egress, input)
 
 	if cfg.BaseURL != "" && cfg.Provider != domain.SearchProviderDuckDuckGo && cfg.Provider != domain.SearchProviderSearxng {
 		return domain.ToolResult{}, fmt.Errorf("base_url is only supported with provider \"duckduckgo\" or \"searxng\"")

@@ -15,8 +15,9 @@ import (
 	"danmo-work/core/port"
 )
 
-func selectBackend(cfg domain.ConfigSandboxSection) (domain.SandboxBackend, runner, bool, string, []string) {
+func selectBackend(cfg domain.ConfigSandboxSection, allowlistProxyActive bool) (domain.SandboxBackend, runner, bool, string, []string) {
 	force := strings.ToLower(strings.TrimSpace(cfg.Backend))
+	netDeny := needNetDeny(cfg, allowlistProxyActive)
 	switch force {
 	case "host-weak", "host":
 		return domain.SandboxBackendHostWeak, hostRunner{}, true, "forced host-weak backend", []string{"host"}
@@ -29,7 +30,7 @@ func selectBackend(cfg domain.ConfigSandboxSection) (domain.SandboxBackend, runn
 		if landlockAvailable() {
 			caps := []string{"landlock", "fs-isolation"}
 			degraded, reason := false, ""
-			if cfg.Network == domain.SandboxNetworkDeny {
+			if netDeny {
 				degraded, reason = true, "landlock backend does not isolate network; install bubblewrap for --unshare-net"
 			}
 			return domain.SandboxBackendLandlock, landlockRunner{}, degraded, reason, caps
@@ -40,17 +41,16 @@ func selectBackend(cfg domain.ConfigSandboxSection) (domain.SandboxBackend, runn
 	}
 
 	// Auto: prefer landlock when network allows; prefer bwrap when network deny.
-	needNetDeny := cfg.Network == domain.SandboxNetworkDeny
 	hasBwrap := lookPath("bwrap")
 	hasLL := landlockAvailable()
 
-	if needNetDeny && hasBwrap {
+	if netDeny && hasBwrap {
 		return domain.SandboxBackendBwrap, bwrapRunner{}, false, "", []string{"bwrap", "fs-isolation", "network-control", "seccomp-via-bwrap"}
 	}
 	if hasLL {
 		caps := []string{"landlock", "fs-isolation"}
 		degraded, reason := false, ""
-		if needNetDeny {
+		if netDeny {
 			if hasBwrap {
 				return domain.SandboxBackendBwrap, bwrapRunner{}, false, "", []string{"bwrap", "fs-isolation", "network-control"}
 			}

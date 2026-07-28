@@ -18,6 +18,7 @@ import (
 type WebFetch struct {
 	ConfigFunc func(context.Context) (domain.SearchConfig, error)
 	Browser    port.Browser
+	Egress     HostEgressChecker
 }
 
 func (h *WebFetch) Name() string                { return "web_fetch" }
@@ -110,7 +111,7 @@ func (h *WebFetch) Execute(ctx context.Context, input map[string]any) (domain.To
 		return h.fetchViaBrowser(ctx, urlStr, maxChars, timeout, cfg, 0, "")
 	}
 
-	opts := clientOpts(cfg.Proxy, cfg.UserAgent, timeout, false)
+	opts := withToolEgress(clientOpts(cfg.Proxy, cfg.UserAgent, timeout, false), h.Egress, input)
 	resp, err := fetchWithOpts(ctx, urlStr, opts)
 	if err != nil {
 		return domain.ToolResult{}, err
