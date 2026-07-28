@@ -5,6 +5,7 @@ import (
 
 	"danmo-work/core/adapter/market/clawhub"
 	gitmarket "danmo-work/core/adapter/market/git"
+	"danmo-work/core/adapter/market/techleads"
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
 )
@@ -56,6 +57,8 @@ func newAdapter(src domain.MarketSource) port.Market {
 		return gitmarket.New(src)
 	case "clawhub":
 		return clawhub.New(src)
+	case "techleads", "tlc", "tech-leads-club":
+		return techleads.New(src)
 	default:
 		return nil
 	}

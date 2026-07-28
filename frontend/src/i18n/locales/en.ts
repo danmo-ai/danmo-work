@@ -88,6 +88,7 @@ export default {
     compatWarn: 'May need local tools',
     compatHint: 'Compatibility',
     openOnClawhub: 'Open on ClawHub',
+    openOnTechleads: 'Open Tech Leads Club',
   },
   skills: {
     title: 'Skills',
@@ -392,6 +393,8 @@ export default {
     marketPlatform: 'Platform',
     marketRepo: 'Repo / path',
     marketClawhubRepo: 'ClawHub registry URL',
+    marketTechleadsRepo: 'Tech Leads npm package',
+    marketNpmRef: 'npm version / tag',
     marketRepoPlaceholder: 'https://github.com/danmo-ai/dq-market or local absolute path',
     marketRef: 'Branch / tag',
     marketCatalogPath: 'Catalog path',

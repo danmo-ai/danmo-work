@@ -177,4 +177,19 @@ watch(items, () => ensureSelection())
   display: flex;
   flex-direction: column;
 }
+
+.market-rail__warn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(217, 119, 6, 0.15);
+  color: #b45309;
+  vertical-align: middle;
+}
 </style>

@@ -88,6 +88,7 @@ export default {
     compatWarn: '可能需本机依赖',
     compatHint: '兼容提示',
     openOnClawhub: '在 ClawHub 打开',
+    openOnTechleads: '打开 Tech Leads Club',
   },
   skills: {
     title: '技能',
@@ -392,6 +393,8 @@ export default {
     marketPlatform: '平台',
     marketRepo: '仓库 / 路径',
     marketClawhubRepo: 'ClawHub 注册表地址',
+    marketTechleadsRepo: 'Tech Leads npm 包名',
+    marketNpmRef: 'npm 版本 / tag',
     marketRepoPlaceholder: 'https://github.com/danmo-ai/dq-market 或本地绝对路径',
     marketRef: '分支 / Tag',
     marketCatalogPath: '目录文件路径',
