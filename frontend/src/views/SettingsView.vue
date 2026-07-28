@@ -211,12 +211,13 @@ const environmentStatusText = computed(() => {
   const st = runtimeConfig.environmentStatus
   if (!st) return ''
   const eng = st.engine ? ` · ${st.engine}` : ''
+  const tar = st.tarPresent ? ' · tar ok' : ' · tar missing'
   const img = st.imageLoaded ? ' · image loaded' : ''
   const res = [st.resources?.cpus && `cpus=${st.resources.cpus}`, st.resources?.memory && `mem=${st.resources.memory}`]
     .filter(Boolean)
     .join(' ')
   const resPart = res ? ` · ${res}` : ' · unlimited'
-  return `${st.backend}${eng}${img}${resPart}`
+  return `${st.backend}${eng}${tar}${img}${resPart}`
 })
 
 const showGitBashHint = computed(() => {
@@ -251,6 +252,17 @@ function applyAllowlistPreset(name: string) {
   }
   runtimeForm.value.sandboxAllowlistDomains = cur.join('\n')
   runtimeForm.value.sandboxNetwork = 'allowlist'
+}
+
+function formatTarBytes(n: number) {
+  if (!n || n < 0) return '0 B'
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+async function downloadEnvTar() {
+  await runtimeConfig.downloadEnvTar()
 }
 
 const browserStatusText = computed(() => {
@@ -1248,6 +1260,38 @@ const hasFooterActions = computed(() => {
               </div>
             </div>
             <template v-if="runtimeForm.envBackend === 'container'">
+              <div class="settings-form-row" style="align-items: center; gap: 12px; flex-wrap: wrap">
+                <DqButton
+                  size="sm"
+                  :loading="runtimeConfig.downloadingTar"
+                  :disabled="runtimeConfig.downloadingTar"
+                  @click="downloadEnvTar"
+                >
+                  {{
+                    runtimeConfig.environmentStatus?.tarPresent
+                      ? $t('settings.envTarRedownload')
+                      : $t('settings.envTarDownload')
+                  }}
+                </DqButton>
+                <a
+                  v-if="runtimeConfig.environmentStatus?.downloadUrl"
+                  class="settings-link"
+                  :href="runtimeConfig.environmentStatus.downloadUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {{ $t('settings.envTarOpenRelease') }}
+                </a>
+                <span v-if="runtimeConfig.environmentStatus?.tarPresent" class="settings-form-group__desc" style="margin: 0">
+                  {{ $t('settings.envTarInstalled', {
+                    path: runtimeConfig.environmentStatus.tarPath || '',
+                    size: formatTarBytes(runtimeConfig.environmentStatus.tarBytes || 0),
+                  }) }}
+                </span>
+                <span v-else class="settings-form-group__desc" style="margin: 0">
+                  {{ $t('settings.envTarMissing') }}
+                </span>
+              </div>
               <p class="settings-form-group__desc">{{ $t('settings.envResourcesDesc') }}</p>
               <div class="settings-form-row">
                 <div class="settings-field settings-field--half">

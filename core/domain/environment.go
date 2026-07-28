@@ -56,6 +56,11 @@ type EnvironmentStatus struct {
 	Image          string               `json:"image,omitempty"`
 	ImageLoaded    bool                 `json:"imageLoaded"`
 	TarPath        string               `json:"tarPath,omitempty"`
+	TarPresent     bool                 `json:"tarPresent"`
+	TarBytes       int64                `json:"tarBytes,omitempty"`
+	TarArch        string               `json:"tarArch,omitempty"`
+	DownloadURL    string               `json:"downloadUrl,omitempty"`
+	AssetName      string               `json:"assetName,omitempty"`
 	WorkspaceMount string               `json:"workspaceMount,omitempty"`
 	Resources      EnvironmentResources `json:"resources,omitempty"`
 	Degraded       bool                 `json:"degraded"`

@@ -20,10 +20,13 @@ type ExecRunOptions struct {
 }
 
 // ExecutionBackend runs shell commands either on the host sandbox or in a
-// per-project OCI container loaded from a bundled tar (no registry pull).
+// per-project OCI container loaded from a user-downloaded tar (no registry pull).
 type ExecutionBackend interface {
 	Status() domain.EnvironmentStatus
+	// StatusWithTar fills download/install metadata for Settings (version = app version).
+	StatusWithTar(version string) domain.EnvironmentStatus
 	Configure(cfg domain.ConfigEnvironmentSection, sandboxCfg domain.ConfigSandboxSection)
+	NotifyTarInstalled()
 	Run(ctx context.Context, opts ExecRunOptions) ([]byte, error)
 	Teardown(ctx context.Context, projectID string) error
 }

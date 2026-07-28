@@ -102,6 +102,26 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
     }
   }
 
+  const downloadingTar = ref(false)
+
+  async function downloadEnvTar() {
+    downloadingTar.value = true
+    try {
+      const res = await fetchJSON<{ status: EnvironmentStatus }>('/environment/tar/download', {
+        method: 'POST',
+        body: '{}',
+      })
+      environmentStatus.value = res.status
+      toast.success('环境镜像已下载')
+      return res.status
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '下载失败')
+      throw e
+    } finally {
+      downloadingTar.value = false
+    }
+  }
+
   async function loadBrowserStatus() {
     try {
       browserStatus.value = await fetchJSON<BrowserStatus>('/browser/status')
@@ -206,10 +226,12 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
     browserStatus,
     loading,
     saving,
+    downloadingTar,
     loadConfig,
     loadSandboxStatus,
     loadEnvironmentStatus,
     loadBrowserStatus,
+    downloadEnvTar,
     saveConfig,
   }
 })

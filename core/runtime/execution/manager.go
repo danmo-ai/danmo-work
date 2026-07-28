@@ -123,6 +123,49 @@ func (m *Manager) Status() domain.EnvironmentStatus {
 	return st
 }
 
+// StatusWithTar fills tar download/install fields (version from server build).
+func (m *Manager) StatusWithTar(version string) domain.EnvironmentStatus {
+	st := m.Status()
+	info := container.InspectTar(version)
+	st.TarPresent = info.Present
+	st.TarBytes = info.Bytes
+	st.TarArch = info.Arch
+	st.DownloadURL = info.DownloadURL
+	st.AssetName = info.AssetName
+	if info.Path != "" {
+		st.TarPath = info.Path
+	}
+	if info.Present && m.tarPath == "" {
+		m.mu.Lock()
+		m.tarPath = info.Path
+		if m.envCfg.Backend == domain.EnvironmentBackendContainer && m.runtime != nil {
+			m.degraded = false
+			m.degradeMsg = ""
+		}
+		m.mu.Unlock()
+		st = m.Status()
+		st.TarPresent = info.Present
+		st.TarBytes = info.Bytes
+		st.TarArch = info.Arch
+		st.DownloadURL = info.DownloadURL
+		st.AssetName = info.AssetName
+		st.TarPath = info.Path
+	}
+	return st
+}
+
+// NotifyTarInstalled re-resolves tar path after Settings download.
+func (m *Manager) NotifyTarInstalled() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.tarPath = container.ResolveTarPath(m.envCfg.TarPath)
+	if m.tarPath != "" && m.envCfg.Backend == domain.EnvironmentBackendContainer && m.runtime != nil {
+		m.degraded = false
+		m.degradeMsg = ""
+		m.imageReady = false
+	}
+}
+
 func (m *Manager) Run(ctx context.Context, opts port.ExecRunOptions) ([]byte, error) {
 	if opts.Timeout <= 0 {
 		opts.Timeout = 30 * time.Second
@@ -179,7 +222,13 @@ func (m *Manager) runContainer(ctx context.Context, opts port.ExecRunOptions) ([
 	}
 	execCtx, cancel := context.WithTimeout(ctx, opts.Timeout)
 	defer cancel()
-	proxyEnv := proxyEnvFor(opts)
+	m.mu.Lock()
+	engineName := ""
+	if m.runtime != nil {
+		engineName = m.runtime.Name()
+	}
+	m.mu.Unlock()
+	proxyEnv := proxyEnvFor(opts, engineName)
 	return m.engineExec(execCtx, name, mount, opts.Command, proxyEnv)
 }
 
@@ -229,7 +278,11 @@ func (m *Manager) ensureProjectContainer(ctx context.Context, opts port.ExecRunO
 	image := m.envCfg.Image
 	mount = m.envCfg.WorkspaceMount
 	resources := m.envCfg.Resources
-	netMode := containerNetwork(m.sandboxCfg, opts)
+	engineName := ""
+	if m.runtime != nil {
+		engineName = m.runtime.Name()
+	}
+	netMode := containerNetwork(m.sandboxCfg, opts, engineName)
 	rt := m.runtime
 	m.mu.Unlock()
 
@@ -270,7 +323,7 @@ func (m *Manager) ensureProjectContainer(ctx context.Context, opts port.ExecRunO
 		WorkDir:   workDir,
 		Mount:     mount,
 		Network:   netMode,
-		Env:       proxyEnvFor(opts),
+		Env:       proxyEnvFor(opts, engineName),
 		Resources: resources,
 	}
 	if err := rt.CreateDetached(ctx, create); err != nil {
@@ -285,32 +338,39 @@ func (m *Manager) ensureProjectContainer(ctx context.Context, opts port.ExecRunO
 	return name, mount, nil
 }
 
-func containerNetwork(cfg domain.ConfigSandboxSection, opts port.ExecRunOptions) string {
+func containerNetwork(cfg domain.ConfigSandboxSection, opts port.ExecRunOptions, engine string) string {
 	if opts.AllowNetwork {
 		return ""
 	}
+	apple := engine == string(domain.EnvironmentEngineAppleContainer)
 	switch cfg.Network {
 	case domain.SandboxNetworkAllow:
 		return ""
 	case domain.SandboxNetworkAllowlist:
+		if apple {
+			// No host network on Apple Container — default vmnet + host.container.internal DNS.
+			return ""
+		}
 		return "host"
 	default:
 		return "none"
 	}
 }
 
-func proxyEnvFor(opts port.ExecRunOptions) []string {
+func proxyEnvFor(opts port.ExecRunOptions, engine string) []string {
 	var out []string
 	if p := strings.TrimSpace(opts.AllowlistProxy); p != "" {
 		u := p
-		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+		if engine == string(domain.EnvironmentEngineAppleContainer) {
+			u = container.RewriteProxyForApple(p)
+		} else if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
 			u = "http://" + u
 		}
 		out = append(out,
 			"HTTP_PROXY="+u,
 			"HTTPS_PROXY="+u,
 			"ALL_PROXY="+u,
-			"NO_PROXY=localhost,127.0.0.1",
+			"NO_PROXY=localhost,127.0.0.1,host.container.internal",
 		)
 	}
 	return out

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	containerpkg "danmo-work/core/adapter/container"
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
 	"danmo-work/core/service"
@@ -129,6 +130,7 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.PUT("/channels/qq", qqConfigure(h))
 	api.GET("/sandbox/status", getSandboxStatus(h))
 	api.GET("/environment/status", getEnvironmentStatus(h))
+	api.POST("/environment/tar/download", downloadEnvironmentTar(h))
 	api.GET("/browser/status", getBrowserStatus(h))
 	api.GET("/model-configs", getModelConfigs(h))
 	api.PUT("/model-configs", updateModelConfigs(h))
@@ -1080,7 +1082,33 @@ func getEnvironmentStatus(h *Handler) gin.HandlerFunc {
 				h.Execution.Configure(cfg.Runtime.Environment, cfg.Runtime.Sandbox)
 			}
 		}
-		c.JSON(http.StatusOK, h.Execution.Status())
+		c.JSON(http.StatusOK, h.Execution.StatusWithTar(Version))
+	}
+}
+
+func downloadEnvironmentTar(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		info, err := containerpkg.DownloadEnvTar(c.Request.Context(), Version)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error(), "downloadUrl": containerpkg.ReleaseDownloadURL(Version, containerpkg.LinuxArch())})
+			return
+		}
+		if h.Execution != nil {
+			h.Execution.NotifyTarInstalled()
+			if h.Config != nil {
+				if cfg, err := h.Config.Get(c); err == nil {
+					h.Execution.Configure(cfg.Runtime.Environment, cfg.Runtime.Sandbox)
+				}
+			}
+		}
+		st := domain.EnvironmentStatus{}
+		if h.Execution != nil {
+			st = h.Execution.StatusWithTar(Version)
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"tar":    info,
+			"status": st,
+		})
 	}
 }
 

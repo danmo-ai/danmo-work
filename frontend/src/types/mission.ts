@@ -319,6 +319,11 @@ export interface EnvironmentStatus {
   image?: string
   imageLoaded?: boolean
   tarPath?: string
+  tarPresent?: boolean
+  tarBytes?: number
+  tarArch?: string
+  downloadUrl?: string
+  assetName?: string
   workspaceMount?: string
   resources?: { cpus?: string; memory?: string; pids?: number }
   degraded?: boolean

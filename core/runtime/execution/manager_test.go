@@ -59,15 +59,19 @@ func TestStatusDegradesWithoutEngine(t *testing.T) {
 }
 
 func TestContainerNetwork(t *testing.T) {
-	deny := containerNetwork(domain.ConfigSandboxSection{Network: domain.SandboxNetworkDeny}, port.ExecRunOptions{})
+	deny := containerNetwork(domain.ConfigSandboxSection{Network: domain.SandboxNetworkDeny}, port.ExecRunOptions{}, "podman")
 	if deny != "none" {
 		t.Fatalf("deny=%q", deny)
 	}
-	alist := containerNetwork(domain.ConfigSandboxSection{Network: domain.SandboxNetworkAllowlist}, port.ExecRunOptions{})
+	alist := containerNetwork(domain.ConfigSandboxSection{Network: domain.SandboxNetworkAllowlist}, port.ExecRunOptions{}, "docker")
 	if alist != "host" {
 		t.Fatalf("allowlist=%q", alist)
 	}
-	allow := containerNetwork(domain.ConfigSandboxSection{Network: domain.SandboxNetworkAllow}, port.ExecRunOptions{})
+	appleAlist := containerNetwork(domain.ConfigSandboxSection{Network: domain.SandboxNetworkAllowlist}, port.ExecRunOptions{}, "apple-container")
+	if appleAlist != "" {
+		t.Fatalf("apple allowlist=%q", appleAlist)
+	}
+	allow := containerNetwork(domain.ConfigSandboxSection{Network: domain.SandboxNetworkAllow}, port.ExecRunOptions{}, "podman")
 	if allow != "" {
 		t.Fatalf("allow=%q", allow)
 	}
