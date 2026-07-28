@@ -23,11 +23,8 @@
 
 一句话：**本地用轻量 OS 沙箱管安全；跨机 / 评测 / 云端用轻量 OCI 容器管环境一致性；两者通过同一 `Sandbox`/`Workspace` 接口切换。**
 
-<<<<<<< HEAD
 权限 Soft/Hard 分工与网络三态见 **[permission-model.md](./permission-model.md)**。
 
-=======
->>>>>>> origin/main
 ---
 
 ## 2. 问题拆解：别把两件事揉成一件
@@ -107,11 +104,7 @@ Client / Agent 逻辑
 - Network：沙箱内断网或受限，**出站经宿主机侧 proxy 做域名 allowlist**。
 - 可沙箱任意进程（含 MCP server），不只是 bash。
 
-<<<<<<< HEAD
 Danmo 现状：`sandboxNetwork=deny|allow|allowlist`；deny ≈ `bwrap --unshare-net` / Seatbelt `(deny network*)`；**allowlist 已落地**为宿主机 loopback HTTP CONNECT 代理（`core/runtime/sandbox/netproxy`）+ `allowlist_domains`，经 `HTTP(S)_PROXY` / `ALL_PROXY` 注入。
-=======
-Danmo 现状：`sandboxNetwork=deny|allow|allowlist`，但 Linux 路径上 deny ≈ `bwrap --unshare-net`，**allowlist 尚未实现真正的域名过滤**。这是本地安全层最明显的缺口。
->>>>>>> origin/main
 
 #### D. Cursor environment.json：标准化环境的最小声明
 
@@ -177,11 +170,7 @@ Danmo 产品叙事建议：**本地轻量沙箱 + 可选轻量容器环境**，�
 |------|------|
 | **无 ExecutionBackend / Workspace 抽象** | `Sandbox` 只管「怎么隔离地跑一条命令」，不管「在哪套文件系统/工具链里跑」 |
 | **无项目级环境声明** | 缺少类似 `environment.json` / `devcontainer.json` / `runtime.env.yaml` 的一等配置 |
-<<<<<<< HEAD
 | **网络 allowlist（Phase 1 已完成）** | `netproxy` + `allowlistDomains` + Settings UI；已知限制：忽略代理 env 的客户端可绕过 |
-=======
-| **网络 allowlist 未落地** | 配置枚举有 `allowlist`，缺少 proxy / 域名策略实现 |
->>>>>>> origin/main
 | **桌面用户环境漂移** | Agent 依赖用户机器上的 Node/Go/Python；换机即碎 |
 | **容器 backend 未接入产品路径** | Harbor 镜像仅服务 eval，未作为 Session/Project 运行时选项 |
 | **远程 / 多租户** | 无 Remote workspace；若未来做云端 Agent，需 L3/L4 |
@@ -249,19 +238,11 @@ spec:
 - 固定术语：Sandbox（隔离）vs Environment（工具链/镜像）vs Backend（执行位置）。
 - 明确桌面默认保持 L1。
 
-<<<<<<< HEAD
 ### Phase 1 — 本地安全补齐（已完成）
 
 1. ~~实现 `network=allowlist`：宿主机侧 HTTP CONNECT proxy + 域名列表。~~ → `core/runtime/sandbox/netproxy` + `Manager` 注入。
 2. ~~扩展 sandbox 状态：`allowlistActive` / `allowlistProxy` / `allowlistDomains` + degraded reason。~~
 3. Go 内生实现（未嵌入 `@anthropic-ai/sandbox-runtime`）；未做 SOCKS5 / 内核层强制代理。
-=======
-### Phase 1 — 本地安全补齐（小改动、高价值）
-
-1. 实现 `network=allowlist`：宿主机侧 HTTP/SOCKS proxy + 域名列表（参考 Anthropic srt / Codex managed-proxy）。
-2. 扩展 sandbox 状态：暴露「allowlist 是否生效 / degraded reason」。
-3. （可选）评估直接嵌入或 exec 调用 `@anthropic-ai/sandbox-runtime` 的利弊；Go 内生实现更符合当前架构，但 proxy 协议可对齐其配置形状。
->>>>>>> origin/main
 
 ### Phase 2 — Container backend MVP（标准化环境）
 
