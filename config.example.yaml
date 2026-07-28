@@ -160,6 +160,14 @@ market:
       repo: https://clawhub.ai
       enabled: false
       priority: 30
+    # Curated Tech Leads Club catalog (Snyk-scanned, npm CDN).
+    - id: techleads
+      name: Tech Leads Club
+      kind: techleads
+      repo: "@tech-leads-club/skills-catalog"
+      ref: latest
+      enabled: true
+      priority: 25
     # Local sibling repo for development (platform: local, repo = absolute path):
     # - id: local-dq-market
     #   name: Local dq-market

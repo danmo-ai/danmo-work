@@ -36,6 +36,14 @@ const isClawhubItem = computed(() => {
   return src?.kind === 'clawhub' || item.sourceId === 'clawhub'
 })
 
+const isTechleadsItem = computed(() => {
+  const item = selected.value
+  if (!item) return false
+  const src = store.sources.find((s) => s.id === item.sourceId)
+  const kind = src?.kind || ''
+  return kind === 'techleads' || kind === 'tlc' || kind === 'tech-leads-club' || item.sourceId === 'techleads'
+})
+
 const clawhubListingURL = computed(() => {
   const item = selected.value
   if (!item || !isClawhubItem.value) return ''
@@ -45,6 +53,18 @@ const clawhubListingURL = computed(() => {
   }
   if (slug) return `https://clawhub.ai/skills/${slug}`
   return 'https://clawhub.ai'
+})
+
+const externalListingURL = computed(() => {
+  if (isClawhubItem.value) return clawhubListingURL.value
+  if (isTechleadsItem.value) return 'https://tech-leads-club.github.io/agent-skills/'
+  return ''
+})
+
+const externalListingLabel = computed(() => {
+  if (isClawhubItem.value) return 'market.openOnClawhub'
+  if (isTechleadsItem.value) return 'market.openOnTechleads'
+  return ''
 })
 
 async function installItem(item: MarketListing, overwrite = false) {
@@ -107,13 +127,13 @@ async function uninstallItem(item: MarketListing) {
         <span>{{ selected.sourceName || selected.sourceId }}</span>
         <span v-if="selected.author">{{ selected.author }}</span>
         <a
-          v-if="clawhubListingURL"
+          v-if="externalListingURL"
           class="market-card__link"
-          :href="clawhubListingURL"
+          :href="externalListingURL"
           target="_blank"
           rel="noopener noreferrer"
         >
-          {{ $t('market.openOnClawhub') }}
+          {{ $t(externalListingLabel) }}
         </a>
       </div>
       <div v-if="selected.skillDeps?.length" class="market-card__deps">

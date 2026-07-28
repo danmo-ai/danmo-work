@@ -307,6 +307,23 @@ func (m *MarketManager) installSkill(
 			skill.Compatibility = compatibilityFromSkillMetadata(skill.Metadata)
 		}
 	}
+	if market.Kind() == "techleads" || market.Kind() == "tlc" || market.Kind() == "tech-leads-club" {
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			name = strings.TrimPrefix(item.ID, "tlc__")
+		}
+		skill.Metadata["techleads.name"] = name
+		if p := strings.Trim(strings.ReplaceAll(item.Path, "\\", "/"), "/"); p != "" {
+			skill.Metadata["techleads.path"] = p
+		}
+		if item.Category != "" {
+			skill.Metadata["techleads.category"] = item.Category
+		}
+		skill.Metadata["techleads.url"] = "https://tech-leads-club.github.io/agent-skills/"
+		if item.Author != "" {
+			skill.Metadata["techleads.author"] = item.Author
+		}
+	}
 	if err := m.skills.Upsert(ctx, *skill); err != nil {
 		return err
 	}

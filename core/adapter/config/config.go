@@ -221,6 +221,15 @@ func defaultMarketSources() []domain.MarketSource {
 			Enabled:  false,
 			Priority: 30,
 		},
+		{
+			ID:       "techleads",
+			Name:     "Tech Leads Club",
+			Kind:     "techleads",
+			Repo:     "@tech-leads-club/skills-catalog",
+			Ref:      "latest",
+			Enabled:  true,
+			Priority: 25,
+		},
 	}
 }
 
