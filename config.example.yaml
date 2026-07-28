@@ -46,11 +46,17 @@ runtime:
     enabled: true
     mode: "workspace-write"
     network: "deny"
+    # allowlist_domains:  # empty = fail closed when network=allowlist
+    # Settings presets (additive):
+    #   开发依赖 — Debian/apt + npm + Go + PyPI + GitHub
+    #   网络搜索 — DuckDuckGo / Bing / Brave / Google / Baidu / Tavily
+    #   单生态 — debian | npm | go | pypi | crates | github
     # allowlist_domains:
-    #   - "pypi.org"
-    #   - "*.pythonhosted.org"
-    #   - "proxy.golang.org"
+    #   - "deb.debian.org"
+    #   - "security.debian.org"
+    #   - "*.debian.org"
     #   - "registry.npmjs.org"
+    #   - "pypi.org"
     backend: ""
     shell: "auto"
   # Optional OCI execution environment (one long-lived container per project).

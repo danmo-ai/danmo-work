@@ -229,12 +229,89 @@ const showGitBashHint = computed(() => {
   return true
 })
 
-const ALLOWLIST_PRESETS: Record<string, string[]> = {
-  npm: ['registry.npmjs.org', '*.npmjs.org', 'registry.yarnpkg.com'],
-  go: ['proxy.golang.org', 'sum.golang.org', 'github.com', '*.githubusercontent.com'],
-  pypi: ['pypi.org', '*.pythonhosted.org', 'files.pythonhosted.org'],
-  github: ['github.com', 'api.github.com', '*.githubusercontent.com', 'codeload.github.com'],
-}
+const ALLOWLIST_PRESET_GROUPS: {
+  id: string
+  presets: { id: string; domains: string[] }[]
+}[] = [
+  {
+    id: 'combo',
+    presets: [
+      {
+        // Debian apt + common language registries + GitHub (container / agent install path)
+        id: 'devDeps',
+        domains: [
+          'deb.debian.org',
+          'security.debian.org',
+          '*.debian.org',
+          'registry.npmjs.org',
+          '*.npmjs.org',
+          'registry.yarnpkg.com',
+          'proxy.golang.org',
+          'sum.golang.org',
+          'pypi.org',
+          '*.pythonhosted.org',
+          'files.pythonhosted.org',
+          'github.com',
+          'api.github.com',
+          '*.githubusercontent.com',
+          'codeload.github.com',
+        ],
+      },
+      {
+        // Default + common web_search / web_fetch providers
+        id: 'webSearch',
+        domains: [
+          'duckduckgo.com',
+          'html.duckduckgo.com',
+          '*.duckduckgo.com',
+          'www.bing.com',
+          'bing.com',
+          'api.search.brave.com',
+          'search.brave.com',
+          'www.google.com',
+          'google.com',
+          '*.google.com',
+          'www.baidu.com',
+          'baidu.com',
+          'api.tavily.com',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'dev',
+    presets: [
+      {
+        id: 'debian',
+        domains: ['deb.debian.org', 'security.debian.org', '*.debian.org'],
+      },
+      {
+        id: 'npm',
+        domains: ['registry.npmjs.org', '*.npmjs.org', 'registry.yarnpkg.com'],
+      },
+      {
+        id: 'go',
+        domains: ['proxy.golang.org', 'sum.golang.org', 'github.com', '*.githubusercontent.com'],
+      },
+      {
+        id: 'pypi',
+        domains: ['pypi.org', '*.pythonhosted.org', 'files.pythonhosted.org'],
+      },
+      {
+        id: 'crates',
+        domains: ['static.crates.io', 'index.crates.io', 'crates.io'],
+      },
+      {
+        id: 'github',
+        domains: ['github.com', 'api.github.com', '*.githubusercontent.com', 'codeload.github.com'],
+      },
+    ],
+  },
+]
+
+const ALLOWLIST_PRESETS: Record<string, string[]> = Object.fromEntries(
+  ALLOWLIST_PRESET_GROUPS.flatMap((g) => g.presets.map((p) => [p.id, p.domains])),
+)
 
 function applyAllowlistPreset(name: string) {
   const extra = ALLOWLIST_PRESETS[name]
@@ -1213,15 +1290,28 @@ const hasFooterActions = computed(() => {
                   <DqInput
                     v-model="runtimeForm.sandboxAllowlistDomains"
                     type="textarea"
-                    :rows="4"
+                    :rows="5"
                     :placeholder="$t('settings.sandboxAllowlistDomainsPlaceholder')"
                   />
                 </div>
-                <div class="settings-form-row" style="margin-top: 8px; gap: 8px; flex-wrap: wrap;">
-                  <DqButton size="sm" @click="applyAllowlistPreset('npm')">{{ $t('settings.sandboxPresetNpm') }}</DqButton>
-                  <DqButton size="sm" @click="applyAllowlistPreset('go')">{{ $t('settings.sandboxPresetGo') }}</DqButton>
-                  <DqButton size="sm" @click="applyAllowlistPreset('pypi')">{{ $t('settings.sandboxPresetPypi') }}</DqButton>
-                  <DqButton size="sm" @click="applyAllowlistPreset('github')">{{ $t('settings.sandboxPresetGithub') }}</DqButton>
+                <p class="settings-form-group__desc">{{ $t('settings.sandboxAllowlistPresetsDesc') }}</p>
+                <div
+                  v-for="group in ALLOWLIST_PRESET_GROUPS"
+                  :key="group.id"
+                  class="settings-allowlist-presets"
+                  style="margin-top: 10px"
+                >
+                  <span class="settings-field__label">{{ $t(`settings.sandboxPresetGroup_${group.id}`) }}</span>
+                  <div class="settings-form-row" style="margin-top: 6px; gap: 8px; flex-wrap: wrap">
+                    <DqButton
+                      v-for="p in group.presets"
+                      :key="p.id"
+                      size="sm"
+                      @click="applyAllowlistPreset(p.id)"
+                    >
+                      {{ $t(`settings.sandboxPreset_${p.id}`) }}
+                    </DqButton>
+                  </div>
                 </div>
                 <p class="settings-form-group__desc">{{ $t('settings.sandboxAllowlistDomainsDesc') }}</p>
               </template>
