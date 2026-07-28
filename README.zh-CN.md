@@ -74,6 +74,12 @@ cask 从 GitHub Releases 拉 `.dmg`。（国内镜像 `releases.danmo.ai` 可选
 
 从 [Releases](https://github.com/danmo-ai/danmo-work/releases/latest) 下载 `Danmo.Work_*_arm64.dmg`，拖入「应用程序」，首次右键 → 打开。
 
+### Windows
+
+从 [Releases](https://github.com/danmo-ai/danmo-work/releases/latest) 下载 `Danmo.Work_*_x64-setup.exe`。
+
+在 release CI 启用 Authenticode（[SignPath 配置](docs/windows-authenticode.md)）之前，SmartScreen 可能拦截——点 **更多信息 → 仍要运行**。Windows 11 Smart App Control 可能直接硬拦未签名包，最终仍需代码签名。
+
 ### 源码运行
 
 需同级 [`dq-ui`](https://github.com/danmo-ai/dq-ui)：

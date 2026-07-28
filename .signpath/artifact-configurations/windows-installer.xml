@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration for the Windows NSIS installer.
+
+  upload-artifact zips the file by default, so the root is zip-file with a
+  single PE (NSIS setup.exe) inside. Create a matching Artifact Configuration
+  in the SignPath project (slug: windows-installer), or rely on this file when
+  the project is configured to use repo-synced configs.
+
+  Docs: https://docs.signpath.io/artifact-configuration/
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="Danmo.Work_*_x64-setup.exe">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>
