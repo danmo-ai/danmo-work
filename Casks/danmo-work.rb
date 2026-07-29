@@ -1,6 +1,6 @@
 cask "danmo-work" do
-  version "0.9.9"
-  sha256 "99f2c18e30e51ab87832b6e25de0a7fa13694e45b9f7d0c9736363cad6445ccd"
+  version "0.9.10"
+  sha256 "43baed873cc5baa3c086393d3e35e1948cae3d57d50763a0c85cbb402124acd1"
 
   url "https://github.com/danmo-ai/danmo-work/releases/download/v#{version}/Danmo.Work_#{version}_arm64.dmg"
   name "Danmo Work"
