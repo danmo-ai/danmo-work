@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { OfficeKind, OfficeMode } from '@/utils/office-route'
 
-export type RightWorkspaceTab = 'plan' | 'files' | 'memory' | 'changes' | 'terminal'
+export type RightWorkspaceTab = 'plan' | 'files' | 'memory' | 'tables' | 'changes' | 'terminal'
 export type LayoutMode = 'chat' | 'stage' | 'immersive'
 
 export interface OfficeStageState {

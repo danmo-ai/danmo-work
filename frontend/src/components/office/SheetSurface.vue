@@ -1,9 +1,16 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
 import type { OfficeEditScope } from '@/utils/office-route'
+
+interface SheetTab {
+  name: string
+  rows: string[][]
+  /** Column widths in px; parallel to max columns. */
+  colWidths?: number[]
+}
 
 const props = defineProps<{
   projectId: string
@@ -21,19 +28,45 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const loading = ref(false)
 const saving = ref(false)
-const rows = ref<string[][]>([['']])
+const sheets = ref<SheetTab[]>([{ name: 'Sheet1', rows: [['']], colWidths: [120] }])
+const sheetIndex = ref(0)
 const dirty = ref(false)
 const gridRef = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const scrollLeft = ref(0)
+const selectedCell = ref<{ r: number; c: number } | null>(null)
+
 const isJson = () => props.path.toLowerCase().endsWith('.danmo-sheet.json')
+const readonly = computed(() => props.mode === 'view' || !!props.turnRunning)
+
+const activeSheet = computed(() => sheets.value[sheetIndex.value] || sheets.value[0])
+const rows = computed(() => activeSheet.value?.rows || [['']])
+const colCount = computed(() => Math.max(1, ...rows.value.map((r) => r.length)))
+const colWidths = computed(() => {
+  const widths = activeSheet.value?.colWidths || []
+  return Array.from({ length: colCount.value }, (_, i) => widths[i] || 120)
+})
+
+function colLabel(i: number): string {
+  let n = i
+  let s = ''
+  do {
+    s = String.fromCharCode(65 + (n % 26)) + s
+    n = Math.floor(n / 26) - 1
+  } while (n >= 0)
+  return s
+}
+
+function cellLooksNumber(value: string): boolean {
+  if (!value.trim()) return false
+  return /^-?\d+(\.\d+)?([eE][+-]?\d+)?%$/.test(value.trim()) || /^-?\d+(\.\d+)?$/.test(value.trim())
+}
 
 function parseCsv(text: string): string[][] {
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/)
   const out: string[][] = []
   for (const line of lines) {
     if (line === '' && out.length === 0) continue
-    // Minimal CSV: split on commas not inside quotes.
     const cells: string[] = []
     let cur = ''
     let inQ = false
@@ -71,11 +104,23 @@ function toCsv(table: string[][]): string {
   )
 }
 
+function markDirty() {
+  dirty.value = true
+  emit('dirty', true)
+}
+
+function mutateActive(mutator: (sheet: SheetTab) => SheetTab) {
+  const next = sheets.value.map((s, i) => (i === sheetIndex.value ? mutator({ ...s, rows: s.rows.map((r) => [...r]) }) : s))
+  sheets.value = next
+  markDirty()
+}
+
 async function load(opts?: { resetScroll?: boolean }) {
   if (!props.projectId || !props.path) return
   if (opts?.resetScroll) {
     scrollTop.value = 0
     scrollLeft.value = 0
+    sheetIndex.value = 0
   } else if (gridRef.value) {
     scrollTop.value = gridRef.value.scrollTop
     scrollLeft.value = gridRef.value.scrollLeft
@@ -86,15 +131,24 @@ async function load(opts?: { resetScroll?: boolean }) {
       `/projects/${props.projectId}/files/content?path=${encodeURIComponent(props.path)}`,
     )
     if (isJson()) {
-      const data = JSON.parse(fc.content || '{"sheets":[{"rows":[[""]]}]}') as {
-        sheets?: Array<{ rows?: string[][] }>
+      const data = JSON.parse(fc.content || '{"sheets":[{"name":"Sheet1","rows":[[""]]}]}') as {
+        sheets?: Array<{ name?: string; rows?: string[][]; colWidths?: number[] }>
       }
-      rows.value = data.sheets?.[0]?.rows?.length ? data.sheets[0].rows! : [['']]
+      const parsed = (data.sheets?.length ? data.sheets : [{ name: 'Sheet1', rows: [['']] }]).map((s, i) => ({
+        name: s.name || `Sheet${i + 1}`,
+        rows: s.rows?.length ? s.rows : [['']],
+        colWidths: s.colWidths,
+      }))
+      sheets.value = parsed
+      sheetIndex.value = Math.min(sheetIndex.value, parsed.length - 1)
     } else {
-      rows.value = parseCsv(fc.content || '')
+      const table = parseCsv(fc.content || '')
+      sheets.value = [{ name: 'Sheet1', rows: table }]
+      sheetIndex.value = 0
     }
     dirty.value = false
     emit('dirty', false)
+    selectedCell.value = null
     await nextTick()
     if (gridRef.value) {
       gridRef.value.scrollTop = scrollTop.value
@@ -112,7 +166,17 @@ async function save(opts?: { quiet?: boolean }) {
   saving.value = true
   try {
     const content = isJson()
-      ? JSON.stringify({ sheets: [{ name: 'Sheet1', rows: rows.value }] }, null, 2) + '\n'
+      ? JSON.stringify(
+          {
+            sheets: sheets.value.map((s) => ({
+              name: s.name,
+              rows: s.rows,
+              colWidths: s.colWidths,
+            })),
+          },
+          null,
+          2,
+        ) + '\n'
       : toCsv(rows.value)
     await fetchJSON(`/projects/${props.projectId}/files/content`, {
       method: 'PUT',
@@ -131,26 +195,79 @@ async function save(opts?: { quiet?: boolean }) {
 }
 
 function updateCell(r: number, c: number, value: string) {
-  const next = rows.value.map((row) => [...row])
-  while (next.length <= r) next.push([''])
-  while (next[r].length <= c) next[r].push('')
-  next[r][c] = value
-  rows.value = next
-  dirty.value = true
-  emit('dirty', true)
+  mutateActive((sheet) => {
+    const nextRows = sheet.rows.map((row) => [...row])
+    while (nextRows.length <= r) nextRows.push([''])
+    while (nextRows[r].length <= c) nextRows[r].push('')
+    nextRows[r][c] = value
+    return { ...sheet, rows: nextRows }
+  })
 }
 
 function addRow() {
-  const cols = Math.max(1, ...rows.value.map((r) => r.length))
-  rows.value = [...rows.value, Array.from({ length: cols }, () => '')]
-  dirty.value = true
-  emit('dirty', true)
+  mutateActive((sheet) => {
+    const cols = Math.max(1, ...sheet.rows.map((r) => r.length))
+    return { ...sheet, rows: [...sheet.rows, Array.from({ length: cols }, () => '')] }
+  })
 }
 
 function addCol() {
-  rows.value = rows.value.map((r) => [...r, ''])
-  dirty.value = true
-  emit('dirty', true)
+  mutateActive((sheet) => {
+    const cols = Math.max(1, ...sheet.rows.map((r) => r.length))
+    const widths = [...(sheet.colWidths || [])]
+    while (widths.length < cols) widths.push(120)
+    widths.push(120)
+    return {
+      ...sheet,
+      rows: sheet.rows.map((r) => [...r, '']),
+      colWidths: widths,
+    }
+  })
+}
+
+function deleteRow() {
+  const r = selectedCell.value?.r
+  if (r == null) return
+  mutateActive((sheet) => {
+    if (sheet.rows.length <= 1) return { ...sheet, rows: [['']] }
+    return { ...sheet, rows: sheet.rows.filter((_, i) => i !== r) }
+  })
+  selectedCell.value = null
+}
+
+function onColResize(c: number, e: MouseEvent) {
+  if (readonly.value) return
+  e.preventDefault()
+  const startX = e.clientX
+  const startW = colWidths.value[c] || 120
+  function onMove(ev: MouseEvent) {
+    const nextW = Math.max(64, startW + (ev.clientX - startX))
+    mutateActive((sheet) => {
+      const widths = Array.from({ length: Math.max(colCount.value, c + 1) }, (_, i) =>
+        i === c ? nextW : sheet.colWidths?.[i] || 120,
+      )
+      return { ...sheet, colWidths: widths }
+    })
+  }
+  function onUp() {
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+  }
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
+}
+
+function addSheet() {
+  if (!isJson() || readonly.value) return
+  const name = `Sheet${sheets.value.length + 1}`
+  sheets.value = [...sheets.value, { name, rows: [['']], colWidths: [120] }]
+  sheetIndex.value = sheets.value.length - 1
+  markDirty()
+}
+
+function selectSheet(i: number) {
+  sheetIndex.value = i
+  selectedCell.value = null
 }
 
 function getEditScope(): OfficeEditScope {
@@ -188,23 +305,72 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
     <div v-if="loading" class="sheet-surface__status">{{ t('office.loading') }}</div>
     <template v-else>
       <div class="sheet-surface__toolbar">
-        <button class="sheet-surface__btn" :disabled="mode === 'view' || turnRunning" @click="addRow">
+        <button class="sheet-surface__btn" :disabled="readonly" @click="addRow">
           {{ t('office.addRow') }}
         </button>
-        <button class="sheet-surface__btn" :disabled="mode === 'view' || turnRunning" @click="addCol">
+        <button class="sheet-surface__btn" :disabled="readonly" @click="addCol">
           {{ t('office.addCol') }}
         </button>
+        <button class="sheet-surface__btn" :disabled="readonly || selectedCell == null" @click="deleteRow">
+          {{ t('office.deleteRow') }}
+        </button>
+        <button v-if="isJson()" class="sheet-surface__btn" :disabled="readonly" @click="addSheet">
+          + {{ t('office.sheetTab') }}
+        </button>
       </div>
+
+      <div v-if="isJson() && sheets.length > 1" class="sheet-surface__tabs">
+        <button
+          v-for="(s, i) in sheets"
+          :key="i"
+          type="button"
+          class="sheet-surface__tab"
+          :class="{ 'is-active': i === sheetIndex }"
+          @click="selectSheet(i)"
+        >
+          {{ s.name }}
+        </button>
+      </div>
+
       <div ref="gridRef" class="sheet-surface__grid-wrap">
         <table class="sheet-surface__grid">
+          <thead>
+            <tr>
+              <th class="sheet-surface__corner" />
+              <th
+                v-for="ci in colCount"
+                :key="ci"
+                class="sheet-surface__col-head"
+                :style="{ width: `${colWidths[ci - 1]}px`, minWidth: `${colWidths[ci - 1]}px` }"
+              >
+                <span>{{ colLabel(ci - 1) }}</span>
+                <span
+                  class="sheet-surface__resize"
+                  :title="t('office.colWidth')"
+                  @mousedown="onColResize(ci - 1, $event)"
+                />
+              </th>
+            </tr>
+          </thead>
           <tbody>
             <tr v-for="(row, ri) in rows" :key="ri">
-              <td v-for="(cell, ci) in row" :key="ci">
+              <th class="sheet-surface__row-head">{{ ri + 1 }}</th>
+              <td
+                v-for="ci in colCount"
+                :key="ci"
+                :class="{
+                  'is-selected': selectedCell?.r === ri && selectedCell?.c === ci - 1,
+                  'is-number': cellLooksNumber(row[ci - 1] || ''),
+                }"
+                :style="{ width: `${colWidths[ci - 1]}px`, minWidth: `${colWidths[ci - 1]}px` }"
+                @mousedown="selectedCell = { r: ri, c: ci - 1 }"
+              >
                 <input
                   class="sheet-surface__cell"
-                  :value="cell"
-                  :readonly="mode === 'view' || turnRunning"
-                  @input="updateCell(ri, ci, ($event.target as HTMLInputElement).value)"
+                  :value="row[ci - 1] || ''"
+                  :readonly="readonly"
+                  @input="updateCell(ri, ci - 1, ($event.target as HTMLInputElement).value)"
+                  @focus="selectedCell = { r: ri, c: ci - 1 }"
                 />
               </td>
             </tr>
@@ -231,10 +397,33 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
 }
 .sheet-surface__toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--dq-separator-light);
   background: color-mix(in srgb, var(--dq-bg-elevated) 40%, transparent);
+}
+.sheet-surface__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--dq-separator-light);
+  overflow-x: auto;
+}
+.sheet-surface__tab {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--dq-border);
+  border-radius: 5px;
+  background: var(--dq-fill-tertiary);
+  color: var(--dq-label-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.sheet-surface__tab.is-active {
+  border-color: var(--dq-accent);
+  color: var(--dq-label-primary);
+  box-shadow: inset 0 -2px 0 var(--dq-accent);
 }
 .sheet-surface__btn {
   height: 28px;
@@ -255,17 +444,69 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
 .sheet-surface__grid-wrap {
   flex: 1;
   overflow: auto;
-  padding: 8px;
+  padding: 0;
 }
 .sheet-surface__grid {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   min-width: 100%;
 }
+.sheet-surface__corner,
+.sheet-surface__col-head,
+.sheet-surface__row-head {
+  position: sticky;
+  background: color-mix(in srgb, var(--dq-bg-elevated) 85%, transparent);
+  color: var(--dq-label-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  z-index: 2;
+  border-bottom: 1px solid var(--dq-border);
+  border-right: 1px solid var(--dq-border);
+}
+.sheet-surface__corner {
+  left: 0;
+  top: 0;
+  z-index: 3;
+  min-width: 36px;
+  width: 36px;
+}
+.sheet-surface__col-head {
+  top: 0;
+  height: 28px;
+  position: relative;
+  text-align: center;
+  user-select: none;
+}
+.sheet-surface__row-head {
+  left: 0;
+  width: 36px;
+  min-width: 36px;
+  text-align: center;
+  padding: 0 4px;
+}
+.sheet-surface__resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 5px;
+  height: 100%;
+  cursor: col-resize;
+}
 .sheet-surface__grid td {
-  border: 1px solid var(--dq-border);
+  border-bottom: 1px solid var(--dq-border);
+  border-right: 1px solid var(--dq-border);
   padding: 0;
-  min-width: 96px;
-  background: color-mix(in srgb, var(--dq-bg-elevated) 45%, transparent);
+  background: color-mix(in srgb, var(--dq-bg-elevated) 35%, transparent);
+}
+.sheet-surface__grid td.is-selected {
+  outline: 2px solid var(--dq-accent);
+  outline-offset: -2px;
+  z-index: 1;
+}
+.sheet-surface__grid td.is-number .sheet-surface__cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--dq-label-primary);
 }
 .sheet-surface__cell {
   width: 100%;
@@ -275,6 +516,7 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
   background: transparent;
   color: var(--dq-label-primary);
   outline: none;
+  box-sizing: border-box;
 }
 .sheet-surface__cell:focus {
   background: var(--dq-selection-bg, var(--dq-accent-tint));

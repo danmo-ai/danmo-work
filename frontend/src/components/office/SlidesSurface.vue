@@ -15,6 +15,7 @@ import {
   siblingSlidesMarkdownPath,
   splitSlidesForEditor,
 } from '@/utils/slides-render'
+import { renderMarkdown } from '@/utils/markdown-render'
 
 const props = defineProps<{
   projectId: string
@@ -44,6 +45,12 @@ const editorRef = ref<HTMLTextAreaElement | null>(null)
 const thumbsRef = ref<HTMLElement | null>(null)
 const editorScrollTop = ref(0)
 const thumbsScrollTop = ref(0)
+
+const previewHtml = computed(() => {
+  const raw = pages.value[pageIndex.value] || ''
+  const body = raw.replace(/<!--\s*notes:\s*[\s\S]*?-->/gi, '').trim()
+  return renderMarkdown(body)
+})
 
 const isHtmlPresent = computed(() => /\.html?$/i.test(props.path))
 const presentUrl = computed(() => {
@@ -267,14 +274,23 @@ defineExpose({
           <span class="slides-surface__thumb-title">{{ p.split('\n')[0]?.replace(/^#+\s*/, '') || t('office.emptySlide') }}</span>
         </button>
       </aside>
-      <textarea
-        ref="editorRef"
-        class="slides-surface__editor"
-        :value="pages[pageIndex] || ''"
-        :readonly="mode === 'view' || turnRunning"
-        :placeholder="t('office.slidePlaceholder')"
-        @input="onPageEdit"
-      />
+      <div class="slides-surface__split">
+        <div class="slides-surface__source-pane">
+          <div class="slides-surface__pane-label">{{ t('office.slideSource') }}</div>
+          <textarea
+            ref="editorRef"
+            class="slides-surface__editor"
+            :value="pages[pageIndex] || ''"
+            :readonly="mode === 'view' || turnRunning"
+            :placeholder="t('office.slidePlaceholder')"
+            @input="onPageEdit"
+          />
+        </div>
+        <div class="slides-surface__preview-pane">
+          <div class="slides-surface__pane-label">{{ t('office.slidePreview') }}</div>
+          <div class="slides-surface__preview dq-prose" v-html="previewHtml" />
+        </div>
+      </div>
     </div>
 
     <div v-else class="slides-surface__status">{{ t('office.slidesHtmlHint') }}</div>
@@ -307,6 +323,49 @@ defineExpose({
   min-height: 0;
   display: grid;
   grid-template-columns: 180px 1fr;
+}
+.slides-surface__split {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.slides-surface__source-pane,
+.slides-surface__preview-pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--dq-separator-light);
+}
+.slides-surface__pane-label {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dq-label-tertiary);
+  border-bottom: 1px solid var(--dq-separator-light);
+  background: color-mix(in srgb, var(--dq-bg-elevated) 35%, transparent);
+}
+.slides-surface__preview {
+  flex: 1;
+  overflow: auto;
+  padding: 20px 22px 40px;
+  background: color-mix(in srgb, var(--dq-bg-elevated) 25%, var(--dq-bg-base));
+  font-size: 15px;
+  line-height: 1.6;
+}
+.slides-surface__preview :deep(h1),
+.slides-surface__preview :deep(h2),
+.slides-surface__preview :deep(h3) {
+  margin-top: 0.6em;
+  margin-bottom: 0.35em;
+  line-height: 1.25;
+}
+.slides-surface__preview :deep(p) {
+  margin: 0.45em 0;
 }
 .slides-surface__thumbs {
   border-right: 1px solid var(--dq-separator-light);
@@ -349,6 +408,7 @@ defineExpose({
   white-space: nowrap;
 }
 .slides-surface__editor {
+  flex: 1;
   border: 0;
   resize: none;
   padding: 16px 20px;
@@ -361,5 +421,11 @@ defineExpose({
 }
 .slides-surface__editor::placeholder {
   color: var(--dq-label-quaternary);
+}
+@media (max-width: 900px) {
+  .slides-surface__split {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
 }
 </style>

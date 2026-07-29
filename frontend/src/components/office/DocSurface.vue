@@ -1,14 +1,10 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { useEditor, EditorContent } from '@tiptap/vue-3'
-import StarterKit from '@tiptap/starter-kit'
-import { Placeholder } from '@tiptap/extensions'
-import { Markdown } from '@tiptap/markdown'
+import { nextTick, ref, watch } from 'vue'
 import { fetchJSON } from '@/api/client'
-import { editorToMarkdown, selectionToMarkdown } from '@/utils/tiptap-markdown'
 import { toast } from '@/utils/feedback'
 import { useI18n } from 'vue-i18n'
 import type { OfficeEditScope } from '@/utils/office-route'
+import MarkdownRichEditor from '@/components/office/MarkdownRichEditor.vue'
 
 const props = defineProps<{
   projectId: string
@@ -26,49 +22,18 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const rootRef = ref<HTMLElement | null>(null)
+const editorRef = ref<InstanceType<typeof MarkdownRichEditor> | null>(null)
 const loading = ref(false)
 const saving = ref(false)
 const sourceMarkdown = ref('')
 const dirty = ref(false)
 const scrollTop = ref(0)
 
+const editable = () => props.mode === 'edit' && !props.turnRunning
+
 function publishScope(empty: boolean) {
   emit('scope', empty ? 'document' : 'selection')
 }
-
-const editor = useEditor({
-  extensions: [
-    StarterKit.configure({
-      link: { openOnClick: false },
-    }),
-    Placeholder.configure({ placeholder: '开始编写…' }),
-    Markdown,
-  ],
-  content: '',
-  contentType: 'markdown',
-  editable: props.mode === 'edit',
-  onUpdate: () => {
-    dirty.value = true
-    emit('dirty', true)
-  },
-  onSelectionUpdate: ({ editor: ed }) => {
-    publishScope(ed.state.selection.empty)
-  },
-})
-
-watch(
-  () => props.mode,
-  (mode) => {
-    editor.value?.setEditable(mode === 'edit' && !props.turnRunning)
-  },
-)
-
-watch(
-  () => props.turnRunning,
-  (running) => {
-    editor.value?.setEditable(props.mode === 'edit' && !running)
-  },
-)
 
 async function load(opts?: { resetScroll?: boolean }) {
   if (!props.projectId || !props.path) return
@@ -81,15 +46,14 @@ async function load(opts?: { resetScroll?: boolean }) {
     )
     if (fc.binary) throw new Error('binary file')
     sourceMarkdown.value = fc.content || ''
-    editor.value?.commands.setContent(sourceMarkdown.value, {
-      contentType: 'markdown',
-      emitUpdate: false,
-    })
+    await nextTick()
+    editorRef.value?.setContent(sourceMarkdown.value, { emitUpdate: false })
     dirty.value = false
     emit('dirty', false)
-    publishScope(editor.value?.state.selection.empty ?? true)
+    publishScope(editorRef.value?.isSelectionEmpty() ?? true)
     await nextTick()
-    if (rootRef.value) rootRef.value.scrollTop = scrollTop.value
+    const scrollEl = rootRef.value?.querySelector('.md-rich__scroll') as HTMLElement | null
+    if (scrollEl) scrollEl.scrollTop = scrollTop.value
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('office.loadFailed'))
   } finally {
@@ -98,10 +62,10 @@ async function load(opts?: { resetScroll?: boolean }) {
 }
 
 async function save(opts?: { quiet?: boolean }) {
-  if (!editor.value || !props.projectId) return
+  if (!editorRef.value || !props.projectId) return
   saving.value = true
   try {
-    const md = editorToMarkdown(editor.value)
+    const md = editorRef.value.getMarkdown()
     await fetchJSON(`/projects/${props.projectId}/files/content`, {
       method: 'PUT',
       body: JSON.stringify({ path: props.path, content: md }),
@@ -119,10 +83,13 @@ async function save(opts?: { quiet?: boolean }) {
   }
 }
 
+function onEditorUpdate() {
+  dirty.value = true
+  emit('dirty', true)
+}
+
 function hasTextSelection(): boolean {
-  const ed = editor.value
-  if (!ed) return false
-  return !ed.state.selection.empty
+  return !(editorRef.value?.isSelectionEmpty() ?? true)
 }
 
 function getEditScope(): OfficeEditScope {
@@ -130,9 +97,7 @@ function getEditScope(): OfficeEditScope {
 }
 
 function getSelectionMarkdown(): string {
-  const ed = editor.value
-  if (!ed) return sourceMarkdown.value
-  return selectionToMarkdown(ed)
+  return editorRef.value?.getSelectionMarkdown() || sourceMarkdown.value
 }
 
 watch(
@@ -150,17 +115,22 @@ watch(
   },
 )
 
-onBeforeUnmount(() => {
-  editor.value?.destroy()
-})
-
 defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading })
 </script>
 
 <template>
-  <div ref="rootRef" class="doc-surface" :class="{ 'is-readonly': mode !== 'edit' || turnRunning }">
+  <div ref="rootRef" class="doc-surface" :class="{ 'is-readonly': !editable() }">
     <div v-if="loading" class="doc-surface__status">{{ t('office.loading') }}</div>
-    <EditorContent v-else :editor="editor" class="doc-surface__editor dq-prose" />
+    <MarkdownRichEditor
+      v-show="!loading"
+      ref="editorRef"
+      :editable="editable()"
+      :show-toolbar="editable()"
+      :show-toc="true"
+      :placeholder="t('office.docPlaceholder')"
+      @update="onEditorUpdate"
+      @selection-empty="publishScope"
+    />
   </div>
 </template>
 
@@ -168,8 +138,8 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
 .doc-surface {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: 16px 20px 48px;
+  display: flex;
+  flex-direction: column;
   background: var(--dq-bg-base);
   color: var(--dq-label-primary);
 }
@@ -177,24 +147,5 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
   padding: 24px;
   color: var(--dq-label-tertiary);
   font-size: 13px;
-}
-.doc-surface__editor :deep(.tiptap) {
-  outline: none;
-  min-height: 240px;
-  max-width: 720px;
-  margin: 0 auto;
-  font-size: 15px;
-  line-height: 1.65;
-  color: var(--dq-label-primary);
-}
-.doc-surface__editor :deep(.tiptap p.is-editor-empty:first-child::before) {
-  color: var(--dq-label-quaternary);
-  content: attr(data-placeholder);
-  float: left;
-  height: 0;
-  pointer-events: none;
-}
-.doc-surface.is-readonly :deep(.tiptap) {
-  caret-color: transparent;
 }
 </style>

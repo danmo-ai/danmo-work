@@ -3,19 +3,13 @@
  * Run: npm run test:markdown
  */
 import { Editor } from '@tiptap/core'
-import StarterKit from '@tiptap/starter-kit'
-import { Markdown } from '@tiptap/markdown'
+import { createOfficeDocExtensions } from '../src/utils/tiptap-extensions.ts'
 import { normalizeMarkdown, selectionToMarkdown } from '../src/utils/tiptap-markdown.ts'
 
 function createEditor(content = '') {
   return new Editor({
     element: null,
-    extensions: [
-      StarterKit.configure({
-        link: { openOnClick: false },
-      }),
-      Markdown,
-    ],
+    extensions: createOfficeDocExtensions({ placeholder: '…' }),
     content,
     contentType: 'markdown',
   })
@@ -68,6 +62,21 @@ console.log(1)
     input: `> quoted line
 `,
     mustInclude: ['>'],
+  },
+  {
+    name: 'gfm table',
+    input: `| A | B |
+| --- | --- |
+| 1 | 2 |
+`,
+    mustInclude: ['|', 'A', 'B'],
+  },
+  {
+    name: 'task list',
+    input: `- [ ] todo
+- [x] done
+`,
+    mustInclude: ['[ ]', '[x]'],
   },
 ]
 
