@@ -3,7 +3,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import { fetchJSON, asArray } from '@/api/client'
 import { apiBaseUrl } from '@/utils/desktop'
 import { i18n } from '@/i18n'
-import type { Session, TurnLog, StreamEvent, Agent, Skill, WorkerCard, AgentRun, UpdateSessionPayload, LLMModel } from '@/types/mission'
+import type { Session, TurnLog, StreamEvent, Agent, Skill, WorkerCard, AgentRun, UpdateSessionPayload, LLMModel, PendingMessage } from '@/types/mission'
 import { useSkillsStore } from '@/stores/skills'
 
 const base = apiBaseUrl()
@@ -28,6 +28,7 @@ export const useSessionsStore = defineStore('sessions', () => {
   const currentSessionId = ref<string | null>(null)
   const turns = ref<TurnLog[]>([])
   const streamEvents = ref<StreamEvent[]>([])
+  const pendingMessages = ref<PendingMessage[]>([])
   const agents = ref<Agent[]>([])
   const skills = ref<Skill[]>([])
   const workers = ref<WorkerCard[]>([])
@@ -123,6 +124,13 @@ export const useSessionsStore = defineStore('sessions', () => {
     if (root) return root.id
     const any = turns.value.find((t) => t.status === 'running')
     return any?.id ?? null
+  })
+
+  watch(runningTurnId, (id, prev) => {
+    if (prev && !id && currentSessionId.value) {
+      void loadPending(currentSessionId.value)
+      void loadTurns(currentSessionId.value)
+    }
   })
 
   async function loadCatalog() {
@@ -269,6 +277,98 @@ export const useSessionsStore = defineStore('sessions', () => {
       console.error('[loadTurns] failed for', sessionId, e)
       turns.value = []
     }
+  }
+
+  async function loadPending(sessionId?: string | null) {
+    const sid = sessionId ?? currentSessionId.value
+    if (!sid) {
+      pendingMessages.value = []
+      return
+    }
+    try {
+      pendingMessages.value = asArray(await fetchJSON<PendingMessage[]>(`/sessions/${sid}/pending`))
+    } catch (e) {
+      console.error('[loadPending] failed for', sid, e)
+      pendingMessages.value = []
+    }
+  }
+
+  async function enqueuePending(
+    userInput: string,
+    attachments?: Array<{
+      type: string
+      name?: string
+      mimeType?: string
+      data: string
+    }>,
+  ) {
+    const sid = currentSessionId.value
+    const hasAtts = Boolean(attachments?.length)
+    if (!sid || (!userInput.trim() && !hasAtts) || loading.value) return
+    loading.value = true
+    try {
+      const body: Record<string, unknown> = { content: userInput.trim() }
+      if (selectedAgentId.value) body.agentId = selectedAgentId.value
+      body.modelId = selectedModelId.value
+      if (hasAtts) body.attachments = attachments
+      await fetchJSON(`/sessions/${sid}/pending`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+      await loadPending(sid)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function updatePending(id: string, content: string) {
+    const sid = currentSessionId.value
+    if (!sid) return
+    await fetchJSON(`/sessions/${sid}/pending/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ content }),
+    })
+    await loadPending(sid)
+  }
+
+  async function deletePending(id: string) {
+    const sid = currentSessionId.value
+    if (!sid) return
+    await fetchJSON(`/sessions/${sid}/pending/${id}`, { method: 'DELETE' })
+    await loadPending(sid)
+  }
+
+  async function clearPending() {
+    const sid = currentSessionId.value
+    if (!sid) return
+    await fetchJSON(`/sessions/${sid}/pending/clear`, { method: 'POST' })
+    await loadPending(sid)
+  }
+
+  async function reorderPending(ids: string[]) {
+    const sid = currentSessionId.value
+    if (!sid) return
+    pendingMessages.value = asArray(
+      await fetchJSON<PendingMessage[]>(`/sessions/${sid}/pending/order`, {
+        method: 'PUT',
+        body: JSON.stringify({ ids }),
+      }),
+    )
+  }
+
+  async function steerPending(id: string) {
+    const sid = currentSessionId.value
+    if (!sid) return
+    const res = await fetchJSON<{ status?: string; pending?: PendingMessage[] }>(
+      `/sessions/${sid}/pending/${id}/steer`,
+      { method: 'POST' },
+    )
+    if (Array.isArray(res?.pending)) {
+      pendingMessages.value = res.pending
+    } else {
+      await loadPending(sid)
+    }
+    await loadTurns(sid)
   }
 
   async function sendTurn(
@@ -562,6 +662,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     subscribeEvents(id)
     void pollSession(id)
     void loadTurns(id)
+    void loadPending(id)
   }
 
   function startCompose(projectId?: string | null) {
@@ -571,6 +672,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     selectedAgentId.value = defaultAgentId() || 'team'
     resetStreamState()
     turns.value = []
+    pendingMessages.value = []
     eventSource?.close()
   }
 
@@ -599,6 +701,13 @@ export const useSessionsStore = defineStore('sessions', () => {
     deleteSession,
     removeSessionsForProject,
     loadTurns,
+    loadPending,
+    enqueuePending,
+    updatePending,
+    deletePending,
+    clearPending,
+    reorderPending,
+    steerPending,
     sendTurn,
     cancelTurn,
     resumeTurn,
@@ -608,6 +717,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     resolveAskUser,
     pendingApprovals,
     pendingAsks,
+    pendingMessages,
     resolvedAskCallIds,
     decidedApprovalIds,
     syncModelSelection,

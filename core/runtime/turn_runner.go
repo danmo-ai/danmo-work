@@ -150,6 +150,10 @@ type TurnContext struct {
 	ProjectID string
 	OnReport  func(domain.Report)
 	Messages  []Message
+	// ClaimSteers loads durable soft-steer messages (status=steering) for this
+	// session. Called after parallel tools finish, before the next LLM call
+	// (and when the model stops so a steer can keep the turn alive).
+	ClaimSteers func() []Message
 }
 
 type approvalGate interface {
@@ -347,6 +351,22 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		}
 
 		if len(resp.ToolCalls) == 0 {
+			if resp.ReasoningContent != "" {
+				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentThinking, domain.AgentThinkingPayload{Text: resp.ReasoningContent})
+			}
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentMessage, domain.AgentMessagePayload{Text: resp.Content})
+			messages = append(messages, Message{Role: RoleAssistant, Content: resp.Content})
+			p.logAssistantMessage(Message{Role: RoleAssistant, Content: resp.Content})
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
+
+			// Model wanted to stop — scan durable steers so a late guidance
+			// message can keep the same turn alive.
+			before := len(messages)
+			messages = p.applySoftSteers(ctx, tctx, messages)
+			if len(messages) > before && !isLastStep {
+				continue
+			}
+
 			finalReport = domain.Report{
 				Status: domain.ReportDone, Summary: resp.Content,
 				Confidence: 0.8, StepsUsed: step,
@@ -355,14 +375,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			if tctx.OnReport != nil {
 				tctx.OnReport(finalReport)
 			}
-			if resp.ReasoningContent != "" {
-				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentThinking, domain.AgentThinkingPayload{Text: resp.ReasoningContent})
-			}
-			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentMessage, domain.AgentMessagePayload{Text: resp.Content})
-			messages = append(messages, Message{Role: RoleAssistant, Content: resp.Content})
-			p.logAssistantMessage(Message{Role: RoleAssistant, Content: resp.Content})
 			reportCaptured = true
-			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
 			break
 		}
 
@@ -402,6 +415,10 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			reportCaptured = true
 			break
 		}
+
+		// Safe soft-steer boundary: parallel tools finished → scan durable
+		// steering messages before the next LLM call.
+		messages = p.applySoftSteers(ctx, tctx, messages)
 		p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
 	}
 
@@ -797,6 +814,36 @@ func (p *TurnRunner) logUserMessage(content string) {
 		return
 	}
 	p.Log("user", map[string]any{"content": content})
+}
+
+func (p *TurnRunner) applySoftSteers(ctx context.Context, tctx TurnContext, messages []Message) []Message {
+	if tctx.ClaimSteers == nil {
+		return messages
+	}
+	steers := tctx.ClaimSteers()
+	if len(steers) == 0 {
+		return messages
+	}
+	for _, m := range steers {
+		if m.Role == "" {
+			m.Role = RoleUser
+		}
+		messages = append(messages, m)
+		p.logUserMessage(m.Content)
+		if p.Stream != nil {
+			atts := make([]domain.UserAttachment, 0, len(m.Parts))
+			for _, part := range m.Parts {
+				if part.Type != "image" || part.Data == "" {
+					continue
+				}
+				atts = append(atts, domain.UserAttachment{
+					Type: "image", Name: part.Name, MimeType: part.MimeType, Data: part.Data,
+				})
+			}
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventUserMessage, userMessagePayload(m.Content, atts))
+		}
+	}
+	return messages
 }
 
 func (p *TurnRunner) logAssistantMessage(msg Message) {

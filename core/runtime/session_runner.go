@@ -390,7 +390,7 @@ func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments
 		return
 	}
 	go func() {
-		defer e.releaseSessionTurn(s.ID, turnID)
+		defer e.finishSessionTurn(s.ID, turnID)
 		turnCtx, cancel := context.WithCancel(context.Background())
 		e.mu.Lock()
 		e.cancel[turnID] = cancel
@@ -424,7 +424,7 @@ func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, m
 	// Reset session status to active so UI shows "运行中"
 	e.updateSessionStatus(sessionID, domain.SessionStatusActive)
 	go func() {
-		defer e.releaseSessionTurn(sessionID, turnID)
+		defer e.finishSessionTurn(sessionID, turnID)
 		s, err := e.sessions.Get(ctx, sessionID)
 		if err != nil {
 			return
@@ -508,7 +508,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 		return err
 	}
 	go func() {
-		defer e.releaseSessionTurn(sessionID, turnID)
+		defer e.finishSessionTurn(sessionID, turnID)
 		cfg := e.loadRunCfg(ctx)
 
 		s, err := e.sessions.Get(ctx, sessionID)
@@ -623,6 +623,27 @@ func (e *Engine) releaseSessionTurn(sessionID, turnID string) {
 	defer e.mu.Unlock()
 	if e.activeTurns[sessionID] == turnID {
 		delete(e.activeTurns, sessionID)
+	}
+}
+
+func (e *Engine) ActiveTurnID(sessionID string) string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.activeTurns == nil {
+		return ""
+	}
+	return e.activeTurns[sessionID]
+}
+
+func (e *Engine) finishSessionTurn(sessionID, turnID string) {
+	e.releaseSessionTurn(sessionID, turnID)
+	if e.sessions != nil {
+		// Soft-steer marks that were not claimed before the turn ended fall
+		// back to the normal next-turn queue.
+		if err := e.sessions.DemoteSteering(context.Background(), sessionID); err != nil {
+			log.Printf("[steer] demote leftover steering session %s: %v", sessionID, err)
+		}
+		go e.sessions.DrainPendingQueue(context.Background(), sessionID)
 	}
 }
 
@@ -953,6 +974,21 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		WorkDir:   workDir,
 		ProjectID: projectID,
 		Messages:  messages,
+		ClaimSteers: func() []Message {
+			if e.sessions == nil {
+				return nil
+			}
+			items, err := e.sessions.ClaimSteering(context.Background(), sessionID)
+			if err != nil {
+				log.Printf("[steer] claim session %s: %v", sessionID, err)
+				return nil
+			}
+			out := make([]Message, 0, len(items))
+			for _, it := range items {
+				out = append(out, userMessageFromAttachments(it.Content, it.Attachments))
+			}
+			return out
+		},
 	})
 
 	// History lives on disk; drop any in-memory session buffer after the turn.

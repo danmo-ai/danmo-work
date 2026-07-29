@@ -18,6 +18,7 @@ import (
 
 const (
 	channelBusyReply     = "上一条消息还在处理中，请稍后再试。"
+	channelQueuedReply   = "当前回合进行中，已加入队列，结束后会继续处理。"
 	channelProcessingMsg = "正在处理…"
 	channelAskAckMsg     = "已收到。"
 	channelPermAckMsg    = "已处理授权。"
@@ -201,7 +202,7 @@ func (ing *ChannelIngressService) HandleInbound(ctx context.Context, msg port.In
 		}
 	}
 	if ing.sessionHasRunningTurn(sessionID) {
-		return ing.deliverOrReturn(ctx, &msg, channelBusyReply)
+		return ing.queueInboundWhileBusy(ctx, &msg, sessionID, defs.AgentID, modelID)
 	}
 	if s, gerr := ing.sessions.Get(ctx, sessionID); gerr == nil && strings.TrimSpace(s.ModelID) == "" {
 		_, _ = ing.sessions.Update(ctx, sessionID, domain.UpdateSessionRequest{ModelID: &modelID})
@@ -215,9 +216,31 @@ func (ing *ChannelIngressService) HandleInbound(ctx context.Context, msg port.In
 		Attachments: MediaToVisionAttachments(msg.Media),
 	})
 	if serr != nil {
+		// Race: turn started between the busy check and StartTurn.
+		if errors.Is(serr, port.ErrSessionTurnRunning) {
+			return ing.queueInboundWhileBusy(ctx, &msg, sessionID, defs.AgentID, modelID)
+		}
 		return "", serr
 	}
 	return ing.runTurnPipeline(ctx, &msg, sessionID, ch, turnID, defs.AutoApprove)
+}
+
+// queueInboundWhileBusy enqueues the IM message onto the session pending queue
+// (same durable path as the desktop composer) and ACKs the user.
+func (ing *ChannelIngressService) queueInboundWhileBusy(ctx context.Context, msg *port.InboundMessage, sessionID, agentID, modelID string) (string, error) {
+	if msg == nil {
+		return "", fmt.Errorf("inbound message required")
+	}
+	if _, err := ing.sessions.EnqueuePending(ctx, sessionID, domain.EnqueuePendingRequest{
+		Content:     msg.Text,
+		Attachments: MediaToVisionAttachments(msg.Media),
+		AgentID:     agentID,
+		ModelID:     modelID,
+	}); err != nil {
+		log.Printf("[channel] enqueue while busy session %s: %v", sessionID, err)
+		return ing.deliverOrReturn(ctx, msg, channelBusyReply)
+	}
+	return ing.deliverOrReturn(ctx, msg, channelQueuedReply)
 }
 
 // HandleInteraction routes card/keyboard callbacks without starting a new turn.
@@ -589,6 +612,12 @@ func channelSessionTitle(t port.ChannelType, text string) string {
 }
 
 func (ing *ChannelIngressService) sessionHasRunningTurn(sessionID string) bool {
+	if ing.sessions == nil {
+		return false
+	}
+	if id := ing.sessions.ActiveTurnID(sessionID); id != "" {
+		return true
+	}
 	for _, t := range ing.sessions.ListTurns(sessionID) {
 		if t.Status == domain.TurnRunning {
 			return true

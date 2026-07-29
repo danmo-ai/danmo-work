@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"danmo-work/core/domain"
@@ -242,6 +243,51 @@ func approvalToDomain(m approvalModel) domain.Approval {
 
 func approvalFromDomain(a domain.Approval) approvalModel {
 	return approvalModel{ID: a.ID, SessionID: a.SessionID, TurnID: a.TurnID, ToolName: a.ToolName, Summary: a.Summary, Status: a.Status, CreatedAt: a.CreatedAt}
+}
+
+// ---- PendingMessage ----
+
+type pendingMessageModel struct {
+	ID            string    `gorm:"primaryKey"`
+	SessionID     string    `gorm:"column:session_id;index"`
+	Content       string    `gorm:"column:content"`
+	AttachmentsJSON string  `gorm:"column:attachments_json"`
+	Position      int       `gorm:"column:position;index"`
+	Status        string    `gorm:"column:status;index"`
+	AgentID       string    `gorm:"column:agent_id"`
+	ModelID       string    `gorm:"column:model_id"`
+	CreatedAt     time.Time `gorm:"column:created_at"`
+	UpdatedAt     time.Time `gorm:"column:updated_at"`
+}
+
+func (pendingMessageModel) TableName() string { return "pending_messages" }
+
+func pendingMessageToDomain(m pendingMessageModel) domain.PendingMessage {
+	var atts []domain.UserAttachment
+	if strings.TrimSpace(m.AttachmentsJSON) != "" {
+		_ = json.Unmarshal([]byte(m.AttachmentsJSON), &atts)
+	}
+	return domain.PendingMessage{
+		ID: m.ID, SessionID: m.SessionID, Content: m.Content, Attachments: atts,
+		Position: m.Position, Status: domain.PendingMessageStatus(m.Status),
+		AgentID: m.AgentID, ModelID: m.ModelID,
+		CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+	}
+}
+
+func pendingMessageFromDomain(m domain.PendingMessage) pendingMessageModel {
+	attsJSON := "[]"
+	if len(m.Attachments) > 0 {
+		if b, err := json.Marshal(m.Attachments); err == nil {
+			attsJSON = string(b)
+		}
+	}
+	return pendingMessageModel{
+		ID: m.ID, SessionID: m.SessionID, Content: m.Content, AttachmentsJSON: attsJSON,
+		Position: m.Position, Status: string(m.Status),
+		AgentID: m.AgentID, ModelID: m.ModelID,
+		CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
+	}
 }
 
 // ---- StreamEvent ----

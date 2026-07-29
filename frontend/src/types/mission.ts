@@ -44,6 +44,24 @@ export interface SendMessagePayload {
   userInput: string
 }
 
+export interface PendingMessage {
+  id: string
+  sessionId: string
+  content: string
+  attachments?: Array<{
+    type: string
+    name?: string
+    mimeType?: string
+    data?: string
+  }>
+  position: number
+  status: 'queued' | 'steering' | 'sending' | 'discarded'
+  agentId?: string
+  modelId?: string
+  createdAt: string
+  updatedAt: string
+}
+
 /** SSE / UI timeline event — not LLM chat history. */
 export interface StreamEvent {
   seq: number
