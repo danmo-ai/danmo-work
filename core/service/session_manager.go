@@ -118,7 +118,18 @@ func (m *SessionManager) ResumeTurn(ctx context.Context, sessionID, turnID strin
 }
 
 func (m *SessionManager) ListTurns(sessionID string) []domain.TurnLog {
+	if m == nil || m.engine == nil {
+		return nil
+	}
 	return m.engine.ListTurns(sessionID)
+}
+
+// ActiveTurnID returns the in-flight turn for a session, if any.
+func (m *SessionManager) ActiveTurnID(sessionID string) string {
+	if m == nil || m.engine == nil {
+		return ""
+	}
+	return m.engine.ActiveTurnID(sessionID)
 }
 
 func (m *SessionManager) Get(ctx context.Context, id string) (domain.Session, error) {
