@@ -626,6 +626,15 @@ func (e *Engine) releaseSessionTurn(sessionID, turnID string) {
 	}
 }
 
+func (e *Engine) ActiveTurnID(sessionID string) string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.activeTurns == nil {
+		return ""
+	}
+	return e.activeTurns[sessionID]
+}
+
 func (e *Engine) finishSessionTurn(sessionID, turnID string) {
 	e.releaseSessionTurn(sessionID, turnID)
 	if e.sessions != nil {

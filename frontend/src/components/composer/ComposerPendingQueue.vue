@@ -82,6 +82,24 @@ async function move(id: string, dir: -1 | 1) {
     toast.error(e instanceof Error ? e.message : t('composer.queueFailed'))
   }
 }
+
+const steeringId = ref<string | null>(null)
+
+async function steerToCurrentTurn(id: string) {
+  if (steeringId.value) return
+  const wasRunning = Boolean(sessions.runningTurnId)
+  steeringId.value = id
+  try {
+    await sessions.steerPending(id)
+    toast.success(
+      wasRunning ? t('composer.queueSteeredInterrupt') : t('composer.queueSteered'),
+    )
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('composer.queueSteerFailed'))
+  } finally {
+    steeringId.value = null
+  }
+}
 </script>
 
 <template>
@@ -95,7 +113,12 @@ async function move(id: string, dir: -1 | 1) {
     </div>
 
     <ul class="composer-queue__list">
-      <li v-for="(msg, index) in items" :key="msg.id" class="composer-queue__item">
+      <li
+        v-for="(msg, index) in items"
+        :key="msg.id"
+        class="composer-queue__item"
+        :class="{ 'is-front': index === 0 }"
+      >
         <template v-if="editingId === msg.id">
           <textarea
             v-model="editDraft"
@@ -112,8 +135,28 @@ async function move(id: string, dir: -1 | 1) {
         </template>
         <template v-else>
           <div class="composer-queue__body">
-            <span class="composer-queue__index">{{ index + 1 }}</span>
-            <p class="composer-queue__text">{{ preview(msg.content) }}</p>
+            <button
+              v-if="index === 0"
+              type="button"
+              class="composer-queue__steer"
+              :disabled="steeringId === msg.id"
+              :title="t('composer.queueSteerHint')"
+              :aria-label="t('composer.queueSteer')"
+              @click="steerToCurrentTurn(msg.id)"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M5 12h14" />
+                <path d="M13 6l6 6-6 6" />
+                <path d="M5 19V5" />
+              </svg>
+            </button>
+            <span v-else class="composer-queue__index">{{ index + 1 }}</span>
+            <div class="composer-queue__main">
+              <p class="composer-queue__text">{{ preview(msg.content) }}</p>
+              <span v-if="index === 0" class="composer-queue__steer-label">
+                {{ sessions.runningTurnId ? t('composer.queueSteerNextRunning') : t('composer.queueSteerNextIdle') }}
+              </span>
+            </div>
             <span v-if="msg.attachments?.length" class="composer-queue__atts">
               {{ t('composer.queueAttachments', { n: msg.attachments.length }) }}
             </span>
@@ -200,11 +243,53 @@ async function move(id: string, dir: -1 | 1) {
   background: color-mix(in srgb, var(--dq-label-primary) 3%, transparent);
 }
 
+.composer-queue__item.is-front {
+  border-color: color-mix(in srgb, var(--dq-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--dq-accent) 8%, transparent);
+}
+
 .composer-queue__body {
   display: flex;
   align-items: flex-start;
   gap: 8px;
   min-width: 0;
+}
+
+.composer-queue__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.composer-queue__steer {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  color: var(--dq-color-white);
+  background: var(--dq-accent);
+  cursor: pointer;
+}
+
+.composer-queue__steer:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.composer-queue__steer:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.composer-queue__steer-label {
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-accent);
+  font-weight: 500;
 }
 
 .composer-queue__index {

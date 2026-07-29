@@ -356,6 +356,21 @@ export const useSessionsStore = defineStore('sessions', () => {
     )
   }
 
+  async function steerPending(id: string) {
+    const sid = currentSessionId.value
+    if (!sid) return
+    const res = await fetchJSON<{ status?: string; pending?: PendingMessage[] }>(
+      `/sessions/${sid}/pending/${id}/steer`,
+      { method: 'POST' },
+    )
+    if (Array.isArray(res?.pending)) {
+      pendingMessages.value = res.pending
+    } else {
+      await loadPending(sid)
+    }
+    await loadTurns(sid)
+  }
+
   async function sendTurn(
     userInput: string,
     attachments?: Array<{
@@ -692,6 +707,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     deletePending,
     clearPending,
     reorderPending,
+    steerPending,
     sendTurn,
     cancelTurn,
     resumeTurn,

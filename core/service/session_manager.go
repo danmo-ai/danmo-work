@@ -307,6 +307,49 @@ func (m *SessionManager) ReorderPending(ctx context.Context, sessionID string, i
 	return m.store.PendingMessages().Reorder(ctx, sessionID, ids)
 }
 
+// SteerPending moves a queued message to the front and promotes it into the
+// current session turn flow: interrupt any active turn (drain starts it next)
+// or start immediately when idle.
+func (m *SessionManager) SteerPending(ctx context.Context, sessionID, id string) error {
+	msg, err := m.store.PendingMessages().Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if msg.SessionID != sessionID {
+		return fmt.Errorf("pending message not found")
+	}
+	if msg.Status != domain.PendingQueued {
+		return fmt.Errorf("pending message is not steerable")
+	}
+
+	list, err := m.store.PendingMessages().ListBySession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	ids := make([]string, 0, len(list))
+	ids = append(ids, id)
+	for _, item := range list {
+		if item.ID == id {
+			continue
+		}
+		ids = append(ids, item.ID)
+	}
+	if err := m.store.PendingMessages().Reorder(ctx, sessionID, ids); err != nil {
+		return err
+	}
+
+	active := ""
+	if m.engine != nil {
+		active = m.engine.ActiveTurnID(sessionID)
+	}
+	if active != "" {
+		m.engine.CancelTurn(ctx, active)
+		return nil
+	}
+	go m.DrainPendingQueue(context.Background(), sessionID)
+	return nil
+}
+
 // DrainPendingQueue starts the next queued turn if the session is idle.
 func (m *SessionManager) DrainPendingQueue(ctx context.Context, sessionID string) {
 	if m == nil || m.engine == nil || m.store == nil {

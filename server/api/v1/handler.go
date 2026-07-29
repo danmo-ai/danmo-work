@@ -91,6 +91,7 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.DELETE("/sessions/:id/pending/:mid", deletePending(h))
 	api.POST("/sessions/:id/pending/clear", clearPending(h))
 	api.PUT("/sessions/:id/pending/order", reorderPending(h))
+	api.POST("/sessions/:id/pending/:mid/steer", steerPending(h))
 	api.GET("/sessions/:id/events", streamEvents(h))
 	api.GET("/sessions/:id/events/poll", pollEvents(h))
 	api.POST("/projects", createProject(h))
@@ -959,6 +960,25 @@ func reorderPending(h *Handler) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, items)
+	}
+}
+
+func steerPending(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := h.Sessions.SteerPending(c, c.Param("id"), c.Param("mid")); err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				status = http.StatusNotFound
+			}
+			c.JSON(status, gin.H{"error": err.Error()})
+			return
+		}
+		items, err := h.Sessions.ListPending(c, c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "pending": items})
 	}
 }
 

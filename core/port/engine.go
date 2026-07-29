@@ -14,6 +14,8 @@ type Engine interface {
 	StartTurn(ctx context.Context, sessionID, userInput, agentID, modelID string, attachments []domain.UserAttachment) (string, error)
 	ResumeTurn(ctx context.Context, sessionID, turnID string) error
 	CancelTurn(ctx context.Context, turnID string)
+	// ActiveTurnID returns the in-flight turn for a session, if any.
+	ActiveTurnID(sessionID string) string
 	ListTurns(sessionID string) []domain.TurnLog
 
 	StreamEvents(sessionID string, since int64) []domain.StreamEvent
