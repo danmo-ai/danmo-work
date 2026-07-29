@@ -84,7 +84,13 @@ rm -rf "$DQ_DESKTOP_BUNDLE"/*
 mkdir -p "$DQ_DESKTOP_BUNDLE"
 cp -R "$BUNDLE_SRC"/* "$DQ_DESKTOP_BUNDLE/"
 
-APPIMAGE="$(find "$DQ_DESKTOP_BUNDLE" -type f -name '*.AppImage' | head -1 || true)"
+# Tauri names from productName ("Danmo Work_…"); rename to Danmo.Work_* for
+# URL-safe Release assets (matches macOS DMG / Windows setup naming).
+VERSION="${RELEASE_VERSION:-$(git -C "$DQ_ROOT" describe --tags --always --dirty 2>/dev/null || echo 0.0.0)}"
+VERSION="${VERSION#v}"
+SAFE_PREFIX="Danmo.Work_${VERSION}_amd64"
+
+APPIMAGE="$(find "$DQ_DESKTOP_BUNDLE" -type f -name '*.AppImage' ! -name '*.sig' | head -1 || true)"
 DEB="$(find "$DQ_DESKTOP_BUNDLE" -type f -name '*.deb' | head -1 || true)"
 if [[ -z "$APPIMAGE" || -z "$DEB" ]]; then
   echo "ERROR: expected both AppImage and .deb under $DQ_DESKTOP_BUNDLE" >&2
@@ -92,13 +98,39 @@ if [[ -z "$APPIMAGE" || -z "$DEB" ]]; then
   exit 1
 fi
 
+APPIMAGE_DIR="$(dirname "$APPIMAGE")"
+DEB_DIR="$(dirname "$DEB")"
+FINAL_APPIMAGE="$APPIMAGE_DIR/${SAFE_PREFIX}.AppImage"
+FINAL_DEB="$DEB_DIR/${SAFE_PREFIX}.deb"
+mv -f "$APPIMAGE" "$FINAL_APPIMAGE"
+mv -f "$DEB" "$FINAL_DEB"
+
+# Keep updater signature next to the renamed AppImage when present.
+for sig in "$APPIMAGE.sig" "${APPIMAGE}.sig"; do
+  if [[ -f "$sig" ]]; then
+    mv -f "$sig" "${FINAL_APPIMAGE}.sig"
+    break
+  fi
+done
+for sig in "$APPIMAGE.tar.gz.sig" "${APPIMAGE}.tar.gz.sig"; do
+  if [[ -f "$sig" ]]; then
+    # Rare v1-compat path; keep beside any .AppImage.tar.gz if tauri emitted one
+    TAR_GZ="$(find "$APPIMAGE_DIR" -maxdepth 1 -type f -name '*.AppImage.tar.gz' | head -1 || true)"
+    if [[ -n "$TAR_GZ" ]]; then
+      FINAL_TAR="$APPIMAGE_DIR/${SAFE_PREFIX}.AppImage.tar.gz"
+      mv -f "$TAR_GZ" "$FINAL_TAR"
+      mv -f "$sig" "${FINAL_TAR}.sig"
+    fi
+    break
+  fi
+done
+
 echo "==> Desktop bundle -> $DQ_DESKTOP_BUNDLE"
-echo "    AppImage: $APPIMAGE"
-echo "    deb:      $DEB"
+echo "    AppImage: $FINAL_APPIMAGE"
+echo "    deb:      $FINAL_DEB"
 if has_tauri_signing_key; then
-  SIG="$(find "$DQ_DESKTOP_BUNDLE" -type f -name '*.AppImage.sig' | head -1 || true)"
-  if [[ -n "$SIG" ]]; then
-    echo "    updater:  $SIG"
+  if [[ -f "${FINAL_APPIMAGE}.sig" ]]; then
+    echo "    updater:  ${FINAL_APPIMAGE}.sig"
   else
     echo "WARNING: no *.AppImage.sig — updater latest.json will skip linux-x86_64" >&2
   fi
