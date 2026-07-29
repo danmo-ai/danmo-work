@@ -66,6 +66,15 @@ def classify(name):
         if "x86_64" in lower or "x64" in lower:
             return "darwin-x86_64"
         return "darwin-aarch64"
+    # Tauri v2 updater reuses the AppImage (+ .sig); prefer .AppImage over .AppImage.tar.gz
+    if lower.endswith(".appimage.tar.gz"):
+        if "aarch64" in lower or "arm64" in lower:
+            return "linux-aarch64"
+        return "linux-x86_64"
+    if lower.endswith(".appimage"):
+        if "aarch64" in lower or "arm64" in lower:
+            return "linux-aarch64"
+        return "linux-x86_64"
     if lower.endswith(".nsis.zip"):
         return "windows-x86_64"
     if "setup.exe" in lower or lower.endswith("-setup.exe"):
@@ -73,7 +82,7 @@ def classify(name):
     return None
 
 
-# Prefer nsis.zip over setup.exe
+# Prefer nsis.zip / AppImage / app.tar.gz over setup.exe
 candidates = []
 for path in root.rglob("*"):
     if not path.is_file():
@@ -86,11 +95,16 @@ for path in root.rglob("*"):
     if name.endswith(".sig"):
         continue
     priority = 0
-    if name.lower().endswith(".nsis.zip"):
+    lower = name.lower()
+    if lower.endswith(".nsis.zip"):
         priority = 2
-    elif name.lower().endswith(".app.tar.gz"):
+    elif lower.endswith(".app.tar.gz"):
         priority = 2
-    elif "setup.exe" in name.lower():
+    elif lower.endswith(".appimage") and not lower.endswith(".appimage.tar.gz"):
+        priority = 2
+    elif lower.endswith(".appimage.tar.gz"):
+        priority = 1
+    elif "setup.exe" in lower:
         priority = 1
     candidates.append((priority, path, platform))
 

@@ -109,8 +109,8 @@ jobs:
             ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.app.tar.gz.sig
           if-no-files-found: error
 
-  linux-server:
-    name: Linux server
+  linux-desktop:
+    name: Linux desktop
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -134,6 +134,26 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux Tauri dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libfuse2
 
       - name: Install & build dq-ui workspace
         working-directory: dq-ui
@@ -167,17 +187,31 @@ jobs:
           rm -f desktop/src-tauri/tauri.conf.json.bak desktop/src-tauri/Cargo.toml.bak frontend/package.json.bak
           echo "Version set to $V"
 
-      - name: Build Linux server bundle
+      - name: Prepare Tauri signing key
+        env:
+          RAW_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          chmod +x ${{ env.REPO_DIR }}/scripts/*.sh
+          ${{ env.REPO_DIR }}/scripts/ci_prepare_tauri_signing_key.sh
+
+      - name: Build Linux desktop
         working-directory: ${{ env.REPO_DIR }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           chmod +x scripts/*.sh
-          make pack-linux-server RELEASE_VERSION="$RELEASE_VERSION"
+          make pack-linux-desktop RELEASE_VERSION="$RELEASE_VERSION"
 
-      - name: Upload Linux server artifact
+      - name: Upload Linux desktop artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: danmo-work-server-linux
-          path: ${{ env.REPO_DIR }}/out/dist/${{ env.APP_NAME }}-linux-*.tar.gz
+          name: danmo-work-desktop-linux
+          path: |
+            ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.AppImage
+            ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.AppImage.sig
+            ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.AppImage.tar.gz
+            ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.AppImage.tar.gz.sig
+            ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.deb
           if-no-files-found: error
 
   # Optional OCI env image — separate Release assets (amd64 + arm64), NOT in app packages.
@@ -403,7 +437,7 @@ jobs:
   publish-release:
     name: Publish GitHub Release
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [macos-desktop, linux-server, linux-env-tar, windows-desktop]
+    needs: [macos-desktop, linux-desktop, linux-env-tar, windows-desktop]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -418,10 +452,10 @@ jobs:
           name: danmo-work-desktop-macos
           path: release-assets/macos
 
-      - name: Download Linux server artifact
+      - name: Download Linux desktop artifact
         uses: actions/download-artifact@v7
         with:
-          name: danmo-work-server-linux
+          name: danmo-work-desktop-linux
           path: release-assets/linux
 
       - name: Download env image tar (amd64)
@@ -449,7 +483,7 @@ jobs:
         id: updater_manifest
         run: |
           chmod +x ${{ env.REPO_DIR }}/scripts/*.sh
-          if find release-assets \( -name '*.app.tar.gz' -o -name '*.nsis.zip' \) | grep -q .; then
+          if find release-assets \( -name '*.app.tar.gz' -o -name '*.AppImage' -o -name '*.AppImage.tar.gz' -o -name '*.nsis.zip' \) | grep -q .; then
             ${{ env.REPO_DIR }}/scripts/generate_updater_latest_json.sh \
               --version "$RELEASE_VERSION" \
               --base-url "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}" \
@@ -485,7 +519,11 @@ jobs:
             release-assets/macos/**/*.dmg
             release-assets/macos/**/*.app.tar.gz
             release-assets/macos/**/*.app.tar.gz.sig
-            release-assets/linux/**/*.tar.gz
+            release-assets/linux/**/*.AppImage
+            release-assets/linux/**/*.AppImage.sig
+            release-assets/linux/**/*.AppImage.tar.gz
+            release-assets/linux/**/*.AppImage.tar.gz.sig
+            release-assets/linux/**/*.deb
             release-assets/env/**/*.tar
             release-assets/windows/**/*.exe
             release-assets/windows/**/*.nsis.zip

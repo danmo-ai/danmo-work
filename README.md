@@ -52,7 +52,7 @@ Danmo Work keeps a **coding-agent-grade** execution core, then asks a wider ques
 | **macOS** (Apple Silicon) | **Homebrew** (recommended if you use brew) | see below |
 | **macOS** (Apple Silicon) | `.dmg` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
 | **Windows** | Setup `.exe` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
-| **Linux server** | `.tar.gz` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **Linux** (x86_64) | AppImage / `.deb` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
 
 ### macOS — Homebrew
 
@@ -79,6 +79,15 @@ Download `Danmo.Work_*_arm64.dmg` from [Releases](https://github.com/danmo-ai/da
 Download `Danmo.Work_*_x64-setup.exe` from [Releases](https://github.com/danmo-ai/danmo-work/releases/latest).
 
 Until Authenticode is enabled in release CI ([SignPath setup](docs/windows-authenticode.md)), SmartScreen may warn — **More info → Run anyway**. On Windows 11 with Smart App Control, unsigned installers can be hard-blocked; signing is the real fix.
+
+### Linux
+
+Download from [Releases](https://github.com/danmo-ai/danmo-work/releases/latest):
+
+- **AppImage** — `chmod +x Danmo.Work_*_amd64.AppImage && ./Danmo.Work_*_amd64.AppImage`
+- **`.deb`** — `sudo apt install ./Danmo.Work_*_amd64.deb` (Debian/Ubuntu)
+
+Needs a desktop environment with WebKitGTK. Auto-update uses the AppImage channel.
 
 ### From source
 
@@ -356,7 +365,7 @@ cp config.example.yaml ~/.danmo-work/config.yaml
 make build-all              # frontend dist + Go server/cli/tui
 make build-go               # all three Go binaries
 make pack-macos-desktop     # .dmg / .app
-make pack-linux-server      # tar.gz
+make pack-linux-desktop     # AppImage / .deb
 make pack-windows-desktop   # .exe
 make clean                  # rm -rf out/
 ```
@@ -365,8 +374,8 @@ make clean                  # rm -rf out/
 out/
   frontend/dist/     # Vite production (served at /app/)
   server/            # danmo-work, danmo-work-cli, danmo-work-tui
-  desktop/bundle/    # Tauri installers
-  dist/              # Linux server release tarball
+  desktop/bundle/    # Tauri installers (macOS / Linux / Windows)
+  env/               # optional OCI agent env tar (Release asset)
   run/               # Dev PIDs, logs, wrappers
 ```
 
@@ -433,7 +442,7 @@ SKIP_BACKEND=1 make dev-desktop
 | Job | Artifact |
 |-----|----------|
 | macOS desktop | `out/desktop/bundle/*.dmg`, `*.app` |
-| Linux server | `out/dist/danmo-work-linux-*.tar.gz` |
+| Linux desktop | `out/desktop/bundle/*.AppImage`, `*.deb` |
 | Windows desktop | `out/desktop/bundle/*.exe` |
 
 **macOS channels:** GitHub Releases `.dmg`, or Homebrew (`brew tap danmo-ai/tap` → [`danmo-ai/homebrew-tap`](https://github.com/danmo-ai/homebrew-tap), synced by `HOMEBREW_TAP_TOKEN` / **Publish Homebrew Tap**). Cask source of truth: [`Casks/danmo-work.rb`](Casks/danmo-work.rb).

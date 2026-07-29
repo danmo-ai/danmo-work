@@ -73,14 +73,19 @@ fn find_sidecar_binary() -> Result<PathBuf, String> {
         .and_then(|p| p.parent().map(|d| d.to_path_buf()))
         .ok_or_else(|| "cannot determine exe directory".to_string())?;
 
-    let triples = [
-        "aarch64-apple-darwin",
-        "x86_64-apple-darwin",
-        "x86_64-unknown-linux-gnu",
-        "x86_64-pc-windows-msvc",
+    // Packaged macOS/Windows keep the Rust target triple on externalBin;
+    // Linux AppImage/.deb strip it to plain danmo-work-backend next to the exe.
+    let names = [
+        "danmo-work-backend-aarch64-apple-darwin",
+        "danmo-work-backend-x86_64-apple-darwin",
+        "danmo-work-backend-x86_64-unknown-linux-gnu",
+        "danmo-work-backend-x86_64-pc-windows-msvc.exe",
+        "danmo-work-backend-x86_64-pc-windows-msvc",
+        "danmo-work-backend",
+        "danmo-work-backend.exe",
     ];
-    for triple in &triples {
-        let candidate = exe_dir.join(format!("danmo-work-backend-{triple}"));
+    for name in &names {
+        let candidate = exe_dir.join(name);
         if candidate.exists() {
             return Ok(candidate);
         }

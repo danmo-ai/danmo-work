@@ -37,7 +37,7 @@ make build-server         # server only
 make build-cli            # cli only
 make build-tui            # tui only
 make build-env-tar        # optional OCI env tar → out/env/*.tar (Release asset; not in app packs)
-make pack-linux-server
+make pack-linux-desktop
 make pack-macos-desktop
 make pack-windows-desktop
 make clean                # rm -rf out/
@@ -54,7 +54,6 @@ out/frontend/dist/   # Vite production
 out/server/          # Go binaries (danmo-work, danmo-work-cli, danmo-work-tui)
 out/desktop/bundle/  # Tauri installers
 out/desktop/cargo/   # Cargo intermediate
-out/dist/            # pack-linux-server tar.gz
 out/env/             # optional OCI image tar (dev/CI; user downloads to ~/.danmo-work/env/)
 out/run/             # dev PIDs, logs, wrappers (DQ_DEV markers)
 ```
@@ -121,7 +120,7 @@ Builds Go backend as a Tauri sidecar binary (`scripts/build_sidecar.sh`), inject
 `.github/workflows/release.yml` builds on tag `v*` or `workflow_dispatch`:
 
 - macOS desktop → `out/desktop/bundle/**/*.dmg, *.app`
-- Linux server → `out/dist/danmo-work-linux-*.tar.gz`
+- Linux desktop → `out/desktop/bundle/**/*.AppImage, *.deb`
 - Windows desktop → `out/desktop/bundle/**/*.exe`
 
 Homebrew cask: `Casks/danmo-work.rb` (bumped on `v*` release; URL =

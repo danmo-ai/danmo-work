@@ -1,5 +1,5 @@
 # Unified build output paths — source from scripts/*.sh
-# Layout: out/frontend/dist, out/server/, out/desktop/, out/dist/, out/run/
+# Layout: out/frontend/dist, out/server/, out/desktop/, out/env/, out/run/
 
 if [[ -n "${_DQ_OUT_PATHS_LOADED:-}" ]]; then
   return 0 2>/dev/null || true
