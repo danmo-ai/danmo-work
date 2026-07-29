@@ -511,7 +511,10 @@ type pendingMessageRepo struct{ s *Store }
 func (r *pendingMessageRepo) ListBySession(ctx context.Context, sessionID string) ([]domain.PendingMessage, error) {
 	var rows []pendingMessageModel
 	if err := r.s.db.WithContext(ctx).
-		Where("session_id = ? AND status = ?", sessionID, string(domain.PendingQueued)).
+		Where("session_id = ? AND status IN ?", sessionID, []string{
+			string(domain.PendingQueued),
+			string(domain.PendingSteering),
+		}).
 		Order("position ASC, created_at ASC").
 		Find(&rows).Error; err != nil {
 		return nil, err
@@ -555,7 +558,10 @@ func (r *pendingMessageRepo) Delete(ctx context.Context, id string) error {
 
 func (r *pendingMessageRepo) DeleteBySession(ctx context.Context, sessionID string) error {
 	return r.s.db.WithContext(ctx).
-		Where("session_id = ? AND status = ?", sessionID, string(domain.PendingQueued)).
+		Where("session_id = ? AND status IN ?", sessionID, []string{
+			string(domain.PendingQueued),
+			string(domain.PendingSteering),
+		}).
 		Delete(&pendingMessageModel{}).Error
 }
 
@@ -563,7 +569,10 @@ func (r *pendingMessageRepo) MaxPosition(ctx context.Context, sessionID string) 
 	var maxPos *int
 	err := r.s.db.WithContext(ctx).Model(&pendingMessageModel{}).
 		Select("MAX(position)").
-		Where("session_id = ? AND status = ?", sessionID, string(domain.PendingQueued)).
+		Where("session_id = ? AND status IN ?", sessionID, []string{
+			string(domain.PendingQueued),
+			string(domain.PendingSteering),
+		}).
 		Scan(&maxPos).Error
 	if err != nil {
 		return 0, err
@@ -600,11 +609,50 @@ func (r *pendingMessageRepo) PopFront(ctx context.Context, sessionID string) (do
 	return pendingMessageToDomain(row), true, nil
 }
 
+func (r *pendingMessageRepo) ClaimSteering(ctx context.Context, sessionID string) ([]domain.PendingMessage, error) {
+	r.s.mu.Lock()
+	defer r.s.mu.Unlock()
+	var rows []pendingMessageModel
+	if err := r.s.db.WithContext(ctx).
+		Where("session_id = ? AND status = ?", sessionID, string(domain.PendingSteering)).
+		Order("position ASC, created_at ASC").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	ids := make([]string, len(rows))
+	out := make([]domain.PendingMessage, len(rows))
+	for i, row := range rows {
+		ids[i] = row.ID
+		out[i] = pendingMessageToDomain(row)
+	}
+	if err := r.s.db.WithContext(ctx).
+		Where("id IN ?", ids).
+		Delete(&pendingMessageModel{}).Error; err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (r *pendingMessageRepo) DemoteSteering(ctx context.Context, sessionID string) error {
+	return r.s.db.WithContext(ctx).Model(&pendingMessageModel{}).
+		Where("session_id = ? AND status = ?", sessionID, string(domain.PendingSteering)).
+		Updates(map[string]any{
+			"status":     string(domain.PendingQueued),
+			"updated_at": time.Now().UTC(),
+		}).Error
+}
+
 func (r *pendingMessageRepo) Reorder(ctx context.Context, sessionID string, ids []string) error {
 	return r.s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for i, id := range ids {
 			res := tx.Model(&pendingMessageModel{}).
-				Where("id = ? AND session_id = ? AND status = ?", id, sessionID, string(domain.PendingQueued)).
+				Where("id = ? AND session_id = ? AND status IN ?", id, sessionID, []string{
+					string(domain.PendingQueued),
+					string(domain.PendingSteering),
+				}).
 				Updates(map[string]any{
 					"position":   i + 1,
 					"updated_at": time.Now().UTC(),

@@ -16,9 +16,6 @@ type Engine interface {
 	CancelTurn(ctx context.Context, turnID string)
 	// ActiveTurnID returns the in-flight turn for a session, if any.
 	ActiveTurnID(sessionID string) string
-	// SoftSteer injects a user message into the active turn at the next safe
-	// boundary (after the current tool batch / before the next model call).
-	SoftSteer(sessionID, content string, attachments []domain.UserAttachment) error
 	ListTurns(sessionID string) []domain.TurnLog
 
 	StreamEvents(sessionID string, since int64) []domain.StreamEvent

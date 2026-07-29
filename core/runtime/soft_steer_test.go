@@ -4,13 +4,13 @@ import (
 	"context"
 	"testing"
 
-	"danmo-work/core/domain"
 	"danmo-work/core/adapter/llm"
+	"danmo-work/core/domain"
 	"danmo-work/core/runtime/permission"
 	"danmo-work/core/runtime/tool"
 )
 
-func TestSoftSteerInjectedBetweenToolAndNextModelCall(t *testing.T) {
+func TestSoftSteerInjectedAfterToolsBeforeNextLLM(t *testing.T) {
 	mockLLM := llm.NewMock().
 		AddToolCall("noop_tool", map[string]any{}).
 		AddText("steered done")
@@ -19,9 +19,8 @@ func TestSoftSteerInjectedBetweenToolAndNextModelCall(t *testing.T) {
 	reg.Register(&mockToolHandler{name: "noop_tool", risk: domain.RiskLow})
 	runner := NewTurnRunner(mockLLM, NewStreamEventManager(nil), permission.NewGate(nil), reg, nil)
 
-	var pending []Message
-	pending = []Message{{Role: RoleUser, Content: "please change direction"}}
-	drains := 0
+	pending := []Message{{Role: RoleUser, Content: "please change direction"}}
+	claims := 0
 
 	rep, msgs, err := runner.Run(context.Background(), TurnContext{
 		SessionID: "s1",
@@ -30,10 +29,10 @@ func TestSoftSteerInjectedBetweenToolAndNextModelCall(t *testing.T) {
 		Model:     "m",
 		MaxSteps:  10,
 		Messages:  []Message{{Role: RoleUser, Content: "start"}},
-		DrainSteers: func() []Message {
-			drains++
-			// After tools complete, second step start drains the steer.
-			if drains >= 2 && len(pending) > 0 {
+		ClaimSteers: func() []Message {
+			claims++
+			// Claim only after tools finish (first claim in this path).
+			if claims == 1 && len(pending) > 0 {
 				out := pending
 				pending = nil
 				return out
@@ -46,6 +45,9 @@ func TestSoftSteerInjectedBetweenToolAndNextModelCall(t *testing.T) {
 	}
 	if rep.Status != domain.ReportDone {
 		t.Fatalf("status=%s summary=%q", rep.Status, rep.Summary)
+	}
+	if claims < 1 {
+		t.Fatal("expected ClaimSteers after tool batch")
 	}
 	found := false
 	for _, m := range msgs {
@@ -67,7 +69,7 @@ func TestSoftSteerKeepsTurnAliveWhenModelStops(t *testing.T) {
 	runner := NewTurnRunner(mockLLM, NewStreamEventManager(nil), permission.NewGate(nil), tool.NewRegistry(), nil)
 
 	pending := []Message{{Role: RoleUser, Content: "one more thing"}}
-	calls := 0
+	claims := 0
 	rep, msgs, err := runner.Run(context.Background(), TurnContext{
 		SessionID: "s1",
 		TurnID:    "t1",
@@ -75,10 +77,10 @@ func TestSoftSteerKeepsTurnAliveWhenModelStops(t *testing.T) {
 		Model:     "m",
 		MaxSteps:  10,
 		Messages:  []Message{{Role: RoleUser, Content: "start"}},
-		DrainSteers: func() []Message {
-			// After first final answer, inject steer so the turn continues.
-			calls++
-			if calls == 2 && len(pending) > 0 {
+		ClaimSteers: func() []Message {
+			claims++
+			// First claim happens when model stops with no tools.
+			if claims == 1 && len(pending) > 0 {
 				out := pending
 				pending = nil
 				return out

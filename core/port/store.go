@@ -204,8 +204,13 @@ type PendingMessageRepo interface {
 	Delete(ctx context.Context, id string) error
 	DeleteBySession(ctx context.Context, sessionID string) error
 	// PopFront marks the lowest-position queued message as sending and returns it.
-	// Returns ok=false when the queue is empty.
+	// Returns ok=false when the queue is empty. Only considers status=queued.
 	PopFront(ctx context.Context, sessionID string) (domain.PendingMessage, bool, error)
+	// ClaimSteering atomically returns and deletes all status=steering messages
+	// for the session (ordered). Used at the tool→LLM soft-steer boundary.
+	ClaimSteering(ctx context.Context, sessionID string) ([]domain.PendingMessage, error)
+	// DemoteSteering moves leftover steering messages back to queued (turn ended).
+	DemoteSteering(ctx context.Context, sessionID string) error
 	Reorder(ctx context.Context, sessionID string, ids []string) error
 	MaxPosition(ctx context.Context, sessionID string) (int, error)
 }

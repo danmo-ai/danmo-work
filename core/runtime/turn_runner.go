@@ -150,10 +150,10 @@ type TurnContext struct {
 	ProjectID string
 	OnReport  func(domain.Report)
 	Messages  []Message
-	// DrainSteers returns soft-steer user messages queued for this session's
-	// active turn. Called at safe boundaries (before each model call; and when
-	// the model stops with no tools so the turn can continue).
-	DrainSteers func() []Message
+	// ClaimSteers loads durable soft-steer messages (status=steering) for this
+	// session. Called after parallel tools finish, before the next LLM call
+	// (and when the model stops so a steer can keep the turn alive).
+	ClaimSteers func() []Message
 }
 
 type approvalGate interface {
@@ -296,8 +296,6 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		default:
 		}
 
-		messages = p.applySoftSteers(ctx, tctx, messages)
-
 		if cfg.compactionEnabled && step > 1 {
 			messages = p.compactMessages(messages, cfg)
 		}
@@ -361,8 +359,8 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			p.logAssistantMessage(Message{Role: RoleAssistant, Content: resp.Content})
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
 
-			// Soft steer arrived while the model was producing a final answer:
-			// keep the turn alive instead of ending.
+			// Model wanted to stop — scan durable steers so a late guidance
+			// message can keep the same turn alive.
 			before := len(messages)
 			messages = p.applySoftSteers(ctx, tctx, messages)
 			if len(messages) > before && !isLastStep {
@@ -417,8 +415,11 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			reportCaptured = true
 			break
 		}
+
+		// Safe soft-steer boundary: parallel tools finished → scan durable
+		// steering messages before the next LLM call.
+		messages = p.applySoftSteers(ctx, tctx, messages)
 		p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
-		// Next loop iteration applies soft steers at the tool→model boundary.
 	}
 
 	if !reportCaptured {
@@ -816,10 +817,10 @@ func (p *TurnRunner) logUserMessage(content string) {
 }
 
 func (p *TurnRunner) applySoftSteers(ctx context.Context, tctx TurnContext, messages []Message) []Message {
-	if tctx.DrainSteers == nil {
+	if tctx.ClaimSteers == nil {
 		return messages
 	}
-	steers := tctx.DrainSteers()
+	steers := tctx.ClaimSteers()
 	if len(steers) == 0 {
 		return messages
 	}

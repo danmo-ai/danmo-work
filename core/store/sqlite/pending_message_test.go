@@ -65,3 +65,84 @@ func TestPendingMessageQueueOrderAndPop(t *testing.T) {
 		t.Fatalf("after pop list: %+v", list)
 	}
 }
+
+func TestPendingMessageClaimAndDemoteSteering(t *testing.T) {
+	dir := t.TempDir()
+	st, err := sqlite.New(filepath.Join(dir, "work.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	repo := st.PendingMessages()
+
+	queued := domain.PendingMessage{
+		ID: "q1", SessionID: "s1", Content: "later", Position: 2, Status: domain.PendingQueued,
+	}
+	steer := domain.PendingMessage{
+		ID: "s1msg", SessionID: "s1", Content: "nudge", Position: 1, Status: domain.PendingSteering,
+	}
+	if err := repo.Create(ctx, queued); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Create(ctx, steer); err != nil {
+		t.Fatal(err)
+	}
+
+	// PopFront must skip steering rows.
+	front, ok, err := repo.PopFront(ctx, "s1")
+	if err != nil || !ok {
+		t.Fatalf("pop queued: ok=%v err=%v", ok, err)
+	}
+	if front.ID != "q1" {
+		t.Fatalf("popped steering instead of queued: %+v", front)
+	}
+	_ = repo.Update(ctx, domain.PendingMessage{
+		ID: "q1", SessionID: "s1", Content: "later", Position: 2, Status: domain.PendingQueued,
+	})
+
+	claimed, err := repo.ClaimSteering(ctx, "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(claimed) != 1 || claimed[0].ID != "s1msg" || claimed[0].Content != "nudge" {
+		t.Fatalf("claim: %+v", claimed)
+	}
+	list, err := repo.ListBySession(ctx, "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].ID != "q1" {
+		t.Fatalf("after claim list: %+v", list)
+	}
+
+	again, err := repo.ClaimSteering(ctx, "s1")
+	if err != nil || len(again) != 0 {
+		t.Fatalf("second claim should be empty: %+v err=%v", again, err)
+	}
+
+	leftover := domain.PendingMessage{
+		ID: "s2msg", SessionID: "s1", Content: "missed", Position: 1, Status: domain.PendingSteering,
+	}
+	if err := repo.Create(ctx, leftover); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.DemoteSteering(ctx, "s1"); err != nil {
+		t.Fatal(err)
+	}
+	list, err = repo.ListBySession(ctx, "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, m := range list {
+		if m.ID == "s2msg" {
+			found = true
+			if m.Status != domain.PendingQueued {
+				t.Fatalf("demote status: %+v", m)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("demoted message missing: %+v", list)
+	}
+}

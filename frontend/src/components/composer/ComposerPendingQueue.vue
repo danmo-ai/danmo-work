@@ -94,7 +94,7 @@ async function steerToCurrentTurn(id: string) {
     toast.success(
       wasRunning ? t('composer.queueSteeredInterrupt') : t('composer.queueSteered'),
     )
-    // Soft-steer removes the item from durable pending immediately.
+    // Soft-steer stays in the queue as status=steering until claimed after tools.
     await sessions.loadPending()
     if (wasRunning) await sessions.loadTurns()
   } catch (e) {
@@ -156,8 +156,14 @@ async function steerToCurrentTurn(id: string) {
             <span v-else class="composer-queue__index">{{ index + 1 }}</span>
             <div class="composer-queue__main">
               <p class="composer-queue__text">{{ preview(msg.content) }}</p>
-              <span v-if="index === 0" class="composer-queue__steer-label">
-                {{ sessions.runningTurnId ? t('composer.queueSteerNextRunning') : t('composer.queueSteerNextIdle') }}
+              <span v-if="index === 0 || msg.status === 'steering'" class="composer-queue__steer-label">
+                {{
+                  msg.status === 'steering'
+                    ? t('composer.queueSteeringArmed')
+                    : sessions.runningTurnId
+                      ? t('composer.queueSteerNextRunning')
+                      : t('composer.queueSteerNextIdle')
+                }}
               </span>
             </div>
             <span v-if="msg.attachments?.length" class="composer-queue__atts">
@@ -167,7 +173,12 @@ async function steerToCurrentTurn(id: string) {
           <div class="composer-queue__actions">
             <button type="button" :disabled="index === 0" :title="t('composer.queueMoveUp')" @click="move(msg.id, -1)">↑</button>
             <button type="button" :disabled="index === items.length - 1" :title="t('composer.queueMoveDown')" @click="move(msg.id, 1)">↓</button>
-            <button type="button" :title="t('composer.queueEdit')" @click="startEdit(msg.id, msg.content)">✎</button>
+            <button
+              type="button"
+              :disabled="msg.status === 'steering'"
+              :title="t('composer.queueEdit')"
+              @click="startEdit(msg.id, msg.content)"
+            >✎</button>
             <button type="button" :title="t('composer.queueRemove')" @click="remove(msg.id)">✕</button>
           </div>
         </template>

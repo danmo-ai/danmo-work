@@ -201,6 +201,8 @@ func TestMarketInstallNormalizesBodyWithCatalogID(t *testing.T) {
 		t.Fatalf("body still has pre-override refs: %q", sk.Body)
 	}
 }
+
+func TestMarketUninstallRestoresBuiltinSkill(t *testing.T) {
 	ctx := context.Background()
 	cfgStore := &memConfigStore{cfg: &domain.ConfigFile{}}
 	configMgr := NewConfigManager(cfgStore)

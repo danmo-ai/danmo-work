@@ -55,7 +55,7 @@ export interface PendingMessage {
     data?: string
   }>
   position: number
-  status: 'queued' | 'sending' | 'discarded'
+  status: 'queued' | 'steering' | 'sending' | 'discarded'
   agentId?: string
   modelId?: string
   createdAt: string

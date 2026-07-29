@@ -6,9 +6,10 @@ import "time"
 type PendingMessageStatus string
 
 const (
-	PendingQueued     PendingMessageStatus = "queued"
-	PendingSending    PendingMessageStatus = "sending"
-	PendingDiscarded  PendingMessageStatus = "discarded"
+	PendingQueued    PendingMessageStatus = "queued"
+	PendingSteering  PendingMessageStatus = "steering" // soft-steer into active turn at next tool→LLM boundary
+	PendingSending   PendingMessageStatus = "sending"
+	PendingDiscarded PendingMessageStatus = "discarded"
 )
 
 // PendingMessage is a user message waiting to become the next turn after the

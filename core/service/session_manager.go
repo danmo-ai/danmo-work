@@ -307,8 +307,9 @@ func (m *SessionManager) ReorderPending(ctx context.Context, sessionID string, i
 	return m.store.PendingMessages().Reorder(ctx, sessionID, ids)
 }
 
-// SteerPending soft-steers a queued message into the active turn at the next
-// safe boundary. If the session is idle, it starts the message as a new turn.
+// SteerPending marks a queued message for soft-steer into the active turn.
+// The turn runner scans durable steering rows after each tool batch (before
+// the next LLM call). If the session is idle, the message is sent as a new turn.
 func (m *SessionManager) SteerPending(ctx context.Context, sessionID, id string) error {
 	msg, err := m.store.PendingMessages().Get(ctx, id)
 	if err != nil {
@@ -317,7 +318,7 @@ func (m *SessionManager) SteerPending(ctx context.Context, sessionID, id string)
 	if msg.SessionID != sessionID {
 		return fmt.Errorf("pending message not found")
 	}
-	if msg.Status != domain.PendingQueued {
+	if msg.Status != domain.PendingQueued && msg.Status != domain.PendingSteering {
 		return fmt.Errorf("pending message is not steerable")
 	}
 
@@ -342,24 +343,31 @@ func (m *SessionManager) SteerPending(ctx context.Context, sessionID, id string)
 		active = m.engine.ActiveTurnID(sessionID)
 	}
 	if active == "" {
+		// Idle: keep as queued and start a normal turn.
+		if msg.Status == domain.PendingSteering {
+			msg.Status = domain.PendingQueued
+			msg.UpdatedAt = time.Now().UTC()
+			if err := m.store.PendingMessages().Update(ctx, msg); err != nil {
+				return err
+			}
+		}
 		go m.DrainPendingQueue(context.Background(), sessionID)
 		return nil
 	}
 
-	// Soft steer: remove from durable queue and inject into the live turn inbox.
-	if err := m.store.PendingMessages().Delete(ctx, id); err != nil {
-		return err
-	}
-	if err := m.engine.SoftSteer(sessionID, msg.Content, msg.Attachments); err != nil {
-		// Restore so the user does not lose the message.
-		msg.Status = domain.PendingQueued
-		msg.UpdatedAt = time.Now().UTC()
-		if cerr := m.store.PendingMessages().Create(ctx, msg); cerr != nil {
-			log.Printf("[steer] restore pending %s after SoftSteer failure: %v", id, cerr)
-		}
-		return err
-	}
-	return nil
+	msg.Status = domain.PendingSteering
+	msg.UpdatedAt = time.Now().UTC()
+	return m.store.PendingMessages().Update(ctx, msg)
+}
+
+// ClaimSteering returns and deletes durable soft-steer messages for a session.
+func (m *SessionManager) ClaimSteering(ctx context.Context, sessionID string) ([]domain.PendingMessage, error) {
+	return m.store.PendingMessages().ClaimSteering(ctx, sessionID)
+}
+
+// DemoteSteering moves unclaimed soft-steer messages back to the next-turn queue.
+func (m *SessionManager) DemoteSteering(ctx context.Context, sessionID string) error {
+	return m.store.PendingMessages().DemoteSteering(ctx, sessionID)
 }
 
 // DrainPendingQueue starts the next queued turn if the session is idle.
