@@ -655,16 +655,16 @@ function delegateCardAwaiting(seq: number): boolean {
 
 function delegateCardAwaitingLabel(seq: number): string {
   const childId = delegateChildTurnId(seq)
-  if (childTurnNeedsApproval(childId)) return '待审批'
-  if (childTurnNeedsAsk(childId)) return '待回答'
+  if (childTurnNeedsApproval(childId)) return t('sessions.awaitingApproval')
+  if (childTurnNeedsAsk(childId)) return t('sessions.awaitingAsk')
   return ''
 }
 
 function delegateCardLinkLabel(seq: number): string {
   const childId = delegateChildTurnId(seq)
-  if (childTurnNeedsApproval(childId)) return '去审批 →'
-  if (childTurnNeedsAsk(childId)) return '去回答 →'
-  return '查看 →'
+  if (childTurnNeedsApproval(childId)) return t('sessions.goApprove')
+  if (childTurnNeedsAsk(childId)) return t('sessions.goAnswer')
+  return t('sessions.viewExpertWork')
 }
 
 function drillIntoChildTurnBySeq(seq: number) {
@@ -824,13 +824,18 @@ function toolName(ev: StreamEvent): string {
 
 function delegateLabel(ev: StreamEvent): string {
   const p = asRecord(ev.payload)
-  const agent = String(p?.agentId ?? p?.agent ?? '')
+  const agentId = String(p?.agentId ?? p?.agent ?? '')
+  const agent = agentId ? sessions.agents.find((a) => a.id === agentId) : undefined
+  const name = agent?.name?.trim() || agentId
   const goal = String(p?.goal ?? '')
   const status = String(p?.status ?? '')
   if (ev.type === 'delegate.started') {
-    return agent ? `委托给 ${agent}: ${goal}` : '开始委托'
+    if (!name) return t('sessions.delegateStartedFallback')
+    return t('sessions.delegateStarted', { name, goal })
   }
-  return agent ? `委托完成 ${agent}${status ? ` (${status})` : ''}` : '委托完成'
+  if (!name) return t('sessions.delegateCompletedFallback')
+  const statusSuffix = status ? ` (${status})` : ''
+  return t('sessions.delegateCompleted', { name, status: statusSuffix })
 }
 
 function delegateAgent(ev: StreamEvent): string {

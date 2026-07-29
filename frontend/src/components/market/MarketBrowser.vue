@@ -13,6 +13,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   installed: [id: string]
   uninstalled: [id: string]
+  viewInstalled: [id: string]
 }>()
 
 const { t } = useI18n()
@@ -69,9 +70,14 @@ const externalListingLabel = computed(() => {
 
 async function installItem(item: MarketListing, overwrite = false) {
   try {
-    await store.install(item.sourceId, item.kind, item.id, overwrite)
-    toast.success(t('market.installSuccess', { name: item.name }))
-    emit('installed', item.id)
+    const result = await store.install(item.sourceId, item.kind, item.id, overwrite)
+    if (item.kind === 'expert') {
+      toast.success(t('market.installSuccessExpert', { name: item.name }))
+    } else {
+      toast.success(t('market.installSuccess', { name: item.name }))
+    }
+    const installedId = result?.installed?.[0] || item.id
+    emit('installed', installedId)
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('market.installFailed'))
   }
@@ -140,6 +146,9 @@ async function uninstallItem(item: MarketListing) {
         {{ $t('market.skillDeps') }}:
         <code v-for="dep in selected.skillDeps" :key="dep">{{ dep }}</code>
       </div>
+      <p v-if="kind === 'expert' && selected.installed" class="market-card__next">
+        {{ $t('market.installNextStepExpert') }}
+      </p>
       <div class="market-card__actions">
         <template v-if="!selected.installed">
           <DqButton
@@ -151,6 +160,13 @@ async function uninstallItem(item: MarketListing) {
           </DqButton>
         </template>
         <template v-else>
+          <DqButton
+            v-if="kind === 'expert'"
+            type="primary"
+            @click="emit('viewInstalled', selected.id)"
+          >
+            {{ $t('market.viewInstalled') }}
+          </DqButton>
           <DqButton
             :loading="store.installing === `${selected.kind}:${selected.id}`"
             @click="installItem(selected, true)"
@@ -268,6 +284,12 @@ async function uninstallItem(item: MarketListing) {
 }
 .market-card__deps code {
   font-size: 11px;
+}
+.market-card__next {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--dq-text-secondary, #666);
 }
 .market-card__actions {
   margin-top: 16px;

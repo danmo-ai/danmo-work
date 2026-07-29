@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DqToolCard } from '@danqing/dq-shell'
+import { useSessionsStore } from '@/stores/sessions'
+import { friendlyToolDisplayName } from '@/utils/tool-display'
 
 export interface ToolCardPayload {
   name: string
@@ -28,6 +30,11 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const sessions = useSessionsStore()
+
+const toolDisplayName = computed(() =>
+  friendlyToolDisplayName(props.card.name, props.card.inputStr, sessions.agents, t),
+)
 
 function truncateText(s: string, max = 200): string {
   if (s.length <= max) return s
@@ -78,7 +85,7 @@ const statusLabel = computed(() => {
 
 <template>
   <DqToolCard
-    :name="card.name"
+    :name="toolDisplayName"
     :status="card.status"
     :summary="inputSummary"
     :preview="outputSummary"

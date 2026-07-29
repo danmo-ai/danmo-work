@@ -171,8 +171,38 @@ const showTray = computed(
 const useAgentSegmented = computed(() => primaryAgents.value.length > 0 && primaryAgents.value.length <= 4)
 
 const agentOptions = computed(() =>
-  primaryAgents.value.map((a) => ({ label: a.name, value: a.id })),
+  primaryAgents.value.map((a) => ({
+    label: leadAgentShortLabel(a),
+    value: a.id,
+  })),
 )
+
+const selectedLeadAgent = computed(() =>
+  primaryAgents.value.find((a) => a.id === sessions.selectedAgentId),
+)
+
+const selectedLeadHint = computed(() => leadAgentHint(selectedLeadAgent.value))
+
+function leadAgentShortLabel(agent: { id: string; name: string }): string {
+  if (agent.id === 'default' || agent.id === 'team' || agent.id === 'planner') {
+    return t(`composer.agentMode.${agent.id}`)
+  }
+  return agent.name
+}
+
+function leadAgentHint(agent: { id: string; name: string; description?: string; persona?: string; canDelegate?: boolean } | undefined): string {
+  if (!agent) return ''
+  let base = ''
+  if (agent.id === 'default' || agent.id === 'team' || agent.id === 'planner') {
+    base = t(`composer.agentModeHint.${agent.id}`)
+  } else {
+    base = (agent.description || agent.persona || '').trim() || t('composer.agentModeHint.custom')
+  }
+  if (agent.canDelegate) {
+    return `${base} ${t('composer.canDelegateHint')}`
+  }
+  return base
+}
 
 function clearGitStatus() {
   gitBranch.value = ''
@@ -935,31 +965,45 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
           </DqSelect>
         </div>
 
-        <DqSegmented
-          v-if="showAgentSelect && useAgentSegmented"
-          v-model="sessions.selectedAgentId"
-          size="sm"
-          class="composer-agent-seg composer-agent-seg--compact"
-          :options="agentOptions"
-          :aria-label="t('composer.selectAgent')"
-        />
         <div
-          v-else-if="showAgentSelect"
-          class="composer-select composer-select--agent"
+          v-if="showAgentSelect"
+          class="composer-agent-picker"
         >
-          <DqSelect
+          <DqSegmented
+            v-if="useAgentSegmented"
             v-model="sessions.selectedAgentId"
             size="sm"
-            variant="ghost"
+            class="composer-agent-seg composer-agent-seg--compact"
+            :options="agentOptions"
             :aria-label="t('composer.selectAgent')"
+            :title="selectedLeadHint"
+          />
+          <div
+            v-else
+            class="composer-select composer-select--agent"
           >
-            <DqOption
-              v-for="a in primaryAgents"
-              :key="a.id"
-              :value="a.id"
-              :label="a.name"
-            />
-          </DqSelect>
+            <DqSelect
+              v-model="sessions.selectedAgentId"
+              size="sm"
+              variant="ghost"
+              :aria-label="t('composer.selectAgent')"
+              :title="selectedLeadHint"
+            >
+              <DqOption
+                v-for="a in primaryAgents"
+                :key="a.id"
+                :value="a.id"
+                :label="leadAgentShortLabel(a)"
+              />
+            </DqSelect>
+          </div>
+          <p
+            v-if="selectedLeadHint"
+            class="composer-agent-hint"
+            :title="selectedLeadHint"
+          >
+            {{ selectedLeadHint }}
+          </p>
         </div>
 
         <span
@@ -1213,6 +1257,26 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
   border: none;
   background: transparent;
   padding: 0;
+}
+
+.composer-agent-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  max-width: min(420px, 55vw);
+  flex-shrink: 1;
+}
+
+.composer-agent-hint {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--dq-label-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .composer-agent-seg--compact :deep(.dq-segmented__item) {

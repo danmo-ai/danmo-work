@@ -89,6 +89,19 @@ const marketAgents = computed(() =>
   sortedAgents.value.filter((a) => a.mode === 'subagent' && !!a.marketSource),
 )
 
+/** Experts that a lead can summon when canDelegate is on (read-only roster). */
+const collaboratableExperts = computed(() =>
+  sortedAgents.value.filter((a) => a.mode === 'subagent'),
+)
+
+const capabilitySummary = computed(() => ({
+  skills: agentForm.value.skillIds?.length ?? 0,
+  tools: agentForm.value.tools?.length ?? 0,
+  connectors: agentForm.value.mcpServers?.length ?? 0,
+  knowledge: agentForm.value.knowledgeIds?.length ?? 0,
+  canDelegate: !!agentForm.value.canDelegate,
+}))
+
 const selectedAgent = computed(() => globalAgents.items.find((a) => a.id === selectedId.value))
 const marketSelected = computed(() => {
   if (!marketSelectedKey.value) return null
@@ -113,8 +126,20 @@ const headerTitle = computed(() => {
   return selectedAgent.value?.name.trim() || t('teams.untitled')
 })
 
-async function onMarketInstalled() {
+async function onMarketInstalled(id: string) {
   await Promise.all([globalAgents.load(), skills.load()])
+  if (id && globalAgents.items.some((a) => a.id === id)) {
+    pageView.value = 'library'
+    selectAgent(id)
+  }
+}
+
+function viewInstalledExpert(id: string) {
+  if (!id) return
+  pageView.value = 'library'
+  if (globalAgents.items.some((a) => a.id === id)) {
+    selectAgent(id)
+  }
 }
 
 async function onMarketUninstalled() {
@@ -302,6 +327,19 @@ function compactId(id: string) {
   return `${id.slice(0, 8)}…${id.slice(-4)}`
 }
 
+/** Rail subtitle: role first, id only as fallback. */
+function agentRailSubtitle(agent: Agent): string {
+  const text = (agent.persona || agent.description || '').trim().replace(/\s+/g, ' ')
+  if (text) return text.length > 56 ? `${text.slice(0, 56)}…` : text
+  return compactId(agent.id)
+}
+
+function expertOneLiner(agent: Agent): string {
+  const text = (agent.persona || agent.description || '').trim().replace(/\s+/g, ' ')
+  if (!text) return compactId(agent.id)
+  return text.length > 72 ? `${text.slice(0, 72)}…` : text
+}
+
 function onWorkspaceKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') {
     e.preventDefault()
@@ -347,7 +385,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
                 <span class="resource-rail__avatar">{{ agentInitial(agent.name) }}</span>
                 <span class="resource-rail__meta">
                   <span class="resource-rail__name">{{ agent.name }}</span>
-                  <span class="resource-rail__desc">{{ compactId(agent.id) }}</span>
+                  <span class="resource-rail__desc" :title="agent.persona || agent.description || agent.id">{{ agentRailSubtitle(agent) }}</span>
                 </span>
               </button>
             </nav>
@@ -366,7 +404,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
                 <span class="resource-rail__avatar">{{ agentInitial(agent.name) }}</span>
                 <span class="resource-rail__meta">
                   <span class="resource-rail__name">{{ agent.name }}</span>
-                  <span class="resource-rail__desc">{{ compactId(agent.id) }}</span>
+                  <span class="resource-rail__desc" :title="agent.persona || agent.description || agent.id">{{ agentRailSubtitle(agent) }}</span>
                 </span>
               </button>
             </nav>
@@ -385,7 +423,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
                 <span class="resource-rail__avatar">{{ agentInitial(agent.name) }}</span>
                 <span class="resource-rail__meta">
                   <span class="resource-rail__name">{{ agent.name }}</span>
-                  <span class="resource-rail__desc">{{ compactId(agent.id) }}</span>
+                  <span class="resource-rail__desc" :title="agent.persona || agent.description || agent.id">{{ agentRailSubtitle(agent) }}</span>
                 </span>
               </button>
             </nav>
@@ -404,7 +442,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
                 <span class="resource-rail__avatar">{{ agentInitial(agent.name) }}</span>
                 <span class="resource-rail__meta">
                   <span class="resource-rail__name">{{ agent.name }}</span>
-                  <span class="resource-rail__desc">{{ compactId(agent.id) }}</span>
+                  <span class="resource-rail__desc" :title="agent.persona || agent.description || agent.id">{{ agentRailSubtitle(agent) }}</span>
                 </span>
               </button>
             </nav>
@@ -446,9 +484,25 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
         :selected-key="marketSelectedKey"
         @installed="onMarketInstalled"
         @uninstalled="onMarketUninstalled"
+        @view-installed="viewInstalledExpert"
       />
       <template v-else>
       <section v-show="activeTab === 'overview'" class="resource-section">
+        <div class="expert-capability" aria-label="capability summary">
+          <span class="expert-capability__label">{{ $t('teams.capabilitySummary') }}</span>
+          <div class="expert-capability__chips">
+            <span class="expert-capability__chip">{{ $t('teams.capabilitySkills', { n: capabilitySummary.skills }) }}</span>
+            <span class="expert-capability__chip">{{ $t('teams.capabilityTools', { n: capabilitySummary.tools }) }}</span>
+            <span class="expert-capability__chip">{{ $t('teams.capabilityConnectors', { n: capabilitySummary.connectors }) }}</span>
+            <span class="expert-capability__chip">{{ $t('teams.capabilityKnowledge', { n: capabilitySummary.knowledge }) }}</span>
+            <span
+              class="expert-capability__chip"
+              :class="capabilitySummary.canDelegate ? 'is-on' : 'is-off'"
+            >
+              {{ capabilitySummary.canDelegate ? $t('teams.capabilityCanDelegate') : $t('teams.capabilityNoDelegate') }}
+            </span>
+          </div>
+        </div>
         <div class="resource-form-grid resource-form-grid--2">
           <label class="resource-field">
             <span class="resource-field__label">{{ $t('teams.agentId') }}</span>
@@ -488,8 +542,28 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
         <div class="resource-field resource-field--block resource-field--inline" @click="agentForm.canDelegate = !agentForm.canDelegate">
           <div class="resource-field__inline-meta">
             <span class="resource-field__label">{{ $t('teams.canDelegate') }}</span>
+            <span class="resource-field__hint">{{ $t('teams.canDelegateHint') }}</span>
           </div>
           <DqSwitch :model-value="agentForm.canDelegate" size="sm" />
+        </div>
+        <div
+          v-if="agentForm.canDelegate && agentForm.mode !== 'subagent'"
+          class="expert-collab"
+        >
+          <div class="expert-collab__head">
+            <span class="resource-field__label">{{ $t('teams.collaboratableExperts') }}</span>
+            <span class="resource-field__hint">{{ $t('teams.collaboratableExpertsHint') }}</span>
+          </div>
+          <DqEmpty
+            v-if="!collaboratableExperts.length"
+            :description="$t('teams.noCollaboratableExperts')"
+          />
+          <ul v-else class="expert-collab__list">
+            <li v-for="expert in collaboratableExperts" :key="expert.id" class="expert-collab__item">
+              <span class="expert-collab__name">{{ expert.name }}</span>
+              <span class="expert-collab__desc">{{ expertOneLiner(expert) }}</span>
+            </li>
+          </ul>
         </div>
         <div class="resource-field resource-field--block resource-field--inline" @click="agentForm.inheritAmbient = !agentForm.inheritAmbient">
           <div class="resource-field__inline-meta">
@@ -711,5 +785,99 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
   font-weight: 500;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   color: var(--dq-label-secondary);
+}
+
+.expert-capability {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  background: color-mix(in srgb, var(--dq-label-primary) 2.5%, transparent);
+}
+
+.expert-capability__label {
+  font-size: var(--dq-font-size-caption);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dq-label-tertiary);
+}
+
+.expert-capability__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.expert-capability__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 500;
+  color: var(--dq-label-secondary);
+  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
+}
+
+.expert-capability__chip.is-on {
+  color: var(--dq-accent);
+  background: color-mix(in srgb, var(--dq-accent) 12%, transparent);
+}
+
+.expert-capability__chip.is-off {
+  color: var(--dq-label-tertiary);
+}
+
+.expert-collab {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+}
+
+.expert-collab__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.expert-collab__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.expert-collab__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dq-label-primary) 3%, transparent);
+}
+
+.expert-collab__name {
+  font-size: var(--dq-font-size-footnote);
+  font-weight: 600;
+  color: var(--dq-label-primary);
+}
+
+.expert-collab__desc {
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-secondary);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
