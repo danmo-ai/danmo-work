@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ToolCardBlock, { type ToolCardPayload } from '@/components/center/ToolCardBlock.vue'
+import { useSessionsStore } from '@/stores/sessions'
+import { friendlyToolDisplayName } from '@/utils/tool-display'
 
 export interface ToolGroupCard extends ToolCardPayload {
   callId: string
@@ -25,6 +27,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const sessions = useSessionsStore()
 
 const counts = computed(() => {
   let completed = 0
@@ -43,7 +46,9 @@ const counts = computed(() => {
 const hasRunning = computed(() => counts.value.running > 0)
 
 const nameSummary = computed(() => {
-  const names = props.cards.map((c) => c.name).filter(Boolean)
+  const names = props.cards
+    .map((c) => friendlyToolDisplayName(c.name, c.inputStr, sessions.agents, t))
+    .filter(Boolean)
   if (names.length <= 3) return names.join(', ')
   return `${names.slice(0, 3).join(', ')} +${names.length - 3}`
 })
