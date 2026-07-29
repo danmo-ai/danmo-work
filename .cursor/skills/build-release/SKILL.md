@@ -55,7 +55,7 @@ When the user asks to build/release:
 - `desktop/src-tauri/Cargo.lock` → `danmo-work-desktop` package version only
 - `desktop/src-tauri/tauri.conf.json` → `version`
 
-CI (`release.yml` on `v*` tags) injects the same version into `frontend/package.json` at build time and publishes dmg / app.tar.gz / exe / linux tar.gz.
+CI (`release.yml` on `v*` tags) injects the same version into `frontend/package.json` at build time and publishes dmg / app.tar.gz / AppImage / deb / exe.
 
 ## Notes
 

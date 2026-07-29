@@ -9,8 +9,8 @@
 #     - rclone remote configured via UPDATE_MIRROR_RCLONE_REMOTE
 #
 # Uploads (flat under the mirror base):
-#   - Tauri updater payloads (.app.tar.gz / .nsis.zip / setup.exe + .sig)
-#   - macOS .dmg (Homebrew cask)
+#   - Tauri updater payloads (.app.tar.gz / .AppImage / .nsis.zip / setup.exe + .sig)
+#   - macOS .dmg (Homebrew cask) + Linux .deb
 #   - latest.json (only when updater payloads are present)
 #
 # Usage:
@@ -51,14 +51,16 @@ mkdir -p "$WORK/upload"
 # Updater payloads
 find "$ASSET_DIR" \( \
   -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' -o \
+  -name '*.AppImage' -o -name '*.AppImage.sig' -o \
+  -name '*.AppImage.tar.gz' -o -name '*.AppImage.tar.gz.sig' -o \
   -name '*.nsis.zip' -o -name '*.nsis.zip.sig' -o \
   -name '*setup.exe' -o -name '*setup.exe.sig' \
 \) -exec cp {} "$WORK/upload/" \;
 
-# Desktop / server installers (Homebrew cask uses the arm64 .dmg)
+# Desktop installers (Homebrew cask uses the arm64 .dmg)
 find "$ASSET_DIR" \( \
   -name '*.dmg' -o \
-  -name 'danmo-work-linux-*.tar.gz' \
+  -name '*.deb' \
 \) -exec cp {} "$WORK/upload/" \;
 
 UPLOAD_COUNT="$(find "$WORK/upload" -type f | wc -l | tr -d ' ')"
@@ -67,7 +69,7 @@ if [[ "$UPLOAD_COUNT" -eq 0 ]]; then
   exit 0
 fi
 
-if find "$WORK/upload" \( -name '*.app.tar.gz' -o -name '*.nsis.zip' -o -name '*setup.exe' \) | grep -q .; then
+if find "$WORK/upload" \( -name '*.app.tar.gz' -o -name '*.AppImage' -o -name '*.AppImage.tar.gz' -o -name '*.nsis.zip' -o -name '*setup.exe' \) | grep -q .; then
   "$SCRIPT_DIR/generate_updater_latest_json.sh" \
     --version "$VERSION" \
     --base-url "$MIRROR_BASE" \

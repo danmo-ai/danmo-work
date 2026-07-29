@@ -46,11 +46,15 @@ jobs:
             --pattern '*.dmg' \
             --pattern '*.app.tar.gz' \
             --pattern '*.app.tar.gz.sig' \
+            --pattern '*.AppImage' \
+            --pattern '*.AppImage.sig' \
+            --pattern '*.AppImage.tar.gz' \
+            --pattern '*.AppImage.tar.gz.sig' \
+            --pattern '*.deb' \
             --pattern '*.nsis.zip' \
             --pattern '*.nsis.zip.sig' \
             --pattern '*setup.exe' \
             --pattern '*setup.exe.sig' \
-            --pattern 'danmo-work-linux-*.tar.gz' \
             --clobber
           ls -la release-assets
 

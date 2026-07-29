@@ -40,7 +40,9 @@ Local pack with updater artifacts:
 ```bash
 export TAURI_SIGNING_PRIVATE_KEY_PATH="$PWD/desktop/src-tauri/keys/updater.key"
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
-make pack-macos-desktop
+make pack-macos-desktop     # darwin
+# make pack-linux-desktop   # linux-x86_64 (AppImage + .sig)
+# make pack-windows-desktop # windows-x86_64
 ```
 
 Private keys under `desktop/src-tauri/keys/` are gitignored.

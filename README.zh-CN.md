@@ -52,7 +52,7 @@ Danmo Work 保留**一流 Coding Agent 量级**的执行底盘，再问更大的
 | **macOS**（Apple Silicon） | **Homebrew**（有 brew 时推荐） | 见下 |
 | **macOS**（Apple Silicon） | `.dmg` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
 | **Windows** | 安装包 `.exe` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
-| **Linux 服务端** | `.tar.gz` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
+| **Linux**（x86_64） | AppImage / `.deb` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
 
 ### macOS — Homebrew
 
@@ -79,6 +79,15 @@ cask 从 GitHub Releases 拉 `.dmg`。（国内镜像 `releases.danmo.ai` 可选
 从 [Releases](https://github.com/danmo-ai/danmo-work/releases/latest) 下载 `Danmo.Work_*_x64-setup.exe`。
 
 在 release CI 启用 Authenticode（[SignPath 配置](docs/windows-authenticode.md)）之前，SmartScreen 可能拦截——点 **更多信息 → 仍要运行**。Windows 11 Smart App Control 可能直接硬拦未签名包，最终仍需代码签名。
+
+### Linux
+
+从 [Releases](https://github.com/danmo-ai/danmo-work/releases/latest) 下载：
+
+- **AppImage** — `chmod +x Danmo.Work_*_amd64.AppImage && ./Danmo.Work_*_amd64.AppImage`
+- **`.deb`** — `sudo apt install ./Danmo.Work_*_amd64.deb`（Debian/Ubuntu）
+
+需要带 WebKitGTK 的桌面环境。应用内自动更新走 AppImage 通道。
 
 ### 源码运行
 
@@ -357,7 +366,7 @@ cp config.example.yaml ~/.danmo-work/config.yaml
 make build-all              # 前端 dist + Go server/cli/tui
 make build-go               # 仅三件套 Go 二进制
 make pack-macos-desktop     # .dmg / .app
-make pack-linux-server      # tar.gz
+make pack-linux-desktop     # AppImage / .deb
 make pack-windows-desktop   # .exe
 make clean                  # 删除 out/
 ```
@@ -366,8 +375,8 @@ make clean                  # 删除 out/
 out/
   frontend/dist/     # Vite 生产构建（挂载于 /app/）
   server/            # danmo-work / danmo-work-cli / danmo-work-tui
-  desktop/bundle/    # Tauri 安装包
-  dist/              # Linux server 发布包
+  desktop/bundle/    # Tauri 安装包（macOS / Linux / Windows）
+  env/               # 可选 OCI agent 环境 tar（Release 资源）
   run/               # 开发用 pid / log / wrappers
 ```
 
@@ -434,7 +443,7 @@ SKIP_BACKEND=1 make dev-desktop
 | Job | 产物 |
 |-----|------|
 | macOS desktop | `out/desktop/bundle/*.dmg`、`*.app` |
-| Linux server | `out/dist/danmo-work-linux-*.tar.gz` |
+| Linux desktop | `out/desktop/bundle/*.AppImage`、`*.deb` |
 | Windows desktop | `out/desktop/bundle/*.exe` |
 
 **macOS 通道：** GitHub Releases `.dmg`，或 Homebrew（`brew tap danmo-ai/tap` → [`danmo-ai/homebrew-tap`](https://github.com/danmo-ai/homebrew-tap)，由 `HOMEBREW_TAP_TOKEN` / **Publish Homebrew Tap** 同步）。cask 源：[`Casks/danmo-work.rb`](Casks/danmo-work.rb)。

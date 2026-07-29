@@ -15,7 +15,7 @@ export DQ_APP_NAME := $(APP_NAME)
 	check-layers test test-integration \
 	build-go build-server build-cli build-tui build-sidecar build build-all clean \
 	build-env-tar \
-	pack-prereqs pack-macos-desktop pack-linux-server pack-windows-desktop \
+	pack-prereqs pack-macos-desktop pack-linux-desktop pack-windows-desktop \
 	eval-harbor-bin eval-harbor-base eval-harbor-sync-tb2 eval-harbor-smoke eval-harbor-suite eval-harbor-compare
 
 EVAL_BIN_DIR := $(OUT_DIR)/eval
@@ -44,7 +44,7 @@ help:
 	@echo "Test:      check-layers | test | test-integration"
 	@echo "Eval:      eval-harbor-bin | eval-harbor-base | eval-harbor-sync-tb2 | eval-harbor-smoke | eval-harbor-suite | eval-harbor-compare"
 	@echo "Build:     build | build-all | build-go | build-server | build-cli | build-tui | build-sidecar | build-env-tar | clean"
-	@echo "Release:   pack-macos-desktop | pack-linux-server | pack-windows-desktop"
+	@echo "Release:   pack-macos-desktop | pack-linux-desktop | pack-windows-desktop"
 
 # Backend only (for Go debugger or separate frontend)
 backend:
@@ -131,9 +131,9 @@ build-env-tar:
 	@chmod +x scripts/*.sh
 	@./scripts/build_env_tar.sh
 
-pack-linux-server: frontend-build build-go
+pack-linux-desktop: pack-prereqs frontend-build
 	@chmod +x scripts/*.sh
-	@RELEASE_VERSION=$(RELEASE_VERSION) ./scripts/pack_linux_server.sh
+	@RELEASE_VERSION=$(RELEASE_VERSION) ./scripts/pack_desktop_linux.sh
 
 pack-windows-desktop: pack-prereqs frontend-build
 	@chmod +x scripts/*.sh
