@@ -94,6 +94,9 @@ async function steerToCurrentTurn(id: string) {
     toast.success(
       wasRunning ? t('composer.queueSteeredInterrupt') : t('composer.queueSteered'),
     )
+    // Soft-steer removes the item from durable pending immediately.
+    await sessions.loadPending()
+    if (wasRunning) await sessions.loadTurns()
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('composer.queueSteerFailed'))
   } finally {

@@ -150,6 +150,10 @@ type TurnContext struct {
 	ProjectID string
 	OnReport  func(domain.Report)
 	Messages  []Message
+	// DrainSteers returns soft-steer user messages queued for this session's
+	// active turn. Called at safe boundaries (before each model call; and when
+	// the model stops with no tools so the turn can continue).
+	DrainSteers func() []Message
 }
 
 type approvalGate interface {
@@ -292,6 +296,8 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		default:
 		}
 
+		messages = p.applySoftSteers(ctx, tctx, messages)
+
 		if cfg.compactionEnabled && step > 1 {
 			messages = p.compactMessages(messages, cfg)
 		}
@@ -347,6 +353,22 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		}
 
 		if len(resp.ToolCalls) == 0 {
+			if resp.ReasoningContent != "" {
+				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentThinking, domain.AgentThinkingPayload{Text: resp.ReasoningContent})
+			}
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentMessage, domain.AgentMessagePayload{Text: resp.Content})
+			messages = append(messages, Message{Role: RoleAssistant, Content: resp.Content})
+			p.logAssistantMessage(Message{Role: RoleAssistant, Content: resp.Content})
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
+
+			// Soft steer arrived while the model was producing a final answer:
+			// keep the turn alive instead of ending.
+			before := len(messages)
+			messages = p.applySoftSteers(ctx, tctx, messages)
+			if len(messages) > before && !isLastStep {
+				continue
+			}
+
 			finalReport = domain.Report{
 				Status: domain.ReportDone, Summary: resp.Content,
 				Confidence: 0.8, StepsUsed: step,
@@ -355,14 +377,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			if tctx.OnReport != nil {
 				tctx.OnReport(finalReport)
 			}
-			if resp.ReasoningContent != "" {
-				p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentThinking, domain.AgentThinkingPayload{Text: resp.ReasoningContent})
-			}
-			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentMessage, domain.AgentMessagePayload{Text: resp.Content})
-			messages = append(messages, Message{Role: RoleAssistant, Content: resp.Content})
-			p.logAssistantMessage(Message{Role: RoleAssistant, Content: resp.Content})
 			reportCaptured = true
-			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
 			break
 		}
 
@@ -403,6 +418,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			break
 		}
 		p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
+		// Next loop iteration applies soft steers at the tool→model boundary.
 	}
 
 	if !reportCaptured {
@@ -797,6 +813,36 @@ func (p *TurnRunner) logUserMessage(content string) {
 		return
 	}
 	p.Log("user", map[string]any{"content": content})
+}
+
+func (p *TurnRunner) applySoftSteers(ctx context.Context, tctx TurnContext, messages []Message) []Message {
+	if tctx.DrainSteers == nil {
+		return messages
+	}
+	steers := tctx.DrainSteers()
+	if len(steers) == 0 {
+		return messages
+	}
+	for _, m := range steers {
+		if m.Role == "" {
+			m.Role = RoleUser
+		}
+		messages = append(messages, m)
+		p.logUserMessage(m.Content)
+		if p.Stream != nil {
+			atts := make([]domain.UserAttachment, 0, len(m.Parts))
+			for _, part := range m.Parts {
+				if part.Type != "image" || part.Data == "" {
+					continue
+				}
+				atts = append(atts, domain.UserAttachment{
+					Type: "image", Name: part.Name, MimeType: part.MimeType, Data: part.Data,
+				})
+			}
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventUserMessage, userMessagePayload(m.Content, atts))
+		}
+	}
+	return messages
 }
 
 func (p *TurnRunner) logAssistantMessage(msg Message) {

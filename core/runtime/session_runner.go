@@ -65,8 +65,14 @@ type Engine struct {
 	askUserWait   map[string]chan string
 	cancel        map[string]context.CancelFunc
 	activeTurns   map[string]string // session ID -> in-flight turn ID
+	steerInbox    map[string][]steerItem
 	agentChain    []string
 	readSkill     *builtin.ReadSkill
+}
+
+type steerItem struct {
+	Content     string
+	Attachments []domain.UserAttachment
 }
 
 type approvalMeta struct {
@@ -149,6 +155,7 @@ func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, pro
 		askUserWait:   make(map[string]chan string),
 		cancel:        make(map[string]context.CancelFunc),
 		activeTurns:   make(map[string]string),
+		steerInbox:    make(map[string][]steerItem),
 	}
 	turnRunner.Approval = e
 	turnRunner.SandboxStatus = e.sandboxStatus
@@ -635,9 +642,63 @@ func (e *Engine) ActiveTurnID(sessionID string) string {
 	return e.activeTurns[sessionID]
 }
 
+// SoftSteer queues a user message for injection into the active turn at the
+// next safe boundary (before the next model call; after tools finish).
+func (e *Engine) SoftSteer(sessionID, content string, attachments []domain.UserAttachment) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.activeTurns[sessionID] == "" {
+		return fmt.Errorf("session %s has no active turn", sessionID)
+	}
+	if e.steerInbox == nil {
+		e.steerInbox = make(map[string][]steerItem)
+	}
+	e.steerInbox[sessionID] = append(e.steerInbox[sessionID], steerItem{
+		Content:     content,
+		Attachments: append([]domain.UserAttachment(nil), attachments...),
+	})
+	return nil
+}
+
+func (e *Engine) drainSteerMessages(sessionID string) []Message {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	items := e.steerInbox[sessionID]
+	if len(items) == 0 {
+		return nil
+	}
+	e.steerInbox[sessionID] = nil
+	out := make([]Message, 0, len(items))
+	for _, it := range items {
+		out = append(out, userMessageFromAttachments(it.Content, it.Attachments))
+	}
+	return out
+}
+
+func (e *Engine) takeSteerItems(sessionID string) []steerItem {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	items := e.steerInbox[sessionID]
+	if len(items) == 0 {
+		return nil
+	}
+	e.steerInbox[sessionID] = nil
+	out := make([]steerItem, len(items))
+	copy(out, items)
+	return out
+}
+
 func (e *Engine) finishSessionTurn(sessionID, turnID string) {
+	leftovers := e.takeSteerItems(sessionID)
 	e.releaseSessionTurn(sessionID, turnID)
 	if e.sessions != nil {
+		for _, it := range leftovers {
+			if _, err := e.sessions.EnqueuePending(context.Background(), sessionID, domain.EnqueuePendingRequest{
+				Content: it.Content, Attachments: it.Attachments,
+			}); err != nil {
+				log.Printf("[steer] restore leftover to pending session %s: %v", sessionID, err)
+			}
+		}
 		go e.sessions.DrainPendingQueue(context.Background(), sessionID)
 	}
 }
@@ -969,6 +1030,9 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		WorkDir:   workDir,
 		ProjectID: projectID,
 		Messages:  messages,
+		DrainSteers: func() []Message {
+			return e.drainSteerMessages(sessionID)
+		},
 	})
 
 	// History lives on disk; drop any in-memory session buffer after the turn.

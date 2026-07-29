@@ -307,9 +307,8 @@ func (m *SessionManager) ReorderPending(ctx context.Context, sessionID string, i
 	return m.store.PendingMessages().Reorder(ctx, sessionID, ids)
 }
 
-// SteerPending moves a queued message to the front and promotes it into the
-// current session turn flow: interrupt any active turn (drain starts it next)
-// or start immediately when idle.
+// SteerPending soft-steers a queued message into the active turn at the next
+// safe boundary. If the session is idle, it starts the message as a new turn.
 func (m *SessionManager) SteerPending(ctx context.Context, sessionID, id string) error {
 	msg, err := m.store.PendingMessages().Get(ctx, id)
 	if err != nil {
@@ -342,11 +341,24 @@ func (m *SessionManager) SteerPending(ctx context.Context, sessionID, id string)
 	if m.engine != nil {
 		active = m.engine.ActiveTurnID(sessionID)
 	}
-	if active != "" {
-		m.engine.CancelTurn(ctx, active)
+	if active == "" {
+		go m.DrainPendingQueue(context.Background(), sessionID)
 		return nil
 	}
-	go m.DrainPendingQueue(context.Background(), sessionID)
+
+	// Soft steer: remove from durable queue and inject into the live turn inbox.
+	if err := m.store.PendingMessages().Delete(ctx, id); err != nil {
+		return err
+	}
+	if err := m.engine.SoftSteer(sessionID, msg.Content, msg.Attachments); err != nil {
+		// Restore so the user does not lose the message.
+		msg.Status = domain.PendingQueued
+		msg.UpdatedAt = time.Now().UTC()
+		if cerr := m.store.PendingMessages().Create(ctx, msg); cerr != nil {
+			log.Printf("[steer] restore pending %s after SoftSteer failure: %v", id, cerr)
+		}
+		return err
+	}
 	return nil
 }
 
