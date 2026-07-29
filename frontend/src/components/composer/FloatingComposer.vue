@@ -66,6 +66,7 @@ const workspaceUi = useWorkspaceUiStore()
 
 const emit = defineEmits<{
   'jump-pending': []
+  queued: []
 }>()
 
 const isMac =
@@ -142,16 +143,35 @@ const anyPickerOpen = computed(() => skillPickerOpen.value || slashMenuOpen.valu
 
 const hasPendingApproval = computed(() => workspaceUi.pendingApprovals > 0)
 
-const canSend = computed(
-  () =>
-    Boolean(content.value.trim() || attachments.value.length || selectedSkillIds.value.length) &&
-    !sessions.loading &&
-    !hasPendingApproval.value,
+const hasDraft = computed(
+  () => Boolean(content.value.trim() || attachments.value.length || selectedSkillIds.value.length),
 )
 
 const isTurnRunning = computed(
   () => !sessions.composingNew && sessions.runningTurnId !== null,
 )
+
+/** Running turn → enqueue; idle → send. Pending approvals never start a new turn. */
+const canSubmit = computed(
+  () => hasDraft.value && !sessions.loading && !sessions.composingNew,
+)
+
+const canSend = computed(
+  () => hasDraft.value && !sessions.loading && !hasPendingApproval.value && !isTurnRunning.value,
+)
+
+const canQueue = computed(
+  () =>
+    canSubmit.value &&
+    Boolean(sessions.currentSessionId) &&
+    (isTurnRunning.value || hasPendingApproval.value),
+)
+
+const primaryAction = computed<'send' | 'queue' | 'stop'>(() => {
+  if (isTurnRunning.value && !hasDraft.value) return 'stop'
+  if (canQueue.value) return 'queue'
+  return 'send'
+})
 
 const showAgentSelect = computed(
   () => (sessions.composingNew || sessions.currentSessionId) && primaryAgents.value.length > 0,
@@ -561,14 +581,7 @@ function addLocalFile(file: File) {
   focusInput()
 }
 
-async function send() {
-  if (hasPendingApproval.value) {
-    toast.warning(t('sessions.pendingApprovalHint'))
-    return
-  }
-  if (anyPickerOpen.value) {
-    closeAllPickers()
-  }
+async function buildOutgoing() {
   let text = buildComposerUserInput(content.value, attachments.value)
   text = prependSkillSummon(
     text,
@@ -581,6 +594,26 @@ async function send() {
     toast.warning(t('composer.modelNoVision'))
     imageAtts = []
   }
+  return { text, imageAtts }
+}
+
+async function send() {
+  if (primaryAction.value === 'queue') {
+    await queue()
+    return
+  }
+  if (hasPendingApproval.value) {
+    toast.warning(t('sessions.pendingApprovalHint'))
+    return
+  }
+  if (isTurnRunning.value) {
+    toast.warning(t('composer.queueWhileRunningHint'))
+    return
+  }
+  if (anyPickerOpen.value) {
+    closeAllPickers()
+  }
+  const { text, imageAtts } = await buildOutgoing()
   if ((!text.trim() && !imageAtts.length) || sessions.loading) return
 
   if (sessions.composingNew) {
@@ -604,6 +637,29 @@ async function send() {
     focusInput()
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('composer.sendFailed'))
+  }
+}
+
+async function queue() {
+  if (!canQueue.value) {
+    if (hasPendingApproval.value && !hasDraft.value) {
+      toast.warning(t('sessions.pendingApprovalHint'))
+    }
+    return
+  }
+  if (anyPickerOpen.value) {
+    closeAllPickers()
+  }
+  const { text, imageAtts } = await buildOutgoing()
+  if (!text.trim() && !imageAtts.length) return
+  try {
+    await sessions.enqueuePending(text, imageAtts)
+    clearComposer()
+    focusInput()
+    emit('queued')
+    toast.success(t('composer.queued'))
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('composer.queueFailed'))
   }
 }
 
@@ -635,13 +691,15 @@ function onKeydown(e: KeyboardEvent) {
   }
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
     e.preventDefault()
-    if (isTurnRunning.value) void stop()
+    if (primaryAction.value === 'queue') void queue()
+    else if (isTurnRunning.value && !hasDraft.value) void stop()
     else void send()
     return
   }
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
-    if (isTurnRunning.value) void stop()
+    if (primaryAction.value === 'queue') void queue()
+    else if (isTurnRunning.value && !hasDraft.value) void stop()
     else void send()
   }
 }
@@ -685,14 +743,12 @@ function onPaste(e: ClipboardEvent) {
 }
 
 function onDragOver() {
-  if (hasPendingApproval.value) return
   dragOver.value = true
 }
 
 function onDrop(e: DragEvent) {
   e.preventDefault()
   dragOver.value = false
-  if (hasPendingApproval.value) return
   const files = Array.from(e.dataTransfer?.files ?? [])
   if (!files.length) return
   for (const f of files) addLocalFile(f)
@@ -706,7 +762,6 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
     class="composer-float"
     :class="{
       'is-dragover': dragOver,
-      'is-blocked': hasPendingApproval,
       'is-compose': sessions.composingNew,
       'is-skill-picker-open': skillPickerOpen,
       'is-slash-picker-open': slashMenuOpen,
@@ -719,7 +774,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
   >
     <!-- Outside the glass card: card has overflow:hidden and would clip this popover. -->
     <div
-      v-if="skillPickerOpen && !hasPendingApproval"
+      v-if="skillPickerOpen"
       class="composer-skill-pop"
       :class="{ 'composer-skill-pop--button': buttonPickerOpen }"
     >
@@ -734,7 +789,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
         @close="closeSkillPickers"
       />
     </div>
-    <div v-if="slashMenuOpen && !hasPendingApproval" class="composer-slash-pop">
+    <div v-if="slashMenuOpen" class="composer-slash-pop">
       <ComposerSlashPicker
         ref="slashPickerRef"
         :commands="COMPOSER_SLASH_COMMANDS"
@@ -744,9 +799,27 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
       />
     </div>
 
-    <!-- Compact bar while ask_user / permission cards need attention -->
-    <div v-if="hasPendingApproval" class="composer-float__card composer-float__card--blocked">
-      <div class="composer-float__banner composer-float__banner--warn">
+    <!-- Upper card: input + model/effort/send -->
+    <div class="composer-float__card">
+      <div v-if="dragOver" class="composer-float__drop">{{ t('composer.dropHint') }}</div>
+
+      <div v-if="isTurnRunning" class="composer-float__banner composer-float__banner--run">
+        <span class="composer-float__run-dot" />
+        {{ t('composer.running') }}
+        <span v-if="hasPendingApproval" class="composer-float__banner-sep">·</span>
+        <button
+          v-if="hasPendingApproval"
+          type="button"
+          class="composer-float__jump composer-float__jump--inline"
+          @click="emit('jump-pending')"
+        >
+          {{ t('sessions.pendingApprovalHintCount', { n: workspaceUi.pendingApprovals }) }}
+        </button>
+      </div>
+      <div
+        v-else-if="hasPendingApproval"
+        class="composer-float__banner composer-float__banner--warn"
+      >
         <span class="composer-float__banner-text">{{
           t('sessions.pendingApprovalHintCount', { n: workspaceUi.pendingApprovals })
         }}</span>
@@ -757,17 +830,6 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
         >
           {{ t('sessions.jumpToPending') }}
         </button>
-      </div>
-    </div>
-
-    <template v-else>
-    <!-- Upper card: input + model/effort/send -->
-    <div class="composer-float__card">
-      <div v-if="dragOver" class="composer-float__drop">{{ t('composer.dropHint') }}</div>
-
-      <div v-if="isTurnRunning" class="composer-float__banner composer-float__banner--run">
-        <span class="composer-float__run-dot" />
-        {{ t('composer.running') }}
       </div>
 
       <ComposerAttachmentTray
@@ -793,7 +855,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
             type="textarea"
             :rows="2"
             class="composer-float__input"
-            :placeholder="placeholder"
+            :placeholder="hasPendingApproval || isTurnRunning ? t('composer.placeholderQueue') : placeholder"
             @keydown="onKeydown"
             @paste="onPaste"
             @click="syncAtMenuFromCaret"
@@ -895,7 +957,18 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
             <span>{{ t('composer.stop') }}</span>
           </button>
           <button
-            v-else
+            v-if="primaryAction === 'queue'"
+            type="button"
+            class="composer-send composer-send--queue"
+            :disabled="!canQueue || sessions.loading"
+            :aria-label="t('composer.queue')"
+            @click="queue"
+          >
+            <span>{{ t('composer.queue') }}</span>
+            <kbd class="composer-send__kbd">↵</kbd>
+          </button>
+          <button
+            v-else-if="!isTurnRunning"
             type="button"
             class="composer-send"
             :disabled="!canSend"
@@ -978,7 +1051,6 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
         <ContextUsageBar />
       </div>
     </div>
-    </template>
   </div>
 </template>
 
@@ -1001,23 +1073,18 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
   background: color-mix(in srgb, var(--dq-accent) 6%, var(--dq-glass-popover-bg));
 }
 
-.composer-float.is-blocked {
-  pointer-events: none;
-}
-
 .composer-float__card {
   position: relative;
   z-index: 2;
 }
 
-.composer-float__card--blocked {
-  overflow: hidden;
-  pointer-events: auto;
-}
-
 .composer-float__banner-text {
   flex: 1;
   min-width: 0;
+}
+
+.composer-float__banner-sep {
+  opacity: 0.5;
 }
 
 .composer-float__jump {
@@ -1032,6 +1099,12 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
   font-weight: 600;
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.composer-float__jump--inline {
+  margin-left: 0;
+  padding: 2px 8px;
+  font-size: var(--dq-font-size-caption);
 }
 
 .composer-float__jump:hover {
@@ -1423,6 +1496,10 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
 
 .composer-send--stop {
   background: color-mix(in srgb, var(--dq-system-orange) 88%, #000);
+}
+
+.composer-send--queue {
+  background: color-mix(in srgb, var(--dq-accent) 82%, #000);
 }
 
 .composer-send__kbd {

@@ -390,7 +390,7 @@ func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments
 		return
 	}
 	go func() {
-		defer e.releaseSessionTurn(s.ID, turnID)
+		defer e.finishSessionTurn(s.ID, turnID)
 		turnCtx, cancel := context.WithCancel(context.Background())
 		e.mu.Lock()
 		e.cancel[turnID] = cancel
@@ -424,7 +424,7 @@ func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, m
 	// Reset session status to active so UI shows "运行中"
 	e.updateSessionStatus(sessionID, domain.SessionStatusActive)
 	go func() {
-		defer e.releaseSessionTurn(sessionID, turnID)
+		defer e.finishSessionTurn(sessionID, turnID)
 		s, err := e.sessions.Get(ctx, sessionID)
 		if err != nil {
 			return
@@ -508,7 +508,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 		return err
 	}
 	go func() {
-		defer e.releaseSessionTurn(sessionID, turnID)
+		defer e.finishSessionTurn(sessionID, turnID)
 		cfg := e.loadRunCfg(ctx)
 
 		s, err := e.sessions.Get(ctx, sessionID)
@@ -623,6 +623,13 @@ func (e *Engine) releaseSessionTurn(sessionID, turnID string) {
 	defer e.mu.Unlock()
 	if e.activeTurns[sessionID] == turnID {
 		delete(e.activeTurns, sessionID)
+	}
+}
+
+func (e *Engine) finishSessionTurn(sessionID, turnID string) {
+	e.releaseSessionTurn(sessionID, turnID)
+	if e.sessions != nil {
+		go e.sessions.DrainPendingQueue(context.Background(), sessionID)
 	}
 }
 

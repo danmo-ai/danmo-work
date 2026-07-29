@@ -7,6 +7,8 @@ import { useSessionsStore } from '@/stores/sessions'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import { useSessionActivityStore } from '@/stores/sessionActivity'
 import FloatingComposer from '@/components/composer/FloatingComposer.vue'
+import ComposerPendingDecisions from '@/components/composer/ComposerPendingDecisions.vue'
+import ComposerPendingQueue from '@/components/composer/ComposerPendingQueue.vue'
 import WelcomeEmpty from '@/components/center/WelcomeEmpty.vue'
 import ApprovalRail from '@/components/center/ApprovalRail.vue'
 import ActiveSessionsBar from '@/components/center/ActiveSessionsBar.vue'
@@ -775,17 +777,44 @@ function jumpToFirstPendingApproval() {
   if (first) void jumpToApprovalAnchor(first)
 }
 
-/** When a new ask_user / permission card appears, bring it into the clear area above the composer. */
+const composerPermissionItems = computed(() =>
+  sessions.pendingApprovals.map((e) => {
+    const id = approvalId(e.payload)
+    return {
+      key: `perm-${id || e.seq}`,
+      event: e,
+      decided: isApprovalDecided(e.payload),
+      deciding: isPermissionDeciding(e.payload),
+      showActions: shouldShowApprovalActions(e.payload),
+    }
+  }),
+)
+
+const composerAskItems = computed(() =>
+  sessions.pendingAsks
+    .filter((e) => isAskActionable(e))
+    .map((e) => ({
+      key: `ask-${askUserId(e.payload) || e.seq}`,
+      event: e,
+      askId: askUserId(e.payload),
+      question: askUserQuestion(e.payload),
+      options: askUserOptions(e.payload),
+      defaultOption: askUserDefaultOption(e.payload),
+      formFields: askUserFormFields(e.payload),
+      resolved: isAskResolved(askUserCallId(e.payload)),
+      expired: isAskExpired(e),
+      answering: answeringAskIds.value.has(askUserId(e.payload)),
+      answer: askUserAnswer(e.payload),
+    })),
+)
+
+/** When a new ask_user / permission card appears, keep composer-side cards in view (no timeline jump). */
 watch(
   () => approvalAnchors.value.filter((a) => a.pending).map((a) => a.key).join('|'),
   async (keys, prev) => {
     if (!keys || keys === prev) return
     await nextTick()
-    await nextTick()
     syncComposerLayout()
-    jumpToFirstPendingApproval()
-    // Retry once — orphan turn shells / collapse expand may render a tick later.
-    window.setTimeout(() => jumpToFirstPendingApproval(), 120)
   },
 )
 
@@ -1637,6 +1666,14 @@ function onTitleKeydown(e: KeyboardEvent) {
     </div>
 
     <div ref="composerWrapRef" class="session-workspace__composer" :style="composerStyle">
+      <ComposerPendingDecisions
+        :permissions="composerPermissionItems"
+        :asks="composerAskItems"
+        @decide="onPermissionDecide"
+        @resolve="onAskUserResolve"
+        @jump-timeline="jumpToFirstPendingApproval"
+      />
+      <ComposerPendingQueue />
       <FloatingComposer ref="composerRef" @jump-pending="jumpToFirstPendingApproval" />
     </div>
   </div>

@@ -138,6 +138,7 @@ func (s *Store) migrate() error {
 		&projectModel{},
 		&llmConfigModel{},
 		&approvalModel{},
+		&pendingMessageModel{},
 		&memoryModel{},
 		&streamEventModel{},
 		&turnModel{},
@@ -197,8 +198,9 @@ func (s *Store) SkillFiles() port.SkillFileRepo     { return &skillFileRepo{s} }
 func (s *Store) Sessions() port.SessionRepo         { return &sessionRepo{s} }
 func (s *Store) Projects() port.ProjectRepo         { return &projectRepo{s} }
 func (s *Store) LLMConfig() port.LLMConfigRepo      { return &llmConfigRepo{s} }
-func (s *Store) Approvals() port.ApprovalRepo       { return &approvalRepo{s} }
-func (s *Store) StreamEvents() port.StreamEventRepo { return &streamEventRepo{s} }
+func (s *Store) Approvals() port.ApprovalRepo             { return &approvalRepo{s} }
+func (s *Store) PendingMessages() port.PendingMessageRepo { return &pendingMessageRepo{s} }
+func (s *Store) StreamEvents() port.StreamEventRepo       { return &streamEventRepo{s} }
 func (s *Store) Turns() port.TurnRepo               { return &turnRepo{s} }
 func (s *Store) MCPServers() port.MCPServerRepo     { return &mcpServerRepo{s} }
 func (s *Store) Secrets() port.SecretStore          { return newSecretStore(s.db) }
@@ -500,6 +502,119 @@ func (r *approvalRepo) ListByStatus(ctx context.Context, status string) ([]domai
 		out[i] = approvalToDomain(row)
 	}
 	return out, nil
+}
+
+// ---- PendingMessageRepo ----
+
+type pendingMessageRepo struct{ s *Store }
+
+func (r *pendingMessageRepo) ListBySession(ctx context.Context, sessionID string) ([]domain.PendingMessage, error) {
+	var rows []pendingMessageModel
+	if err := r.s.db.WithContext(ctx).
+		Where("session_id = ? AND status = ?", sessionID, string(domain.PendingQueued)).
+		Order("position ASC, created_at ASC").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.PendingMessage, len(rows))
+	for i, row := range rows {
+		out[i] = pendingMessageToDomain(row)
+	}
+	return out, nil
+}
+
+func (r *pendingMessageRepo) Get(ctx context.Context, id string) (domain.PendingMessage, error) {
+	var row pendingMessageModel
+	if err := r.s.db.WithContext(ctx).First(&row, "id = ?", id).Error; err != nil {
+		return domain.PendingMessage{}, err
+	}
+	return pendingMessageToDomain(row), nil
+}
+
+func (r *pendingMessageRepo) Create(ctx context.Context, m domain.PendingMessage) error {
+	row := pendingMessageFromDomain(m)
+	return r.s.db.WithContext(ctx).Create(&row).Error
+}
+
+func (r *pendingMessageRepo) Update(ctx context.Context, m domain.PendingMessage) error {
+	row := pendingMessageFromDomain(m)
+	return r.s.db.WithContext(ctx).Model(&pendingMessageModel{}).Where("id = ?", m.ID).Updates(map[string]any{
+		"content":          row.Content,
+		"attachments_json": row.AttachmentsJSON,
+		"position":         row.Position,
+		"status":           row.Status,
+		"agent_id":         row.AgentID,
+		"model_id":         row.ModelID,
+		"updated_at":       row.UpdatedAt,
+	}).Error
+}
+
+func (r *pendingMessageRepo) Delete(ctx context.Context, id string) error {
+	return r.s.db.WithContext(ctx).Delete(&pendingMessageModel{}, "id = ?", id).Error
+}
+
+func (r *pendingMessageRepo) DeleteBySession(ctx context.Context, sessionID string) error {
+	return r.s.db.WithContext(ctx).
+		Where("session_id = ? AND status = ?", sessionID, string(domain.PendingQueued)).
+		Delete(&pendingMessageModel{}).Error
+}
+
+func (r *pendingMessageRepo) MaxPosition(ctx context.Context, sessionID string) (int, error) {
+	var maxPos *int
+	err := r.s.db.WithContext(ctx).Model(&pendingMessageModel{}).
+		Select("MAX(position)").
+		Where("session_id = ? AND status = ?", sessionID, string(domain.PendingQueued)).
+		Scan(&maxPos).Error
+	if err != nil {
+		return 0, err
+	}
+	if maxPos == nil {
+		return 0, nil
+	}
+	return *maxPos, nil
+}
+
+func (r *pendingMessageRepo) PopFront(ctx context.Context, sessionID string) (domain.PendingMessage, bool, error) {
+	r.s.mu.Lock()
+	defer r.s.mu.Unlock()
+	var row pendingMessageModel
+	err := r.s.db.WithContext(ctx).
+		Where("session_id = ? AND status = ?", sessionID, string(domain.PendingQueued)).
+		Order("position ASC, created_at ASC").
+		First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return domain.PendingMessage{}, false, nil
+	}
+	if err != nil {
+		return domain.PendingMessage{}, false, err
+	}
+	now := time.Now().UTC()
+	if err := r.s.db.WithContext(ctx).Model(&pendingMessageModel{}).Where("id = ?", row.ID).Updates(map[string]any{
+		"status":     string(domain.PendingSending),
+		"updated_at": now,
+	}).Error; err != nil {
+		return domain.PendingMessage{}, false, err
+	}
+	row.Status = string(domain.PendingSending)
+	row.UpdatedAt = now
+	return pendingMessageToDomain(row), true, nil
+}
+
+func (r *pendingMessageRepo) Reorder(ctx context.Context, sessionID string, ids []string) error {
+	return r.s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for i, id := range ids {
+			res := tx.Model(&pendingMessageModel{}).
+				Where("id = ? AND session_id = ? AND status = ?", id, sessionID, string(domain.PendingQueued)).
+				Updates(map[string]any{
+					"position":   i + 1,
+					"updated_at": time.Now().UTC(),
+				})
+			if res.Error != nil {
+				return res.Error
+			}
+		}
+		return nil
+	})
 }
 
 // ---- StreamEventRepo ----

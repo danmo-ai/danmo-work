@@ -13,6 +13,7 @@ type Repository interface {
 	Projects()        ProjectRepo
 	LLMConfig()       LLMConfigRepo
 	Approvals()       ApprovalRepo
+	PendingMessages() PendingMessageRepo
 	StreamEvents()    StreamEventRepo
 	Turns()           TurnRepo
 	MCPServers()      MCPServerRepo
@@ -192,6 +193,21 @@ type ApprovalRepo interface {
 	Get(ctx context.Context, id string) (domain.Approval, error)
 	Update(ctx context.Context, a domain.Approval) error
 	ListByStatus(ctx context.Context, status string) ([]domain.Approval, error)
+}
+
+// PendingMessageRepo persists editable next-turn queues per session.
+type PendingMessageRepo interface {
+	ListBySession(ctx context.Context, sessionID string) ([]domain.PendingMessage, error)
+	Get(ctx context.Context, id string) (domain.PendingMessage, error)
+	Create(ctx context.Context, m domain.PendingMessage) error
+	Update(ctx context.Context, m domain.PendingMessage) error
+	Delete(ctx context.Context, id string) error
+	DeleteBySession(ctx context.Context, sessionID string) error
+	// PopFront marks the lowest-position queued message as sending and returns it.
+	// Returns ok=false when the queue is empty.
+	PopFront(ctx context.Context, sessionID string) (domain.PendingMessage, bool, error)
+	Reorder(ctx context.Context, sessionID string, ids []string) error
+	MaxPosition(ctx context.Context, sessionID string) (int, error)
 }
 
 type StreamEventRepo interface {

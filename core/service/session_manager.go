@@ -164,6 +164,7 @@ func (m *SessionManager) Delete(ctx context.Context, id string) error {
 	if m.engine != nil {
 		m.engine.RevokeSessionNetworkGrants(id)
 	}
+	_ = m.store.PendingMessages().DeleteBySession(ctx, id)
 	return m.store.Sessions().Delete(ctx, id)
 }
 
@@ -206,4 +207,133 @@ func (m *SessionManager) Unsubscribe(sessionID string, ch chan domain.StreamEven
 
 func (m *SessionManager) ResolveAskUser(askID, answer string) error {
 	return m.engine.ResolveAskUser(askID, answer)
+}
+
+func (m *SessionManager) ListPending(ctx context.Context, sessionID string) ([]domain.PendingMessage, error) {
+	return m.store.PendingMessages().ListBySession(ctx, sessionID)
+}
+
+func (m *SessionManager) EnqueuePending(ctx context.Context, sessionID string, req domain.EnqueuePendingRequest) (domain.PendingMessage, error) {
+	atts, err := domain.NormalizeUserAttachments(req.Attachments)
+	if err != nil {
+		return domain.PendingMessage{}, err
+	}
+	content := strings.TrimSpace(req.Content)
+	if content == "" && len(atts) == 0 {
+		return domain.PendingMessage{}, fmt.Errorf("content or attachments required")
+	}
+	if content == "" && len(atts) > 0 {
+		content = "[Image attachment]"
+	}
+	if _, err := m.store.Sessions().Get(ctx, sessionID); err != nil {
+		return domain.PendingMessage{}, err
+	}
+	maxPos, err := m.store.PendingMessages().MaxPosition(ctx, sessionID)
+	if err != nil {
+		return domain.PendingMessage{}, err
+	}
+	now := time.Now().UTC()
+	msg := domain.PendingMessage{
+		ID:          fmt.Sprintf("pending-%d", time.Now().UnixNano()),
+		SessionID:   sessionID,
+		Content:     content,
+		Attachments: atts,
+		Position:    maxPos + 1,
+		Status:      domain.PendingQueued,
+		AgentID:     req.AgentID,
+		ModelID:     req.ModelID,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := m.store.PendingMessages().Create(ctx, msg); err != nil {
+		return domain.PendingMessage{}, err
+	}
+	// If the session is already idle, start immediately; if busy, StartTurn
+	// fails closed and the message stays queued for finishSessionTurn drain.
+	go m.DrainPendingQueue(context.Background(), sessionID)
+	return msg, nil
+}
+
+func (m *SessionManager) UpdatePending(ctx context.Context, sessionID, id string, req domain.UpdatePendingRequest) (domain.PendingMessage, error) {
+	msg, err := m.store.PendingMessages().Get(ctx, id)
+	if err != nil {
+		return domain.PendingMessage{}, err
+	}
+	if msg.SessionID != sessionID {
+		return domain.PendingMessage{}, fmt.Errorf("pending message not found")
+	}
+	if msg.Status != domain.PendingQueued {
+		return domain.PendingMessage{}, fmt.Errorf("pending message is not editable")
+	}
+	if req.Content != nil {
+		msg.Content = strings.TrimSpace(*req.Content)
+	}
+	if req.Attachments != nil {
+		atts, err := domain.NormalizeUserAttachments(*req.Attachments)
+		if err != nil {
+			return domain.PendingMessage{}, err
+		}
+		msg.Attachments = atts
+	}
+	if strings.TrimSpace(msg.Content) == "" && len(msg.Attachments) == 0 {
+		return domain.PendingMessage{}, fmt.Errorf("content or attachments required")
+	}
+	msg.UpdatedAt = time.Now().UTC()
+	if err := m.store.PendingMessages().Update(ctx, msg); err != nil {
+		return domain.PendingMessage{}, err
+	}
+	return msg, nil
+}
+
+func (m *SessionManager) DeletePending(ctx context.Context, sessionID, id string) error {
+	msg, err := m.store.PendingMessages().Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if msg.SessionID != sessionID {
+		return fmt.Errorf("pending message not found")
+	}
+	return m.store.PendingMessages().Delete(ctx, id)
+}
+
+func (m *SessionManager) ClearPending(ctx context.Context, sessionID string) error {
+	return m.store.PendingMessages().DeleteBySession(ctx, sessionID)
+}
+
+func (m *SessionManager) ReorderPending(ctx context.Context, sessionID string, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return m.store.PendingMessages().Reorder(ctx, sessionID, ids)
+}
+
+// DrainPendingQueue starts the next queued turn if the session is idle.
+func (m *SessionManager) DrainPendingQueue(ctx context.Context, sessionID string) {
+	if m == nil || m.engine == nil || m.store == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	msg, ok, err := m.store.PendingMessages().PopFront(ctx, sessionID)
+	if err != nil {
+		log.Printf("[pending] pop session %s: %v", sessionID, err)
+		return
+	}
+	if !ok {
+		return
+	}
+	turnID, err := m.engine.StartTurn(ctx, sessionID, msg.Content, msg.AgentID, msg.ModelID, msg.Attachments)
+	if err != nil {
+		log.Printf("[pending] start turn session %s: %v", sessionID, err)
+		msg.Status = domain.PendingQueued
+		msg.UpdatedAt = time.Now().UTC()
+		if uerr := m.store.PendingMessages().Update(ctx, msg); uerr != nil {
+			log.Printf("[pending] restore queued %s: %v", msg.ID, uerr)
+		}
+		return
+	}
+	if err := m.store.PendingMessages().Delete(ctx, msg.ID); err != nil {
+		log.Printf("[pending] delete sent %s (turn %s): %v", msg.ID, turnID, err)
+	}
 }

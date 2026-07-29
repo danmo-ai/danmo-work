@@ -85,6 +85,12 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.POST("/sessions/:id/turns/:turnID/resume", resumeTurn(h))
 	api.DELETE("/sessions/:id/turns/:turnID", cancelTurn(h))
 	api.GET("/sessions/:id/turns/:turnID/log", downloadTurnLog(h))
+	api.GET("/sessions/:id/pending", listPending(h))
+	api.POST("/sessions/:id/pending", enqueuePending(h))
+	api.PATCH("/sessions/:id/pending/:mid", updatePending(h))
+	api.DELETE("/sessions/:id/pending/:mid", deletePending(h))
+	api.POST("/sessions/:id/pending/clear", clearPending(h))
+	api.PUT("/sessions/:id/pending/order", reorderPending(h))
 	api.GET("/sessions/:id/events", streamEvents(h))
 	api.GET("/sessions/:id/events/poll", pollEvents(h))
 	api.POST("/projects", createProject(h))
@@ -858,6 +864,101 @@ func sendMessage(h *Handler) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"turnId": turnID})
+	}
+}
+
+func listPending(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		items, err := h.Sessions.ListPending(c, c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, items)
+	}
+}
+
+func enqueuePending(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req domain.EnqueuePendingRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		msg, err := h.Sessions.EnqueuePending(c, c.Param("id"), req)
+		if err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				status = http.StatusNotFound
+			}
+			c.JSON(status, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, msg)
+	}
+}
+
+func updatePending(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req domain.UpdatePendingRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		msg, err := h.Sessions.UpdatePending(c, c.Param("id"), c.Param("mid"), req)
+		if err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				status = http.StatusNotFound
+			}
+			c.JSON(status, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, msg)
+	}
+}
+
+func deletePending(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := h.Sessions.DeletePending(c, c.Param("id"), c.Param("mid")); err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				status = http.StatusNotFound
+			}
+			c.JSON(status, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	}
+}
+
+func clearPending(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := h.Sessions.ClearPending(c, c.Param("id")); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	}
+}
+
+func reorderPending(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req domain.ReorderPendingRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if err := h.Sessions.ReorderPending(c, c.Param("id"), req.IDs); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		items, err := h.Sessions.ListPending(c, c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, items)
 	}
 }
 
