@@ -38,6 +38,13 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     keywords: ['记忆'],
   },
   {
+    id: 'tables',
+    trigger: 'tables',
+    labelKey: 'composer.slash.tables',
+    descriptionKey: 'composer.slash.tablesDesc',
+    keywords: ['table', 'store', '表格'],
+  },
+  {
     id: 'terminal',
     trigger: 'terminal',
     labelKey: 'composer.slash.terminal',

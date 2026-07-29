@@ -504,6 +504,9 @@ async function onPickSlash(cmd: ComposerSlashCommand) {
     case 'memory':
       workspaceUi.setRightTab('memory')
       break
+    case 'tables':
+      workspaceUi.setRightTab('tables')
+      break
     case 'terminal':
       workspaceUi.setRightTab('terminal')
       break

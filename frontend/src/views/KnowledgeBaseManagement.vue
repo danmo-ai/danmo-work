@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import WorkspaceShell from '@/components/common/WorkspaceShell.vue'
+import MarkdownRichEditor from '@/components/office/MarkdownRichEditor.vue'
 import { useKnowledgeStore } from '@/stores/knowledge'
 import { confirm, toast } from '@/utils/feedback'
 import type { KnowledgeBase } from '@/types'
@@ -16,6 +17,11 @@ const activeTab = ref<'info' | 'documents'>('info')
 const pendingDocTitle = ref('')
 const pendingDocContent = ref('')
 const editingDocId = ref<string | null>(null)
+const docEditorOpen = ref(false)
+const docMode = ref<'view' | 'edit'>('edit')
+const docDirty = ref(false)
+const docSaving = ref(false)
+const docEditorRef = ref<InstanceType<typeof MarkdownRichEditor> | null>(null)
 
 const form = ref<KnowledgeBase>({
   id: '',
@@ -55,7 +61,7 @@ async function selectBase(id: string) {
   isCreating.value = false
   selectedId.value = id
   activeTab.value = 'info'
-  editingDocId.value = null
+  closeDocEditor()
   const base = knowledge.bases.find((b) => b.id === id)
   if (base) form.value = { ...base }
   await knowledge.loadDocs(id)
@@ -65,8 +71,17 @@ function openCreate() {
   isCreating.value = true
   selectedId.value = null
   activeTab.value = 'info'
-  editingDocId.value = null
+  closeDocEditor()
   form.value = { id: '', name: '', description: '', documentCount: 0, updatedAt: '' }
+}
+
+function closeDocEditor() {
+  editingDocId.value = null
+  pendingDocTitle.value = ''
+  pendingDocContent.value = ''
+  docEditorOpen.value = false
+  docDirty.value = false
+  docMode.value = 'edit'
 }
 
 async function save() {
@@ -110,39 +125,68 @@ async function removeSelected() {
     await knowledge.removeBase(selected.value.id)
     selectedId.value = null
     isCreating.value = false
+    closeDocEditor()
     toast.success(t('knowledge.deleted'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
   }
 }
 
-async function addDocument() {
-  if (!selected.value || !pendingDocTitle.value.trim() || !pendingDocContent.value.trim()) return
-  try {
-    if (editingDocId.value) {
-      await knowledge.updateDocument(editingDocId.value, pendingDocTitle.value.trim(), pendingDocContent.value.trim())
-      editingDocId.value = null
-    } else {
-      await knowledge.addDocument(selected.value.id, pendingDocTitle.value.trim(), pendingDocContent.value.trim())
-    }
-    pendingDocTitle.value = ''
-    pendingDocContent.value = ''
-    await knowledge.loadBases()
-    await knowledge.loadDocs(selected.value.id)
-    toast.success(t('knowledge.docAdded'))
-  } catch (e) {
-    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
-  }
+function openNewDocument() {
+  editingDocId.value = null
+  pendingDocTitle.value = ''
+  pendingDocContent.value = ''
+  docMode.value = 'edit'
+  docEditorOpen.value = true
+  docDirty.value = false
+  void nextTick(() => {
+    docEditorRef.value?.setContent('', { emitUpdate: false })
+  })
 }
 
-async function editDocument(docId: string) {
+async function openDocument(docId: string, mode: 'view' | 'edit' = 'edit') {
   try {
     const doc = await knowledge.getDocument(docId)
     editingDocId.value = doc.id
     pendingDocTitle.value = doc.title
     pendingDocContent.value = doc.content ?? ''
+    docMode.value = mode
+    docEditorOpen.value = true
+    docDirty.value = false
+    await nextTick()
+    docEditorRef.value?.setContent(pendingDocContent.value, { emitUpdate: false })
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
+  }
+}
+
+async function saveDocument() {
+  if (!selected.value || !pendingDocTitle.value.trim()) {
+    toast.warning(t('knowledge.docTitlePlaceholder'))
+    return
+  }
+  const content = docEditorRef.value?.getMarkdown() || pendingDocContent.value
+  if (!content.trim()) {
+    toast.warning(t('knowledge.contentPlaceholder'))
+    return
+  }
+  docSaving.value = true
+  try {
+    if (editingDocId.value) {
+      await knowledge.updateDocument(editingDocId.value, pendingDocTitle.value.trim(), content)
+    } else {
+      const doc = await knowledge.addDocument(selected.value.id, pendingDocTitle.value.trim(), content)
+      editingDocId.value = doc.id
+    }
+    pendingDocContent.value = content
+    docDirty.value = false
+    await knowledge.loadBases()
+    await knowledge.loadDocs(selected.value.id)
+    toast.success(t('knowledge.docAdded'))
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
+  } finally {
+    docSaving.value = false
   }
 }
 
@@ -150,16 +194,17 @@ async function removeDocument(docId: string) {
   if (!selected.value) return
   try {
     await knowledge.removeDocument(docId)
-    if (editingDocId.value === docId) {
-      editingDocId.value = null
-      pendingDocTitle.value = ''
-      pendingDocContent.value = ''
-    }
+    if (editingDocId.value === docId) closeDocEditor()
     await knowledge.loadBases()
     toast.success(t('knowledge.docDeleted'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
   }
+}
+
+function onDocUpdate() {
+  docDirty.value = true
+  pendingDocContent.value = docEditorRef.value?.getMarkdown() || pendingDocContent.value
 }
 
 function baseInitial(name: string) {
@@ -174,7 +219,8 @@ function formatDate(value: string) {
 function onKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') {
     e.preventDefault()
-    save()
+    if (docEditorOpen.value && docMode.value === 'edit') void saveDocument()
+    else void save()
   }
 }
 </script>
@@ -245,32 +291,70 @@ function onKeydown(e: KeyboardEvent) {
         </label>
       </section>
 
-      <section v-show="activeTab === 'documents'" class="resource-section">
-        <div class="resource-form-grid resource-form-grid--2">
-          <label class="resource-field">
-            <span class="resource-field__label">{{ $t('knowledge.docTitle') }}</span>
-            <DqInput v-model="pendingDocTitle" :placeholder="$t('knowledge.docTitlePlaceholder')" />
-          </label>
-          <div class="resource-field resource-field--action">
-            <DqButton @click="addDocument">{{ editingDocId ? $t('common.save') : $t('knowledge.addDoc') }}</DqButton>
+      <section v-show="activeTab === 'documents'" class="resource-section knowledge-docs">
+        <div class="knowledge-docs__list-card resource-list-card">
+          <div class="knowledge-docs__list-head">
+            <DqButton type="primary" @click="openNewDocument">{{ $t('knowledge.addDoc') }}</DqButton>
           </div>
-        </div>
-        <label class="resource-field resource-field--block">
-          <span class="resource-field__label">{{ $t('knowledge.content') }}</span>
-          <DqInput v-model="pendingDocContent" type="textarea" :rows="10" :placeholder="$t('knowledge.contentPlaceholder')" />
-        </label>
-
-        <div class="resource-list-card">
           <div v-for="doc in selectedDocs" :key="doc.id" class="resource-list-card__item">
             <div class="resource-list-card__meta">
               <span class="resource-list-card__name">{{ doc.title }}</span>
               <span class="resource-list-card__desc">{{ formatDate(doc.updatedAt) }}</span>
             </div>
             <div class="resource-list-card__actions">
-              <button type="button" class="resource-list-card__action" @click="editDocument(doc.id)">{{ $t('common.edit') }}</button>
-              <button type="button" class="resource-list-card__action resource-list-card__action--danger" @click="removeDocument(doc.id)">{{ $t('common.delete') }}</button>
+              <button type="button" class="resource-list-card__action" @click="openDocument(doc.id, 'view')">
+                {{ $t('knowledge.docViewMode') }}
+              </button>
+              <button type="button" class="resource-list-card__action" @click="openDocument(doc.id, 'edit')">
+                {{ $t('knowledge.docOpen') }}
+              </button>
+              <button
+                type="button"
+                class="resource-list-card__action resource-list-card__action--danger"
+                @click="removeDocument(doc.id)"
+              >
+                {{ $t('common.delete') }}
+              </button>
             </div>
           </div>
+        </div>
+
+        <div v-if="docEditorOpen" class="knowledge-docs__editor">
+          <div class="knowledge-docs__editor-bar">
+            <label class="resource-field knowledge-docs__title-field">
+              <span class="resource-field__label">{{ $t('knowledge.docTitle') }}</span>
+              <DqInput
+                v-model="pendingDocTitle"
+                :disabled="docMode === 'view'"
+                :placeholder="$t('knowledge.docTitlePlaceholder')"
+              />
+            </label>
+            <div class="knowledge-docs__editor-actions">
+              <DqSegmented
+                v-model="docMode"
+                size="sm"
+                :options="[
+                  { label: $t('knowledge.docViewMode'), value: 'view' },
+                  { label: $t('knowledge.docEditMode'), value: 'edit' },
+                ]"
+              />
+              <DqButton v-if="docMode === 'edit'" type="primary" :disabled="docSaving" @click="saveDocument">
+                {{ $t('knowledge.docSave') }}
+              </DqButton>
+              <DqButton @click="closeDocEditor">{{ $t('knowledge.docCancel') }}</DqButton>
+            </div>
+          </div>
+          <div class="knowledge-docs__editor-body">
+            <MarkdownRichEditor
+              ref="docEditorRef"
+              :editable="docMode === 'edit'"
+              :show-toolbar="docMode === 'edit'"
+              :show-toc="true"
+              :placeholder="$t('knowledge.contentPlaceholder')"
+              @update="onDocUpdate"
+            />
+          </div>
+          <p v-if="docDirty" class="resource-workspace__hint">{{ $t('common.saveShortcut') }}</p>
         </div>
       </section>
     </template>
@@ -287,3 +371,52 @@ function onKeydown(e: KeyboardEvent) {
     </template>
   </WorkspaceShell>
 </template>
+
+<style scoped>
+.knowledge-docs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+}
+.knowledge-docs__list-head {
+  margin-bottom: 8px;
+}
+.knowledge-docs__editor {
+  flex: 1;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--dq-border);
+  border-radius: 8px;
+  background: var(--dq-bg-base);
+  overflow: hidden;
+}
+.knowledge-docs__editor-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--dq-separator-light);
+}
+.knowledge-docs__title-field {
+  flex: 1;
+  min-width: 200px;
+}
+.knowledge-docs__editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.knowledge-docs__editor-body {
+  flex: 1;
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+}
+</style>

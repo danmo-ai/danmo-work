@@ -89,6 +89,12 @@ const actions = computed<PaletteAction[]>(() => [
     run: () => goTab('memory'),
   },
   {
+    id: 'tab.tables',
+    title: t('commandPalette.tabTables'),
+    group: t('commandPalette.groupNavigate'),
+    run: () => goTab('tables'),
+  },
+  {
     id: 'tab.changes',
     title: t('commandPalette.tabChanges'),
     group: t('commandPalette.groupNavigate'),

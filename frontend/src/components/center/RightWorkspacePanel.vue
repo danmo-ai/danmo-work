@@ -8,15 +8,17 @@ import {
   MagicStick,
   Terminal,
   Library,
+  Grid,
 } from '@danqing/dq-shell'
 import PlanPanel from '@/components/center/PlanPanel.vue'
 import FileTree from '@/components/center/FileTree.vue'
 import MemoryPanel from '@/components/center/MemoryPanel.vue'
+import TablesPanel from '@/components/center/TablesPanel.vue'
 import ChangesPanel from '@/components/center/ChangesPanel.vue'
 import TerminalPanel from '@/components/center/TerminalPanel.vue'
 import type { StreamEvent } from '@/types/mission'
 
-export type RightTab = 'plan' | 'files' | 'memory' | 'changes' | 'terminal'
+export type RightTab = 'plan' | 'files' | 'memory' | 'tables' | 'changes' | 'terminal'
 
 const props = defineProps<{
   streamEvents: StreamEvent[]
@@ -37,12 +39,14 @@ const terminalOpened = ref(false)
 const fileTreeRef = ref<InstanceType<typeof FileTree> | null>(null)
 const changesPanelRef = ref<InstanceType<typeof ChangesPanel> | null>(null)
 const memoryPanelRef = ref<InstanceType<typeof MemoryPanel> | null>(null)
+const tablesPanelRef = ref<InstanceType<typeof TablesPanel> | null>(null)
 const memoryCount = ref(0)
 
 watch(rightTab, (tab) => {
   if (tab === 'terminal') terminalOpened.value = true
   if (tab === 'changes') changesPanelRef.value?.refresh?.()
   if (tab === 'memory') memoryPanelRef.value?.refresh?.()
+  if (tab === 'tables') tablesPanelRef.value?.refresh?.()
 })
 
 const pillItems = computed(() => [
@@ -53,6 +57,11 @@ const pillItems = computed(() => [
     label: t('sessions.tabMemory'),
     icon: Library,
     badge: memoryCount.value > 0 ? memoryCount.value : undefined,
+  },
+  {
+    value: 'tables',
+    label: t('sessions.tabTables'),
+    icon: Grid,
   },
   {
     value: 'changes',
@@ -67,6 +76,7 @@ defineExpose({
   changesPanelRef,
   refreshChanges: () => changesPanelRef.value?.refresh?.(),
   refreshMemory: () => memoryPanelRef.value?.refresh?.(),
+  refreshTables: () => tablesPanelRef.value?.refresh?.(),
 })
 </script>
 
@@ -90,6 +100,13 @@ defineExpose({
       </template>
 
       <ChangesPanel v-else-if="rightTab === 'changes'" ref="changesPanelRef" />
+
+      <TablesPanel
+        v-else-if="rightTab === 'tables'"
+        ref="tablesPanelRef"
+        :project-id="projectId"
+        :agent-id="agentId ?? null"
+      />
 
       <template v-else-if="rightTab === 'terminal'">
         <div v-if="!projectId" class="right-workspace__empty">{{ t('sessions.noProjectLinked') }}</div>

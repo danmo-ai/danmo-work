@@ -150,6 +150,7 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/tables", listTables(h))
 	api.GET("/tables/:table/rows", listTableRows(h))
 	api.GET("/tables/:table/rows/:key", getTableRow(h))
+	api.PUT("/tables/:table/rows/:key", upsertTableRow(h))
 	api.DELETE("/tables/:table/rows/:key", deleteTableRow(h))
 	api.GET("/mcp/servers", listMCPServers(h))
 	api.POST("/mcp/servers", createMCPServer(h))
@@ -764,6 +765,42 @@ func getTableRow(h *Handler) gin.HandlerFunc {
 		row, err := h.TableStore.Get(c, scope, scopeID, c.Param("table"), c.Param("key"))
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, row)
+	}
+}
+
+func upsertTableRow(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.TableStore == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "table store unavailable"})
+			return
+		}
+		scope, scopeID, err := resolveTableScopeQuery(c)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		var body struct {
+			Data map[string]any `json:"data"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if body.Data == nil {
+			body.Data = map[string]any{}
+		}
+		row, err := h.TableStore.Upsert(c, domain.TableRow{
+			Scope:   scope,
+			ScopeID: scopeID,
+			Table:   strings.TrimSpace(c.Param("table")),
+			Key:     strings.TrimSpace(c.Param("key")),
+			Data:    body.Data,
+		})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, row)

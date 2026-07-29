@@ -13,6 +13,8 @@ assert.equal(detectSlashQuery('a/b', 3), null)
 
 const hits = filterSlashCommands(COMPOSER_SLASH_COMMANDS, 'diff')
 assert.ok(hits.some((c) => c.id === 'changes'))
+assert.ok(COMPOSER_SLASH_COMMANDS.some((c) => c.id === 'tables'))
+assert.ok(filterSlashCommands(COMPOSER_SLASH_COMMANDS, 'table').some((c) => c.id === 'tables'))
 
 assert.equal(removeSlashQuery('hi /plan more', 3, 8), 'hi  more')
 assert.ok(activityRank('awaiting_approval') < activityRank('running'))
