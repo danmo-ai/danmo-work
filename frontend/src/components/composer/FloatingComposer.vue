@@ -662,7 +662,11 @@ async function send() {
   }
 
   try {
-    await sessions.sendTurn(text, imageAtts)
+    const stagePath = workspaceUi.stage?.path
+    const snapKinds = new Set(['doc', 'slides', 'sheet', 'code'])
+    const snapshotPaths =
+      stagePath && workspaceUi.stage && snapKinds.has(workspaceUi.stage.kind) ? [stagePath] : undefined
+    await sessions.sendTurn(text, imageAtts, snapshotPaths ? { snapshotPaths } : undefined)
     clearComposer()
     focusInput()
   } catch (e) {

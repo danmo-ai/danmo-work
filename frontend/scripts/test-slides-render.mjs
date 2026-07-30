@@ -82,4 +82,28 @@ const bare = `# A\n\n---\n\n# B\n`
 const bareParsed = parseSlidesMarkdown(bare)
 assert(bareParsed.pages.length === 2, 'bare pages')
 
+const themed = `---
+type: slides
+theme: light
+---
+
+<!-- _class: lead -->
+# Title
+
+---
+
+<!-- class: columns -->
+## Left
+
+## Right
+`
+const themedParsed = parseSlidesMarkdown(themed)
+assert(themedParsed.theme === 'light', `theme=${themedParsed.theme}`)
+assert(themedParsed.pages[0].layoutClass.includes('lead'), 'lead layout')
+assert(themedParsed.pages[1].layoutClass.includes('columns'), 'columns layout')
+const themedHtml = renderPlayableSlidesHtml(themed, await hashSlidesSource(themed))
+assert(themedHtml.includes('data-theme="light"'), 'theme attr')
+assert(themedHtml.includes('lead'), 'lead class in html')
+assert(themedHtml.includes('columns'), 'columns class in html')
+
 console.log('test-slides-render: ok')

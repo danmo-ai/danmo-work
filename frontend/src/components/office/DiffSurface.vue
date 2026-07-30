@@ -2,10 +2,13 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '@/api/client'
+import { applyAiReviewHunks, fetchAiReviewDiff, revertAiReviewFile } from '@/api/aiReview'
 import { toast } from '@/utils/feedback'
 import { routeOfficeFile } from '@/utils/office-route'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
+import { useStageAiReviewStore } from '@/stores/stageAiReview'
 import { apiBaseUrl } from '@/utils/desktop'
+import UnifiedDiffView from '@/components/office/UnifiedDiffView.vue'
 
 interface GitDiffResult {
   path: string
@@ -18,55 +21,66 @@ interface GitDiffResult {
   code?: string
 }
 
-interface DiffLine {
-  type: 'meta' | 'hunk' | 'add' | 'del' | 'ctx' | 'empty'
-  text: string
-}
-
 const props = defineProps<{
   projectId: string
   path: string
   staged?: boolean
   reloadToken: number
+  /** git (default) or ai review vs pre-turn snapshot */
+  source?: 'git' | 'ai'
+  sessionId?: string
+  turnId?: string
 }>()
 
 const { t } = useI18n()
 const workspaceUi = useWorkspaceUiStore()
+const aiReview = useStageAiReviewStore()
 const loading = ref(false)
 const data = ref<GitDiffResult | null>(null)
+const aiPatch = ref('')
+const aiCanRevert = ref(false)
+const aiError = ref('')
+const selectedHunks = ref<number[]>([])
+const acting = ref(false)
 
-const lines = computed<DiffLine[]>(() => {
-  const patch = data.value?.patch || ''
-  if (!patch) return []
-  return patch.split('\n').map((text) => {
-    if (text.startsWith('+++') || text.startsWith('---') || text.startsWith('diff ') || text.startsWith('index ') || text.startsWith('new file') || text.startsWith('deleted file') || text.startsWith('old mode') || text.startsWith('new mode') || text.startsWith('similarity ') || text.startsWith('rename ')) {
-      return { type: 'meta' as const, text }
-    }
-    if (text.startsWith('@@')) return { type: 'hunk' as const, text }
-    if (text.startsWith('+')) return { type: 'add' as const, text }
-    if (text.startsWith('-')) return { type: 'del' as const, text }
-    if (text === '') return { type: 'empty' as const, text: ' ' }
-    return { type: 'ctx' as const, text }
-  })
-})
+const isAi = computed(() => props.source === 'ai')
 
 async function load() {
-  if (!props.projectId || !props.path) return
+  if (!props.path) return
   loading.value = true
+  aiError.value = ''
   try {
+    if (isAi.value) {
+      if (!props.sessionId || !props.turnId) {
+        aiError.value = t('office.aiReviewMissing')
+        aiPatch.value = ''
+        return
+      }
+      const diff = await fetchAiReviewDiff(props.sessionId, props.turnId, props.path)
+      aiPatch.value = diff.patch || ''
+      aiCanRevert.value = !!diff.canRevert
+      if (diff.error) aiError.value = diff.error
+      data.value = null
+      selectedHunks.value = []
+      return
+    }
+    if (!props.projectId) return
     const q = new URLSearchParams({
       path: props.path,
       staged: props.staged ? '1' : '0',
     })
-    data.value = await fetchJSON<GitDiffResult>(
-      `/projects/${props.projectId}/git-diff?${q.toString()}`,
-    )
+    data.value = await fetchJSON<GitDiffResult>(`/projects/${props.projectId}/git-diff?${q.toString()}`)
   } catch (e) {
-    data.value = {
-      path: props.path,
-      staged: !!props.staged,
-      patch: '',
-      error: e instanceof Error ? e.message : t('office.diffLoadFailed'),
+    if (isAi.value) {
+      aiError.value = e instanceof Error ? e.message : t('office.diffLoadFailed')
+      aiPatch.value = ''
+    } else {
+      data.value = {
+        path: props.path,
+        staged: !!props.staged,
+        patch: '',
+        error: e instanceof Error ? e.message : t('office.diffLoadFailed'),
+      }
     }
   } finally {
     loading.value = false
@@ -89,12 +103,60 @@ function openFile() {
 }
 
 function askAboutDiff() {
-  const hint = props.staged ? t('sessions.askAboutStaged') : t('sessions.askAboutUnstaged')
+  const hint = isAi.value
+    ? t('office.aiReviewAskHint')
+    : props.staged
+      ? t('sessions.askAboutStaged')
+      : t('sessions.askAboutUnstaged')
   workspaceUi.prefillComposer(t('sessions.askAboutFilePrompt', { file: props.path, hint }))
 }
 
+async function keepAi() {
+  aiReview.clearPending()
+  openFile()
+}
+
+async function revertAi() {
+  if (!props.sessionId || !props.turnId || acting.value) return
+  acting.value = true
+  try {
+    await revertAiReviewFile(props.sessionId, props.turnId, props.path)
+    aiReview.clearPending()
+    toast.success(t('office.aiReviewReverted'))
+    workspaceUi.requestStageReload()
+    openFile()
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('office.aiReviewRevertFailed'))
+  } finally {
+    acting.value = false
+  }
+}
+
+async function acceptSelectedHunks() {
+  if (!props.sessionId || !props.turnId || acting.value) return
+  if (!selectedHunks.value.length) {
+    toast.warning(t('office.aiReviewSelectHunks'))
+    return
+  }
+  acting.value = true
+  try {
+    await applyAiReviewHunks(props.sessionId, props.turnId, props.path, {
+      hunkIndexes: selectedHunks.value,
+    })
+    aiReview.clearPending()
+    toast.success(t('office.aiReviewHunksApplied'))
+    workspaceUi.requestStageReload()
+    openFile()
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('office.aiReviewHunksFailed'))
+  } finally {
+    acting.value = false
+  }
+}
+
 watch(
-  () => [props.projectId, props.path, props.staged, props.reloadToken] as const,
+  () =>
+    [props.projectId, props.path, props.staged, props.reloadToken, props.source, props.sessionId, props.turnId] as const,
   () => {
     void load()
   },
@@ -105,35 +167,64 @@ watch(
 <template>
   <div class="diff-surface">
     <div class="diff-surface__toolbar">
-      <span class="diff-surface__badge">{{ staged ? t('office.diffStaged') : t('office.diffUnstaged') }}</span>
-      <span v-if="data?.untracked" class="diff-surface__badge diff-surface__badge--warn">{{
-        t('office.diffUntracked')
-      }}</span>
-      <span v-if="data?.binary" class="diff-surface__badge">{{ t('office.diffBinary') }}</span>
-      <span v-if="data?.truncated" class="diff-surface__badge diff-surface__badge--warn">{{
-        t('office.diffTruncated')
-      }}</span>
+      <span v-if="isAi" class="diff-surface__badge">{{ t('office.aiReviewBadge') }}</span>
+      <template v-else>
+        <span class="diff-surface__badge">{{ staged ? t('office.diffStaged') : t('office.diffUnstaged') }}</span>
+        <span v-if="data?.untracked" class="diff-surface__badge diff-surface__badge--warn">{{
+          t('office.diffUntracked')
+        }}</span>
+        <span v-if="data?.binary" class="diff-surface__badge">{{ t('office.diffBinary') }}</span>
+        <span v-if="data?.truncated" class="diff-surface__badge diff-surface__badge--warn">{{
+          t('office.diffTruncated')
+        }}</span>
+      </template>
       <span class="diff-surface__spacer" />
+      <template v-if="isAi">
+        <button
+          v-if="selectedHunks.length"
+          type="button"
+          class="diff-surface__btn"
+          :disabled="acting"
+          @click="acceptSelectedHunks"
+        >
+          {{ t('office.aiReviewAcceptHunks') }}
+        </button>
+        <button type="button" class="diff-surface__btn" :disabled="acting" @click="keepAi">
+          {{ t('office.aiReviewKeep') }}
+        </button>
+        <button
+          type="button"
+          class="diff-surface__btn"
+          :disabled="acting || !aiCanRevert"
+          @click="revertAi"
+        >
+          {{ t('office.aiReviewRevert') }}
+        </button>
+      </template>
       <button type="button" class="diff-surface__btn" @click="askAboutDiff">
         {{ t('sessions.askAboutFile') }}
       </button>
-      <button type="button" class="diff-surface__btn" @click="openFile">
+      <button v-if="!isAi" type="button" class="diff-surface__btn" @click="openFile">
         {{ t('office.diffOpenFile') }}
       </button>
     </div>
 
     <div v-if="loading" class="diff-surface__status">{{ t('office.loading') }}</div>
+    <div v-else-if="isAi && aiError && !aiPatch" class="diff-surface__status">
+      {{ aiError === 'hash_only' ? t('office.aiReviewHashOnly') : aiError }}
+    </div>
+    <div v-else-if="isAi && !aiPatch" class="diff-surface__status">{{ t('office.diffEmpty') }}</div>
+    <UnifiedDiffView
+      v-else-if="isAi"
+      :patch="aiPatch"
+      selectable-hunks
+      v-model:selected-hunks="selectedHunks"
+    />
     <div v-else-if="data?.error || data?.code" class="diff-surface__status">
       {{ data.code === 'git_missing' ? t('composer.gitMissing') : data.error || t('office.diffLoadFailed') }}
     </div>
-    <div v-else-if="!lines.length" class="diff-surface__status">{{ t('office.diffEmpty') }}</div>
-    <pre v-else class="diff-surface__patch"><code><span
-      v-for="(line, i) in lines"
-      :key="i"
-      class="diff-surface__line"
-      :class="`is-${line.type}`"
-    >{{ line.text }}
-</span></code></pre>
+    <div v-else-if="!(data?.patch)" class="diff-surface__status">{{ t('office.diffEmpty') }}</div>
+    <UnifiedDiffView v-else :patch="data?.patch || ''" />
   </div>
 </template>
 
@@ -179,42 +270,16 @@ watch(
   font-size: 12px;
   cursor: pointer;
 }
-.diff-surface__btn:hover {
+.diff-surface__btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--dq-label-primary) 8%, var(--dq-fill-tertiary));
+}
+.diff-surface__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .diff-surface__status {
   padding: 24px;
   color: var(--dq-label-tertiary);
   font-size: 13px;
-}
-.diff-surface__patch {
-  margin: 0;
-  padding: 12px 0;
-  overflow: auto;
-  flex: 1;
-  min-height: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-  font-size: 12px;
-  line-height: 1.45;
-}
-.diff-surface__line {
-  display: block;
-  padding: 0 12px;
-  white-space: pre;
-}
-.diff-surface__line.is-add {
-  background: color-mix(in srgb, var(--dq-system-green, #34c759) 14%, transparent);
-  color: color-mix(in srgb, var(--dq-system-green, #248a3d) 70%, var(--dq-label-primary));
-}
-.diff-surface__line.is-del {
-  background: color-mix(in srgb, var(--dq-system-red, #ff3b30) 12%, transparent);
-  color: color-mix(in srgb, var(--dq-system-red, #d70015) 70%, var(--dq-label-primary));
-}
-.diff-surface__line.is-hunk {
-  background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
-  color: var(--dq-accent);
-}
-.diff-surface__line.is-meta {
-  color: var(--dq-label-tertiary);
 }
 </style>

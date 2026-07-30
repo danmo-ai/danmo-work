@@ -48,6 +48,7 @@ func main() {
 		Browser:     core.Browser,
 		Store:       core.Store,
 		TableStore:  core.TableStore,
+		AIReview:    core.AIReview,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

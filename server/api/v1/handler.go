@@ -46,6 +46,7 @@ type Handler struct {
 	Browser       port.Browser
 	Store         port.Repository
 	TableStore    port.TableStoreRepo
+	AIReview      *service.AIReviewManager
 }
 
 type RouterConfig struct {
@@ -85,6 +86,12 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.POST("/sessions/:id/turns/:turnID/resume", resumeTurn(h))
 	api.DELETE("/sessions/:id/turns/:turnID", cancelTurn(h))
 	api.GET("/sessions/:id/turns/:turnID/log", downloadTurnLog(h))
+	api.POST("/sessions/:id/snapshots", createTurnSnapshots(h))
+	api.GET("/sessions/:id/ai-review/status", getAIReviewStatus(h))
+	api.GET("/sessions/:id/ai-review/diff", getAIReviewDiff(h))
+	api.POST("/sessions/:id/turns/:turnID/ai-review/revert", revertAIReviewFile(h))
+	api.POST("/sessions/:id/turns/:turnID/ai-review/apply-hunks", applyAIReviewHunks(h))
+	api.GET("/sessions/:id/file-changes", listSessionFileChanges(h))
 	api.GET("/sessions/:id/pending", listPending(h))
 	api.POST("/sessions/:id/pending", enqueuePending(h))
 	api.PATCH("/sessions/:id/pending/:mid", updatePending(h))

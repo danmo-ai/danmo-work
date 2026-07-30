@@ -4,6 +4,8 @@ import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import { useSessionsStore } from '@/stores/sessions'
+import { useStageAiReviewStore } from '@/stores/stageAiReview'
+import { fetchAiReviewStatus, revertAiReviewFile } from '@/api/aiReview'
 import DocSurface from '@/components/office/DocSurface.vue'
 import SlidesSurface from '@/components/office/SlidesSurface.vue'
 import SheetSurface from '@/components/office/SheetSurface.vue'
@@ -29,7 +31,11 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const workspaceUi = useWorkspaceUiStore()
 const sessions = useSessionsStore()
+const aiReview = useStageAiReviewStore()
 const { stage, stageReloadToken, layoutMode } = storeToRefs(workspaceUi)
+const { pending: pendingAiReview, afterTurn: aiReviewAfterTurn } = storeToRefs(aiReview)
+const lastFinishedTurnId = ref<string | null>(null)
+const bannerBusy = ref(false)
 
 const docRef = ref<InstanceType<typeof DocSurface> | null>(null)
 const slidesRef = ref<InstanceType<typeof SlidesSurface> | null>(null)
@@ -166,10 +172,83 @@ function onPreviewUrlChange(_display: string, loadUrl: string) {
   workspaceUi.setStageUrl(loadUrl || undefined)
 }
 
-watch(turnRunning, (running, was) => {
-  if (was && !running) {
-    workspaceUi.requestStageReload()
+watch(turnRunning, async (running, was) => {
+  if (!(was && !running)) return
+  workspaceUi.requestStageReload()
+  if (aiReviewAfterTurn.value === 'off') return
+  const path = stage.value?.path
+  const sid = sessions.currentSessionId
+  if (!path || !sid || stage.value?.kind === 'diff' || stage.value?.kind === 'preview') return
+  // Prefer the turn that just finished (was running).
+  const finished =
+    sessions.turns.find((x) => x.status !== 'running' && x.id === lastFinishedTurnId.value) ||
+    sessions.turns.find((x) => x.status === 'completed' || x.status === 'failed') ||
+    sessions.turns[0]
+  const turnId = finished?.id
+  if (!turnId) return
+  try {
+    const st = await fetchAiReviewStatus(sid, turnId, path)
+    if (st.changed && st.hasSnapshot) {
+      aiReview.setPending({
+        sessionId: sid,
+        turnId,
+        path,
+        canRevert: st.canRevert,
+      })
+    } else {
+      aiReview.clearPending()
+    }
+  } catch {
+    /* snapshot may be absent for non-office turns */
   }
+})
+
+watch(
+  () => sessions.runningTurnId,
+  (id, prev) => {
+    if (prev && !id) lastFinishedTurnId.value = prev
+    if (id) lastFinishedTurnId.value = id
+  },
+)
+
+function viewAiDiff() {
+  const p = pendingAiReview.value
+  if (!p) return
+  workspaceUi.openStage({
+    kind: 'diff',
+    path: p.path,
+    mode: 'view',
+    diffSource: 'ai',
+    sessionId: p.sessionId,
+    turnId: p.turnId,
+  })
+}
+
+async function keepAiChange() {
+  aiReview.clearPending()
+}
+
+async function revertAiChange() {
+  const p = pendingAiReview.value
+  if (!p || bannerBusy.value) return
+  bannerBusy.value = true
+  try {
+    await revertAiReviewFile(p.sessionId, p.turnId, p.path)
+    aiReview.clearPending()
+    toast.success(t('office.aiReviewReverted'))
+    workspaceUi.requestStageReload()
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('office.aiReviewRevertFailed'))
+  } finally {
+    bannerBusy.value = false
+  }
+}
+
+const showAiBanner = computed(() => {
+  const p = pendingAiReview.value
+  if (!p || aiReviewAfterTurn.value === 'off') return false
+  if (stage.value?.kind === 'diff') return false
+  return stage.value?.path === p.path
 })
 
 defineExpose({ save })
@@ -243,6 +322,24 @@ defineExpose({ save })
       </div>
     </header>
 
+    <div v-if="showAiBanner" class="document-stage__ai-banner" role="status">
+      <span class="document-stage__ai-banner-text">{{ t('office.aiReviewBanner') }}</span>
+      <span class="document-stage__ai-banner-actions">
+        <button type="button" class="document-stage__btn" @click="viewAiDiff">{{ t('office.aiReviewViewDiff') }}</button>
+        <button type="button" class="document-stage__btn" :disabled="bannerBusy" @click="keepAiChange">
+          {{ t('office.aiReviewKeep') }}
+        </button>
+        <button
+          type="button"
+          class="document-stage__btn"
+          :disabled="bannerBusy || !pendingAiReview?.canRevert"
+          @click="revertAiChange"
+        >
+          {{ t('office.aiReviewRevert') }}
+        </button>
+      </span>
+    </div>
+
     <div v-if="editableKind && stage.mode === 'edit'" class="document-stage__ai">
       <OfficeAiToolbar
         :path="stage.path"
@@ -305,6 +402,9 @@ defineExpose({ save })
       :path="stage.path"
       :staged="stage.staged"
       :reload-token="stageReloadToken"
+      :source="stage.diffSource || 'git'"
+      :session-id="stage.sessionId"
+      :turn-id="stage.turnId"
     />
     <PreviewSurface
       v-else-if="stage.kind === 'preview'"
@@ -332,6 +432,26 @@ defineExpose({ save })
 }
 .document-stage.is-immersive {
   border: 0;
+}
+.document-stage__ai-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--dq-separator-light);
+  background: color-mix(in srgb, var(--dq-accent) 12%, var(--dq-bg-elevated));
+  font-size: 12px;
+}
+.document-stage__ai-banner-text {
+  color: var(--dq-label-primary);
+  font-weight: 550;
+}
+.document-stage__ai-banner-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 .document-stage__chrome {
   display: flex;

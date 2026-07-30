@@ -76,9 +76,10 @@ async function run(action: 'polish' | 'modify' | 'continue' | 'slide-page' | 'sh
       instruction: instruction.value,
       pageIndex: props.pageIndex,
       scope,
+      review: 'commit',
     })
 
-    await sessions.sendTurn(prompt)
+    await sessions.sendTurn(prompt, undefined, { snapshotPaths: [props.path] })
     instruction.value = ''
     emit('started')
     toast.success(t('office.turnStarted'))

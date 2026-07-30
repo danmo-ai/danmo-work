@@ -67,6 +67,8 @@ type Engine struct {
 	activeTurns   map[string]string // session ID -> in-flight turn ID
 	agentChain    []string
 	readSkill     *builtin.ReadSkill
+	// preTurnSnapshot runs before tools (AI review). Optional.
+	preTurnSnapshot func(ctx context.Context, projectID, sessionID, turnID, userInput string, extraPaths []string)
 }
 
 type approvalMeta struct {
@@ -248,6 +250,13 @@ func (e *Engine) SetFileChangeStore(store interface {
 	e.compactionMgr.SetFileChangeJournal(store)
 }
 
+// SetPreTurnSnapshot wires AI-review pre-turn file snapshots (office-edit + explicit paths).
+func (e *Engine) SetPreTurnSnapshot(fn func(ctx context.Context, projectID, sessionID, turnID, userInput string, extraPaths []string)) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.preTurnSnapshot = fn
+}
+
 // SetSandbox wires the process sandbox used for policy decisions and tool execution status.
 func (e *Engine) SetSandbox(sb port.Sandbox) {
 	e.mu.Lock()
@@ -410,7 +419,7 @@ func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments
 		agentPtr := *agent
 
 		reg := e.setupRegistry(s, agentPtr)
-		rep, err := e.runTurn(turnCtx, s.ID, turnID, s.Content, s.ModelID, s.ProjectID, agentPtr, reg, atts)
+		rep, err := e.runTurn(turnCtx, s.ID, turnID, s.Content, s.ModelID, s.ProjectID, agentPtr, reg, atts, nil)
 		e.turnLog.EndTurn(turnID, turnStatus(err, rep))
 	}()
 }
@@ -421,6 +430,7 @@ func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, m
 		return "", err
 	}
 	atts := append([]domain.UserAttachment(nil), attachments...)
+	extraSnap := service.SnapshotPathsFromCtx(ctx)
 	// Reset session status to active so UI shows "运行中"
 	e.updateSessionStatus(sessionID, domain.SessionStatusActive)
 	go func() {
@@ -455,7 +465,7 @@ func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, m
 		}()
 
 		reg := e.setupRegistry(s, agentPtr)
-		rep, err := e.runTurn(turnCtx, sessionID, turnID, userInput, targetModelID, s.ProjectID, agentPtr, reg, atts)
+		rep, err := e.runTurn(turnCtx, sessionID, turnID, userInput, targetModelID, s.ProjectID, agentPtr, reg, atts, extraSnap)
 		e.turnLog.EndTurn(turnID, turnStatus(err, rep))
 	}()
 	return turnID, nil
@@ -915,7 +925,7 @@ func (e *Engine) setTurnFSSkills(skills []domain.Skill, files map[string][]domai
 	}
 }
 
-func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, projectID string, agent domain.Agent, reg *tool.Registry, attachments []domain.UserAttachment) (domain.Report, error) {
+func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, projectID string, agent domain.Agent, reg *tool.Registry, attachments []domain.UserAttachment, extraSnapshotPaths []string) (domain.Report, error) {
 	cfg := e.loadRunCfg(ctx)
 
 	e.turnRunner.Registry = reg
@@ -928,6 +938,11 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 	_ = e.turns.Create(ctx, domain.TurnLog{ID: turnID, SessionID: sessionID, AgentID: agent.ID, Goal: goal, Status: domain.TurnRunning})
 	e.turnRunner.Log = func(typ string, data map[string]any) {
 		e.turnLog.Append(turnID, typ, data)
+	}
+
+	// AI review: snapshot office-edit / Stage paths before any tool mutates disk.
+	if e.preTurnSnapshot != nil {
+		e.preTurnSnapshot(ctx, projectID, sessionID, turnID, goal, extraSnapshotPaths)
 	}
 
 	checkpoint := e.compactionMgr.Recover(ctx, sessionID)

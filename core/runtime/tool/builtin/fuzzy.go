@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"unicode"
+
+	"danmo-work/core/textdiff"
 )
 
 func levenshtein(a, b string) int {
@@ -111,80 +112,7 @@ func fuzzyFileSuggestions(absDir, missingName string) []string {
 }
 
 func generateUnifiedDiff(path, oldContent, newContent string) string {
-	old := strings.Split(oldContent, "\n")
-	new_ := strings.Split(newContent, "\n")
-	oldEnd := len(old)
-	newEnd := len(new_)
-	if oldEnd > 0 && old[oldEnd-1] == "" {
-		oldEnd--
-	}
-	if newEnd > 0 && new_[newEnd-1] == "" {
-		newEnd--
-	}
-
-	var b strings.Builder
-	b.WriteString("--- a/" + filepath.ToSlash(path) + "\n")
-	b.WriteString("+++ b/" + filepath.ToSlash(path) + "\n")
-
-	i, j := 0, 0
-	for i < oldEnd || j < newEnd {
-		ctxStart := 0
-		for i+ctxStart < oldEnd && j+ctxStart < newEnd && old[i+ctxStart] == new_[j+ctxStart] {
-			ctxStart++
-		}
-		if i+ctxStart >= oldEnd && j+ctxStart >= newEnd {
-			break
-		}
-		ctxBefore := 3
-		if i > 0 && ctxStart == 0 {
-			if i-ctxBefore < 0 {
-				ctxBefore = i
-			}
-		} else {
-			ctxBefore = 0
-		}
-
-		hunkOldStart := i - ctxBefore
-		hunkNewStart := j - ctxBefore
-
-		var lines []string
-		for k := 0; k < ctxBefore; k++ {
-			lines = append(lines, " "+old[hunkOldStart+k])
-		}
-		i += ctxStart
-		j += ctxStart
-
-		oldDel := 0
-		newAdd := 0
-		for i < oldEnd || j < newEnd {
-			if i < oldEnd && (j >= newEnd || old[i] != new_[j]) {
-				lines = append(lines, "-"+old[i])
-				i++
-				oldDel++
-			} else if j < newEnd && (i >= oldEnd || old[i] != new_[j]) {
-				lines = append(lines, "+"+new_[j])
-				j++
-				newAdd++
-			} else {
-				break
-			}
-		}
-
-		ctxAfter := 3
-		endCtx := 0
-		for k := 0; k < ctxAfter && i+k < oldEnd && j+k < newEnd && old[i+k] == new_[j+k]; k++ {
-			lines = append(lines, " "+old[i+k])
-			endCtx++
-		}
-		i += endCtx
-		j += endCtx
-
-		fmt.Fprintf(&b, "@@ -%d,%d +%d,%d @@\n", hunkOldStart+1, ctxBefore+oldDel+endCtx, hunkNewStart+1, ctxBefore+newAdd+endCtx)
-		for _, l := range lines {
-			b.WriteString(l + "\n")
-		}
-	}
-	return b.String()
+	return textdiff.Unified(path, oldContent, newContent)
 }
 
 func tryExactReplace(content, oldStr, newStr string, replaceAll bool) (string, int, error) {

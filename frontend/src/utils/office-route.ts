@@ -130,6 +130,8 @@ export function buildOfficeEditPrompt(opts: {
   instruction?: string
   pageIndex?: number
   scope?: OfficeEditScope
+  /** commit = write SoT (default); propose = prefer minimal patch for human review */
+  review?: 'commit' | 'propose'
 }): string {
   const lines = [
     '[office-edit]',
@@ -139,13 +141,14 @@ export function buildOfficeEditPrompt(opts: {
   ]
   if (opts.scope) lines.push(`scope: ${opts.scope}`)
   if (opts.pageIndex != null) lines.push(`page: ${opts.pageIndex}`)
+  lines.push(`review: ${opts.review || 'commit'}`)
   lines.push('selection:')
   lines.push('<<<')
   lines.push(opts.selection.trimEnd())
   lines.push('>>>')
   lines.push(`instruction: ${opts.instruction?.trim() || '(none)'}`)
   lines.push(
-    '约束: 使用 read_file + edit/write 更新上述 path；不要改无关文件；幻灯片不要手写/覆盖 playable HTML（Stage 会从 md 程序同步）；完成后在 SUMMARY 写明变更位置。',
+    '约束: 使用 read_file + edit/write/apply_patch 更新上述 path；优先最小 diff；不要改无关文件；幻灯片不要手写/覆盖 playable HTML（Stage 会从 md 程序同步）；完成后在 SUMMARY 写明变更位置。桌面 Stage 会展示 AI Diff 供用户保留或回滚。',
   )
   return lines.join('\n')
 }

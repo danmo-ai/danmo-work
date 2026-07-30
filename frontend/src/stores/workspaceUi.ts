@@ -13,6 +13,10 @@ export interface OfficeStageState {
   url?: string
   /** Diff kind: staged (index) vs unstaged (working tree) patch. */
   staged?: boolean
+  /** Diff source: git working tree (default) or AI pre-turn snapshot. */
+  diffSource?: 'git' | 'ai'
+  sessionId?: string
+  turnId?: string
 }
 
 const LEFT_RAIL_COLLAPSED_KEY = 'app-left-collapsed'
