@@ -1,0 +1,2656 @@
+From 5967b38378264a0b828e43f8b6d3c5ad745e5d98 Mon Sep 17 00:00:00 2001
+From: Cursor <cursoragent@cursor.com>
+Date: Thu, 30 Jul 2026 11:14:03 +0000
+Subject: [PATCH] =?UTF-8?q?feat(work):=20spotlight=20human=E2=86=94AI=20Of?=
+ =?UTF-8?q?fice=20co-edit=20with=20feature=20tour?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ README.md                            |   11 +-
+ public/demos/office-coedit-tour.html | 1113 ++++++++++++++++++++++++++
+ public/demos/product-tour.html       | 1084 +++++++++++++++++++++++++
+ src/views/HomeView.vue               |    6 +-
+ src/views/TeamsView.vue              |  310 ++++++-
+ 5 files changed, 2500 insertions(+), 24 deletions(-)
+ create mode 100644 public/demos/office-coedit-tour.html
+ create mode 100644 public/demos/product-tour.html
+
+diff --git a/README.md b/README.md
+index c2034fd..c82c581 100644
+--- a/README.md
++++ b/README.md
+@@ -7,9 +7,18 @@ Official English marketing site for [Danmo](https://github.com/danmo-ai) — loc
+ ## Products
+ 
+ - **Make** — plugin-style image & video generation (MLX / CUDA)
+-- **Work** — pure LLM-driven multi-agent collaboration on one thinking chain
++- **Work** — human ↔ AI Office co-edit on a coding-agent-grade loop (docs / slides / sheets + AI Diff); multi-agent, MCP, IM
+ - **Inbox** — AI email information-flow organizer
+ 
++## Feature tours (static HTML)
++
++Served from `public/demos/`:
++
++- [`/demos/office-coedit-tour.html`](https://danmo-ai.github.io/demos/office-coedit-tour.html?lang=en&tour=1) — Intent → Propose → Review → Commit
++- [`/demos/product-tour.html`](https://danmo-ai.github.io/demos/product-tour.html?lang=en&tour=1) — Architecture · Highlights · Capacity
++
++Synced from [`danmo-work/docs/demo`](https://github.com/danmo-ai/danmo-work/tree/main/docs/demo).
++
+ ## Develop
+ 
+ ```bash
+diff --git a/public/demos/office-coedit-tour.html b/public/demos/office-coedit-tour.html
+new file mode 100644
+index 0000000..d89ef69
+--- /dev/null
++++ b/public/demos/office-coedit-tour.html
+@@ -0,0 +1,1113 @@
++<!DOCTYPE html>
++<html lang="zh-CN">
++<head>
++  <meta charset="UTF-8" />
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
++  <title>Danmo Work — Human ↔ AI Office Co-edit</title>
++  <meta name="description" content="Bilingual animated explainer: Intent → Propose → Review → Commit for docs, slides, and sheets." />
++  <link rel="preconnect" href="https://fonts.googleapis.com" />
++  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
++  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet" />
++  <style>
++    :root {
++      --bg: #0b1220;
++      --bg-elev: #121a2b;
++      --line: rgba(148, 163, 184, 0.18);
++      --text: #e8eef9;
++      --muted: #94a3b8;
++      --faint: #64748b;
++      --accent: #2dd4bf;
++      --accent-2: #38bdf8;
++      --accent-warm: #fbbf24;
++      --add: #34d399;
++      --del: #f87171;
++      --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
++      --font: "Noto Sans SC", "Sora", sans-serif;
++      --display: "Sora", "Noto Sans SC", sans-serif;
++    }
++    * { box-sizing: border-box; }
++    html, body { margin: 0; min-height: 100%; }
++    body {
++      font-family: var(--font);
++      color: var(--text);
++      background:
++        radial-gradient(1000px 520px at 12% -10%, rgba(45, 212, 191, 0.14), transparent 55%),
++        radial-gradient(900px 480px at 92% 0%, rgba(56, 189, 248, 0.10), transparent 50%),
++        linear-gradient(180deg, #0a101c 0%, var(--bg) 45%, #0d1524 100%);
++      -webkit-font-smoothing: antialiased;
++    }
++    .top {
++      width: min(1100px, calc(100% - 2rem));
++      margin: 0 auto;
++      padding: 1.25rem 0 0.5rem;
++      display: flex;
++      align-items: center;
++      gap: 1rem;
++      flex-wrap: wrap;
++    }
++    .brand {
++      font-family: var(--display);
++      font-weight: 700;
++      font-size: 1.05rem;
++      letter-spacing: -0.02em;
++      display: flex;
++      align-items: center;
++      gap: 0.55rem;
++    }
++    .brand i {
++      width: 28px; height: 28px; border-radius: 8px;
++      background: linear-gradient(135deg, #2dd4bf, #38bdf8);
++      display: grid; place-items: center;
++      font-style: normal; font-size: 0.85rem; color: #0b1220; font-weight: 800;
++    }
++    .nav {
++      display: flex; gap: 0.4rem; flex-wrap: wrap;
++      margin-left: 0.5rem;
++    }
++    .nav button, .lang button {
++      appearance: none; border: 1px solid var(--line);
++      background: rgba(18, 26, 43, 0.75); color: var(--muted);
++      border-radius: 999px; padding: 0.4rem 0.85rem;
++      font: inherit; font-size: 0.82rem; cursor: pointer;
++      transition: 160ms ease;
++    }
++    .nav button[aria-selected="true"], .lang button[aria-pressed="true"] {
++      color: var(--text);
++      border-color: rgba(45, 212, 191, 0.55);
++      background: rgba(45, 212, 191, 0.12);
++    }
++    .lang { margin-left: auto; display: flex; gap: 0.35rem; }
++
++    .page {
++      width: min(1100px, calc(100% - 2rem));
++      margin: 0 auto;
++      padding: 1.25rem 0 2.5rem;
++    }
++    .eyebrow {
++      margin: 0 0 0.55rem;
++      font-family: var(--display);
++      font-size: 0.75rem; font-weight: 600;
++      letter-spacing: 0.14em; text-transform: uppercase;
++      color: var(--accent); text-align: center;
++    }
++    .title {
++      margin: 0; text-align: center;
++      font-family: var(--display);
++      font-size: clamp(1.65rem, 3.6vw, 2.4rem);
++      font-weight: 700; letter-spacing: -0.03em; line-height: 1.15;
++    }
++    .subtitle {
++      margin: 0.75rem auto 0; max-width: 44rem;
++      text-align: center; color: var(--muted);
++      font-size: 1rem; line-height: 1.6;
++    }
++
++    .stage {
++      margin-top: 1.75rem;
++      border: 1px solid var(--line);
++      border-radius: 20px;
++      background: linear-gradient(180deg, rgba(22, 32, 51, 0.96), rgba(12, 18, 32, 0.98));
++      box-shadow: var(--shadow);
++      overflow: hidden;
++      min-height: 580px;
++    }
++    .stage-bar {
++      display: flex; align-items: center; gap: 0.75rem;
++      padding: 0.8rem 1rem;
++      border-bottom: 1px solid var(--line);
++      background: rgba(255,255,255,0.02);
++    }
++    .lights { display: flex; gap: 0.4rem; }
++    .lights i { width: 10px; height: 10px; border-radius: 50%; display: block; }
++    .lights i:nth-child(1) { background: #f87171; }
++    .lights i:nth-child(2) { background: #fbbf24; }
++    .lights i:nth-child(3) { background: #34d399; }
++    .stage-bar strong { font-family: var(--display); font-size: 0.9rem; }
++    .stage-bar em { margin-left: auto; font-style: normal; color: var(--faint); font-size: 0.78rem; }
++    .progress { height: 2px; background: rgba(148,163,184,0.12); }
++    .progress > i {
++      display: block; height: 100%; width: 0;
++      background: linear-gradient(90deg, var(--accent), var(--accent-2));
++    }
++    .is-playing .progress > i { animation: progress-fill var(--cycle, 11s) linear; }
++    @keyframes progress-fill { from { width: 0; } to { width: 100%; } }
++
++    .section { display: none; padding: 1.25rem 1.35rem 1.5rem; }
++    .section.is-active { display: block; animation: fade-in 420ms ease both; }
++    @keyframes fade-in {
++      from { opacity: 0; transform: translateY(8px); }
++      to { opacity: 1; transform: none; }
++    }
++
++    /* ---- Loop ---- */
++    .beat-grid {
++      display: grid;
++      grid-template-columns: repeat(4, 1fr);
++      gap: 0.7rem;
++      margin-bottom: 1.15rem;
++    }
++    @media (max-width: 820px) { .beat-grid { grid-template-columns: 1fr 1fr; } }
++    .beat {
++      border: 1px solid var(--line);
++      border-radius: 14px;
++      padding: 0.85rem 0.9rem;
++      background: rgba(255,255,255,0.02);
++      position: relative;
++      overflow: hidden;
++    }
++    .beat::after {
++      content: "";
++      position: absolute; inset: auto 0 0; height: 2px;
++      background: linear-gradient(90deg, var(--accent), transparent);
++      transform: scaleX(0); transform-origin: left;
++    }
++    .section.is-active .beat { animation: beat-in 0.5s ease both; }
++    .section.is-active .beat:nth-child(1) { animation-delay: 0.05s; }
++    .section.is-active .beat:nth-child(2) { animation-delay: 0.18s; }
++    .section.is-active .beat:nth-child(3) { animation-delay: 0.31s; }
++    .section.is-active .beat:nth-child(4) { animation-delay: 0.44s; }
++    .section.is-active .beat::after { animation: bar-grow 0.7s ease both; }
++    .section.is-active .beat:nth-child(1)::after { animation-delay: 0.2s; }
++    .section.is-active .beat:nth-child(2)::after { animation-delay: 0.35s; }
++    .section.is-active .beat:nth-child(3)::after { animation-delay: 0.5s; }
++    .section.is-active .beat:nth-child(4)::after { animation-delay: 0.65s; }
++    @keyframes beat-in {
++      from { opacity: 0; transform: translateY(10px); }
++      to { opacity: 1; transform: none; }
++    }
++    @keyframes bar-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
++    .beat .num {
++      font-family: var(--display);
++      font-size: 0.72rem; font-weight: 700;
++      letter-spacing: 0.08em; color: var(--accent);
++      margin-bottom: 0.35rem;
++    }
++    .beat strong {
++      display: block;
++      font-family: var(--display);
++      font-size: 0.95rem;
++      margin-bottom: 0.3rem;
++    }
++    .beat p { margin: 0; color: var(--muted); font-size: 0.82rem; line-height: 1.45; }
++
++    .thesis {
++      display: grid;
++      grid-template-columns: 1.15fr 0.85fr;
++      gap: 1rem;
++    }
++    @media (max-width: 900px) { .thesis { grid-template-columns: 1fr; } }
++    .panel {
++      border: 1px solid var(--line);
++      border-radius: 14px;
++      padding: 1rem;
++      background: rgba(255,255,255,0.02);
++    }
++    .panel h3 {
++      margin: 0 0 0.55rem;
++      font-family: var(--display);
++      font-size: 1rem;
++    }
++    .panel p { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
++    .vs {
++      display: grid; gap: 0.55rem; margin-top: 0.85rem;
++    }
++    .vs div {
++      display: grid; grid-template-columns: 5.5rem 1fr;
++      gap: 0.6rem; align-items: start;
++      font-size: 0.82rem;
++    }
++    .vs b {
++      font-family: var(--display); font-weight: 600;
++      color: var(--accent-2); font-size: 0.75rem;
++      letter-spacing: 0.04em; text-transform: uppercase;
++      padding-top: 0.1rem;
++    }
++    .vs span { color: var(--muted); line-height: 1.45; }
++    .pillars-mini {
++      display: grid; gap: 0.55rem;
++    }
++    .pillars-mini div {
++      border-left: 3px solid var(--accent);
++      padding: 0.45rem 0 0.45rem 0.75rem;
++    }
++    .pillars-mini strong {
++      display: block;
++      font-family: var(--display);
++      font-size: 0.88rem;
++      margin-bottom: 0.15rem;
++    }
++    .pillars-mini span { color: var(--muted); font-size: 0.8rem; line-height: 1.4; }
++
++    /* ---- Surfaces ---- */
++    .surf-tabs {
++      display: flex; gap: 0.4rem; flex-wrap: wrap;
++      margin-bottom: 1rem;
++    }
++    .surf-tabs button {
++      appearance: none; border: 1px solid var(--line);
++      background: rgba(255,255,255,0.03); color: var(--muted);
++      border-radius: 10px; padding: 0.55rem 0.9rem;
++      font: inherit; font-size: 0.85rem; cursor: pointer;
++      display: flex; flex-direction: column; gap: 0.15rem; align-items: flex-start;
++      min-width: 7.5rem;
++    }
++    .surf-tabs button strong { color: inherit; font-family: var(--display); font-size: 0.9rem; }
++    .surf-tabs button small { color: var(--faint); font-size: 0.72rem; }
++    .surf-tabs button[aria-selected="true"] {
++      color: var(--text);
++      border-color: rgba(45, 212, 191, 0.5);
++      background: rgba(45, 212, 191, 0.1);
++    }
++    .surf-tabs button[aria-selected="true"] small { color: var(--muted); }
++
++    .surf-card { display: none; }
++    .surf-card.is-active { display: block; animation: fade-in 380ms ease both; }
++
++    .workspace {
++      display: grid;
++      grid-template-columns: 1fr 0.95fr;
++      gap: 0.85rem;
++      min-height: 320px;
++    }
++    @media (max-width: 900px) { .workspace { grid-template-columns: 1fr; } }
++
++    .mock {
++      border: 1px solid var(--line);
++      border-radius: 12px;
++      overflow: hidden;
++      background: #0e1524;
++      display: flex; flex-direction: column;
++    }
++    .mock-head {
++      display: flex; align-items: center; gap: 0.5rem;
++      padding: 0.55rem 0.75rem;
++      border-bottom: 1px solid var(--line);
++      font-size: 0.78rem; color: var(--muted);
++      background: rgba(255,255,255,0.02);
++    }
++    .mock-head b { color: var(--text); font-family: var(--display); font-weight: 600; }
++    .banner {
++      display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap;
++      padding: 0.45rem 0.75rem;
++      background: rgba(45, 212, 191, 0.12);
++      border-bottom: 1px solid rgba(45, 212, 191, 0.25);
++      font-size: 0.78rem;
++      color: #99f6e4;
++    }
++    .banner .acts { margin-left: auto; display: flex; gap: 0.35rem; }
++    .banner button {
++      appearance: none; border: 1px solid rgba(45, 212, 191, 0.35);
++      background: rgba(15, 23, 42, 0.55); color: var(--text);
++      border-radius: 6px; padding: 0.2rem 0.55rem;
++      font: inherit; font-size: 0.72rem; cursor: default;
++    }
++    .banner button.primary {
++      background: rgba(45, 212, 191, 0.25);
++      border-color: rgba(45, 212, 191, 0.55);
++    }
++    .section.is-active .banner { animation: pulse-banner 2.4s ease-in-out infinite; }
++    @keyframes pulse-banner {
++      0%, 100% { background: rgba(45, 212, 191, 0.10); }
++      50% { background: rgba(45, 212, 191, 0.18); }
++    }
++
++    .doc-body { padding: 0.9rem 1rem; flex: 1; }
++    .doc-body h4 {
++      margin: 0 0 0.55rem;
++      font-family: var(--display);
++      font-size: 1.05rem;
++    }
++    .doc-body p { margin: 0 0 0.55rem; color: var(--muted); font-size: 0.86rem; line-height: 1.55; }
++    .ins {
++      background: rgba(52, 211, 153, 0.18);
++      color: #a7f3d0;
++      border-radius: 3px;
++      padding: 0 0.15rem;
++      animation: ins-flash 1.8s ease both;
++    }
++    .del {
++      background: rgba(248, 113, 113, 0.18);
++      color: #fecaca;
++      text-decoration: line-through;
++      border-radius: 3px;
++      padding: 0 0.15rem;
++    }
++    @keyframes ins-flash {
++      from { background: rgba(52, 211, 153, 0.45); }
++      to { background: rgba(52, 211, 153, 0.18); }
++    }
++
++    .slides-body {
++      padding: 0.75rem;
++      display: grid;
++      grid-template-columns: repeat(3, 1fr);
++      gap: 0.55rem;
++      flex: 1;
++    }
++    .slide-card {
++      border: 1px solid var(--line);
++      border-radius: 10px;
++      background: rgba(255,255,255,0.03);
++      padding: 0.65rem;
++      min-height: 110px;
++      position: relative;
++    }
++    .slide-card.changed {
++      border-color: rgba(45, 212, 191, 0.55);
++      box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.15);
++    }
++    .slide-card .idx {
++      position: absolute; top: 0.4rem; right: 0.45rem;
++      font-size: 0.68rem; color: var(--faint); font-family: var(--display);
++    }
++    .slide-card .badge {
++      position: absolute; top: 0.35rem; left: 0.4rem;
++      font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em;
++      color: #0b1220; background: var(--accent);
++      border-radius: 4px; padding: 0.1rem 0.35rem;
++    }
++    .slide-card strong {
++      display: block; margin-top: 1.1rem;
++      font-size: 0.8rem; font-family: var(--display);
++    }
++    .slide-card p { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--muted); line-height: 1.35; }
++
++    .sheet-body { padding: 0.65rem; overflow: auto; flex: 1; }
++    table.sheet {
++      width: 100%; border-collapse: collapse; font-size: 0.78rem;
++    }
++    table.sheet th, table.sheet td {
++      border: 1px solid var(--line);
++      padding: 0.4rem 0.5rem;
++      text-align: left;
++    }
++    table.sheet th { background: rgba(255,255,255,0.04); color: var(--muted); font-weight: 500; }
++    table.sheet td.chg {
++      background: rgba(52, 211, 153, 0.16);
++      color: #a7f3d0;
++      animation: ins-flash 1.8s ease both;
++    }
++
++    .side {
++      display: flex; flex-direction: column; gap: 0.75rem;
++    }
++    .side .panel h3 { font-size: 0.92rem; }
++    .tool-flow { display: grid; gap: 0.4rem; margin-top: 0.65rem; }
++    .tool-row {
++      display: flex; align-items: center; gap: 0.5rem;
++      padding: 0.45rem 0.55rem;
++      border: 1px solid var(--line);
++      border-radius: 8px;
++      font-size: 0.78rem;
++      background: rgba(0,0,0,0.15);
++      opacity: 0;
++    }
++    .section.is-active .tool-row { animation: tool-in 0.45s ease both; }
++    .section.is-active .tool-row:nth-child(1) { animation-delay: 0.25s; }
++    .section.is-active .tool-row:nth-child(2) { animation-delay: 0.55s; }
++    .section.is-active .tool-row:nth-child(3) { animation-delay: 0.85s; }
++    .section.is-active .tool-row:nth-child(4) { animation-delay: 1.15s; }
++    @keyframes tool-in {
++      from { opacity: 0; transform: translateX(8px); }
++      to { opacity: 1; transform: none; }
++    }
++    .tool-row .tag {
++      font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em;
++      color: var(--accent-2); font-family: var(--display);
++    }
++    .tool-row code { flex: 1; color: var(--text); font-size: 0.74rem; }
++    .tool-row .ok { color: var(--add); font-size: 0.72rem; font-weight: 600; }
++
++    .prompt-box {
++      margin-top: 0.65rem;
++      border: 1px dashed rgba(45, 212, 191, 0.35);
++      border-radius: 10px;
++      padding: 0.65rem 0.75rem;
++      background: rgba(45, 212, 191, 0.05);
++      font-size: 0.8rem;
++      color: var(--muted);
++      line-height: 1.5;
++    }
++    .prompt-box code {
++      display: block;
++      margin-top: 0.35rem;
++      color: #99f6e4;
++      font-size: 0.74rem;
++      white-space: pre-wrap;
++    }
++
++    /* ---- Review ---- */
++    .review-layout {
++      display: grid;
++      grid-template-columns: 1.05fr 0.95fr;
++      gap: 1rem;
++    }
++    @media (max-width: 900px) { .review-layout { grid-template-columns: 1fr; } }
++
++    .diff-view {
++      border: 1px solid var(--line);
++      border-radius: 12px;
++      overflow: hidden;
++      background: #0c1320;
++      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
++      font-size: 0.78rem;
++    }
++    .diff-view header {
++      padding: 0.55rem 0.75rem;
++      border-bottom: 1px solid var(--line);
++      color: var(--muted);
++      font-family: var(--font);
++      display: flex; align-items: center; gap: 0.5rem;
++    }
++    .diff-view header b { color: var(--text); font-family: var(--display); }
++    .diff-line {
++      display: grid;
++      grid-template-columns: 1.6rem 1fr;
++      gap: 0.35rem;
++      padding: 0.2rem 0.65rem;
++      line-height: 1.45;
++    }
++    .diff-line .mark { color: var(--faint); text-align: center; }
++    .diff-line.add { background: rgba(52, 211, 153, 0.12); color: #a7f3d0; }
++    .diff-line.del { background: rgba(248, 113, 113, 0.12); color: #fecaca; }
++    .diff-line.hunk { color: var(--accent-2); background: rgba(56, 189, 248, 0.06); }
++    .diff-line.ctx { color: var(--muted); }
++    .hunk-check {
++      width: 1rem; height: 1rem; border-radius: 50%;
++      border: 1px solid var(--accent);
++      display: inline-grid; place-items: center;
++      font-size: 0.6rem; color: var(--accent);
++      margin-right: 0.25rem;
++    }
++    .hunk-check.on { background: rgba(45, 212, 191, 0.25); }
++    .section.is-active .diff-line.add,
++    .section.is-active .diff-line.del {
++      animation: line-in 0.4s ease both;
++    }
++    .section.is-active .diff-line.add:nth-of-type(4) { animation-delay: 0.35s; }
++    .section.is-active .diff-line.add:nth-of-type(5) { animation-delay: 0.5s; }
++    .section.is-active .diff-line.del:nth-of-type(3) { animation-delay: 0.2s; }
++    @keyframes line-in {
++      from { opacity: 0; transform: translateX(6px); }
++      to { opacity: 1; transform: none; }
++    }
++
++    .actions-panel .act-row {
++      display: flex; gap: 0.45rem; flex-wrap: wrap;
++      margin-top: 0.75rem;
++    }
++    .actions-panel .act-row span {
++      border: 1px solid var(--line);
++      border-radius: 8px;
++      padding: 0.45rem 0.7rem;
++      font-size: 0.8rem;
++      background: rgba(255,255,255,0.03);
++    }
++    .actions-panel .act-row span.keep {
++      border-color: rgba(52, 211, 153, 0.45);
++      color: #a7f3d0;
++    }
++    .actions-panel .act-row span.revert {
++      border-color: rgba(248, 113, 113, 0.4);
++      color: #fecaca;
++    }
++    .actions-panel .act-row span.hunk {
++      border-color: rgba(56, 189, 248, 0.4);
++      color: #bae6fd;
++    }
++    .note-list {
++      margin: 0.85rem 0 0;
++      padding: 0;
++      list-style: none;
++      display: grid; gap: 0.5rem;
++    }
++    .note-list li {
++      padding-left: 0.85rem;
++      border-left: 2px solid var(--accent);
++      color: var(--muted);
++      font-size: 0.84rem;
++      line-height: 1.45;
++    }
++
++    .hint {
++      margin: 1.1rem 0 0;
++      text-align: center;
++      color: var(--faint);
++      font-size: 0.8rem;
++    }
++    .hint a { color: var(--accent-2); }
++
++    body.record .top { padding-top: 0.5rem; }
++    body.record .page { padding-bottom: 1rem; }
++    body.record .subtitle { max-width: 40rem; }
++
++    @media (prefers-reduced-motion: reduce) {
++      *, *::before, *::after {
++        animation-duration: 0.01ms !important;
++        animation-iteration-count: 1 !important;
++        transition-duration: 0.01ms !important;
++      }
++      .section.is-active .tool-row { opacity: 1; }
++    }
++  </style>
++</head>
++<body>
++  <header class="top">
++    <div class="brand"><i>D</i> Danmo Work</div>
++    <nav class="nav" role="tablist">
++      <button type="button" data-section-tab="loop" aria-selected="true"></button>
++      <button type="button" data-section-tab="surfaces" aria-selected="false"></button>
++      <button type="button" data-section-tab="review" aria-selected="false"></button>
++    </nav>
++    <div class="lang">
++      <button type="button" data-lang="zh" aria-pressed="true">中文</button>
++      <button type="button" data-lang="en" aria-pressed="false">EN</button>
++    </div>
++  </header>
++
++  <main class="page">
++    <p class="eyebrow" data-i18n="eyebrow"></p>
++    <h1 class="title" data-i18n="title"></h1>
++    <p class="subtitle" data-i18n="subtitle"></p>
++
++    <div class="stage" data-stage style="--cycle: 11000ms">
++      <div class="stage-bar">
++        <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
++        <strong data-i18n="stageTitle"></strong>
++        <em data-i18n="stageMeta"></em>
++      </div>
++      <div class="progress" aria-hidden="true"><i></i></div>
++
++      <!-- Loop -->
++      <section class="section is-active" data-section="loop">
++        <div class="beat-grid">
++          <article class="beat">
++            <div class="num">01 · INTENT</div>
++            <strong data-i18n="loop.b1t"></strong>
++            <p data-i18n="loop.b1d"></p>
++          </article>
++          <article class="beat">
++            <div class="num">02 · PROPOSE</div>
++            <strong data-i18n="loop.b2t"></strong>
++            <p data-i18n="loop.b2d"></p>
++          </article>
++          <article class="beat">
++            <div class="num">03 · REVIEW</div>
++            <strong data-i18n="loop.b3t"></strong>
++            <p data-i18n="loop.b3d"></p>
++          </article>
++          <article class="beat">
++            <div class="num">04 · COMMIT</div>
++            <strong data-i18n="loop.b4t"></strong>
++            <p data-i18n="loop.b4d"></p>
++          </article>
++        </div>
++        <div class="thesis">
++          <div class="panel">
++            <h3 data-i18n="loop.th"></h3>
++            <p data-i18n="loop.td"></p>
++            <div class="vs">
++              <div><b data-i18n="loop.v1k"></b><span data-i18n="loop.v1v"></span></div>
++              <div><b data-i18n="loop.v2k"></b><span data-i18n="loop.v2v"></span></div>
++              <div><b data-i18n="loop.v3k"></b><span data-i18n="loop.v3v"></span></div>
++            </div>
++          </div>
++          <div class="panel">
++            <h3 data-i18n="loop.ph"></h3>
++            <div class="pillars-mini">
++              <div><strong data-i18n="loop.p1t"></strong><span data-i18n="loop.p1d"></span></div>
++              <div><strong data-i18n="loop.p2t"></strong><span data-i18n="loop.p2d"></span></div>
++              <div><strong data-i18n="loop.p3t"></strong><span data-i18n="loop.p3d"></span></div>
++            </div>
++          </div>
++        </div>
++      </section>
++
++      <!-- Surfaces -->
++      <section class="section" data-section="surfaces" hidden>
++        <div class="surf-tabs" role="tablist">
++          <button type="button" data-surf="0" aria-selected="true">
++            <strong data-i18n="surf.t0"></strong><small data-i18n="surf.d0"></small>
++          </button>
++          <button type="button" data-surf="1" aria-selected="false">
++            <strong data-i18n="surf.t1"></strong><small data-i18n="surf.d1"></small>
++          </button>
++          <button type="button" data-surf="2" aria-selected="false">
++            <strong data-i18n="surf.t2"></strong><small data-i18n="surf.d2"></small>
++          </button>
++        </div>
++
++        <article class="surf-card is-active" data-surf-card="0">
++          <div class="workspace">
++            <div class="mock">
++              <div class="mock-head"><b>Document Stage · Doc</b><span>brief.md</span></div>
++              <div class="banner">
++                <span data-i18n="surf.banner"></span>
++                <span class="acts">
++                  <button type="button" data-i18n="surf.diff"></button>
++                  <button type="button" class="primary" data-i18n="surf.keep"></button>
++                  <button type="button" data-i18n="surf.revert"></button>
++                </span>
++              </div>
++              <div class="doc-body">
++                <h4 data-i18n="surf.docTitle"></h4>
++                <p><span class="del" data-i18n="surf.docOld"></span> <span class="ins" data-i18n="surf.docNew"></span></p>
++                <p data-i18n="surf.docBody"></p>
++              </div>
++            </div>
++            <div class="side">
++              <div class="panel">
++                <h3 data-i18n="surf.flowTitle"></h3>
++                <p data-i18n="surf.docLead"></p>
++                <div class="prompt-box">
++                  <span data-i18n="surf.scopeDoc"></span>
++                  <code>[office-edit]
++action: polish
++path: brief.md
++scope: selection</code>
++                </div>
++                <div class="tool-flow">
++                  <div class="tool-row"><span class="tag">CALL</span><code>read_file · brief.md</code><span class="ok">OK</span></div>
++                  <div class="tool-row"><span class="tag">CALL</span><code>apply_patch · ¶2</code><span class="ok">OK</span></div>
++                  <div class="tool-row"><span class="tag">SNAP</span><code>pre-turn snapshot</code><span class="ok">OK</span></div>
++                  <div class="tool-row"><span class="tag">UI</span><code>AI Diff banner</code><span class="ok">live</span></div>
++                </div>
++              </div>
++            </div>
++          </div>
++        </article>
++
++        <article class="surf-card" data-surf-card="1" hidden>
++          <div class="workspace">
++            <div class="mock">
++              <div class="mock-head"><b>Document Stage · Slides</b><span>deck.md</span></div>
++              <div class="banner">
++                <span data-i18n="surf.banner"></span>
++                <span class="acts">
++                  <button type="button" data-i18n="surf.diff"></button>
++                  <button type="button" class="primary" data-i18n="surf.keep"></button>
++                  <button type="button" data-i18n="surf.revert"></button>
++                </span>
++              </div>
++              <div class="slides-body">
++                <div class="slide-card">
++                  <span class="idx">01</span>
++                  <strong data-i18n="surf.sl1t"></strong>
++                  <p data-i18n="surf.sl1d"></p>
++                </div>
++                <div class="slide-card changed">
++                  <span class="badge">AI</span>
++                  <span class="idx">02</span>
++                  <strong data-i18n="surf.sl2t"></strong>
++                  <p data-i18n="surf.sl2d"></p>
++                </div>
++                <div class="slide-card">
++                  <span class="idx">03</span>
++                  <strong data-i18n="surf.sl3t"></strong>
++                  <p data-i18n="surf.sl3d"></p>
++                </div>
++              </div>
++            </div>
++            <div class="side">
++              <div class="panel">
++                <h3 data-i18n="surf.flowTitle"></h3>
++                <p data-i18n="surf.slidesLead"></p>
++                <div class="prompt-box">
++                  <span data-i18n="surf.scopeSlide"></span>
++                  <code>[office-edit]
++action: slide-page
++path: deck.md
++scope: slide
++pageIndex: 1</code>
++                </div>
++                <div class="tool-flow">
++                  <div class="tool-row"><span class="tag">CALL</span><code>read_file · deck.md</code><span class="ok">OK</span></div>
++                  <div class="tool-row"><span class="tag">CALL</span><code>edit · page 02</code><span class="ok">OK</span></div>
++                  <div class="tool-row"><span class="tag">MD</span><code>--- page SoT</code><span class="ok">OK</span></div>
++                  <div class="tool-row"><span class="tag">UI</span><code>review · Keep / Revert</code><span class="ok">live</span></div>
++                </div>
++              </div>
++            </div>
++          </div>
++        </article>
++
++        <article class="surf-card" data-surf-card="2" hidden>
++          <div class="workspace">
++            <div class="mock">
++              <div class="mock-head"><b>Document Stage · Sheet</b><span>pipeline.csv</span></div>
++              <div class="banner">
++                <span data-i18n="surf.banner"></span>
++                <span class="acts">
++                  <button type="button" data-i18n="surf.diff"></button>
++                  <button type="button" class="primary" data-i18n="surf.keep"></button>
++                  <button type="button" data-i18n="surf.revert"></button>
++                </span>
++              </div>
++              <div class="sheet-body">
++                <table class="sheet">
++                  <thead>
++                    <tr>
++                      <th data-i18n="surf.th1"></th>
++                      <th data-i18n="surf.th2"></th>
++                      <th data-i18n="surf.th3"></th>
++                      <th data-i18n="surf.th4"></th>
++                    </tr>
++                  </thead>
++                  <tbody>
++                    <tr><td>Acme</td><td>$48k</td><td>P1</td><td class="chg" data-i18n="surf.cell1"></td></tr>
++                    <tr><td>North</td><td>$22k</td><td>P2</td><td data-i18n="surf.cell2"></td></tr>
++                    <tr><td>Orbit</td><td>$15k</td><td>P2</td><td class="chg" data-i18n="surf.cell3"></td></tr>
++                  </tbody>
++                </table>
++              </div>
++            </div>
++            <div class="side">
++              <div class="panel">
++                <h3 data-i18n="surf.flowTitle"></h3>
++                <p data-i18n="surf.sheetLead"></p>
++                <div class="prompt-box">
++                  <span data-i18n="surf.scopeSheet"></span>
++                  <code>[office-edit]
++action: sheet
++path: pipeline.csv
++scope: selection
++range: D2:D4</code>
++                </div>
++                <div class="tool-flow">
++                  <div class="tool-row"><span class="tag">CALL</span><code>read_file · pipeline.csv</code><span class="ok">OK</span></div>
++                  <div class="tool-row"><span class="tag">CALL</span><code>edit · range D2:D4</code><span class="ok">OK</span></div>
++                  <div class="tool-row"><span class="tag">SOT</span><code>CSV / .danmo-sheet.json</code><span class="ok">OK</span></div>
++                  <div class="tool-row"><span class="tag">UI</span><code>cell highlight + banner</code><span class="ok">live</span></div>
++                </div>
++              </div>
++            </div>
++          </div>
++        </article>
++      </section>
++
++      <!-- Review -->
++      <section class="section" data-section="review" hidden>
++        <div class="review-layout">
++          <div class="diff-view">
++            <header>
++              <b data-i18n="rev.diffTitle"></b>
++              <span>· brief.md</span>
++              <span style="margin-left:auto" data-i18n="rev.diffMeta"></span>
++            </header>
++            <div class="diff-line hunk"><span class="mark">◎</span><span><span class="hunk-check on">✓</span>@@ -12,4 +12,5 @@</span></div>
++            <div class="diff-line ctx"><span class="mark"> </span><span data-i18n="rev.l1"></span></div>
++            <div class="diff-line del"><span class="mark">-</span><span data-i18n="rev.l2"></span></div>
++            <div class="diff-line add"><span class="mark">+</span><span data-i18n="rev.l3"></span></div>
++            <div class="diff-line add"><span class="mark">+</span><span data-i18n="rev.l4"></span></div>
++            <div class="diff-line ctx"><span class="mark"> </span><span data-i18n="rev.l5"></span></div>
++            <div class="diff-line hunk"><span class="mark">○</span><span><span class="hunk-check">○</span>@@ -28,3 +29,3 @@</span></div>
++            <div class="diff-line del"><span class="mark">-</span><span data-i18n="rev.l6"></span></div>
++            <div class="diff-line add"><span class="mark">+</span><span data-i18n="rev.l7"></span></div>
++          </div>
++          <div class="panel actions-panel">
++            <h3 data-i18n="rev.title"></h3>
++            <p data-i18n="rev.lead"></p>
++            <div class="act-row">
++              <span class="keep" data-i18n="rev.keep"></span>
++              <span class="revert" data-i18n="rev.revert"></span>
++              <span class="hunk" data-i18n="rev.hunk"></span>
++            </div>
++            <ul class="note-list">
++              <li data-i18n="rev.n1"></li>
++              <li data-i18n="rev.n2"></li>
++              <li data-i18n="rev.n3"></li>
++              <li data-i18n="rev.n4"></li>
++            </ul>
++          </div>
++        </div>
++      </section>
++    </div>
++
++    <p class="hint">
++      <span data-i18n="hint"></span>
++      · <a href="https://github.com/danmo-ai/danmo-work">danmo-ai/danmo-work</a>
++      · <a href="./product-tour.html">product tour</a>
++    </p>
++  </main>
++
++  <script>
++    const I18N = {
++      zh: {
++        eyebrow: "人机共审 · Office",
++        title: "人与 AI 协作编辑文档、幻灯片、表格",
++        subtitle: "不是聊天框里倒 Markdown，也不是石墨式多人共编。Document Stage 上走 Intent → Propose → Review → Commit：AI 改稿可见、可回滚、可分块接受，轨迹进 Turn Log。",
++        stageTitle: "Office Co-edit",
++        stageMeta: "Loop · Surfaces · Review",
++        nav: ["四拍协同环", "Doc / Slides / Sheet", "AI Diff 审阅"],
++        loop: {
++          b1t: "指定意图", b1d: "选区 / 当前页 / 单元格范围 + 一句指令；工具栏组装 [office-edit]。",
++          b2t: "AI 提案写盘", b2d: "同一条 Agent Loop：read_file + apply_patch；回合前自动快照。",
++          b3t: "人在 Stage 审阅", b3d: "顶栏 AI 变更条：查看 Diff · 保留 · 回滚；可按 hunk 接受。",
++          b4t: "提交真相源", b4d: "Accept 留下 SoT（MD / CSV）；Reject 恢复快照；全程可回放。",
++          th: "协同对象是人 ↔ AI",
++          td: "壁垒在 Agent Loop + Turn Log + Stage，不是 CRDT 多人文档。文本仍是真相源——编辑器可换，契约不变。",
++          v1k: "不是", v1v: "聊天倒稿、黑盒改写、或嵌入 OnlyOffice 套件。",
++          v2k: "而是", v2v: "propose → review → accept/reject；人决定什么进 SoT。",
++          v3k: "轨迹", v3v: "提案、接受、回滚都可审计；Web / 桌面 / IM 同一语义。",
++          ph: "三条原则",
++          p1t: "人始终可介入", p1d: "默认可看 Diff、可整文件回滚；桌面 Stage 默认审阅条。",
++          p2t: "文本 SoT", p2d: "Doc/Slides = Markdown；Sheet = CSV / .danmo-sheet.json。",
++          p3t: "审阅层增强", p3d: "不做 Yjs 多人文档；增强的是共审体验，不是 OT。",
++        },
++        surf: {
++          t0: "Doc", d0: "选区润色 · TipTap",
++          t1: "Slides", d1: "按页改稿 · MD 分页",
++          t2: "Sheet", d2: "选区填充 · CSV SoT",
++          banner: "AI 已修改此文件 — 请审阅后再继续",
++          diff: "查看 Diff", keep: "保留", revert: "回滚",
++          flowTitle: "本回合发生了什么",
++          docTitle: "产品定位",
++          docOld: "又一个 Coding Agent。",
++          docNew: "面向长程工作的 Work Agent——Coding 是车道，不是天花板。",
++          docBody: "Document Stage 交付报告与幻灯片；人通过 ask_user 与 AI Diff 对等参与。",
++          docLead: "选中段落 → 润色 / 改写；Turn 结束后 Stage 顶栏出现审阅条，可对照回合前快照。",
++          scopeDoc: "作用域：选区",
++          slidesLead: "当前页 scope；Markdown 以 --- 分页。AI 只改指定页，Present HTML 由 Stage 派生。",
++          scopeSlide: "作用域：当前页",
++          sl1t: "议程", sl1d: "问题 · 方案 · 节奏",
++          sl2t: "方案要点", sl2d: "人机共审四拍环 · 文本 SoT",
++          sl3t: "下一步", sl3d: "试点 · 指标 · 复盘",
++          sheetLead: "选区 range 写入指令；公式以字符串单元格展示。改完高亮变更格，并可整表回滚。",
++          scopeSheet: "作用域：选区 D2:D4",
++          th1: "客户", th2: "金额", th3: "优先级", th4: "下一步",
++          cell1: "本周演示", cell2: "发案例", cell3: "补 POC",
++        },
++        rev: {
++          diffTitle: "AI Diff",
++          diffMeta: "vs 回合前快照",
++          title: "保留、回滚，或只接受部分",
++          lead: "P0：整文件 Keep / Revert。P1：勾选 hunk 后接受所选——长文润色不必全盘接收。",
++          keep: "保留全部",
++          revert: "回滚到快照",
++          hunk: "接受所选 hunk",
++          l1: "产品定位",
++          l2: "又一个 Coding Agent。",
++          l3: "面向长程工作的 Work Agent——",
++          l4: "Coding 是车道，不是天花板。",
++          l5: "",
++          l6: "下周再谈。",
++          l7: "本周完成试点复盘。",
++          n1: "office-edit 走普通 session turn，不是独立 /office/ai 接口。",
++          n2: "权限门禁管高风险工具；内容层放行靠 AI Diff 审阅。",
++          n3: "IM 无 Stage 时 Auto-commit；回桌面仍可从 file_changes 回看。",
++          n4: "Code Stage 同样可走 AI Diff；改码不挂 Office 润色工具栏。",
++        },
++        hint: "HTML 可切换语言与章节 · 适合落地页嵌入与录屏导出",
++      },
++      en: {
++        eyebrow: "Human ↔ AI · Office",
++        title: "Co-edit docs, slides, and sheets with the Agent",
++        subtitle: "Not Markdown dumped into chat. Not multiplayer CRDT docs. On Document Stage: Intent → Propose → Review → Commit — visible edits, revertible, hunk-selectable, logged on the Turn trail.",
++        stageTitle: "Office Co-edit",
++        stageMeta: "Loop · Surfaces · Review",
++        nav: ["Four-beat loop", "Doc / Slides / Sheet", "AI Diff review"],
++        loop: {
++          b1t: "Intent", b1d: "Selection / current page / cell range + instruction; toolbar builds [office-edit].",
++          b2t: "Propose", b2d: "Same Agent Loop: read_file + apply_patch; pre-turn snapshot captured.",
++          b3t: "Review", b3d: "Stage banner: View Diff · Keep · Revert; accept selected hunks.",
++          b4t: "Commit", b4d: "Accept keeps SoT (MD / CSV); Reject restores snapshot; full replay.",
++          th: "The peer is human ↔ AI",
++          td: "The moat is Agent Loop + Turn Log + Stage — not CRDT multiplayer. Text stays source of truth; surfaces can evolve.",
++          v1k: "Not", v1v: "Chat dumps, opaque rewrites, or embedding an OOXML suite.",
++          v2k: "But", v2v: "propose → review → accept/reject; humans decide what enters SoT.",
++          v3k: "Trail", v3v: "Proposals, accepts, and reverts are auditable across Web / desktop / IM.",
++          ph: "Three principles",
++          p1t: "Humans can always intervene", p1d: "Diff visible by default; one-click whole-file revert on Stage.",
++          p2t: "Text SoT", p2d: "Doc/Slides = Markdown; Sheet = CSV / .danmo-sheet.json.",
++          p3t: "Review layer, not OT", p3d: "No Yjs multiplayer docs — we deepen co-review, not CRDT.",
++        },
++        surf: {
++          t0: "Doc", d0: "Selection polish · TipTap",
++          t1: "Slides", d1: "Page-scoped edit · MD",
++          t2: "Sheet", d2: "Range fill · CSV SoT",
++          banner: "AI changed this file — review before continuing",
++          diff: "View diff", keep: "Keep", revert: "Revert",
++          flowTitle: "What this turn did",
++          docTitle: "Positioning",
++          docOld: "Just another coding agent.",
++          docNew: "A Work Agent for long-horizon work — coding is a lane, not the ceiling.",
++          docBody: "Document Stage ships reports and decks; humans join via ask_user and AI Diff.",
++          docLead: "Select a paragraph → polish / rewrite. After the turn, Stage shows a review banner against the pre-turn snapshot.",
++          scopeDoc: "Scope: selection",
++          slidesLead: "Current-page scope; Markdown split by ---. AI edits one page; Present HTML is derived by Stage.",
++          scopeSlide: "Scope: current page",
++          sl1t: "Agenda", sl1d: "Problem · approach · cadence",
++          sl2t: "Approach", sl2d: "Four-beat co-review · text SoT",
++          sl3t: "Next", sl3d: "Pilot · metrics · retro",
++          sheetLead: "Selection range in the prompt; formulas stay string cells. Changed cells highlight; whole sheet can revert.",
++          scopeSheet: "Scope: selection D2:D4",
++          th1: "Account", th2: "ARR", th3: "Pri", th4: "Next step",
++          cell1: "Demo this week", cell2: "Send case", cell3: "Add POC",
++        },
++        rev: {
++          diffTitle: "AI Diff",
++          diffMeta: "vs pre-turn snapshot",
++          title: "Keep, revert, or accept hunks",
++          lead: "P0: whole-file Keep / Revert. P1: tick hunks and accept only what you want — polish long docs without taking everything.",
++          keep: "Keep all",
++          revert: "Revert to snapshot",
++          hunk: "Accept selected hunks",
++          l1: "Positioning",
++          l2: "Just another coding agent.",
++          l3: "A Work Agent for long-horizon work —",
++          l4: "coding is a lane, not the ceiling.",
++          l5: "",
++          l6: "Talk next week.",
++          l7: "Finish the pilot retro this week.",
++          n1: "office-edit is a normal session turn — not a separate /office/ai API.",
++          n2: "Permissions gate risky tools; content acceptance is AI Diff review.",
++          n3: "IM without Stage auto-commits; open the file later to inspect file_changes.",
++          n4: "Code Stage shares AI Diff; coding edits stay on Composer, not Office polish.",
++        },
++        hint: "HTML toggles language & sections · embed on the landing page or export for social",
++      },
++    };
++
++    const $ = (sel, el = document) => el.querySelector(sel);
++    const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
++
++    function getByPath(obj, path) {
++      return path.split(".").reduce((o, k) => (o == null ? o : o[k]), obj);
++    }
++
++    function applyI18n(lang) {
++      const dict = I18N[lang];
++      document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
++      $$("[data-i18n]").forEach((node) => {
++        const key = node.getAttribute("data-i18n");
++        const val = getByPath(dict, key);
++        if (val != null) node.textContent = val;
++      });
++      $$("[data-section-tab]").forEach((btn, i) => {
++        btn.textContent = dict.nav[i];
++      });
++      $$("[data-lang]").forEach((btn) => {
++        btn.setAttribute("aria-pressed", String(btn.dataset.lang === lang));
++      });
++    }
++
++    function restartProgress(stage) {
++      stage.classList.remove("is-playing");
++      const bar = $(".progress > i", stage);
++      void bar.offsetWidth;
++      stage.classList.add("is-playing");
++    }
++
++    function replay(el) {
++      if (!el) return;
++      el.style.display = "none";
++      void el.offsetWidth;
++      el.style.display = "";
++    }
++
++    function init() {
++      const params = new URLSearchParams(location.search);
++      let lang = params.get("lang") === "en" ? "en" : "zh";
++      let section = params.get("section") || "loop";
++      if (!["loop", "surfaces", "review"].includes(section)) section = "loop";
++      if (params.has("record")) document.body.classList.add("record");
++      const auto = params.has("tour") || params.has("record");
++
++      const stage = $("[data-stage]");
++      const sectionTabs = $$("[data-section-tab]");
++      const sections = $$("[data-section]");
++
++      let surf = 0;
++      let timer;
++
++      const fast = params.has("record") || params.get("tour") === "fast";
++      const CYCLE = fast
++        ? { loop: 6500, surfaces: 5000, review: 6500 }
++        : { loop: 11000, surfaces: 9000, review: 10000 };
++
++      function showSection(name, { restartSurf = true } = {}) {
++        section = name;
++        sectionTabs.forEach((btn) => {
++          btn.setAttribute("aria-selected", String(btn.dataset.sectionTab === name));
++        });
++        sections.forEach((sec) => {
++          const on = sec.dataset.section === name;
++          sec.classList.toggle("is-active", on);
++          sec.toggleAttribute("hidden", !on);
++          if (on) replay(sec);
++        });
++        stage.style.setProperty("--cycle", `${CYCLE[name]}ms`);
++        restartProgress(stage);
++        if (name === "surfaces" && restartSurf) showSurf(0);
++      }
++
++      function showSurf(i) {
++        surf = i;
++        $$("[data-surf]").forEach((btn, idx) => {
++          btn.setAttribute("aria-selected", String(idx === i));
++        });
++        $$("[data-surf-card]").forEach((card, idx) => {
++          const on = idx === i;
++          card.classList.toggle("is-active", on);
++          card.toggleAttribute("hidden", !on);
++          if (on) replay(card);
++        });
++      }
++
++      sectionTabs.forEach((btn) => {
++        btn.addEventListener("click", () => {
++          clearInterval(timer);
++          showSection(btn.dataset.sectionTab);
++          if (auto) startTour();
++        });
++      });
++
++      $$("[data-surf]").forEach((btn) => {
++        btn.addEventListener("click", () => {
++          clearInterval(timer);
++          showSurf(Number(btn.dataset.surf));
++          if (auto) startTour();
++        });
++      });
++
++      $$("[data-lang]").forEach((btn) => {
++        btn.addEventListener("click", () => {
++          lang = btn.dataset.lang;
++          applyI18n(lang);
++          const url = new URL(location.href);
++          url.searchParams.set("lang", lang);
++          history.replaceState(null, "", url);
++        });
++      });
++
++      const order = ["loop", "surfaces", "review"];
++      function startTour() {
++        clearInterval(timer);
++        let tick = 0;
++        const plan = [];
++        order.forEach((name) => {
++          if (name === "surfaces") {
++            for (let i = 0; i < 3; i++) plan.push({ section: name, surf: i, ms: CYCLE.surfaces / 3 });
++          } else {
++            plan.push({ section: name, ms: CYCLE[name] });
++          }
++        });
++        const run = () => {
++          const step = plan[tick % plan.length];
++          showSection(step.section, { restartSurf: step.surf == null });
++          if (step.surf != null) showSurf(step.surf);
++          tick += 1;
++          timer = setTimeout(run, step.ms);
++        };
++        run();
++      }
++
++      applyI18n(lang);
++      showSection(section);
++      if (auto) startTour();
++    }
++
++    init();
++  </script>
++</body>
++</html>
+diff --git a/public/demos/product-tour.html b/public/demos/product-tour.html
+new file mode 100644
+index 0000000..576bf9e
+--- /dev/null
++++ b/public/demos/product-tour.html
+@@ -0,0 +1,1084 @@
++<!DOCTYPE html>
++<html lang="zh-CN">
++<head>
++  <meta charset="UTF-8" />
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
++  <title>Danmo Work — Product Tour</title>
++  <meta name="description" content="Bilingual animated tour: architecture, highlights, capacity demos." />
++  <link rel="preconnect" href="https://fonts.googleapis.com" />
++  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
++  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet" />
++  <style>
++    :root {
++      --bg: #0b1220;
++      --bg-elev: #121a2b;
++      --line: rgba(148, 163, 184, 0.18);
++      --text: #e8eef9;
++      --muted: #94a3b8;
++      --faint: #64748b;
++      --accent: #38bdf8;
++      --accent-2: #34d399;
++      --accent-warm: #fbbf24;
++      --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
++      --font: "Noto Sans SC", "Sora", sans-serif;
++      --display: "Sora", "Noto Sans SC", sans-serif;
++    }
++    * { box-sizing: border-box; }
++    html, body { margin: 0; min-height: 100%; }
++    body {
++      font-family: var(--font);
++      color: var(--text);
++      background:
++        radial-gradient(1000px 520px at 10% -8%, rgba(56, 189, 248, 0.15), transparent 55%),
++        radial-gradient(900px 480px at 90% 0%, rgba(52, 211, 153, 0.10), transparent 50%),
++        linear-gradient(180deg, #0a101c 0%, var(--bg) 45%, #0d1524 100%);
++      -webkit-font-smoothing: antialiased;
++    }
++    [data-i18n] { /* filled by JS */ }
++
++    .top {
++      width: min(1180px, calc(100% - 2rem));
++      margin: 0 auto;
++      padding: 1.25rem 0 0.5rem;
++      display: flex;
++      align-items: center;
++      gap: 1rem;
++      flex-wrap: wrap;
++    }
++    .brand {
++      font-family: var(--display);
++      font-weight: 700;
++      font-size: 1.05rem;
++      letter-spacing: -0.02em;
++      display: flex;
++      align-items: center;
++      gap: 0.55rem;
++    }
++    .brand i {
++      width: 28px; height: 28px; border-radius: 8px;
++      background: linear-gradient(135deg, #38bdf8, #34d399);
++      display: grid; place-items: center;
++      font-style: normal; font-size: 0.85rem; color: #0b1220; font-weight: 800;
++    }
++    .nav {
++      display: flex; gap: 0.4rem; flex-wrap: wrap;
++      margin-left: 0.5rem;
++    }
++    .nav button, .lang button {
++      appearance: none; border: 1px solid var(--line);
++      background: rgba(18, 26, 43, 0.75); color: var(--muted);
++      border-radius: 999px; padding: 0.4rem 0.85rem;
++      font: inherit; font-size: 0.82rem; cursor: pointer;
++      transition: 160ms ease;
++    }
++    .nav button[aria-selected="true"], .lang button[aria-pressed="true"] {
++      color: var(--text);
++      border-color: rgba(56, 189, 248, 0.55);
++      background: rgba(56, 189, 248, 0.12);
++    }
++    .lang { margin-left: auto; display: flex; gap: 0.35rem; }
++
++    .page {
++      width: min(1180px, calc(100% - 2rem));
++      margin: 0 auto;
++      padding: 1.25rem 0 2.5rem;
++    }
++    .eyebrow {
++      margin: 0 0 0.55rem;
++      font-family: var(--display);
++      font-size: 0.75rem; font-weight: 600;
++      letter-spacing: 0.14em; text-transform: uppercase;
++      color: var(--accent); text-align: center;
++    }
++    .title {
++      margin: 0; text-align: center;
++      font-family: var(--display);
++      font-size: clamp(1.7rem, 3.8vw, 2.5rem);
++      font-weight: 700; letter-spacing: -0.03em; line-height: 1.15;
++    }
++    .subtitle {
++      margin: 0.75rem auto 0; max-width: 46rem;
++      text-align: center; color: var(--muted);
++      font-size: 1rem; line-height: 1.6;
++    }
++
++    .stage {
++      margin-top: 1.75rem;
++      border: 1px solid var(--line);
++      border-radius: 20px;
++      background: linear-gradient(180deg, rgba(22, 32, 51, 0.96), rgba(12, 18, 32, 0.98));
++      box-shadow: var(--shadow);
++      overflow: hidden;
++      min-height: 560px;
++    }
++    .stage-bar {
++      display: flex; align-items: center; gap: 0.75rem;
++      padding: 0.8rem 1rem;
++      border-bottom: 1px solid var(--line);
++      background: rgba(255,255,255,0.02);
++    }
++    .lights { display: flex; gap: 0.4rem; }
++    .lights i { width: 10px; height: 10px; border-radius: 50%; display: block; }
++    .lights i:nth-child(1) { background: #f87171; }
++    .lights i:nth-child(2) { background: #fbbf24; }
++    .lights i:nth-child(3) { background: #34d399; }
++    .stage-bar strong { font-family: var(--display); font-size: 0.9rem; }
++    .stage-bar em { margin-left: auto; font-style: normal; color: var(--faint); font-size: 0.78rem; }
++    .progress { height: 2px; background: rgba(148,163,184,0.12); }
++    .progress > i {
++      display: block; height: 100%; width: 0;
++      background: linear-gradient(90deg, var(--accent), var(--accent-2));
++    }
++    .is-playing .progress > i { animation: progress-fill var(--cycle, 12s) linear; }
++    @keyframes progress-fill { from { width: 0; } to { width: 100%; } }
++
++    .section { display: none; padding: 1.25rem 1.35rem 1.5rem; }
++    .section.is-active { display: block; }
++
++    /* ---- Architecture ---- */
++    .arch-grid {
++      display: grid;
++      grid-template-columns: 1.1fr 0.9fr;
++      gap: 1.1rem;
++    }
++    @media (max-width: 900px) { .arch-grid { grid-template-columns: 1fr; } }
++
++    .flow {
++      border: 1px solid var(--line);
++      border-radius: 14px;
++      padding: 1rem;
++      background: rgba(255,255,255,0.02);
++    }
++    .flow-step {
++      display: grid;
++      grid-template-columns: 36px 1fr;
++      gap: 0.75rem;
++      align-items: start;
++      opacity: 0;
++      transform: translateY(8px);
++    }
++    .flow-step + .flow-step { margin-top: 0.55rem; }
++    .flow-num {
++      width: 36px; height: 36px; border-radius: 10px;
++      display: grid; place-items: center;
++      font-family: var(--display); font-weight: 700; font-size: 0.85rem;
++      background: var(--bg-elev); border: 1px solid var(--line);
++      color: var(--accent);
++    }
++    .flow-step strong { display: block; font-size: 0.95rem; margin-bottom: 0.15rem; }
++    .flow-step p { margin: 0; color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
++    .flow-arrow {
++      grid-column: 1 / -1;
++      height: 18px;
++      margin-left: 17px;
++      border-left: 2px dashed rgba(56, 189, 248, 0.35);
++      opacity: 0;
++    }
++
++    .pillars { display: grid; gap: 0.65rem; }
++    .pillar {
++      border: 1px solid var(--line);
++      border-radius: 12px;
++      padding: 0.85rem 0.95rem;
++      background: rgba(0,0,0,0.15);
++      opacity: 0;
++      transform: translateX(10px);
++    }
++    .pillar b {
++      display: block; font-family: var(--display);
++      font-size: 0.9rem; margin-bottom: 0.25rem; color: var(--accent-2);
++    }
++    .pillar span { color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
++    .pillar code {
++      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
++      color: #cbd5e1; font-size: 0.78rem;
++    }
++
++    .layer-strip {
++      margin-top: 1rem;
++      display: grid;
++      grid-template-columns: repeat(4, 1fr);
++      gap: 0.5rem;
++    }
++    @media (max-width: 700px) { .layer-strip { grid-template-columns: repeat(2, 1fr); } }
++    .layer {
++      border: 1px solid var(--line);
++      border-radius: 10px;
++      padding: 0.65rem 0.7rem;
++      text-align: center;
++      background: rgba(56, 189, 248, 0.06);
++      opacity: 0;
++      transform: scale(0.96);
++    }
++    .layer b { display: block; font-family: var(--display); font-size: 0.82rem; margin-bottom: 0.2rem; }
++    .layer span { color: var(--faint); font-size: 0.72rem; }
++
++    /* ---- Highlights ---- */
++    .hi-layout {
++      display: grid;
++      grid-template-columns: 260px 1fr;
++      gap: 1rem;
++    }
++    @media (max-width: 860px) { .hi-layout { grid-template-columns: 1fr; } }
++    .hi-tabs { display: flex; flex-direction: column; gap: 0.5rem; }
++    .hi-tab {
++      appearance: none; text-align: left; cursor: pointer;
++      border: 1px solid var(--line); border-radius: 12px;
++      background: rgba(18,26,43,0.7); color: inherit;
++      padding: 0.8rem 0.9rem; transition: 160ms ease;
++    }
++    .hi-tab[aria-selected="true"] {
++      border-color: rgba(56,189,248,0.55);
++      background: rgba(56,189,248,0.12);
++    }
++    .hi-tab strong { display: block; font-size: 0.92rem; margin-bottom: 0.15rem; }
++    .hi-tab small { color: var(--muted); font-size: 0.8rem; line-height: 1.4; }
++
++    .hi-card {
++      border: 1px solid var(--line);
++      border-radius: 14px;
++      min-height: 380px;
++      padding: 1.1rem 1.15rem;
++      background: rgba(255,255,255,0.02);
++      display: none;
++    }
++    .hi-card.is-active { display: block; }
++    .hi-card h3 {
++      margin: 0 0 0.4rem;
++      font-family: var(--display);
++      font-size: 1.15rem; letter-spacing: -0.02em;
++    }
++    .hi-card .lead { margin: 0 0 1rem; color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
++
++    .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
++    .chip {
++      border: 1px solid var(--line); border-radius: 999px;
++      padding: 0.25rem 0.65rem; font-size: 0.75rem; color: var(--muted);
++      background: rgba(0,0,0,0.18);
++      opacity: 0; transform: translateY(6px);
++    }
++
++    .mock-ui {
++      border: 1px solid var(--line);
++      border-radius: 12px;
++      overflow: hidden;
++      background: #0f172a;
++      opacity: 0;
++      transform: translateY(10px);
++    }
++    .mock-ui header {
++      display: flex; gap: 0.5rem; align-items: center;
++      padding: 0.55rem 0.75rem;
++      border-bottom: 1px solid var(--line);
++      font-size: 0.75rem; color: var(--faint);
++    }
++    .mock-ui .body { padding: 0.85rem; }
++    .mock-row {
++      display: flex; justify-content: space-between; gap: 0.75rem;
++      padding: 0.45rem 0.55rem; border-radius: 8px;
++      background: rgba(255,255,255,0.03);
++      margin-bottom: 0.4rem; font-size: 0.82rem;
++    }
++    .mock-row code { color: #cbd5e1; font-size: 0.78rem; }
++    .ok { color: var(--accent-2); font-size: 0.75rem; font-weight: 650; }
++    .metric-row {
++      display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45rem;
++    }
++    .metric-row div {
++      border: 1px solid var(--line); border-radius: 10px;
++      padding: 0.55rem; background: rgba(56,189,248,0.06);
++    }
++    .metric-row em { display: block; font-style: normal; color: var(--faint); font-size: 0.7rem; }
++    .metric-row strong { font-family: var(--display); font-size: 0.95rem; }
++
++    /* ---- Capacity (reuse pattern) ---- */
++    .cap-layout {
++      display: grid;
++      grid-template-columns: minmax(220px, 280px) 1fr;
++      gap: 1rem;
++    }
++    @media (max-width: 860px) { .cap-layout { grid-template-columns: 1fr; } }
++    .cap-tabs { display: flex; flex-direction: column; gap: 0.55rem; }
++    .cap-tab {
++      appearance: none; text-align: left; cursor: pointer;
++      border: 1px solid var(--line); border-radius: 12px;
++      background: rgba(18,26,43,0.7); color: inherit;
++      padding: 0.85rem 0.95rem;
++    }
++    .cap-tab[aria-selected="true"] {
++      border-color: rgba(56,189,248,0.55);
++      background: linear-gradient(180deg, rgba(56,189,248,0.14), rgba(18,26,43,0.9));
++    }
++    .cap-tab span {
++      display: block; font-family: var(--display);
++      font-size: 0.7rem; letter-spacing: 0.12em; color: var(--faint); margin-bottom: 0.25rem;
++    }
++    .cap-tab[aria-selected="true"] span { color: var(--accent); }
++    .cap-tab strong { display: block; font-size: 0.92rem; margin-bottom: 0.2rem; }
++    .cap-tab small { color: var(--muted); font-size: 0.8rem; line-height: 1.4; }
++
++    .cap-panel { display: none; }
++    .cap-panel.is-active { display: block; }
++    .msg-user {
++      margin-left: auto; width: fit-content; max-width: 92%;
++      background: linear-gradient(135deg, #2563eb, #1d4ed8);
++      color: #fff; border-radius: 16px 16px 4px 16px;
++      padding: 0.7rem 0.9rem; font-size: 0.92rem; line-height: 1.45;
++      opacity: 0; transform: translateY(8px);
++    }
++    .intro {
++      margin: 0.9rem 0 0.8rem; color: var(--muted);
++      font-size: 0.88rem; line-height: 1.55;
++      opacity: 0; transform: translateY(8px);
++    }
++    .process {
++      border: 1px solid var(--line); border-radius: 12px;
++      background: rgba(255,255,255,0.02); overflow: hidden;
++      opacity: 0; transform: translateY(8px);
++    }
++    .process-summary {
++      padding: 0.55rem 0.85rem; border-bottom: 1px solid var(--line);
++      font-family: var(--display); font-size: 0.8rem; font-weight: 600; color: var(--accent-2);
++    }
++    .tool-row {
++      display: grid; grid-template-columns: auto auto 1fr 18px;
++      gap: 0.5rem; align-items: center;
++      padding: 0.6rem 0.85rem; border-top: 1px solid rgba(148,163,184,0.08);
++      font-size: 0.82rem; opacity: 0; transform: translateX(-8px);
++    }
++    .tool-row:first-child { border-top: 0; }
++    .tag {
++      font-family: var(--display); font-size: 0.66rem; font-weight: 700;
++      letter-spacing: 0.08em; color: var(--accent-warm);
++    }
++    .tool-row code {
++      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
++      color: #cbd5e1; font-size: 0.78rem;
++      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
++    }
++    .check { width: 16px; height: 16px; color: var(--accent-2); opacity: 0; transform: scale(0.6); }
++    .report {
++      margin-top: 0.85rem;
++      border: 1px solid rgba(56,189,248,0.22);
++      border-radius: 12px;
++      background: linear-gradient(180deg, rgba(56,189,248,0.08), rgba(22,32,51,0.5));
++      padding: 0.95rem 1rem;
++      opacity: 0; transform: translateY(12px) scale(0.985);
++    }
++    .report h3 { margin: 0 0 0.35rem; font-family: var(--display); font-size: 1.02rem; }
++    .report p { margin: 0 0 0.75rem; color: var(--muted); font-size: 0.88rem; line-height: 1.5; }
++    .report .note { margin: 0.7rem 0 0; color: var(--faint); font-size: 0.8rem; }
++    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.45rem; }
++    @media (max-width: 640px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
++    .metrics div {
++      border: 1px solid var(--line); border-radius: 8px;
++      padding: 0.45rem 0.55rem; background: rgba(0,0,0,0.18);
++    }
++    .metrics em { display: block; font-style: normal; color: var(--faint); font-size: 0.68rem; }
++    .metrics strong { font-family: var(--display); font-size: 0.92rem; }
++    .metrics strong.up { color: var(--accent-2); }
++    .slides { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45rem; }
++    .slide {
++      aspect-ratio: 4/3; border-radius: 8px; border: 1px solid var(--line);
++      background: linear-gradient(160deg, #1e293b, #0f172a);
++      padding: 0.5rem; display: flex; flex-direction: column; justify-content: space-between;
++    }
++    .slide b { font-family: var(--display); font-size: 0.72rem; }
++    .slide i { font-style: normal; font-size: 0.66rem; color: var(--faint); }
++    table.sheet { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
++    table.sheet th, table.sheet td {
++      border-bottom: 1px solid var(--line); padding: 0.4rem 0.3rem; text-align: left;
++    }
++    table.sheet th { color: var(--faint); font-size: 0.7rem; }
++    .prio {
++      display: inline-block; padding: 0.08rem 0.35rem; border-radius: 999px;
++      font-size: 0.66rem; font-weight: 700;
++    }
++    .prio.p1 { background: rgba(248,113,113,0.16); color: #fca5a5; }
++    .prio.p2 { background: rgba(251,191,36,0.16); color: #fcd34d; }
++    .prio.p3 { background: rgba(148,163,184,0.16); color: #cbd5e1; }
++    .im-badge {
++      display: inline-flex; align-items: center; gap: 0.3rem;
++      padding: 0.15rem 0.5rem; border-radius: 999px;
++      background: rgba(52,211,153,0.12); color: var(--accent-2);
++      font-size: 0.72rem; font-weight: 600; margin-bottom: 0.55rem;
++    }
++
++    /* Animations when active */
++    .section.is-active .flow-step:nth-child(1) { animation: rise 420ms ease both 120ms; }
++    .section.is-active .flow-arrow:nth-child(2) { animation: rise 300ms ease both 320ms; }
++    .section.is-active .flow-step:nth-child(3) { animation: rise 420ms ease both 420ms; }
++    .section.is-active .flow-arrow:nth-child(4) { animation: rise 300ms ease both 620ms; }
++    .section.is-active .flow-step:nth-child(5) { animation: rise 420ms ease both 720ms; }
++    .section.is-active .flow-arrow:nth-child(6) { animation: rise 300ms ease both 920ms; }
++    .section.is-active .flow-step:nth-child(7) { animation: rise 420ms ease both 1020ms; }
++    .section.is-active .flow-arrow:nth-child(8) { animation: rise 300ms ease both 1220ms; }
++    .section.is-active .flow-step:nth-child(9) { animation: rise 420ms ease both 1320ms; }
++    .section.is-active .pillar:nth-child(1) { animation: slideR 420ms ease both 500ms; }
++    .section.is-active .pillar:nth-child(2) { animation: slideR 420ms ease both 750ms; }
++    .section.is-active .pillar:nth-child(3) { animation: slideR 420ms ease both 1000ms; }
++    .section.is-active .pillar:nth-child(4) { animation: slideR 420ms ease both 1250ms; }
++    .section.is-active .layer:nth-child(1) { animation: pop 380ms ease both 1500ms; }
++    .section.is-active .layer:nth-child(2) { animation: pop 380ms ease both 1650ms; }
++    .section.is-active .layer:nth-child(3) { animation: pop 380ms ease both 1800ms; }
++    .section.is-active .layer:nth-child(4) { animation: pop 380ms ease both 1950ms; }
++
++    .hi-card.is-active .chip:nth-child(1) { animation: rise 350ms ease both 200ms; }
++    .hi-card.is-active .chip:nth-child(2) { animation: rise 350ms ease both 320ms; }
++    .hi-card.is-active .chip:nth-child(3) { animation: rise 350ms ease both 440ms; }
++    .hi-card.is-active .chip:nth-child(4) { animation: rise 350ms ease both 560ms; }
++    .hi-card.is-active .mock-ui { animation: rise 450ms ease both 700ms; }
++
++    .cap-panel.is-active .msg-user { animation: rise 420ms ease both; }
++    .cap-panel.is-active .intro { animation: rise 420ms ease both 280ms; }
++    .cap-panel.is-active .process { animation: rise 420ms ease both 520ms; }
++    .cap-panel.is-active .tool-row:nth-child(1) { animation: slideL 380ms ease both 780ms; }
++    .cap-panel.is-active .tool-row:nth-child(2) { animation: slideL 380ms ease both 1080ms; }
++    .cap-panel.is-active .tool-row:nth-child(3) { animation: slideL 380ms ease both 1380ms; }
++    .cap-panel.is-active .tool-row:nth-child(1) .check { animation: pop 300ms ease both 1050ms; }
++    .cap-panel.is-active .tool-row:nth-child(2) .check { animation: pop 300ms ease both 1350ms; }
++    .cap-panel.is-active .tool-row:nth-child(3) .check { animation: pop 300ms ease both 1650ms; }
++    .cap-panel.is-active .report { animation: result 520ms ease both 1750ms; }
++
++    @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
++    @keyframes slideR { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
++    @keyframes slideL { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
++    @keyframes pop { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
++    @keyframes result { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
++
++    .hint {
++      margin-top: 1.1rem; text-align: center; color: var(--faint); font-size: 0.8rem;
++    }
++    .hint a { color: var(--accent); text-decoration: none; }
++    body.record .top { padding-top: 0.75rem; }
++    body.record .page { padding-bottom: 1.25rem; }
++  </style>
++</head>
++<body>
++  <header class="top">
++    <div class="brand"><i>D</i><span>Danmo Work</span></div>
++    <nav class="nav" role="tablist" aria-label="Tour sections">
++      <button type="button" data-section-tab="arch" aria-selected="true"></button>
++      <button type="button" data-section-tab="highlights" aria-selected="false"></button>
++      <button type="button" data-section-tab="capacity" aria-selected="false"></button>
++    </nav>
++    <div class="lang" role="group" aria-label="Language">
++      <button type="button" data-lang="zh" aria-pressed="true">中文</button>
++      <button type="button" data-lang="en" aria-pressed="false">EN</button>
++    </div>
++  </header>
++
++  <main class="page">
++    <p class="eyebrow" data-i18n="eyebrow"></p>
++    <h1 class="title" data-i18n="title"></h1>
++    <p class="subtitle" data-i18n="subtitle"></p>
++
++    <div class="stage is-playing" data-stage style="--cycle: 12s">
++      <div class="stage-bar">
++        <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
++        <strong data-i18n="stageTitle"></strong>
++        <em data-i18n="stageMeta"></em>
++      </div>
++      <div class="progress" aria-hidden="true"><i></i></div>
++
++      <!-- Architecture -->
++      <section class="section is-active" data-section="arch">
++        <div class="arch-grid">
++          <div class="flow" data-flow>
++            <div class="flow-step">
++              <div class="flow-num">1</div>
++              <div><strong data-i18n="arch.s1t"></strong><p data-i18n="arch.s1d"></p></div>
++            </div>
++            <div class="flow-arrow"></div>
++            <div class="flow-step">
++              <div class="flow-num">2</div>
++              <div><strong data-i18n="arch.s2t"></strong><p data-i18n="arch.s2d"></p></div>
++            </div>
++            <div class="flow-arrow"></div>
++            <div class="flow-step">
++              <div class="flow-num">3</div>
++              <div><strong data-i18n="arch.s3t"></strong><p data-i18n="arch.s3d"></p></div>
++            </div>
++            <div class="flow-arrow"></div>
++            <div class="flow-step">
++              <div class="flow-num">4</div>
++              <div><strong data-i18n="arch.s4t"></strong><p data-i18n="arch.s4d"></p></div>
++            </div>
++            <div class="flow-arrow"></div>
++            <div class="flow-step">
++              <div class="flow-num">5</div>
++              <div><strong data-i18n="arch.s5t"></strong><p data-i18n="arch.s5d"></p></div>
++            </div>
++          </div>
++          <div>
++            <div class="pillars">
++              <div class="pillar"><b data-i18n="arch.p1t"></b><span data-i18n="arch.p1d"></span></div>
++              <div class="pillar"><b data-i18n="arch.p2t"></b><span data-i18n="arch.p2d"></span></div>
++              <div class="pillar"><b data-i18n="arch.p3t"></b><span data-i18n="arch.p3d"></span></div>
++              <div class="pillar"><b data-i18n="arch.p4t"></b><span data-i18n="arch.p4d"></span></div>
++            </div>
++            <div class="layer-strip">
++              <div class="layer"><b>Surfaces</b><span data-i18n="arch.l1"></span></div>
++              <div class="layer"><b>Runtime</b><span data-i18n="arch.l2"></span></div>
++              <div class="layer"><b>Tools</b><span data-i18n="arch.l3"></span></div>
++              <div class="layer"><b>Store</b><span data-i18n="arch.l4"></span></div>
++            </div>
++          </div>
++        </div>
++      </section>
++
++      <!-- Highlights -->
++      <section class="section" data-section="highlights" hidden>
++        <div class="hi-layout">
++          <div class="hi-tabs" role="tablist">
++            <button class="hi-tab" type="button" data-hi="0" aria-selected="true">
++              <strong data-i18n="hi.t0"></strong><small data-i18n="hi.d0"></small>
++            </button>
++            <button class="hi-tab" type="button" data-hi="1" aria-selected="false">
++              <strong data-i18n="hi.t1"></strong><small data-i18n="hi.d1"></small>
++            </button>
++            <button class="hi-tab" type="button" data-hi="2" aria-selected="false">
++              <strong data-i18n="hi.t2"></strong><small data-i18n="hi.d2"></small>
++            </button>
++            <button class="hi-tab" type="button" data-hi="3" aria-selected="false">
++              <strong data-i18n="hi.t3"></strong><small data-i18n="hi.d3"></small>
++            </button>
++            <button class="hi-tab" type="button" data-hi="4" aria-selected="false">
++              <strong data-i18n="hi.t4"></strong><small data-i18n="hi.d4"></small>
++            </button>
++            <button class="hi-tab" type="button" data-hi="5" aria-selected="false">
++              <strong data-i18n="hi.t5"></strong><small data-i18n="hi.d5"></small>
++            </button>
++          </div>
++          <div>
++            <article class="hi-card is-active" data-hi-card="0">
++              <h3 data-i18n="hi.c0t"></h3>
++              <p class="lead" data-i18n="hi.c0l"></p>
++              <div class="chips">
++                <span class="chip">Doc</span><span class="chip">Slides</span>
++                <span class="chip">Sheet</span><span class="chip">Preview</span>
++              </div>
++              <div class="mock-ui">
++                <header><span>Document Stage</span><span>·</span><span data-i18n="hi.c0m"></span></header>
++                <div class="body">
++                  <div class="metric-row">
++                    <div><em>Doc</em><strong>.md</strong></div>
++                    <div><em>Slides</em><strong>---</strong></div>
++                    <div><em>Sheet</em><strong>.csv</strong></div>
++                  </div>
++                </div>
++              </div>
++            </article>
++            <article class="hi-card" data-hi-card="1" hidden>
++              <h3 data-i18n="hi.c1t"></h3>
++              <p class="lead" data-i18n="hi.c1l"></p>
++              <div class="chips">
++                <span class="chip">delegate_agent</span><span class="chip">hard isolation</span>
++                <span class="chip">same chain</span><span class="chip">Report</span>
++              </div>
++              <div class="mock-ui">
++                <header>Agent Loop</header>
++                <div class="body">
++                  <div class="mock-row"><code>delegate_agent · researcher</code><span class="ok">OK</span></div>
++                  <div class="mock-row"><code>child Turn · tools/skills</code><span class="ok">OK</span></div>
++                  <div class="mock-row"><code>Report → parent continues</code><span class="ok">OK</span></div>
++                </div>
++              </div>
++            </article>
++            <article class="hi-card" data-hi-card="2" hidden>
++              <h3 data-i18n="hi.c2t"></h3>
++              <p class="lead" data-i18n="hi.c2l"></p>
++              <div class="chips">
++                <span class="chip">resume</span><span class="chip">replay</span>
++                <span class="chip">edit result</span><span class="chip">JSONL</span>
++              </div>
++              <div class="mock-ui">
++                <header>Turn Log</header>
++                <div class="body">
++                  <div class="mock-row"><code>step.web_search</code><span class="ok">done</span></div>
++                  <div class="mock-row"><code>step.write_file</code><span class="ok">done</span></div>
++                  <div class="mock-row"><code>edit Tool Result → continue</code><span class="ok">live</span></div>
++                </div>
++              </div>
++            </article>
++            <article class="hi-card" data-hi-card="3" hidden>
++              <h3 data-i18n="hi.c3t"></h3>
++              <p class="lead" data-i18n="hi.c3l"></p>
++              <div class="chips">
++                <span class="chip">memory_*</span><span class="chip">table_*</span>
++                <span class="chip">store.db</span><span class="chip">scopes</span>
++              </div>
++              <div class="mock-ui">
++                <header>Memory · Table Store</header>
++                <div class="body">
++                  <div class="mock-row"><code>memory_update · project</code><span class="ok">OK</span></div>
++                  <div class="mock-row"><code>table_upsert · digests</code><span class="ok">OK</span></div>
++                  <div class="mock-row"><code>~/.danmo-work/store.db</code><span class="ok">local</span></div>
++                </div>
++              </div>
++            </article>
++            <article class="hi-card" data-hi-card="4" hidden>
++              <h3 data-i18n="hi.c4t"></h3>
++              <p class="lead" data-i18n="hi.c4l"></p>
++              <div class="chips">
++                <span class="chip">MCP</span><span class="chip">secrets</span>
++                <span class="chip">cron</span><span class="chip">webhook</span>
++              </div>
++              <div class="mock-ui">
++                <header>Connectors · Automations</header>
++                <div class="body">
++                  <div class="mock-row"><code>mcp_notion_search</code><span class="ok">OK</span></div>
++                  <div class="mock-row"><code>mcp_feishu_bitable</code><span class="ok">OK</span></div>
++                  <div class="mock-row"><code>cron → real Turn</code><span class="ok">OK</span></div>
++                </div>
++              </div>
++            </article>
++            <article class="hi-card" data-hi-card="5" hidden>
++              <h3 data-i18n="hi.c5t"></h3>
++              <p class="lead" data-i18n="hi.c5l"></p>
++              <div class="chips">
++                <span class="chip">WeChat</span><span class="chip">Feishu</span>
++                <span class="chip">WeCom</span><span class="chip">QQ</span>
++              </div>
++              <div class="mock-ui">
++                <header>IM Channels</header>
++                <div class="body">
++                  <div class="mock-row"><code>outbound WS · no public callback</code><span class="ok">OK</span></div>
++                  <div class="mock-row"><code>same Agent Loop</code><span class="ok">OK</span></div>
++                  <div class="mock-row"><code>tools on your machine</code><span class="ok">local</span></div>
++                </div>
++              </div>
++            </article>
++          </div>
++        </div>
++      </section>
++
++      <!-- Capacity -->
++      <section class="section" data-section="capacity" hidden>
++        <div class="cap-layout">
++          <div class="cap-tabs">
++            <button class="cap-tab" type="button" data-cap="0" aria-selected="true">
++              <span>01</span><strong data-i18n="cap.t0"></strong><small data-i18n="cap.d0"></small>
++            </button>
++            <button class="cap-tab" type="button" data-cap="1" aria-selected="false">
++              <span>02</span><strong data-i18n="cap.t1"></strong><small data-i18n="cap.d1"></small>
++            </button>
++            <button class="cap-tab" type="button" data-cap="2" aria-selected="false">
++              <span>03</span><strong data-i18n="cap.t2"></strong><small data-i18n="cap.d2"></small>
++            </button>
++          </div>
++          <div>
++            <article class="cap-panel is-active" data-cap-panel="0">
++              <div class="msg-user" data-i18n="cap.u0"></div>
++              <p class="intro" data-i18n="cap.i0"></p>
++              <div class="process">
++                <div class="process-summary" data-i18n="cap.p0"></div>
++                <div class="tool-row"><span class="tag">CALLED</span><code>web_search</code><span></span>
++                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
++                </div>
++                <div class="tool-row"><span class="tag">CALLED</span><code>write_file · market-report.html</code><span></span>
++                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
++                </div>
++                <div class="tool-row"><span class="tag">CALLED</span><code>stage.open · Preview</code><span></span>
++                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
++                </div>
++              </div>
++              <div class="report">
++                <h3 data-i18n="cap.r0t"></h3>
++                <p data-i18n="cap.r0d"></p>
++                <div class="metrics">
++                  <div><em>Coding</em><strong>$12.3B</strong></div>
++                  <div><em>Work</em><strong>$7.8B</strong></div>
++                  <div><em>CAGR</em><strong class="up">45.8%</strong></div>
++                  <div><em>Adoption</em><strong>87%</strong></div>
++                </div>
++                <p class="note" data-i18n="cap.r0n"></p>
++              </div>
++            </article>
++            <article class="cap-panel" data-cap-panel="1" hidden>
++              <div class="msg-user" data-i18n="cap.u1"></div>
++              <p class="intro" data-i18n="cap.i1"></p>
++              <div class="process">
++                <div class="process-summary" data-i18n="cap.p1"></div>
++                <div class="tool-row"><span class="tag">CALLED</span><code>delegate_agent · researcher</code><span></span>
++                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
++                </div>
++                <div class="tool-row"><span class="tag">CALLED</span><code>memory_update · competitor notes</code><span></span>
++                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
++                </div>
++                <div class="tool-row"><span class="tag">CALLED</span><code>write_file · competitor-deck.md</code><span></span>
++                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
++                </div>
++              </div>
++              <div class="report">
++                <h3 data-i18n="cap.r1t"></h3>
++                <p data-i18n="cap.r1d"></p>
++                <div class="slides">
++                  <div class="slide"><b data-i18n="cap.sl1"></b><i>01</i></div>
++                  <div class="slide"><b data-i18n="cap.sl2"></b><i>02</i></div>
++                  <div class="slide"><b data-i18n="cap.sl3"></b><i>03</i></div>
++                </div>
++                <p class="note" data-i18n="cap.r1n"></p>
++              </div>
++            </article>
++            <article class="cap-panel" data-cap-panel="2" hidden>
++              <div class="msg-user" data-i18n="cap.u2"></div>
++              <p class="intro" data-i18n="cap.i2"></p>
++              <div class="process">
++                <div class="process-summary" data-i18n="cap.p2"></div>
++                <div class="tool-row"><span class="tag">CALLED</span><code>channel.feishu · support</code><span></span>
++                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
++                </div>
++                <div class="tool-row"><span class="tag">CALLED</span><code>table_upsert · customer_issues</code><span></span>
++                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
++                </div>
++                <div class="tool-row"><span class="tag">CALLED</span><code>stage.open · issues.csv</code><span></span>
++                  <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6 9 17l-5-5"/></svg>
++                </div>
++              </div>
++              <div class="report">
++                <div class="im-badge" data-i18n="cap.badge"></div>
++                <h3 data-i18n="cap.r2t"></h3>
++                <p data-i18n="cap.r2d"></p>
++                <table class="sheet">
++                  <thead><tr><th data-i18n="cap.th1"></th><th data-i18n="cap.th2"></th><th data-i18n="cap.th3"></th><th data-i18n="cap.th4"></th></tr></thead>
++                  <tbody>
++                    <tr><td>Billing</td><td>18</td><td><span class="prio p1">P1</span></td><td data-i18n="cap.row1"></td></tr>
++                    <tr><td>Onboarding</td><td>14</td><td><span class="prio p2">P2</span></td><td data-i18n="cap.row2"></td></tr>
++                    <tr><td>Performance</td><td>9</td><td><span class="prio p3">P3</span></td><td data-i18n="cap.row3"></td></tr>
++                    <tr><td>Integrations</td><td>7</td><td><span class="prio p3">P3</span></td><td data-i18n="cap.row4"></td></tr>
++                  </tbody>
++                </table>
++                <p class="note" data-i18n="cap.r2n"></p>
++              </div>
++            </article>
++          </div>
++        </div>
++      </section>
++    </div>
++
++    <p class="hint">
++      <span data-i18n="hint"></span>
++      · <a href="https://github.com/danmo-ai/danmo-work">danmo-ai/danmo-work</a>
++      · <a href="./office-coedit-tour.html">Office co-edit</a>
++    </p>
++  </main>
++
++  <script>
++    const I18N = {
++      zh: {
++        eyebrow: "产品演示",
++        title: "架构 · 亮点 · 产能，一条思维链讲完",
++          subtitle: "不是又一个 Coding CLI。一流 Agent Loop 底盘，面向长程工作：文档、幻灯片、表格上的人机共审，加上 MCP 与 IM，同一条 Turn Log。",
++        stageTitle: "Danmo Work Tour",
++        stageMeta: "Architecture · Highlights · Capacity",
++        nav: ["架构设计", "亮点功能", "产能示例"],
++        arch: {
++          s1t: "用户输入", s1d: "Web / 桌面 / CLI·TUI / 飞书·微信，同一入口语义。",
++          s2t: "LLM 规划 Tool Call", s2d: "无手写 Graph / Mode；模型是唯一决策中心。",
++          s3t: "Agent Loop 执行", s3d: "文件、Shell、MCP、记忆、委派……一切皆 Tool。",
++          s4t: "Turn Log 落盘", s4d: "每一步可恢复、可回放、可改结果再继续。",
++          s5t: "交付工作产物", s5d: "Document Stage：报告 / 幻灯片 / 表格 / 预览。",
++          p1t: "一切皆工具", p1d: "delegate_agent、ask_user、memory_*、table_*、MCP 统一接口。",
++          p2t: "纯 LLM 驱动", p2d: "控制流由模型生成，不是开发者预设路由。",
++          p3t: "日志即状态", p3d: "Turn Log = 可信任执行轨迹，不是黑盒会话。",
++          p4t: "Coding 是车道", p4d: "不是天花板——同一架构覆盖长程 Work。",
++          l1: "Web · Desktop · CLI · IM",
++          l2: "Session · Turn · Step",
++          l3: "Files · MCP · Agents",
++          l4: "work.db · store.db · logs",
++        },
++        hi: {
++          t0: "Document Stage", d0: "文档 / 幻灯片 / 表格 · AI Diff 共审",
++          t1: "多 Agent 委派", d1: "同一思维链，硬隔离",
++          t2: "Turn Log", d2: "恢复 · 回放 · 改结果",
++          t3: "Memory + Table Store", d3: "可检视记忆与业务流水",
++          t4: "MCP + 自动化", d4: "连接器、密钥、cron/webhook",
++          t5: "IM 通道", d5: "微信 · 飞书 · 企微 · QQ",
++          c0t: "人与 AI 共审编辑 Office",
++          c0l: "选区 / 页 / 表 → [office-edit]；Turn 后 AI Diff：保留 · 回滚 · 分块接受。文本仍是真相源。",
++          c0m: "Intent · Propose · Review · Commit",
++          c1t: "子 Agent 是 Tool，不是并行黑盒",
++          c1l: "delegate_agent 开独立 Turn；父链只收 Report，轨迹仍可检视。",
++          c2t: "执行轨迹可信任",
++          c2l: "输入输出全量持久化；中途失败可 Resume；人工改 Tool Result 后继续。",
++          c3t: "记忆与业务数据分开",
++          c3l: "Memory 存约定与偏好；Table Store 存可查询流水（独立 store.db）。",
++          c4t: "能力扩展不叠复杂度",
++          c4l: "新能力 = 新 Tool / Skill / MCP；自动化真正开启带 Turn Log 的 Session。",
++          c5t: "人在哪聊，Agent 就在哪",
++          c5l: "出站接入、无需公网回调；工具仍在本机执行，权限与密钥可控。",
++        },
++        cap: {
++          t0: "调研到报告", d0: "市场发展报告落到 Stage",
++          t1: "委派到幻灯片", d1: "子 Agent 调研 → 可播放 deck",
++          t2: "飞书到表格", d2: "IM 归类客户问题",
++          u0: "写一份 Coding Agent 与 Work Agent 市场发展报告，落到项目里可预览。",
++          i0: "检索、结构化、写作在同一思维链；产物进 Document Stage。",
++          p0: "请求 → 报告",
++          r0t: "市场发展报告已就绪",
++          r0d: "双赛道对比：规模、增速、采用率与产品边界。",
++          r0n: "Turn Log 可回放每一步；改结果后可从断点继续。",
++          u1: "委派子 Agent 调研 3 个竞品，整理成可播放幻灯片。",
++          i1: "硬隔离跑调研；主链汇总后写入 Markdown slides。",
++          p1: "委派 → 幻灯片",
++          r1t: "竞品 Deck · 6 页可播放",
++          r1d: "定位 / 功能矩阵 / 差异化建议已落盘。",
++          r1n: "子 Agent 与主链共享可检视 Turn Log。",
++          sl1: "市场地图", sl2: "功能对比", sl3: "差异化建议",
++          u2: "总结支持频道里本周客户问题，按优先级写入表格。",
++          i2: "飞书消息进同一 Loop；结果写入 Table Store 并打开 Sheet。",
++          p2: "IM → 表格",
++          badge: "飞书 · 同一 Loop · 工具在本机",
++          r2t: "48 条反馈 → 4 类问题",
++          r2d: "已写入 Table Store，并导出可编辑表格。",
++          th1: "主题", th2: "数量", th3: "优先级", th4: "建议",
++          row1: "导出失败", row2: "卡在创建", row3: "首屏慢", row4: "MCP 权限",
++          r2n: "Billing + Onboarding 覆盖 67% 高频问题。",
++        },
++        hint: "HTML 可切换语言与章节 · 录屏导出 GIF/MP4 用于 README / 社媒",
++      },
++      en: {
++        eyebrow: "Product tour",
++        title: "Architecture, highlights, capacity — one thinking trail",
++          subtitle: "Not just another coding CLI. Coding-agent-grade loop for long-horizon work: human↔AI Office co-edit, plus MCP & IM on one Turn Log.",
++        stageTitle: "Danmo Work Tour",
++        stageMeta: "Architecture · Highlights · Capacity",
++        nav: ["Architecture", "Highlights", "Capacity"],
++        arch: {
++          s1t: "User input", s1d: "Web / Desktop / CLI·TUI / Feishu·WeChat — same semantics.",
++          s2t: "LLM plans Tool Calls", s2d: "No hand-written graph or mode; the model decides.",
++          s3t: "Agent Loop executes", s3d: "Files, shell, MCP, memory, delegation — everything is a Tool.",
++          s4t: "Turn Log persists", s4d: "Resume, replay, edit a Tool Result and continue.",
++          s5t: "Ship work artifacts", s5d: "Document Stage: report / slides / sheet / preview.",
++          p1t: "Everything is a Tool", p1d: "delegate_agent, ask_user, memory_*, table_*, MCP — one interface.",
++          p2t: "Pure LLM-driven", p2d: "Control flow is model-planned, not a developer router.",
++          p3t: "Log is state", p3d: "Turn Log is a trusted trail — not a black-box chat.",
++          p4t: "Coding is a lane", p4d: "Not the ceiling — same architecture covers long-horizon work.",
++          l1: "Web · Desktop · CLI · IM",
++          l2: "Session · Turn · Step",
++          l3: "Files · MCP · Agents",
++          l4: "work.db · store.db · logs",
++        },
++        hi: {
++          t0: "Document Stage", d0: "Docs / slides / sheets · AI Diff review",
++          t1: "Multi-agent", d1: "Same chain, hard isolation",
++          t2: "Turn Log", d2: "Resume · replay · edit",
++          t3: "Memory + Table Store", d3: "Visible memory & business rows",
++          t4: "MCP + Automations", d4: "Connectors, secrets, cron/webhook",
++          t5: "IM channels", d5: "WeChat · Feishu · WeCom · QQ",
++          c0t: "Human ↔ AI Office co-edit",
++          c0l: "Selection / page / sheet → [office-edit]; after the turn, AI Diff: Keep · Revert · hunks. Text stays SoT.",
++          c0m: "Intent · Propose · Review · Commit",
++          c1t: "Sub-agents are Tools, not opaque sessions",
++          c1l: "delegate_agent opens an isolated Turn; parent continues on Report.",
++          c2t: "A trail you can trust",
++          c2l: "Full persistence; Resume on failure; humans can edit Tool Results.",
++          c3t: "Memory ≠ business rows",
++          c3l: "Memory keeps preferences; Table Store holds queryable digests in store.db.",
++          c4t: "Grow capability without graph sprawl",
++          c4l: "New power = Tool / Skill / MCP; automations start real logged Turns.",
++          c5t: "Meet people where they chat",
++          c5l: "Outbound connect, no public callback; tools still run on your machine.",
++        },
++        cap: {
++          t0: "Research → report", d0: "Market report into Stage",
++          t1: "Delegate → slides", d1: "Sub-agent research → deck",
++          t2: "Feishu → sheet", d2: "Classify support issues",
++          u0: "Write a Coding Agent vs Work Agent market report and preview it in the project.",
++          i0: "Retrieve, structure, write on one chain; artifact opens in Document Stage.",
++          p0: "Request → report",
++          r0t: "Market report ready",
++          r0d: "Dual-track comparison: size, growth, adoption, product boundaries.",
++          r0n: "Replay every Tool Call; edit a result and continue from the break.",
++          u1: "Delegate a sub-agent to research 3 competitors into playable slides.",
++          i1: "Hard-isolated research; parent writes Markdown slides.",
++          p1: "Delegate → slides",
++          r1t: "Competitor deck · 6 playable pages",
++          r1d: "Positioning / matrix / differentiation landed on disk.",
++          r1n: "Parent and child share an inspectable Turn Log.",
++          sl1: "Market map", sl2: "Feature matrix", sl3: "Differentiation",
++          u2: "Summarize this week’s support-channel issues into a prioritized sheet.",
++          i2: "Feishu enters the same loop; rows land in Table Store + Sheet Stage.",
++          p2: "IM → sheet",
++          badge: "Feishu · same loop · tools local",
++          r2t: "48 messages → 4 themes",
++          r2d: "Written to Table Store and opened as an editable sheet.",
++          th1: "Theme", th2: "Count", th3: "Priority", th4: "Note",
++          row1: "Export failed", row2: "Stuck create", row3: "Slow first paint", row4: "MCP perms",
++          r2n: "Billing + Onboarding cover 67% of high-frequency issues.",
++        },
++        hint: "HTML toggles language & sections · export GIF/MP4 for README / social",
++      },
++    };
++
++    const $ = (sel, el = document) => el.querySelector(sel);
++    const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
++
++    function getByPath(obj, path) {
++      return path.split(".").reduce((o, k) => (o == null ? o : o[k]), obj);
++    }
++
++    function applyI18n(lang) {
++      const dict = I18N[lang];
++      document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
++      $$("[data-i18n]").forEach((node) => {
++        const key = node.getAttribute("data-i18n");
++        const val = getByPath(dict, key);
++        if (val != null) node.textContent = val;
++      });
++      $$("[data-section-tab]").forEach((btn, i) => {
++        btn.textContent = dict.nav[i];
++      });
++      $$("[data-lang]").forEach((btn) => {
++        btn.setAttribute("aria-pressed", String(btn.dataset.lang === lang));
++      });
++    }
++
++    function restartProgress(stage) {
++      stage.classList.remove("is-playing");
++      const bar = $(".progress > i", stage);
++      void bar.offsetWidth;
++      stage.classList.add("is-playing");
++    }
++
++    function replay(el) {
++      if (!el) return;
++      el.style.display = "none";
++      void el.offsetWidth;
++      el.style.display = "";
++    }
++
++    function init() {
++      const params = new URLSearchParams(location.search);
++      let lang = params.get("lang") === "en" ? "en" : "zh";
++      let section = params.get("section") || "arch";
++      if (!["arch", "highlights", "capacity"].includes(section)) section = "arch";
++      if (params.has("record")) document.body.classList.add("record");
++      const auto = params.has("tour") || params.has("record");
++
++      const stage = $("[data-stage]");
++      const sectionTabs = $$("[data-section-tab]");
++      const sections = $$("[data-section]");
++
++      let hi = 0;
++      let cap = 0;
++      let timer;
++
++      const fast = params.has("record") || params.get("tour") === "fast";
++      const CYCLE = fast
++        ? { arch: 7000, highlights: 4500, capacity: 7000 }
++        : { arch: 12000, highlights: 9000, capacity: 11000 };
++
++      function showSection(name, { restartHi = true, restartCap = true } = {}) {
++        section = name;
++        sectionTabs.forEach((btn) => {
++          btn.setAttribute("aria-selected", String(btn.dataset.sectionTab === name));
++        });
++        sections.forEach((sec) => {
++          const on = sec.dataset.section === name;
++          sec.classList.toggle("is-active", on);
++          sec.toggleAttribute("hidden", !on);
++          if (on) replay(sec);
++        });
++        stage.style.setProperty("--cycle", `${CYCLE[name]}ms`);
++        restartProgress(stage);
++        if (name === "highlights" && restartHi) showHi(0);
++        if (name === "capacity" && restartCap) showCap(0);
++      }
++
++      function showHi(i) {
++        hi = i;
++        $$("[data-hi]").forEach((btn, idx) => {
++          btn.setAttribute("aria-selected", String(idx === i));
++        });
++        $$("[data-hi-card]").forEach((card, idx) => {
++          const on = idx === i;
++          card.classList.toggle("is-active", on);
++          card.toggleAttribute("hidden", !on);
++          if (on) replay(card);
++        });
++      }
++
++      function showCap(i) {
++        cap = i;
++        $$("[data-cap]").forEach((btn, idx) => {
++          btn.setAttribute("aria-selected", String(idx === i));
++        });
++        $$("[data-cap-panel]").forEach((panel, idx) => {
++          const on = idx === i;
++          panel.classList.toggle("is-active", on);
++          panel.toggleAttribute("hidden", !on);
++          if (on) replay(panel);
++        });
++      }
++
++      function arm() {
++        if (!auto) return;
++        window.clearTimeout(timer);
++        const order = ["arch", "highlights", "capacity"];
++        timer = window.setTimeout(() => {
++          if (section === "highlights") {
++            if (hi < 5) {
++              showHi(hi + 1);
++              restartProgress(stage);
++              arm();
++              return;
++            }
++          }
++          if (section === "capacity") {
++            if (cap < 2) {
++              showCap(cap + 1);
++              restartProgress(stage);
++              arm();
++              return;
++            }
++          }
++          const next = order[(order.indexOf(section) + 1) % order.length];
++          showSection(next);
++          arm();
++        }, CYCLE[section]);
++      }
++
++      $$("[data-lang]").forEach((btn) => {
++        btn.addEventListener("click", () => {
++          lang = btn.dataset.lang;
++          applyI18n(lang);
++          const url = new URL(location.href);
++          url.searchParams.set("lang", lang);
++          history.replaceState(null, "", url);
++        });
++      });
++
++      sectionTabs.forEach((btn) => {
++        btn.addEventListener("click", () => {
++          showSection(btn.dataset.sectionTab);
++          arm();
++        });
++      });
++
++      $$("[data-hi]").forEach((btn) => {
++        btn.addEventListener("click", () => {
++          showHi(Number(btn.dataset.hi));
++          restartProgress(stage);
++          arm();
++        });
++      });
++
++      $$("[data-cap]").forEach((btn) => {
++        btn.addEventListener("click", () => {
++          showCap(Number(btn.dataset.cap));
++          restartProgress(stage);
++          arm();
++        });
++      });
++
++      applyI18n(lang);
++      showSection(section);
++      arm();
++    }
++
++    init();
++  </script>
++</body>
++</html>
+diff --git a/src/views/HomeView.vue b/src/views/HomeView.vue
+index 5ba85a0..95f6eff 100644
+--- a/src/views/HomeView.vue
++++ b/src/views/HomeView.vue
+@@ -18,8 +18,8 @@ const products = [
+     name: 'Work',
+     path: '/work',
+     accent: 'var(--mineral)',
+-    title: 'Pure LLM-driven multi-agent work.',
+-    copy: 'One thinking chain, long-horizon tasks. No fixed workflows — log is state; resume, replay, visualize.',
++    title: 'Human ↔ AI Office co-edit on one trail.',
++    copy: 'Coding-agent-grade loop for long-horizon work. Co-edit docs, slides, and sheets with AI Diff review — propose, keep, or revert. Log is state.',
+   },
+   {
+     name: 'Inbox',
+@@ -108,7 +108,7 @@ const products = [
+             width="3456"
+             height="2168"
+           />
+-          <figcaption>Work — interactive demos from a single goal</figcaption>
++          <figcaption>Work — research reports into Document Stage</figcaption>
+         </figure>
+         <figure class="shot reveal" style="transition-delay: 100ms">
+           <img
+diff --git a/src/views/TeamsView.vue b/src/views/TeamsView.vue
+index 94fe110..2b9216b 100644
+--- a/src/views/TeamsView.vue
++++ b/src/views/TeamsView.vue
+@@ -7,6 +7,10 @@ const root = ref<HTMLElement | null>(null)
+ useReveal(root)
+ 
+ const pillars = [
++  {
++    title: 'Human ↔ AI Office co-edit',
++    copy: 'On Document Stage: Intent → Propose → Review → Commit. AI Diff lets you Keep, Revert, or accept hunks against a pre-turn snapshot. Text stays source of truth — not chat dumps, not multiplayer CRDT.',
++  },
+   {
+     title: 'Pure LLM-driven',
+     copy: 'No hand-maintained graph, role router, or mode switch. The model plans Tool Calls on one Agent Loop — full use of its reasoning and chain-of-thought.',
+@@ -24,6 +28,29 @@ const pillars = [
+     copy: 'Every Tool Call is persisted. Resume, replay, and visualize the thinking process through ultra-long runs — edit a result and continue.',
+   },
+ ]
++
++const beats = [
++  {
++    num: '01',
++    title: 'Intent',
++    copy: 'Select a paragraph, slide, or cell range. Add an instruction. The toolbar builds an [office-edit] turn.',
++  },
++  {
++    num: '02',
++    title: 'Propose',
++    copy: 'Same Agent Loop: read_file + apply_patch. A pre-turn snapshot is captured before the write.',
++  },
++  {
++    num: '03',
++    title: 'Review',
++    copy: 'Stage banner: View Diff · Keep · Revert. Optionally accept only the hunks you want.',
++  },
++  {
++    num: '04',
++    title: 'Commit',
++    copy: 'Keep leaves Markdown / CSV SoT. Revert restores the snapshot. The trail stays in Turn Log.',
++  },
++]
+ </script>
+ 
+ <template>
+@@ -31,10 +58,69 @@ const pillars = [
+     <ProductHero
+       name="Work"
+       accent="#2a7a82"
+-      tagline="Pure LLM-driven multi-agent collaboration on one thinking chain."
+-      lede="A general-purpose Work Agent for long-horizon complex tasks. No fixed workflows — the model drives everything. Tool calls are logged end-to-end so you can resume, replay, and see the thinking stream."
++      tagline="Human ↔ AI co-edit for long-horizon work."
++      lede="A general-purpose Work Agent with a coding-agent-grade loop. On Document Stage you and the model co-edit docs, slides, and sheets — propose, review AI Diff, keep or revert — while every Tool Call stays on one thinking trail."
+       github="https://github.com/danmo-ai/danmo-work"
+-    />
++    >
++      <template #cta>
++        <a class="btn ghost" href="#office-coedit">See Office co-edit</a>
++      </template>
++    </ProductHero>
++
++    <section id="office-coedit" class="coedit container">
++      <header class="reveal section-head">
++        <p class="kicker">Document Stage</p>
++        <h2>Office co-edit, not chat dumps</h2>
++        <p>
++          You and the Agent are co-editors. Four beats on Stage — Intent, Propose, Review, Commit —
++          for docs, slides, and sheets. Text remains source of truth; the review layer is what we deepen.
++        </p>
++      </header>
++
++      <ol class="beats reveal">
++        <li v-for="(b, i) in beats" :key="b.num" :style="{ transitionDelay: `${i * 70}ms` }">
++          <span class="num">{{ b.num }}</span>
++          <h3>{{ b.title }}</h3>
++          <p>{{ b.copy }}</p>
++        </li>
++      </ol>
++
++      <div class="demo-frame reveal">
++        <div class="demo-bar">
++          <strong>Feature tour</strong>
++          <span>ZH / EN · auto-play</span>
++          <a
++            class="demo-open"
++            href="/demos/office-coedit-tour.html?lang=en&tour=1"
++            target="_blank"
++            rel="noopener noreferrer"
++          >
++            Open full screen
++          </a>
++        </div>
++        <iframe
++          class="demo-iframe"
++          title="Danmo Work Office co-edit tour"
++          src="/demos/office-coedit-tour.html?lang=en&tour=1"
++          loading="lazy"
++        />
++      </div>
++
++      <div class="surface-grid">
++        <article class="reveal surface">
++          <h3>Doc</h3>
++          <p>GFM Markdown · TipTap · selection or whole-doc polish with AI Diff after the turn.</p>
++        </article>
++        <article class="reveal surface" style="transition-delay: 80ms">
++          <h3>Slides</h3>
++          <p>Markdown pages split by <code>---</code> · page-scoped edit · Present HTML derived by Stage.</p>
++        </article>
++        <article class="reveal surface" style="transition-delay: 140ms">
++          <h3>Sheet</h3>
++          <p>CSV / <code>.danmo-sheet.json</code> · selection range · fill · review banner on change.</p>
++        </article>
++      </div>
++    </section>
+ 
+     <section class="shots container">
+       <figure class="reveal featured">
+@@ -165,14 +251,190 @@ const pillars = [
+       <h2>Three-pane workspace</h2>
+       <p>
+         Project sidebar · agent execution log · right panel (Plan / Files / Memory / Changes /
+-        Terminal / Browser). Describe a goal, watch tools stream, join via ask_user or page annotate —
+-        peer collaboration on long-horizon work.
++        Terminal / Browser). Describe a goal, watch tools stream, co-edit on Document Stage, join via
++        ask_user or page annotate — peer collaboration on long-horizon work.
++      </p>
++      <p class="tour-links">
++        <a href="/demos/product-tour.html?lang=en&tour=1" target="_blank" rel="noopener noreferrer">
++          Product tour
++        </a>
++        <a href="/demos/office-coedit-tour.html?lang=en&tour=1" target="_blank" rel="noopener noreferrer">
++          Office co-edit tour
++        </a>
+       </p>
+     </section>
+   </div>
+ </template>
+ 
+ <style scoped>
++.btn.ghost {
++  display: inline-flex;
++  align-items: center;
++  min-height: 2.75rem;
++  padding: 0.65rem 1.25rem;
++  font-size: 0.9rem;
++  font-weight: 500;
++  border-radius: 4px;
++  border: 1px solid rgba(255, 255, 255, 0.18);
++  color: var(--label);
++  transition:
++    border-color 0.25s var(--ease-out),
++    background 0.25s var(--ease-out),
++    transform 0.25s var(--ease-out);
++}
++
++.btn.ghost:hover {
++  border-color: rgba(255, 255, 255, 0.35);
++  background: rgba(255, 255, 255, 0.04);
++  transform: translateY(-1px);
++}
++
++.coedit {
++  padding-bottom: 4rem;
++}
++
++.section-head {
++  max-width: 40rem;
++  margin-bottom: 2rem;
++}
++
++.kicker {
++  font-size: 0.75rem;
++  letter-spacing: 0.14em;
++  text-transform: uppercase;
++  color: var(--mineral);
++  font-weight: 500;
++  margin-bottom: 0.85rem;
++}
++
++.section-head h2,
++.section-title,
++.pillars h2,
++.workspace h2 {
++  font-family: var(--font-display);
++  font-size: clamp(1.5rem, 3vw, 2rem);
++  font-weight: 700;
++  letter-spacing: -0.035em;
++  margin-bottom: 0.75rem;
++}
++
++.section-head p,
++.section-lede {
++  color: var(--label-muted);
++  font-weight: 300;
++  line-height: 1.6;
++}
++
++.beats {
++  list-style: none;
++  margin: 0 0 2rem;
++  padding: 0;
++  display: grid;
++  grid-template-columns: repeat(4, 1fr);
++  gap: 1rem;
++}
++
++.beats li {
++  border-top: 1px solid var(--ink-line);
++  padding-top: 1rem;
++}
++
++.beats .num {
++  display: block;
++  font-family: var(--font-display);
++  font-size: 0.75rem;
++  letter-spacing: 0.1em;
++  color: var(--mineral);
++  margin-bottom: 0.45rem;
++}
++
++.beats h3 {
++  font-family: var(--font-display);
++  font-size: 1.05rem;
++  font-weight: 600;
++  margin-bottom: 0.45rem;
++}
++
++.beats p {
++  color: var(--label-muted);
++  font-size: 0.9rem;
++  font-weight: 300;
++  line-height: 1.5;
++}
++
++.demo-frame {
++  border: 1px solid var(--ink-line);
++  border-radius: 12px;
++  overflow: hidden;
++  background: #0b1220;
++  margin-bottom: 1.5rem;
++}
++
++.demo-bar {
++  display: flex;
++  align-items: center;
++  gap: 0.75rem;
++  flex-wrap: wrap;
++  padding: 0.7rem 1rem;
++  border-bottom: 1px solid var(--ink-line);
++  font-size: 0.8rem;
++  color: var(--label-faint);
++}
++
++.demo-bar strong {
++  color: var(--label);
++  font-family: var(--font-display);
++  font-weight: 600;
++}
++
++.demo-open {
++  margin-left: auto;
++  color: var(--mineral);
++  font-weight: 500;
++}
++
++.demo-open:hover {
++  color: var(--label);
++}
++
++.demo-iframe {
++  width: 100%;
++  height: min(72vh, 720px);
++  border: 0;
++  display: block;
++  background: #0b1220;
++}
++
++.surface-grid {
++  display: grid;
++  grid-template-columns: repeat(3, 1fr);
++  gap: 1rem;
++}
++
++.surface {
++  border-left: 3px solid var(--mineral);
++  padding: 0.35rem 0 0.35rem 1rem;
++}
++
++.surface h3 {
++  font-family: var(--font-display);
++  font-size: 1.05rem;
++  font-weight: 600;
++  margin-bottom: 0.4rem;
++}
++
++.surface p {
++  color: var(--label-muted);
++  font-size: 0.9rem;
++  font-weight: 300;
++  line-height: 1.5;
++}
++
++.surface code {
++  font-size: 0.82em;
++  color: var(--lacquer);
++}
++
+ .shots {
+   display: grid;
+   gap: 1.25rem;
+@@ -213,20 +475,9 @@ const pillars = [
+   gap: 1.25rem;
+ }
+ 
+-.section-title {
+-  font-family: var(--font-display);
+-  font-size: clamp(1.5rem, 3vw, 2rem);
+-  font-weight: 700;
+-  letter-spacing: -0.035em;
+-  margin-bottom: 0.75rem;
+-}
+-
+ .section-lede {
+-  color: var(--label-muted);
+-  font-weight: 300;
+   max-width: 40rem;
+   margin-bottom: 1.75rem;
+-  line-height: 1.6;
+ }
+ 
+ .pillars {
+@@ -235,10 +486,6 @@ const pillars = [
+ 
+ .pillars h2,
+ .workspace h2 {
+-  font-family: var(--font-display);
+-  font-size: clamp(1.5rem, 3vw, 2rem);
+-  font-weight: 700;
+-  letter-spacing: -0.035em;
+   margin-bottom: 2rem;
+ }
+ 
+@@ -289,10 +536,33 @@ const pillars = [
+   margin-top: -0.5rem;
+ }
+ 
++.tour-links {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 1rem;
++  margin-top: 1.25rem !important;
++}
++
++.tour-links a {
++  color: var(--mineral);
++  font-size: 0.95rem;
++  font-weight: 500;
++}
++
++.tour-links a:hover {
++  color: var(--label);
++}
++
+ @media (max-width: 900px) {
++  .beats,
++  .surface-grid,
+   .trio {
+     grid-template-columns: 1fr;
+   }
++
++  .demo-iframe {
++    height: 640px;
++  }
+ }
+ 
+ @media (max-width: 700px) {
+-- 
+2.43.0
+
