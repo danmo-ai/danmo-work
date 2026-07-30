@@ -47,6 +47,8 @@ type SendMessageRequest struct {
 	AgentID     string           `json:"agentId,omitempty"`
 	ModelID     string           `json:"modelId,omitempty"`
 	Attachments []UserAttachment `json:"attachments,omitempty"`
+	// SnapshotPaths are project-relative files to snapshot before tools run (AI review).
+	SnapshotPaths []string `json:"snapshotPaths,omitempty"`
 }
 
 type UpdateSessionRequest struct {

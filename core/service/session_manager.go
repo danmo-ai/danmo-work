@@ -106,6 +106,9 @@ func (m *SessionManager) StartTurn(ctx context.Context, sessionID string, req do
 	if strings.TrimSpace(userInput) == "" {
 		return "", fmt.Errorf("userInput or attachments required")
 	}
+	if len(req.SnapshotPaths) > 0 {
+		ctx = WithSnapshotPaths(ctx, req.SnapshotPaths)
+	}
 	return m.engine.StartTurn(ctx, sessionID, userInput, req.AgentID, req.ModelID, atts)
 }
 

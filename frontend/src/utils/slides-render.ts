@@ -12,6 +12,8 @@ export interface SlidePage {
   /** Markdown body without notes comments. */
   body: string
   notes: string
+  /** Marp-compatible layout classes, e.g. lead, columns. */
+  layoutClass: string
 }
 
 export interface ParsedSlidesMarkdown {
@@ -53,6 +55,17 @@ function stripNotes(body: string): { body: string; notes: string } {
   return { body: cleaned.replace(/\n{3,}/g, '\n\n').trim(), notes: notes.join('\n') }
 }
 
+/** Extract Marp-style `<!-- _class: lead columns -->` / `<!-- class: … -->` from page body. */
+function stripLayoutClass(body: string): { body: string; layoutClass: string } {
+  let layoutClass = ''
+  const cleaned = body.replace(/<!--\s*_?class\s*:\s*([^>]*?)-->/gi, (_m, cls: string) => {
+    const t = String(cls).trim().replace(/\s+/g, ' ')
+    if (t) layoutClass = layoutClass ? `${layoutClass} ${t}` : t
+    return ''
+  })
+  return { body: cleaned.replace(/\n{3,}/g, '\n\n').trim(), layoutClass }
+}
+
 /**
  * Parse Marp-compatible slides Markdown.
  * First `---` … `---` block is frontmatter when it looks like YAML (contains `:`).
@@ -79,7 +92,11 @@ export function parseSlidesMarkdown(md: string): ParsedSlidesMarkdown {
     .map((p) => p.trim())
     .filter(Boolean)
 
-  const pages = (parts.length ? parts : [body.trim() || '']).map((part) => stripNotes(part))
+  const pages = (parts.length ? parts : [body.trim() || '']).map((part) => {
+    const withNotes = stripNotes(part)
+    const withLayout = stripLayoutClass(withNotes.body)
+    return { body: withLayout.body, notes: withNotes.notes, layoutClass: withLayout.layoutClass }
+  })
 
   let title = ''
   let theme = 'default'
@@ -159,10 +176,12 @@ function escapeAttr(s: string): string {
 export function renderPlayableSlidesHtml(md: string, srcHash: string): string {
   const parsed = parseSlidesMarkdown(md)
   const title = parsed.title || 'Slides'
+  const theme = (parsed.theme || 'default').toLowerCase()
   const slidesJson = JSON.stringify(
     parsed.pages.map((p) => ({
       html: renderMarkdown(p.body),
       notes: p.notes,
+      layoutClass: p.layoutClass || '',
     })),
   )
 
@@ -174,44 +193,58 @@ export function renderPlayableSlidesHtml(md: string, srcHash: string): string {
 <!-- danmo-slides-src-sha256:${srcHash.toLowerCase()} -->
 <title>${escapeAttr(title)}</title>
 <style>
-  :root { color-scheme: light dark; --bg:#0f1115; --fg:#f3f4f6; --muted:#9ca3af; --accent:#60a5fa; --slide-bg:#161b22; }
+  :root { color-scheme: light dark; --bg:#0f1115; --fg:#f3f4f6; --muted:#9ca3af; --accent:#60a5fa; --slide-bg:#161b22; --border:#30363d; }
+  body[data-theme="light"] { color-scheme: light; --bg:#f6f4ef; --fg:#1c1917; --muted:#57534e; --accent:#2563eb; --slide-bg:#ffffff; --border:#d6d3d1; }
+  body[data-theme="academic"] { color-scheme: light; --bg:#f8fafc; --fg:#0f172a; --muted:#475569; --accent:#0f766e; --slide-bg:#ffffff; --border:#cbd5e1; }
   * { box-sizing: border-box; }
   html, body { margin:0; height:100%; background:var(--bg); color:var(--fg);
     font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; }
+  body[data-theme="academic"] { font-family: "Source Serif 4", "Times New Roman", Times, serif; }
   #deck { position:relative; width:100%; height:100%; overflow:hidden; }
   .slide { display:none; position:absolute; inset:0; padding:6vh 8vw; overflow:auto;
-    background: radial-gradient(1200px 600px at 10% 0%, #1f2937 0%, var(--slide-bg) 55%, var(--bg) 100%); }
+    background: radial-gradient(1200px 600px at 10% 0%, color-mix(in srgb, var(--accent) 18%, var(--slide-bg)) 0%, var(--slide-bg) 55%, var(--bg) 100%); }
+  body[data-theme="light"] .slide, body[data-theme="academic"] .slide {
+    background: linear-gradient(180deg, var(--slide-bg) 0%, color-mix(in srgb, var(--bg) 55%, var(--slide-bg)) 100%); }
   .slide.active { display:flex; flex-direction:column; justify-content:center; }
+  .slide.lead { justify-content:center; text-align:center; align-items:center; }
+  .slide.lead h1 { font-size: clamp(2.4rem, 6vw, 3.8rem); }
+  .slide.lead > *:first-child { margin-top:0; }
+  .slide.columns { display:none; }
+  .slide.columns.active { display:grid; grid-template-columns:1fr 1fr; gap:2.5vw; align-items:start; justify-content:stretch; }
+  .slide.columns > * { min-width:0; }
   .slide h1 { font-size: clamp(2rem, 5vw, 3.25rem); margin:0 0 0.4em; line-height:1.15; font-weight:700; }
   .slide h2 { font-size: clamp(1.5rem, 3.5vw, 2.25rem); margin:0 0 0.5em; line-height:1.2; }
   .slide h3 { font-size:1.35rem; margin:0 0 0.5em; }
   .slide p, .slide li { font-size: clamp(1.05rem, 2vw, 1.35rem); line-height:1.45;
     font-family: "Source Sans 3", "Helvetica Neue", Arial, sans-serif; }
+  body[data-theme="academic"] .slide p, body[data-theme="academic"] .slide li {
+    font-family: "Source Serif 4", Georgia, serif; }
   .slide ul, .slide ol { margin:0.2em 0 0; padding-left:1.2em; }
   .slide li { margin:0.35em 0; }
-  .slide pre { background:#0b0f14; border:1px solid #30363d; border-radius:8px; padding:1em 1.2em;
+  .slide pre { background:color-mix(in srgb, var(--bg) 80%, #000); border:1px solid var(--border); border-radius:8px; padding:1em 1.2em;
     overflow:auto; font-size: clamp(0.9rem, 1.6vw, 1.1rem); line-height:1.4; }
   .slide code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   .slide blockquote { margin:0; padding-left:1em; border-left:4px solid var(--accent); color:var(--muted); font-size:1.4rem; }
   .slide table { border-collapse:collapse; font-family: "Source Sans 3", Arial, sans-serif; }
-  .slide th, .slide td { border:1px solid #30363d; padding:0.4em 0.7em; }
+  .slide th, .slide td { border:1px solid var(--border); padding:0.4em 0.7em; }
   .slide img { max-width:100%; max-height:55vh; object-fit:contain; }
-  #bar { position:fixed; left:0; right:0; bottom:0; height:4px; background:#21262d; z-index:5; }
+  #bar { position:fixed; left:0; right:0; bottom:0; height:4px; background:var(--border); z-index:5; }
   #bar > i { display:block; height:100%; width:0; background:var(--accent); transition:width .2s; }
   #counter { position:fixed; right:16px; bottom:14px; z-index:6; font: 12px/1 ui-sans-serif, system-ui, sans-serif;
     color:var(--muted); letter-spacing:0.04em; }
   #presenter { display:none; position:fixed; inset:auto 16px 28px 16px; z-index:7; padding:12px 14px;
-    background:rgba(0,0,0,.78); border:1px solid #30363d; border-radius:8px; max-height:30vh; overflow:auto;
+    background:rgba(0,0,0,.78); border:1px solid var(--border); border-radius:8px; max-height:30vh; overflow:auto;
     font: 13px/1.4 "Source Sans 3", Arial, sans-serif; color:#e5e7eb; white-space:pre-wrap; }
   #presenter.on { display:block; }
   @media print {
     #bar, #counter, #presenter { display:none !important; }
     .slide { display:flex !important; position:relative; page-break-after:always; height:100vh;
       background:#fff; color:#111; }
+    .slide.columns { display:grid !important; }
   }
 </style>
 </head>
-<body data-theme="${escapeAttr(parsed.theme)}">
+<body data-theme="${escapeAttr(theme)}">
 <div id="deck"></div>
 <div id="bar"><i id="progress"></i></div>
 <div id="counter"></div>
@@ -229,7 +262,8 @@ function mount() {
   deck.innerHTML = '';
   slides.forEach((s, i) => {
     const el = document.createElement('section');
-    el.className = 'slide' + (i === 0 ? ' active' : '');
+    const layout = (s.layoutClass || '').trim();
+    el.className = 'slide' + (layout ? ' ' + layout : '') + (i === 0 ? ' active' : '');
     el.dataset.index = String(i);
     el.innerHTML = s.html || '<p></p>';
     deck.appendChild(el);

@@ -379,6 +379,7 @@ export const useSessionsStore = defineStore('sessions', () => {
       mimeType?: string
       data: string
     }>,
+    opts?: { snapshotPaths?: string[] },
   ) {
     const hasAtts = Boolean(attachments?.length)
     if (!currentSessionId.value || (!userInput.trim() && !hasAtts) || loading.value) return
@@ -388,6 +389,7 @@ export const useSessionsStore = defineStore('sessions', () => {
       if (selectedAgentId.value) body.agentId = selectedAgentId.value
       body.modelId = selectedModelId.value
       if (hasAtts) body.attachments = attachments
+      if (opts?.snapshotPaths?.length) body.snapshotPaths = opts.snapshotPaths
       await fetchJSON(`/sessions/${currentSessionId.value}/turns`, {
         method: 'POST',
         body: JSON.stringify(body),

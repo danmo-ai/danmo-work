@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"danmo-work/core/adapter/config"
 	"danmo-work/core/adapter/feishu"
@@ -65,6 +66,7 @@ type Core struct {
 	Wecom         *service.WecomBridge
 	QQ            *service.QQBridge
 	Channels      *service.ChannelManager
+	AIReview      *service.AIReviewManager
 }
 
 func New(cfg Config) *Core {
@@ -205,11 +207,36 @@ func New(cfg Config) *Core {
 	stream := dqruntime.NewStreamEventManager(st.StreamEvents())
 	checkpointStore := turnlog.NewCheckpointStore(pm.ProjectDir)
 	fileChangeStore := turnlog.NewFileChangeStore(pm.ProjectDir)
+	snapshotStore := turnlog.NewSnapshotStore(pm.ProjectDir)
+	aiReview := service.NewAIReviewManager(pm, snapshotStore, fileChangeStore)
 
 	sessions := service.NewSessionManager(st, nil, provider)
 	eng := dqruntime.NewEngine(sessions, turnManager, pm, approvalManager, turnLogManager, agents, skills, knowledge, st.Memories(), provider, stream, checkpointStore, loader, appCfg.Data.Dir)
 	eng.SetFileChangeStore(fileChangeStore)
 	eng.SetTableStore(tableStore)
+	eng.SetPreTurnSnapshot(func(ctx context.Context, projectID, sessionID, turnID, userInput string, extraPaths []string) {
+		seen := map[string]bool{}
+		var paths []string
+		for _, p := range service.PathsFromOfficeEdit(userInput) {
+			if p == "" || seen[p] {
+				continue
+			}
+			seen[p] = true
+			paths = append(paths, p)
+		}
+		for _, p := range extraPaths {
+			p = strings.TrimSpace(p)
+			if p == "" || seen[p] {
+				continue
+			}
+			seen[p] = true
+			paths = append(paths, p)
+		}
+		if len(paths) == 0 {
+			return
+		}
+		_, _ = aiReview.SnapshotPaths(ctx, projectID, sessionID, turnID, paths)
+	})
 	sessions.SetEngine(eng)
 
 	sb := sandbox.New(appCfg.Runtime.Sandbox)
@@ -347,6 +374,7 @@ func New(cfg Config) *Core {
 		Feishu:        feishuBridge,
 		Wecom:         wecomBridge,
 		QQ:            qqBridge,
+		AIReview:      aiReview,
 	}
 }
 

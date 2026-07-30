@@ -673,10 +673,12 @@ Changes 面板点击变更文件 → 打开 `diff` Stage（`GET /projects/:id/gi
 ```
 Stage 工具栏（润色 / 修改 / …）
   → 若 dirty：先 auto-save（失败则确认）——避免 Agent 读到旧盘、reload 冲掉未保存编辑
-  → buildOfficeEditPrompt → [office-edit] 块（action / path / kind / scope / selection）
-  → POST /sessions/:id/turns
+  → buildOfficeEditPrompt → [office-edit] 块（action / path / kind / scope / selection / review）
+  → POST /sessions/:id/turns（可选 snapshotPaths）
+  → **pre-turn snapshot**（office-edit path + Stage 路径）
   → Document Agent + document-writing / playable-slides / sheet-writing skills
   → Turn 完成后 Stage reload；恢复 scroll 与 slides pageIndex
+  → 若文件相对快照有变更 → **AI 审阅条**（View Diff / Keep / Revert）
 ```
 
 | Scope | 含义 |
@@ -684,11 +686,13 @@ Stage 工具栏（润色 / 修改 / …）
 | `selection` | 当前选区 |
 | `document` | 全文 |
 | `slide` | 当前幻灯片页 |
-| `sheet` | 整表 |
+| `sheet` | 整表或表格选区（`range: A1:B3`） |
 
 保存 API：`PUT /api/v1/projects/:id/files/content`。
 
-源码改码：不挂 Office AI 工具栏；用户通过 Composer 选区批注（`## Selected Code` + File/Lines）或对话驱动 Agent `edit`/`apply_patch`。
+**人机审阅（AI Diff）**：回合前快照存于 `sessions/<sid>/snapshots/<turnId>/`；`GET .../ai-review/diff` 对比快照与当前盘；Revert 写回快照；Diff Stage 支持按 hunk 接受（见 [human-ai-coedit-plan.md](./human-ai-coedit-plan.md)）。
+
+源码改码：不挂 Office AI 工具栏；用户通过 Composer 选区批注（`## Selected Code` + File/Lines）或对话驱动 Agent `edit`/`apply_patch`；打开 Stage 的 Composer 回合同样会 snapshot 该 path。
 
 ### 13.3 非目标（本阶段）
 

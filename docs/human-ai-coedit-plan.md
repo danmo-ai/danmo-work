@@ -4,6 +4,14 @@
 > 边界对齐 [`core-design.md`](./core-design.md) §13 / §13.3：**不做 Yjs 多人文档、不做 OOXML 套件、不做 IDE 壳**。  
 > 相关已落地：[`file-editor-diff-eval.md`](./file-editor-diff-eval.md)（Code / Diff Stage）、`ask_user` / permission、office-edit 工具栏。
 
+**落地状态（进行中）**
+
+| 阶段 | 状态 |
+|------|------|
+| **P0** 快照 + AI Diff banner + Keep/Revert | **已实现** |
+| **P1** hunk 级 Accept（Diff Stage） | **已实现**（真 `propose_only` 写 shadow 仍后续） |
+| **P2** Sheet 选区/填充/公式展示；Slides 主题+布局 | **已实现首批**；虚拟滚动 / HyperFormula / 按页 Accept 见 §7 P2 |
+
 ---
 
 ## 1. 结论先行
@@ -254,15 +262,40 @@ Skills（`document-writing` / `playable-slides` / `sheet-writing`）补充：
 
 **验收**：润色长文时可只接受部分段落；幻灯片可只接受第 3 页。
 
-### P2 — Surface 能力与协同深度
+### P2 — Surface 能力与协同深度（加深）
 
-**目标**：表格/幻灯片够用；协同环更顺。
+**目标**：表格/幻灯片在「Agent 可写文本 SoT」前提下够用；审阅环与 Surface 能力对齐。  
+**原则**：P2 加厚交互与方言，**不**引入 Univer / Marp-core / HyperFormula 为默认依赖；公式引擎与虚拟滚动按需再开。
 
-1. Sheet：虚拟滚动 + 选区 + 公式字符串（可选 HyperFormula）；`range` scope office-edit。  
-2. Slides：主题包 + 常用布局 class；多页 patch 审阅。  
-3. Doc：选区映射稳定的 block-id（可选，写入 HTML comment / MD 属性，谨慎）。  
-4. Composer：「基于当前提案继续改」无需重读全文。  
-5. 评估（非默认）：局部实验 Yjs **仅单人文档内 AI 光标演示**——不进主线，除非非目标条款修订。
+#### P2.1 Sheet（已部分落地 / 后续）
+
+| 项 | 状态 | 说明 |
+|----|------|------|
+| 选区 + Shift 扩展 | **已做** | `selectionRange`；office-edit selection 带 `range: A1:B3` |
+| 向下填充 | **已做** | 选区顶行复制到下方 |
+| 公式字符串展示 | **已做** | `=` 前缀等宽 + accent（**不求值**；SoT 仍是字符串） |
+| 虚拟滚动 | 后续 | 行数 > ~500 时再上；当前 DOM 表足够 Agent 产物 |
+| HyperFormula 求值 | 后续可选 | 仅当用户明确要「算表」；默认不依赖，避免 SoT/导出语义分叉 |
+| 单元格级 AI Diff 高亮 | 后续 | 在 AI Diff / Stage 上标变更格；依赖稳定 JSON 行序列 |
+
+**Agent 契约**：`sheet-writing` 继续输出 CSV / `.danmo-sheet.json`；公式以单元格文本 `=SUM(...)` 保存；不要默认转 `.xlsx`。
+
+#### P2.2 Slides（已部分落地 / 后续）
+
+| 项 | 状态 | 说明 |
+|----|------|------|
+| 主题 `default` / `light` / `academic` | **已做** | frontmatter `theme:` → Present CSS |
+| 布局 `lead` / `columns` | **已做** | `<!-- _class: lead -->` / `columns`（Marp 方言子集） |
+| 按页 AI Diff | 后续 | 用 `---` 分页对 snapshot/current 做页级 Accept（复用 hunk 或页 merge） |
+| 更多布局（invert / invert-list） | 后续 | 仍在 `slides-render.ts` 扩展，不绑 Marp-core |
+
+**Agent 契约**：只改 MD；Present HTML 仍由 Stage 派生；布局用 HTML comment 指令，勿手写 playable HTML。
+
+#### P2.3 协同深度（后续）
+
+1. Doc：选区映射稳定的 block-id（可选，写入 HTML comment / MD 属性，谨慎）。  
+2. Composer：「基于当前提案继续改」无需重读全文（带上 pending proposal id）。  
+3. **明确不做**：Yjs 多人或「AI as CRDT peer」——除非修订 §13.3。
 
 ---
 

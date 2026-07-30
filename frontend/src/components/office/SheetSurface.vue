@@ -35,6 +35,8 @@ const gridRef = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const scrollLeft = ref(0)
 const selectedCell = ref<{ r: number; c: number } | null>(null)
+/** Inclusive selection range (anchor → focus). When null, falls back to whole sheet for AI. */
+const selectionRange = ref<{ r0: number; c0: number; r1: number; c1: number } | null>(null)
 
 const isJson = () => props.path.toLowerCase().endsWith('.danmo-sheet.json')
 const readonly = computed(() => props.mode === 'view' || !!props.turnRunning)
@@ -60,6 +62,57 @@ function colLabel(i: number): string {
 function cellLooksNumber(value: string): boolean {
   if (!value.trim()) return false
   return /^-?\d+(\.\d+)?([eE][+-]?\d+)?%$/.test(value.trim()) || /^-?\d+(\.\d+)?$/.test(value.trim())
+}
+
+function cellLooksFormula(value: string): boolean {
+  return value.trimStart().startsWith('=')
+}
+
+function normalizeRange(r0: number, c0: number, r1: number, c1: number) {
+  return {
+    r0: Math.min(r0, r1),
+    c0: Math.min(c0, c1),
+    r1: Math.max(r0, r1),
+    c1: Math.max(c0, c1),
+  }
+}
+
+function isInSelection(r: number, c: number): boolean {
+  const sel = selectionRange.value
+  if (!sel) return selectedCell.value?.r === r && selectedCell.value?.c === c
+  return r >= sel.r0 && r <= sel.r1 && c >= sel.c0 && c <= sel.c1
+}
+
+function selectCell(r: number, c: number, ev?: MouseEvent) {
+  if (ev?.shiftKey && selectedCell.value) {
+    selectionRange.value = normalizeRange(selectedCell.value.r, selectedCell.value.c, r, c)
+  } else {
+    selectedCell.value = { r, c }
+    selectionRange.value = { r0: r, c0: c, r1: r, c1: c }
+  }
+}
+
+function a1(r: number, c: number): string {
+  return `${colLabel(c)}${r + 1}`
+}
+
+/** Fill selected column(s) downward from the top row of the selection. */
+function fillDown() {
+  if (readonly.value || !selectionRange.value) return
+  const { r0, c0, r1, c1 } = selectionRange.value
+  if (r1 <= r0) return
+  mutateActive((sheet) => {
+    const nextRows = sheet.rows.map((row) => [...row])
+    for (let c = c0; c <= c1; c++) {
+      const src = nextRows[r0]?.[c] ?? ''
+      for (let r = r0 + 1; r <= r1; r++) {
+        while (nextRows.length <= r) nextRows.push([''])
+        while (nextRows[r].length <= c) nextRows[r].push('')
+        nextRows[r][c] = src
+      }
+    }
+    return { ...sheet, rows: nextRows }
+  })
 }
 
 function parseCsv(text: string): string[][] {
@@ -275,11 +328,38 @@ function getEditScope(): OfficeEditScope {
 }
 
 function getSelectionMarkdown(): string {
+  const sel = selectionRange.value
+  const line = (cells: string[]) => `| ${cells.map((c) => (c ?? '').replace(/\|/g, '\\|')).join(' | ')} |`
+  if (sel && (sel.r0 !== sel.r1 || sel.c0 !== sel.c1 || selectedCell.value)) {
+    const { r0, c0, r1, c1 } = sel
+    const width = c1 - c0 + 1
+    const header = Array.from({ length: width }, (_, i) => a1(r0, c0 + i))
+    const sep = `| ${header.map(() => '---').join(' | ')} |`
+    const body: string[] = []
+    for (let r = r0; r <= r1; r++) {
+      const cells = Array.from({ length: width }, (_, i) => rows.value[r]?.[c0 + i] ?? '')
+      body.push(line(cells))
+    }
+    return [
+      `sheet: ${activeSheet.value?.name || 'Sheet1'}`,
+      `range: ${a1(r0, c0)}:${a1(r1, c1)}`,
+      line(header),
+      sep,
+      ...body,
+      '',
+    ].join('\n')
+  }
   const header = rows.value[0] || []
   const body = rows.value.slice(1)
-  const line = (cells: string[]) => `| ${cells.map((c) => c.replace(/\|/g, '\\|')).join(' | ')} |`
   const sep = `| ${header.map(() => '---').join(' | ')} |`
-  return [line(header), sep, ...body.map(line)].join('\n') + '\n'
+  return [
+    `sheet: ${activeSheet.value?.name || 'Sheet1'}`,
+    `range: all`,
+    line(header),
+    sep,
+    ...body.map(line),
+    '',
+  ].join('\n')
 }
 
 watch(
@@ -314,9 +394,19 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
         <button class="sheet-surface__btn" :disabled="readonly || selectedCell == null" @click="deleteRow">
           {{ t('office.deleteRow') }}
         </button>
+        <button
+          class="sheet-surface__btn"
+          :disabled="readonly || !selectionRange || selectionRange.r1 <= selectionRange.r0"
+          @click="fillDown"
+        >
+          {{ t('office.fillDown') }}
+        </button>
         <button v-if="isJson()" class="sheet-surface__btn" :disabled="readonly" @click="addSheet">
           + {{ t('office.sheetTab') }}
         </button>
+        <span v-if="selectionRange" class="sheet-surface__range">
+          {{ a1(selectionRange.r0, selectionRange.c0) }}:{{ a1(selectionRange.r1, selectionRange.c1) }}
+        </span>
       </div>
 
       <div v-if="isJson() && sheets.length > 1" class="sheet-surface__tabs">
@@ -359,18 +449,19 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
                 v-for="ci in colCount"
                 :key="ci"
                 :class="{
-                  'is-selected': selectedCell?.r === ri && selectedCell?.c === ci - 1,
-                  'is-number': cellLooksNumber(row[ci - 1] || ''),
+                  'is-selected': isInSelection(ri, ci - 1),
+                  'is-number': cellLooksNumber(row[ci - 1] || '') && !cellLooksFormula(row[ci - 1] || ''),
+                  'is-formula': cellLooksFormula(row[ci - 1] || ''),
                 }"
                 :style="{ width: `${colWidths[ci - 1]}px`, minWidth: `${colWidths[ci - 1]}px` }"
-                @mousedown="selectedCell = { r: ri, c: ci - 1 }"
+                @mousedown="selectCell(ri, ci - 1, $event)"
               >
                 <input
                   class="sheet-surface__cell"
                   :value="row[ci - 1] || ''"
                   :readonly="readonly"
                   @input="updateCell(ri, ci - 1, ($event.target as HTMLInputElement).value)"
-                  @focus="selectedCell = { r: ri, c: ci - 1 }"
+                  @focus="selectCell(ri, ci - 1)"
                 />
               </td>
             </tr>
@@ -502,6 +593,16 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
   outline: 2px solid var(--dq-accent);
   outline-offset: -2px;
   z-index: 1;
+}
+.sheet-surface__grid td.is-formula .sheet-surface__cell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--dq-accent);
+}
+.sheet-surface__range {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--dq-label-tertiary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 .sheet-surface__grid td.is-number .sheet-surface__cell {
   text-align: right;
