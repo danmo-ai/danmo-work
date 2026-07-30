@@ -9,7 +9,7 @@
 
 **开源 AI Work Agent** —— 具备一流 Coding Agent 的执行底盘，面向长程工作。可自托管，多 Agent 协作，MIT。
 
-不只是又一个强大的 Coding Agent，也不是要你维护的工作流图。Danmo Work 是**人机共思工作台**：同一条 Agent Loop 既能做文件 / Shell / 多 Agent 编码，也能交付**文档、幻灯片、表格、连接器与 IM**——每一步 Tool Call 全量落盘，**可恢复、可回放、可改结果再继续**。
+不只是又一个强大的 Coding Agent，也不是要你维护的工作流图。Danmo Work 是**人机共思工作台**：同一条 Agent Loop 既能做文件 / Shell / 多 Agent 编码，也能在 Document Stage 上**与人协作编辑文档、幻灯片、表格**——提案 → 审阅 → 保留/回滚——每一步 Tool Call 全量落盘，**可恢复、可回放、可改结果再继续**。
 
 > 代码、调研报告、幻灯片、表格、演示页、自动化流水——桌面 / Web / CLI·TUI，或微信 / 飞书 / 企微 / QQ——同一条思维链。
 
@@ -19,6 +19,7 @@
 | **控制方式** | **纯 LLM 驱动**——无人工维护的 Graph / 角色路由 / 产品 Mode |
 | **抽象** | **一切皆工具**——`delegate_agent`、`ask_user`、记忆、Table Store、MCP、文件… |
 | **状态** | **日志即状态**——Turn Log → 断点恢复、完整回放、改结果继续 |
+| **Office** | **人 ↔ AI 共审编辑**——Document Stage + AI Diff（保留 / 回滚 / hunk）；文本为真相源 |
 | **触达面** | Web · 桌面 · CLI · TUI · IM 通道 · Document Stage |
 
 MIT · Anthropic 与 OpenAI 兼容接口 · 数据默认在 `~/.danmo-work/`
@@ -34,7 +35,8 @@ Danmo Work 保留**一流 Coding Agent 量级**的执行底盘，再问更大的
 | 你得到 | 而不是 |
 |--------|--------|
 | 同一思维链 + 硬隔离子 Agent | 并行 Session / 不透明 Handoff |
-| Document Stage（文档 / 幻灯片 / 表格 / 预览） | 聊天框里倒一堆 Markdown |
+| Document Stage + **AI Diff 共审**（文档 / 幻灯片 / 表格） | 聊天框里倒一堆 Markdown |
+| 相对回合前快照的保留 / 回滚 / 分块接受 | AI 静默覆盖、无法撤回 |
 | 可检视 Memory + schema-free Table Store | 黑盒产品记忆，或再接一套向量库 |
 | MCP 连接器 + cron/webhook 自动化 | 循环外硬拼脚本 |
 | 微信 · 飞书 · 企微 · QQ 同一 Loop | 「先公网回调再说」的 IM 接入 |
@@ -121,7 +123,7 @@ make dev-web   # → http://localhost:5801/app/
 | Agent Loop | 强，偏代码 | 开发者写 Graph / 角色 | **一流 Coding 量级 + 纯 LLM 规划 Tool Call** |
 | 子 Agent | 额外 Session 或 Skill | Handoff / Crew | 同一思维链上的 `delegate_agent`，硬隔离 |
 | 人机 | 审批 / 聊天 | 预设节点 | `ask_user` Tool——模型决定时机 |
-| 产物 | 仓库 Diff | 应用自定义 | Diff **+ Document Stage**：文档 · 幻灯片 · 表格 · 预览 |
+| 产物 | 仓库 Diff | 应用自定义 | Diff **+ Document Stage** + **AI Diff 共审**：文档 · 幻灯片 · 表格 · 预览 |
 | 记忆 | 产品私有或没有 | 缓冲 / 外部向量库 | 显式 `memory_*` + 作用域 SQLite + UI |
 | 业务数据 | 文件 / 自建库 | LangGraph Store 等 | 内置 **Table Store**（`store.db`，schema-free） |
 | 连接器 | MCP / 插件（参差） | 自建 | MCP 目录 + 密钥 + 权限 + 自动化 |
@@ -136,11 +138,12 @@ make dev-web   # → http://localhost:5801/app/
 
 ## 产品价值
 
-1. **交付工作，而不只是对话** —— Stage 原生文档、Markdown 幻灯片、表格、HTML 预览，落在项目文件系统里  
-2. **透明建立信任** —— Tool Call 全量持久化；中途恢复；改 Tool Result 再继续  
-3. **能力扩展不叠加复杂度** —— 新能力 = 新 Tool / Skill / MCP，不是新的图编排语言  
-4. **人在哪聊，Agent 就在哪** —— 手机微信或飞书卡片同一 Loop；工具仍在本机执行  
-5. **本地优先、数据自持** —— 配置、库、Turn Log、密钥在 `~/.danmo-work/`；自带模型 Key  
+1. **与 AI 共审编辑 Office** —— 指定作用域、AI 提案、审阅 AI Diff、保留 / 回滚 / 分块接受；Markdown 与 CSV 仍是真相源  
+2. **交付工作，而不只是对话** —— Stage 原生文档、Markdown 幻灯片、表格、HTML 预览，落在项目文件系统里  
+3. **透明建立信任** —— Tool Call 全量持久化；中途恢复；改 Tool Result 再继续  
+4. **能力扩展不叠加复杂度** —— 新能力 = 新 Tool / Skill / MCP，不是新的图编排语言  
+5. **人在哪聊，Agent 就在哪** —— 手机微信或飞书卡片同一 Loop；工具仍在本机执行  
+6. **本地优先、数据自持** —— 配置、库、Turn Log、密钥在 `~/.danmo-work/`；自带模型 Key  
 
 ---
 
@@ -152,11 +155,34 @@ make dev-web   # → http://localhost:5801/app/
 
 交互版（中/EN 切换）：[`docs/demo/product-tour.html`](docs/demo/product-tour.html) · [MP4](docs/demo/product-tour-zh.mp4)
 
+**人 ↔ AI Office 共审编辑**（Intent → Propose → Review → Commit）：
+
+[`docs/demo/office-coedit-tour.html`](docs/demo/office-coedit-tour.html)?lang=zh&tour=1
+
 三栏工作台：项目侧栏 · Agent 执行 Stream · 右侧面板（计划 / 文件 / **记忆** / 变更 / 终端）。中间 **Document Stage** 按文件类型换 toolbar。
+
+### 人 ↔ AI 协作编辑 Office
+
+你和 Agent 是**共编者**——不是「AI 静默覆盖文件」，也不是石墨式多人 CRDT。Document Stage 上四拍：
+
+1. **Intent** —— 选区 / 当前页 / 单元格范围 + 指令；工具栏组装 `[office-edit]`
+2. **Propose** —— 同一条 Agent Loop（`read_file` + `apply_patch` / `edit`）；回合前自动快照
+3. **Review** —— Stage 顶栏：查看 Diff · 保留 · 回滚；可按 hunk 接受
+4. **Commit** —— 保留留下 SoT；回滚恢复快照；轨迹进 Turn Log / `file_changes`
+
+| 类型 | 真相源 | 共审作用域 |
+|------|--------|------------|
+| **Doc** | GFM `.md` | 选区或全文 · TipTap |
+| **Slides** | 以 `---` 分页的 Markdown | 当前页 · Present HTML 由 Stage 派生 |
+| **Sheet** | `.csv` / `.danmo-sheet.json` | 选区范围 · 网格与填充 |
+| **Preview** | 通用 `.html`、图片、外链等 | 点选 DOM → 批注 → Composer |
+| **Code / Diff** | 源码 / git / AI Diff | AI Diff 审阅（改码仍走 Composer） |
+
+功能动画：[`office-coedit-tour.html`](docs/demo/office-coedit-tour.html) · 方案说明：[`human-ai-coedit-plan.md`](docs/human-ai-coedit-plan.md)
 
 ### Document Stage — 文档 / 幻灯片 / 表格 / 预览
 
-从 Files 打开项目文件 → 进入中间 Stage。可编辑类型走分格式编辑器 + AI；通用 HTML / 图片 / 外链走 **Preview**（URL 栏 + Design mode）。AI 润色走普通 **session turn**。
+从 Files 打开项目文件 → 进入中间 Stage。可编辑类型走分格式编辑器 + AI；通用 HTML / 图片 / 外链走 **Preview**（URL 栏 + Design mode）。AI 润色走普通 **session turn**（不是独立 `/office/ai` 接口）。
 
 | 类型 | 真相源 | 编辑器 / 视图 |
 |------|--------|---------------|
@@ -165,7 +191,7 @@ make dev-web   # → http://localhost:5801/app/
 | **Sheet** | `.csv` / `.danmo-sheet.json` | 表格网格 |
 | **Preview** | 通用 `.html`、图片、外链等 | iframe / 图片；点选元素进 Composer |
 
-工具栏组装 `[office-edit]` prompt → `POST /sessions/:id/turns`。AI 前自动保存脏内容；作用域可为选区 / 全文 / 当前页 / 整表。Turn 结束后 Stage 重载并恢复滚动（幻灯片保留页码）。
+工具栏组装 `[office-edit]` prompt → `POST /sessions/:id/turns`。AI 前自动保存脏内容；作用域可为选区 / 全文 / 当前页 / 整表。Turn 结束后若当前文件有变更，Stage 显示 **AI 审阅条**，再重载并恢复滚动（幻灯片保留页码）。
 
 ### 点选页面，直接说改哪里
 
