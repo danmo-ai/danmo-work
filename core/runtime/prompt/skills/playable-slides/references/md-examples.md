@@ -4,9 +4,40 @@ Marp-compatible subset for Danmo Slides Stage. Stage programmatically renders pl
 
 Keep decks Stage-routable: `type: slides` frontmatter and/or `*-slides.md` filename; pages split by a line that is only `---`.
 
-## Two-column intent (approximate in MD)
+## Fragments + theme (Present)
 
-Markdown has no real columns; use two short lists under one H2, or split into two slides.
+```markdown
+---
+type: slides
+title: Stepped bullets
+theme: moon
+fragments: true
+transition: fade
+---
+
+<!-- _class: lead -->
+# Demo
+
+---
+
+## Why it matters
+
+- Context stays in the file
+- Space reveals one bullet at a time
+- O opens overview
+
+<!-- notes: pause after the second bullet -->
+
+---
+
+<!-- fragments: false -->
+## All at once
+
+- No stepping on this page
+```
+
+Present keys: Space (fragment → next slide), P (notes), O (overview).
+
 
 ```markdown
 ---

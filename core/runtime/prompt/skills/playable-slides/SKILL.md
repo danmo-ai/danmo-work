@@ -5,7 +5,7 @@ license: MIT
 compatibility: Requires write, edit, read_file
 metadata:
   author: danmo-work
-  version: "1.2"
+  version: "1.3"
   category: work
   adapted_from: "https://github.com/alirezarezvani/claude-skills/tree/main/markdown-html/skills/md-slides"
   upstream_license: MIT
@@ -61,6 +61,8 @@ Satisfy at least one; prefer **both** filename and frontmatter:
 type: slides
 title: Deck title
 theme: default
+fragments: true
+transition: fade
 ---
 
 # Title slide
@@ -92,10 +94,24 @@ Next steps or ask
 | Frontmatter | First `---` / `---` YAML block is **not** a slide; put `type: slides` there |
 | Title | First non-empty line of a slide is the thumb title — prefer `#` / `##` |
 | Density | One idea per slide; ≤6 bullets; avoid >~40 source lines per slide |
-| Notes | Optional `<!-- notes: ... -->` for presenter view |
+| Notes | Optional `<!-- notes: ... -->` for presenter view (`P` in Present) |
+| Fragments | Deck `fragments: true` auto-steps list items (Space); per-page `<!-- fragments: false -->` to disable |
+| Layout | `<!-- _class: lead -->` or `columns` |
+| Theme | `default` · `light` · `academic` · `moon` |
+| Transition | `fade` (default) or `none` |
 | Code | Fenced blocks with language tag; ≤8 visible lines |
 | Images | Relative paths from the deck file when assets exist in the project |
 | Prose | Phrases over paragraphs; no walls of text |
+
+### Present keys (Stage-generated HTML)
+
+| Key | Action |
+|-----|--------|
+| Space / → | Next fragment, then next slide |
+| ← | Previous fragment / slide |
+| P | Speaker notes + next-slide peek + timer |
+| O | Overview grid |
+| Esc | Exit overview / notes |
 
 ### Slide shapes (pick intentionally)
 

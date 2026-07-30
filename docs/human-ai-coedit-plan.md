@@ -284,10 +284,11 @@ Skills（`document-writing` / `playable-slides` / `sheet-writing`）补充：
 
 | 项 | 状态 | 说明 |
 |----|------|------|
-| 主题 `default` / `light` / `academic` | **已做** | frontmatter `theme:` → Present CSS |
+| 主题 `default` / `light` / `academic` / `moon` | **已做** | frontmatter `theme:` → Present CSS（参考 Reveal 配色思路） |
 | 布局 `lead` / `columns` | **已做** | `<!-- _class: lead -->` / `columns`（Marp 方言子集） |
+| Fragments / fade / overview | **已做** | 参考 Reveal：`fragments: true`、Space 步进、`O` overview、`transition: fade`；**未**引入 reveal.js 依赖 |
 | 按页 AI Diff | 后续 | 用 `---` 分页对 snapshot/current 做页级 Accept（复用 hunk 或页 merge） |
-| 更多布局（invert / invert-list） | 后续 | 仍在 `slides-render.ts` 扩展，不绑 Marp-core |
+| 更多布局（invert / invert-list） | 后续 | 仍在 `slides-render.ts` 扩展，不绑 Marp-core / Reveal |
 
 **Agent 契约**：只改 MD；Present HTML 仍由 Stage 派生；布局用 HTML comment 指令，勿手写 playable HTML。
 
