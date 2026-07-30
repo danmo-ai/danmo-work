@@ -9,7 +9,7 @@
 
 **Open-source AI Work Agent** — coding-agent-grade loop for long-horizon work. Self-hosted, multi-agent, MIT.
 
-Not just another powerful coding agent. Not a workflow graph you babysit. Danmo Work is a **human–AI co-thinking workspace**: the same Agent Loop that handles files, shell, and multi-agent coding also ships **docs, slides, sheets, connectors, and IM** — every Tool Call logged so you can **resume, replay, and edit the thinking trail**.
+Not just another powerful coding agent. Not a workflow graph you babysit. Danmo Work is a **human–AI co-thinking workspace**: the same Agent Loop that handles files, shell, and multi-agent coding also **co-edits docs, slides, and sheets on Document Stage** — propose → review → keep/revert — with every Tool Call logged so you can **resume, replay, and edit the thinking trail**.
 
 > Code, research reports, decks, sheets, demos, and automations — from desktop, web, CLI/TUI, or WeChat / Feishu / WeCom / QQ — on one trail.
 
@@ -19,6 +19,7 @@ Not just another powerful coding agent. Not a workflow graph you babysit. Danmo 
 | **Control** | **Pure LLM-driven** — no hand-maintained graph / role router / product “mode” |
 | **Abstraction** | **Everything is a Tool** — `delegate_agent`, `ask_user`, memory, table store, MCP, files… |
 | **State** | **Log is state** — Turn Log → recover, replay, edit a result and continue |
+| **Office** | **Human ↔ AI co-edit** — Document Stage + AI Diff (Keep / Revert / hunks); text stays SoT |
 | **Surfaces** | Web · Desktop · CLI · TUI · IM channels · Document Stage |
 
 MIT · Anthropic & OpenAI-compatible providers · Local-first data under `~/.danmo-work/`
@@ -34,7 +35,8 @@ Danmo Work keeps a **coding-agent-grade** execution core, then asks a wider ques
 | You get | Instead of |
 |---------|------------|
 | One thinking chain + hard-isolated sub-agents | Parallel sessions / opaque handoffs |
-| Document Stage (doc / slides / sheet / preview) | Chat that dumps Markdown into a void |
+| Document Stage + **AI Diff co-review** (doc / slides / sheet) | Chat that dumps Markdown into a void |
+| Keep / Revert / accept hunks vs pre-turn snapshot | Opaque AI overwrite you can’t unwind |
 | Inspectable Memory + schema-free Table Store | Black-box product memory or another vector DB |
 | MCP Connectors + cron/webhook Automations | One-off scripts glued outside the loop |
 | WeChat · Feishu · WeCom · QQ on the same loop | “Deploy a public webhook” IM hacks |
@@ -121,7 +123,7 @@ Typical OSS coding agents excel at **code-centric loops**. Danmo Work runs a loo
 | Agent loop | Strong, code-focused | Developer-written graph / roles | **Coding-agent-grade + pure LLM Tool Call planning** |
 | Sub-agents | Extra session or skill | Handoff / crew roles | `delegate_agent` on **same chain**, hard isolation |
 | Human in the loop | Approvals / chat | Preset nodes | `ask_user` Tool — model chooses when |
-| Artifacts | Repo diffs | App-defined | Diffs **+ Document Stage**: doc · slides · sheet · preview |
+| Artifacts | Repo diffs | App-defined | Diffs **+ Document Stage** + **AI Diff co-review**: doc · slides · sheet · preview |
 | Memory | Product-private or none | Buffers / external vector DBs | Explicit `memory_*` + scoped SQLite + UI tab |
 | Business data | Files / DIY DB | LangGraph Store etc. | Built-in **Table Store** (`store.db`, schema-free) |
 | Connectors | MCP / plugins (varies) | DIY | MCP catalog + secrets + permissions + automations |
@@ -135,11 +137,12 @@ Use the CLI/TUI as your daily coding agent when the job is code. Stay in the sam
 
 ## Product value
 
-1. **Finish the job, not the chat** — Stage-native docs, Markdown slides, sheets, and HTML preview stay in the project filesystem.
-2. **Trust through transparency** — every Tool Call is persisted; recover mid-turn; edit a Tool Result and continue.
-3. **Scale capability without scaling complexity** — new power = new Tool / Skill / MCP server, not a new graph language.
-4. **Meet people where they already chat** — same Agent Loop from phone WeChat or Feishu cards; tools still run on your machine.
-5. **Local-first ownership** — config, DB, turn logs, secrets under `~/.danmo-work/`; bring your own model keys.
+1. **Co-edit Office with the Agent** — select scope, let AI propose, review AI Diff, Keep / Revert / accept hunks; Markdown & CSV stay source of truth.
+2. **Finish the job, not the chat** — Stage-native docs, Markdown slides, sheets, and HTML preview stay in the project filesystem.
+3. **Trust through transparency** — every Tool Call is persisted; recover mid-turn; edit a Tool Result and continue.
+4. **Scale capability without scaling complexity** — new power = new Tool / Skill / MCP server, not a new graph language.
+5. **Meet people where they already chat** — same Agent Loop from phone WeChat or Feishu cards; tools still run on your machine.
+6. **Local-first ownership** — config, DB, turn logs, secrets under `~/.danmo-work/`; bring your own model keys.
 
 ---
 
@@ -151,20 +154,36 @@ Architecture · highlights · capacity — bilingual animated tour (HTML first; 
 
 Interactive (ZH/EN toggle): [`docs/demo/product-tour.html`](docs/demo/product-tour.html) · [MP4](docs/demo/product-tour-en.mp4)
 
+**Human ↔ AI Office co-edit** (Intent → Propose → Review → Commit):
+
+[`docs/demo/office-coedit-tour.html`](docs/demo/office-coedit-tour.html)?lang=en&tour=1
+
 Three-pane workspace: project sidebar · agent execution Stream · right panel (Plan / Files / **Memory** / Changes / Terminal). Center **Document Stage** switches toolbar by file kind.
+
+### Human ↔ AI Office co-edit
+
+You and the Agent are **co-editors** — not “AI rewrites the file silently,” and not multiplayer CRDT docs. Four beats on Document Stage:
+
+1. **Intent** — selection / current slide / cell range + instruction; toolbar builds `[office-edit]`
+2. **Propose** — same Agent Loop (`read_file` + `apply_patch` / `edit`); pre-turn snapshot captured
+3. **Review** — Stage banner: View Diff · Keep · Revert; optionally accept selected hunks
+4. **Commit** — Keep leaves SoT; Revert restores the snapshot; trail stays in Turn Log / `file_changes`
+
+| Kind | Source of truth | Co-edit scope |
+|------|-----------------|---------------|
+| **Doc** | GFM `.md` | Selection or whole doc · TipTap |
+| **Slides** | Markdown pages split by `---` | Current page · Present HTML derived by Stage |
+| **Sheet** | `.csv` / `.danmo-sheet.json` | Selection range · grid + fill |
+| **Preview** | Generic `.html`, images, URLs | Click DOM → annotate → Composer |
+| **Code / Diff** | Project source / git / AI Diff | AI Diff review (coding stays on Composer) |
+
+Animated walkthrough: [`office-coedit-tour.html`](docs/demo/office-coedit-tour.html) · design notes: [`human-ai-coedit-plan.md`](docs/human-ai-coedit-plan.md)
 
 ### Document Stage — docs, slides, sheets, preview
 
-Open any project file from Files → center Stage. Editable kinds use format-specific editors + AI; generic HTML / images / URLs use **Preview** (URL bar + Design mode). AI polish runs as a normal **session turn**.
+Open any project file from Files → center Stage. Editable kinds use format-specific editors + AI; generic HTML / images / URLs use **Preview** (URL bar + Design mode). AI polish runs as a normal **session turn** (not a separate `/office/ai` API).
 
-| Kind | Source of truth | Editor / view |
-|------|-----------------|---------------|
-| **Doc** | GFM `.md` | TipTap (MD ↔ HTML in the edit session) |
-| **Slides** | Markdown with `---` pages | Edit markdown + present playable HTML |
-| **Sheet** | `.csv` / `.danmo-sheet.json` | Grid editor |
-| **Preview** | Generic `.html`, images, URLs | iframe / image; element pick → Composer |
-
-Toolbar builds an `[office-edit]` prompt → `POST /sessions/:id/turns`. Dirty content auto-saves before AI; scope can be selection / full document / this slide / whole sheet. After the turn, Stage reloads and restores scroll (and slides page index).
+Toolbar builds an `[office-edit]` prompt → `POST /sessions/:id/turns`. Dirty content auto-saves before AI; scope can be selection / full document / this slide / whole sheet. After the turn, Stage shows the **AI review banner** when the open file changed, then reloads and restores scroll (and slides page index).
 
 ### Point at the page — don’t describe it
 

@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Danmo Work — Human ↔ AI Office Co-edit</title>
+  <meta name="description" content="Bilingual animated explainer: Intent → Propose → Review → Commit for docs, slides, and sheets." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0b1220;
+      --bg-elev: #121a2b;
+      --line: rgba(148, 163, 184, 0.18);
+      --text: #e8eef9;
+      --muted: #94a3b8;
+      --faint: #64748b;
+      --accent: #2dd4bf;
+      --accent-2: #38bdf8;
+      --accent-warm: #fbbf24;
+      --add: #34d399;
+      --del: #f87171;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+      --font: "Noto Sans SC", "Sora", sans-serif;
+      --display: "Sora", "Noto Sans SC", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(1000px 520px at 12% -10%, rgba(45, 212, 191, 0.14), transparent 55%),
+        radial-gradient(900px 480px at 92% 0%, rgba(56, 189, 248, 0.10), transparent 50%),
+        linear-gradient(180deg, #0a101c 0%, var(--bg) 45%, #0d1524 100%);
+      -webkit-font-smoothing: antialiased;
+    }
+    .top {
+      width: min(1100px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 1.25rem 0 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .brand {
+      font-family: var(--display);
+      font-weight: 700;
+      font-size: 1.05rem;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+    .brand i {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: linear-gradient(135deg, #2dd4bf, #38bdf8);
+      display: grid; place-items: center;
+      font-style: normal; font-size: 0.85rem; color: #0b1220; font-weight: 800;
+    }
+    .nav {
+      display: flex; gap: 0.4rem; flex-wrap: wrap;
+      margin-left: 0.5rem;
+    }
+    .nav button, .lang button {
+      appearance: none; border: 1px solid var(--line);
+      background: rgba(18, 26, 43, 0.75); color: var(--muted);
+      border-radius: 999px; padding: 0.4rem 0.85rem;
+      font: inherit; font-size: 0.82rem; cursor: pointer;
+      transition: 160ms ease;
+    }
+    .nav button[aria-selected="true"], .lang button[aria-pressed="true"] {
+      color: var(--text);
+      border-color: rgba(45, 212, 191, 0.55);
+      background: rgba(45, 212, 191, 0.12);
+    }
+    .lang { margin-left: auto; display: flex; gap: 0.35rem; }
+
+    .page {
+      width: min(1100px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 1.25rem 0 2.5rem;
+    }
+    .eyebrow {
+      margin: 0 0 0.55rem;
+      font-family: var(--display);
+      font-size: 0.75rem; font-weight: 600;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--accent); text-align: center;
+    }
+    .title {
+      margin: 0; text-align: center;
+      font-family: var(--display);
+      font-size: clamp(1.65rem, 3.6vw, 2.4rem);
+      font-weight: 700; letter-spacing: -0.03em; line-height: 1.15;
+    }
+    .subtitle {
+      margin: 0.75rem auto 0; max-width: 44rem;
+      text-align: center; color: var(--muted);
+      font-size: 1rem; line-height: 1.6;
+    }
+
+    .stage {
+      margin-top: 1.75rem;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(22, 32, 51, 0.96), rgba(12, 18, 32, 0.98));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      min-height: 580px;
+    }
+    .stage-bar {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.8rem 1rem;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,0.02);
+    }
+    .lights { display: flex; gap: 0.4rem; }
+    .lights i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+    .lights i:nth-child(1) { background: #f87171; }
+    .lights i:nth-child(2) { background: #fbbf24; }
+    .lights i:nth-child(3) { background: #34d399; }
+    .stage-bar strong { font-family: var(--display); font-size: 0.9rem; }
+    .stage-bar em { margin-left: auto; font-style: normal; color: var(--faint); font-size: 0.78rem; }
+    .progress { height: 2px; background: rgba(148,163,184,0.12); }
+    .progress > i {
+      display: block; height: 100%; width: 0;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+    .is-playing .progress > i { animation: progress-fill var(--cycle, 11s) linear; }
+    @keyframes progress-fill { from { width: 0; } to { width: 100%; } }
+
+    .section { display: none; padding: 1.25rem 1.35rem 1.5rem; }
+    .section.is-active { display: block; animation: fade-in 420ms ease both; }
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    /* ---- Loop ---- */
+    .beat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.7rem;
+      margin-bottom: 1.15rem;
+    }
+    @media (max-width: 820px) { .beat-grid { grid-template-columns: 1fr 1fr; } }
+    .beat {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 0.85rem 0.9rem;
+      background: rgba(255,255,255,0.02);
+      position: relative;
+      overflow: hidden;
+    }
+    .beat::after {
+      content: "";
+      position: absolute; inset: auto 0 0; height: 2px;
+      background: linear-gradient(90deg, var(--accent), transparent);
+      transform: scaleX(0); transform-origin: left;
+    }
+    .section.is-active .beat { animation: beat-in 0.5s ease both; }
+    .section.is-active .beat:nth-child(1) { animation-delay: 0.05s; }
+    .section.is-active .beat:nth-child(2) { animation-delay: 0.18s; }
+    .section.is-active .beat:nth-child(3) { animation-delay: 0.31s; }
+    .section.is-active .beat:nth-child(4) { animation-delay: 0.44s; }
+    .section.is-active .beat::after { animation: bar-grow 0.7s ease both; }
+    .section.is-active .beat:nth-child(1)::after { animation-delay: 0.2s; }
+    .section.is-active .beat:nth-child(2)::after { animation-delay: 0.35s; }
+    .section.is-active .beat:nth-child(3)::after { animation-delay: 0.5s; }
+    .section.is-active .beat:nth-child(4)::after { animation-delay: 0.65s; }
+    @keyframes beat-in {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: none; }
+    }
+    @keyframes bar-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    .beat .num {
+      font-family: var(--display);
+      font-size: 0.72rem; font-weight: 700;
+      letter-spacing: 0.08em; color: var(--accent);
+      margin-bottom: 0.35rem;
+    }
+    .beat strong {
+      display: block;
+      font-family: var(--display);
+      font-size: 0.95rem;
+      margin-bottom: 0.3rem;
+    }
+    .beat p { margin: 0; color: var(--muted); font-size: 0.82rem; line-height: 1.45; }
+
+    .thesis {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 1rem;
+    }
+    @media (max-width: 900px) { .thesis { grid-template-columns: 1fr; } }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1rem;
+      background: rgba(255,255,255,0.02);
+    }
+    .panel h3 {
+      margin: 0 0 0.55rem;
+      font-family: var(--display);
+      font-size: 1rem;
+    }
+    .panel p { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
+    .vs {
+      display: grid; gap: 0.55rem; margin-top: 0.85rem;
+    }
+    .vs div {
+      display: grid; grid-template-columns: 5.5rem 1fr;
+      gap: 0.6rem; align-items: start;
+      font-size: 0.82rem;
+    }
+    .vs b {
+      font-family: var(--display); font-weight: 600;
+      color: var(--accent-2); font-size: 0.75rem;
+      letter-spacing: 0.04em; text-transform: uppercase;
+      padding-top: 0.1rem;
+    }
+    .vs span { color: var(--muted); line-height: 1.45; }
+    .pillars-mini {
+      display: grid; gap: 0.55rem;
+    }
+    .pillars-mini div {
+      border-left: 3px solid var(--accent);
+      padding: 0.45rem 0 0.45rem 0.75rem;
+    }
+    .pillars-mini strong {
+      display: block;
+      font-family: var(--display);
+      font-size: 0.88rem;
+      margin-bottom: 0.15rem;
+    }
+    .pillars-mini span { color: var(--muted); font-size: 0.8rem; line-height: 1.4; }
+
+    /* ---- Surfaces ---- */
+    .surf-tabs {
+      display: flex; gap: 0.4rem; flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+    .surf-tabs button {
+      appearance: none; border: 1px solid var(--line);
+      background: rgba(255,255,255,0.03); color: var(--muted);
+      border-radius: 10px; padding: 0.55rem 0.9rem;
+      font: inherit; font-size: 0.85rem; cursor: pointer;
+      display: flex; flex-direction: column; gap: 0.15rem; align-items: flex-start;
+      min-width: 7.5rem;
+    }
+    .surf-tabs button strong { color: inherit; font-family: var(--display); font-size: 0.9rem; }
+    .surf-tabs button small { color: var(--faint); font-size: 0.72rem; }
+    .surf-tabs button[aria-selected="true"] {
+      color: var(--text);
+      border-color: rgba(45, 212, 191, 0.5);
+      background: rgba(45, 212, 191, 0.1);
+    }
+    .surf-tabs button[aria-selected="true"] small { color: var(--muted); }
+
+    .surf-card { display: none; }
+    .surf-card.is-active { display: block; animation: fade-in 380ms ease both; }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 1fr 0.95fr;
+      gap: 0.85rem;
+      min-height: 320px;
+    }
+    @media (max-width: 900px) { .workspace { grid-template-columns: 1fr; } }
+
+    .mock {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #0e1524;
+      display: flex; flex-direction: column;
+    }
+    .mock-head {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid var(--line);
+      font-size: 0.78rem; color: var(--muted);
+      background: rgba(255,255,255,0.02);
+    }
+    .mock-head b { color: var(--text); font-family: var(--display); font-weight: 600; }
+    .banner {
+      display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap;
+      padding: 0.45rem 0.75rem;
+      background: rgba(45, 212, 191, 0.12);
+      border-bottom: 1px solid rgba(45, 212, 191, 0.25);
+      font-size: 0.78rem;
+      color: #99f6e4;
+    }
+    .banner .acts { margin-left: auto; display: flex; gap: 0.35rem; }
+    .banner button {
+      appearance: none; border: 1px solid rgba(45, 212, 191, 0.35);
+      background: rgba(15, 23, 42, 0.55); color: var(--text);
+      border-radius: 6px; padding: 0.2rem 0.55rem;
+      font: inherit; font-size: 0.72rem; cursor: default;
+    }
+    .banner button.primary {
+      background: rgba(45, 212, 191, 0.25);
+      border-color: rgba(45, 212, 191, 0.55);
+    }
+    .section.is-active .banner { animation: pulse-banner 2.4s ease-in-out infinite; }
+    @keyframes pulse-banner {
+      0%, 100% { background: rgba(45, 212, 191, 0.10); }
+      50% { background: rgba(45, 212, 191, 0.18); }
+    }
+
+    .doc-body { padding: 0.9rem 1rem; flex: 1; }
+    .doc-body h4 {
+      margin: 0 0 0.55rem;
+      font-family: var(--display);
+      font-size: 1.05rem;
+    }
+    .doc-body p { margin: 0 0 0.55rem; color: var(--muted); font-size: 0.86rem; line-height: 1.55; }
+    .ins {
+      background: rgba(52, 211, 153, 0.18);
+      color: #a7f3d0;
+      border-radius: 3px;
+      padding: 0 0.15rem;
+      animation: ins-flash 1.8s ease both;
+    }
+    .del {
+      background: rgba(248, 113, 113, 0.18);
+      color: #fecaca;
+      text-decoration: line-through;
+      border-radius: 3px;
+      padding: 0 0.15rem;
+    }
+    @keyframes ins-flash {
+      from { background: rgba(52, 211, 153, 0.45); }
+      to { background: rgba(52, 211, 153, 0.18); }
+    }
+
+    .slides-body {
+      padding: 0.75rem;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.55rem;
+      flex: 1;
+    }
+    .slide-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.03);
+      padding: 0.65rem;
+      min-height: 110px;
+      position: relative;
+    }
+    .slide-card.changed {
+      border-color: rgba(45, 212, 191, 0.55);
+      box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.15);
+    }
+    .slide-card .idx {
+      position: absolute; top: 0.4rem; right: 0.45rem;
+      font-size: 0.68rem; color: var(--faint); font-family: var(--display);
+    }
+    .slide-card .badge {
+      position: absolute; top: 0.35rem; left: 0.4rem;
+      font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em;
+      color: #0b1220; background: var(--accent);
+      border-radius: 4px; padding: 0.1rem 0.35rem;
+    }
+    .slide-card strong {
+      display: block; margin-top: 1.1rem;
+      font-size: 0.8rem; font-family: var(--display);
+    }
+    .slide-card p { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--muted); line-height: 1.35; }
+
+    .sheet-body { padding: 0.65rem; overflow: auto; flex: 1; }
+    table.sheet {
+      width: 100%; border-collapse: collapse; font-size: 0.78rem;
+    }
+    table.sheet th, table.sheet td {
+      border: 1px solid var(--line);
+      padding: 0.4rem 0.5rem;
+      text-align: left;
+    }
+    table.sheet th { background: rgba(255,255,255,0.04); color: var(--muted); font-weight: 500; }
+    table.sheet td.chg {
+      background: rgba(52, 211, 153, 0.16);
+      color: #a7f3d0;
+      animation: ins-flash 1.8s ease both;
+    }
+
+    .side {
+      display: flex; flex-direction: column; gap: 0.75rem;
+    }
+    .side .panel h3 { font-size: 0.92rem; }
+    .tool-flow { display: grid; gap: 0.4rem; margin-top: 0.65rem; }
+    .tool-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.45rem 0.55rem;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 0.78rem;
+      background: rgba(0,0,0,0.15);
+      opacity: 0;
+    }
+    .section.is-active .tool-row { animation: tool-in 0.45s ease both; }
+    .section.is-active .tool-row:nth-child(1) { animation-delay: 0.25s; }
+    .section.is-active .tool-row:nth-child(2) { animation-delay: 0.55s; }
+    .section.is-active .tool-row:nth-child(3) { animation-delay: 0.85s; }
+    .section.is-active .tool-row:nth-child(4) { animation-delay: 1.15s; }
+    @keyframes tool-in {
+      from { opacity: 0; transform: translateX(8px); }
+      to { opacity: 1; transform: none; }
+    }
+    .tool-row .tag {
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em;
+      color: var(--accent-2); font-family: var(--display);
+    }
+    .tool-row code { flex: 1; color: var(--text); font-size: 0.74rem; }
+    .tool-row .ok { color: var(--add); font-size: 0.72rem; font-weight: 600; }
+
+    .prompt-box {
+      margin-top: 0.65rem;
+      border: 1px dashed rgba(45, 212, 191, 0.35);
+      border-radius: 10px;
+      padding: 0.65rem 0.75rem;
+      background: rgba(45, 212, 191, 0.05);
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .prompt-box code {
+      display: block;
+      margin-top: 0.35rem;
+      color: #99f6e4;
+      font-size: 0.74rem;
+      white-space: pre-wrap;
+    }
+
+    /* ---- Review ---- */
+    .review-layout {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 1rem;
+    }
+    @media (max-width: 900px) { .review-layout { grid-template-columns: 1fr; } }
+
+    .diff-view {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #0c1320;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.78rem;
+    }
+    .diff-view header {
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-family: var(--font);
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .diff-view header b { color: var(--text); font-family: var(--display); }
+    .diff-line {
+      display: grid;
+      grid-template-columns: 1.6rem 1fr;
+      gap: 0.35rem;
+      padding: 0.2rem 0.65rem;
+      line-height: 1.45;
+    }
+    .diff-line .mark { color: var(--faint); text-align: center; }
+    .diff-line.add { background: rgba(52, 211, 153, 0.12); color: #a7f3d0; }
+    .diff-line.del { background: rgba(248, 113, 113, 0.12); color: #fecaca; }
+    .diff-line.hunk { color: var(--accent-2); background: rgba(56, 189, 248, 0.06); }
+    .diff-line.ctx { color: var(--muted); }
+    .hunk-check {
+      width: 1rem; height: 1rem; border-radius: 50%;
+      border: 1px solid var(--accent);
+      display: inline-grid; place-items: center;
+      font-size: 0.6rem; color: var(--accent);
+      margin-right: 0.25rem;
+    }
+    .hunk-check.on { background: rgba(45, 212, 191, 0.25); }
+    .section.is-active .diff-line.add,
+    .section.is-active .diff-line.del {
+      animation: line-in 0.4s ease both;
+    }
+    .section.is-active .diff-line.add:nth-of-type(4) { animation-delay: 0.35s; }
+    .section.is-active .diff-line.add:nth-of-type(5) { animation-delay: 0.5s; }
+    .section.is-active .diff-line.del:nth-of-type(3) { animation-delay: 0.2s; }
+    @keyframes line-in {
+      from { opacity: 0; transform: translateX(6px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .actions-panel .act-row {
+      display: flex; gap: 0.45rem; flex-wrap: wrap;
+      margin-top: 0.75rem;
+    }
+    .actions-panel .act-row span {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.45rem 0.7rem;
+      font-size: 0.8rem;
+      background: rgba(255,255,255,0.03);
+    }
+    .actions-panel .act-row span.keep {
+      border-color: rgba(52, 211, 153, 0.45);
+      color: #a7f3d0;
+    }
+    .actions-panel .act-row span.revert {
+      border-color: rgba(248, 113, 113, 0.4);
+      color: #fecaca;
+    }
+    .actions-panel .act-row span.hunk {
+      border-color: rgba(56, 189, 248, 0.4);
+      color: #bae6fd;
+    }
+    .note-list {
+      margin: 0.85rem 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid; gap: 0.5rem;
+    }
+    .note-list li {
+      padding-left: 0.85rem;
+      border-left: 2px solid var(--accent);
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .hint {
+      margin: 1.1rem 0 0;
+      text-align: center;
+      color: var(--faint);
+      font-size: 0.8rem;
+    }
+    .hint a { color: var(--accent-2); }
+
+    body.record .top { padding-top: 0.5rem; }
+    body.record .page { padding-bottom: 1rem; }
+    body.record .subtitle { max-width: 40rem; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      .section.is-active .tool-row { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><i>D</i> Danmo Work</div>
+    <nav class="nav" role="tablist">
+      <button type="button" data-section-tab="loop" aria-selected="true"></button>
+      <button type="button" data-section-tab="surfaces" aria-selected="false"></button>
+      <button type="button" data-section-tab="review" aria-selected="false"></button>
+    </nav>
+    <div class="lang">
+      <button type="button" data-lang="zh" aria-pressed="true">中文</button>
+      <button type="button" data-lang="en" aria-pressed="false">EN</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <p class="eyebrow" data-i18n="eyebrow"></p>
+    <h1 class="title" data-i18n="title"></h1>
+    <p class="subtitle" data-i18n="subtitle"></p>
+
+    <div class="stage" data-stage style="--cycle: 11000ms">
+      <div class="stage-bar">
+        <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
+        <strong data-i18n="stageTitle"></strong>
+        <em data-i18n="stageMeta"></em>
+      </div>
+      <div class="progress" aria-hidden="true"><i></i></div>
+
+      <!-- Loop -->
+      <section class="section is-active" data-section="loop">
+        <div class="beat-grid">
+          <article class="beat">
+            <div class="num">01 · INTENT</div>
+            <strong data-i18n="loop.b1t"></strong>
+            <p data-i18n="loop.b1d"></p>
+          </article>
+          <article class="beat">
+            <div class="num">02 · PROPOSE</div>
+            <strong data-i18n="loop.b2t"></strong>
+            <p data-i18n="loop.b2d"></p>
+          </article>
+          <article class="beat">
+            <div class="num">03 · REVIEW</div>
+            <strong data-i18n="loop.b3t"></strong>
+            <p data-i18n="loop.b3d"></p>
+          </article>
+          <article class="beat">
+            <div class="num">04 · COMMIT</div>
+            <strong data-i18n="loop.b4t"></strong>
+            <p data-i18n="loop.b4d"></p>
+          </article>
+        </div>
+        <div class="thesis">
+          <div class="panel">
+            <h3 data-i18n="loop.th"></h3>
+            <p data-i18n="loop.td"></p>
+            <div class="vs">
+              <div><b data-i18n="loop.v1k"></b><span data-i18n="loop.v1v"></span></div>
+              <div><b data-i18n="loop.v2k"></b><span data-i18n="loop.v2v"></span></div>
+              <div><b data-i18n="loop.v3k"></b><span data-i18n="loop.v3v"></span></div>
+            </div>
+          </div>
+          <div class="panel">
+            <h3 data-i18n="loop.ph"></h3>
+            <div class="pillars-mini">
+              <div><strong data-i18n="loop.p1t"></strong><span data-i18n="loop.p1d"></span></div>
+              <div><strong data-i18n="loop.p2t"></strong><span data-i18n="loop.p2d"></span></div>
+              <div><strong data-i18n="loop.p3t"></strong><span data-i18n="loop.p3d"></span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Surfaces -->
+      <section class="section" data-section="surfaces" hidden>
+        <div class="surf-tabs" role="tablist">
+          <button type="button" data-surf="0" aria-selected="true">
+            <strong data-i18n="surf.t0"></strong><small data-i18n="surf.d0"></small>
+          </button>
+          <button type="button" data-surf="1" aria-selected="false">
+            <strong data-i18n="surf.t1"></strong><small data-i18n="surf.d1"></small>
+          </button>
+          <button type="button" data-surf="2" aria-selected="false">
+            <strong data-i18n="surf.t2"></strong><small data-i18n="surf.d2"></small>
+          </button>
+        </div>
+
+        <article class="surf-card is-active" data-surf-card="0">
+          <div class="workspace">
+            <div class="mock">
+              <div class="mock-head"><b>Document Stage · Doc</b><span>brief.md</span></div>
+              <div class="banner">
+                <span data-i18n="surf.banner"></span>
+                <span class="acts">
+                  <button type="button" data-i18n="surf.diff"></button>
+                  <button type="button" class="primary" data-i18n="surf.keep"></button>
+                  <button type="button" data-i18n="surf.revert"></button>
+                </span>
+              </div>
+              <div class="doc-body">
+                <h4 data-i18n="surf.docTitle"></h4>
+                <p><span class="del" data-i18n="surf.docOld"></span> <span class="ins" data-i18n="surf.docNew"></span></p>
+                <p data-i18n="surf.docBody"></p>
+              </div>
+            </div>
+            <div class="side">
+              <div class="panel">
+                <h3 data-i18n="surf.flowTitle"></h3>
+                <p data-i18n="surf.docLead"></p>
+                <div class="prompt-box">
+                  <span data-i18n="surf.scopeDoc"></span>
+                  <code>[office-edit]
+action: polish
+path: brief.md
+scope: selection</code>
+                </div>
+                <div class="tool-flow">
+                  <div class="tool-row"><span class="tag">CALL</span><code>read_file · brief.md</code><span class="ok">OK</span></div>
+                  <div class="tool-row"><span class="tag">CALL</span><code>apply_patch · ¶2</code><span class="ok">OK</span></div>
+                  <div class="tool-row"><span class="tag">SNAP</span><code>pre-turn snapshot</code><span class="ok">OK</span></div>
+                  <div class="tool-row"><span class="tag">UI</span><code>AI Diff banner</code><span class="ok">live</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="surf-card" data-surf-card="1" hidden>
+          <div class="workspace">
+            <div class="mock">
+              <div class="mock-head"><b>Document Stage · Slides</b><span>deck.md</span></div>
+              <div class="banner">
+                <span data-i18n="surf.banner"></span>
+                <span class="acts">
+                  <button type="button" data-i18n="surf.diff"></button>
+                  <button type="button" class="primary" data-i18n="surf.keep"></button>
+                  <button type="button" data-i18n="surf.revert"></button>
+                </span>
+              </div>
+              <div class="slides-body">
+                <div class="slide-card">
+                  <span class="idx">01</span>
+                  <strong data-i18n="surf.sl1t"></strong>
+                  <p data-i18n="surf.sl1d"></p>
+                </div>
+                <div class="slide-card changed">
+                  <span class="badge">AI</span>
+                  <span class="idx">02</span>
+                  <strong data-i18n="surf.sl2t"></strong>
+                  <p data-i18n="surf.sl2d"></p>
+                </div>
+                <div class="slide-card">
+                  <span class="idx">03</span>
+                  <strong data-i18n="surf.sl3t"></strong>
+                  <p data-i18n="surf.sl3d"></p>
+                </div>
+              </div>
+            </div>
+            <div class="side">
+              <div class="panel">
+                <h3 data-i18n="surf.flowTitle"></h3>
+                <p data-i18n="surf.slidesLead"></p>
+                <div class="prompt-box">
+                  <span data-i18n="surf.scopeSlide"></span>
+                  <code>[office-edit]
+action: slide-page
+path: deck.md
+scope: slide
+pageIndex: 1</code>
+                </div>
+                <div class="tool-flow">
+                  <div class="tool-row"><span class="tag">CALL</span><code>read_file · deck.md</code><span class="ok">OK</span></div>
+                  <div class="tool-row"><span class="tag">CALL</span><code>edit · page 02</code><span class="ok">OK</span></div>
+                  <div class="tool-row"><span class="tag">MD</span><code>--- page SoT</code><span class="ok">OK</span></div>
+                  <div class="tool-row"><span class="tag">UI</span><code>review · Keep / Revert</code><span class="ok">live</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="surf-card" data-surf-card="2" hidden>
+          <div class="workspace">
+            <div class="mock">
+              <div class="mock-head"><b>Document Stage · Sheet</b><span>pipeline.csv</span></div>
+              <div class="banner">
+                <span data-i18n="surf.banner"></span>
+                <span class="acts">
+                  <button type="button" data-i18n="surf.diff"></button>
+                  <button type="button" class="primary" data-i18n="surf.keep"></button>
+                  <button type="button" data-i18n="surf.revert"></button>
+                </span>
+              </div>
+              <div class="sheet-body">
+                <table class="sheet">
+                  <thead>
+                    <tr>
+                      <th data-i18n="surf.th1"></th>
+                      <th data-i18n="surf.th2"></th>
+                      <th data-i18n="surf.th3"></th>
+                      <th data-i18n="surf.th4"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Acme</td><td>$48k</td><td>P1</td><td class="chg" data-i18n="surf.cell1"></td></tr>
+                    <tr><td>North</td><td>$22k</td><td>P2</td><td data-i18n="surf.cell2"></td></tr>
+                    <tr><td>Orbit</td><td>$15k</td><td>P2</td><td class="chg" data-i18n="surf.cell3"></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="side">
+              <div class="panel">
+                <h3 data-i18n="surf.flowTitle"></h3>
+                <p data-i18n="surf.sheetLead"></p>
+                <div class="prompt-box">
+                  <span data-i18n="surf.scopeSheet"></span>
+                  <code>[office-edit]
+action: sheet
+path: pipeline.csv
+scope: selection
+range: D2:D4</code>
+                </div>
+                <div class="tool-flow">
+                  <div class="tool-row"><span class="tag">CALL</span><code>read_file · pipeline.csv</code><span class="ok">OK</span></div>
+                  <div class="tool-row"><span class="tag">CALL</span><code>edit · range D2:D4</code><span class="ok">OK</span></div>
+                  <div class="tool-row"><span class="tag">SOT</span><code>CSV / .danmo-sheet.json</code><span class="ok">OK</span></div>
+                  <div class="tool-row"><span class="tag">UI</span><code>cell highlight + banner</code><span class="ok">live</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <!-- Review -->
+      <section class="section" data-section="review" hidden>
+        <div class="review-layout">
+          <div class="diff-view">
+            <header>
+              <b data-i18n="rev.diffTitle"></b>
+              <span>· brief.md</span>
+              <span style="margin-left:auto" data-i18n="rev.diffMeta"></span>
+            </header>
+            <div class="diff-line hunk"><span class="mark">◎</span><span><span class="hunk-check on">✓</span>@@ -12,4 +12,5 @@</span></div>
+            <div class="diff-line ctx"><span class="mark"> </span><span data-i18n="rev.l1"></span></div>
+            <div class="diff-line del"><span class="mark">-</span><span data-i18n="rev.l2"></span></div>
+            <div class="diff-line add"><span class="mark">+</span><span data-i18n="rev.l3"></span></div>
+            <div class="diff-line add"><span class="mark">+</span><span data-i18n="rev.l4"></span></div>
+            <div class="diff-line ctx"><span class="mark"> </span><span data-i18n="rev.l5"></span></div>
+            <div class="diff-line hunk"><span class="mark">○</span><span><span class="hunk-check">○</span>@@ -28,3 +29,3 @@</span></div>
+            <div class="diff-line del"><span class="mark">-</span><span data-i18n="rev.l6"></span></div>
+            <div class="diff-line add"><span class="mark">+</span><span data-i18n="rev.l7"></span></div>
+          </div>
+          <div class="panel actions-panel">
+            <h3 data-i18n="rev.title"></h3>
+            <p data-i18n="rev.lead"></p>
+            <div class="act-row">
+              <span class="keep" data-i18n="rev.keep"></span>
+              <span class="revert" data-i18n="rev.revert"></span>
+              <span class="hunk" data-i18n="rev.hunk"></span>
+            </div>
+            <ul class="note-list">
+              <li data-i18n="rev.n1"></li>
+              <li data-i18n="rev.n2"></li>
+              <li data-i18n="rev.n3"></li>
+              <li data-i18n="rev.n4"></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <p class="hint">
+      <span data-i18n="hint"></span>
+      · <a href="https://github.com/danmo-ai/danmo-work">danmo-ai/danmo-work</a>
+      · <a href="./product-tour.html">product tour</a>
+    </p>
+  </main>
+
+  <script>
+    const I18N = {
+      zh: {
+        eyebrow: "人机共审 · Office",
+        title: "人与 AI 协作编辑文档、幻灯片、表格",
+        subtitle: "不是聊天框里倒 Markdown，也不是石墨式多人共编。Document Stage 上走 Intent → Propose → Review → Commit：AI 改稿可见、可回滚、可分块接受，轨迹进 Turn Log。",
+        stageTitle: "Office Co-edit",
+        stageMeta: "Loop · Surfaces · Review",
+        nav: ["四拍协同环", "Doc / Slides / Sheet", "AI Diff 审阅"],
+        loop: {
+          b1t: "指定意图", b1d: "选区 / 当前页 / 单元格范围 + 一句指令；工具栏组装 [office-edit]。",
+          b2t: "AI 提案写盘", b2d: "同一条 Agent Loop：read_file + apply_patch；回合前自动快照。",
+          b3t: "人在 Stage 审阅", b3d: "顶栏 AI 变更条：查看 Diff · 保留 · 回滚；可按 hunk 接受。",
+          b4t: "提交真相源", b4d: "Accept 留下 SoT（MD / CSV）；Reject 恢复快照；全程可回放。",
+          th: "协同对象是人 ↔ AI",
+          td: "壁垒在 Agent Loop + Turn Log + Stage，不是 CRDT 多人文档。文本仍是真相源——编辑器可换，契约不变。",
+          v1k: "不是", v1v: "聊天倒稿、黑盒改写、或嵌入 OnlyOffice 套件。",
+          v2k: "而是", v2v: "propose → review → accept/reject；人决定什么进 SoT。",
+          v3k: "轨迹", v3v: "提案、接受、回滚都可审计；Web / 桌面 / IM 同一语义。",
+          ph: "三条原则",
+          p1t: "人始终可介入", p1d: "默认可看 Diff、可整文件回滚；桌面 Stage 默认审阅条。",
+          p2t: "文本 SoT", p2d: "Doc/Slides = Markdown；Sheet = CSV / .danmo-sheet.json。",
+          p3t: "审阅层增强", p3d: "不做 Yjs 多人文档；增强的是共审体验，不是 OT。",
+        },
+        surf: {
+          t0: "Doc", d0: "选区润色 · TipTap",
+          t1: "Slides", d1: "按页改稿 · MD 分页",
+          t2: "Sheet", d2: "选区填充 · CSV SoT",
+          banner: "AI 已修改此文件 — 请审阅后再继续",
+          diff: "查看 Diff", keep: "保留", revert: "回滚",
+          flowTitle: "本回合发生了什么",
+          docTitle: "产品定位",
+          docOld: "又一个 Coding Agent。",
+          docNew: "面向长程工作的 Work Agent——Coding 是车道，不是天花板。",
+          docBody: "Document Stage 交付报告与幻灯片；人通过 ask_user 与 AI Diff 对等参与。",
+          docLead: "选中段落 → 润色 / 改写；Turn 结束后 Stage 顶栏出现审阅条，可对照回合前快照。",
+          scopeDoc: "作用域：选区",
+          slidesLead: "当前页 scope；Markdown 以 --- 分页。AI 只改指定页，Present HTML 由 Stage 派生。",
+          scopeSlide: "作用域：当前页",
+          sl1t: "议程", sl1d: "问题 · 方案 · 节奏",
+          sl2t: "方案要点", sl2d: "人机共审四拍环 · 文本 SoT",
+          sl3t: "下一步", sl3d: "试点 · 指标 · 复盘",
+          sheetLead: "选区 range 写入指令；公式以字符串单元格展示。改完高亮变更格，并可整表回滚。",
+          scopeSheet: "作用域：选区 D2:D4",
+          th1: "客户", th2: "金额", th3: "优先级", th4: "下一步",
+          cell1: "本周演示", cell2: "发案例", cell3: "补 POC",
+        },
+        rev: {
+          diffTitle: "AI Diff",
+          diffMeta: "vs 回合前快照",
+          title: "保留、回滚，或只接受部分",
+          lead: "P0：整文件 Keep / Revert。P1：勾选 hunk 后接受所选——长文润色不必全盘接收。",
+          keep: "保留全部",
+          revert: "回滚到快照",
+          hunk: "接受所选 hunk",
+          l1: "产品定位",
+          l2: "又一个 Coding Agent。",
+          l3: "面向长程工作的 Work Agent——",
+          l4: "Coding 是车道，不是天花板。",
+          l5: "",
+          l6: "下周再谈。",
+          l7: "本周完成试点复盘。",
+          n1: "office-edit 走普通 session turn，不是独立 /office/ai 接口。",
+          n2: "权限门禁管高风险工具；内容层放行靠 AI Diff 审阅。",
+          n3: "IM 无 Stage 时 Auto-commit；回桌面仍可从 file_changes 回看。",
+          n4: "Code Stage 同样可走 AI Diff；改码不挂 Office 润色工具栏。",
+        },
+        hint: "HTML 可切换语言与章节 · 适合落地页嵌入与录屏导出",
+      },
+      en: {
+        eyebrow: "Human ↔ AI · Office",
+        title: "Co-edit docs, slides, and sheets with the Agent",
+        subtitle: "Not Markdown dumped into chat. Not multiplayer CRDT docs. On Document Stage: Intent → Propose → Review → Commit — visible edits, revertible, hunk-selectable, logged on the Turn trail.",
+        stageTitle: "Office Co-edit",
+        stageMeta: "Loop · Surfaces · Review",
+        nav: ["Four-beat loop", "Doc / Slides / Sheet", "AI Diff review"],
+        loop: {
+          b1t: "Intent", b1d: "Selection / current page / cell range + instruction; toolbar builds [office-edit].",
+          b2t: "Propose", b2d: "Same Agent Loop: read_file + apply_patch; pre-turn snapshot captured.",
+          b3t: "Review", b3d: "Stage banner: View Diff · Keep · Revert; accept selected hunks.",
+          b4t: "Commit", b4d: "Accept keeps SoT (MD / CSV); Reject restores snapshot; full replay.",
+          th: "The peer is human ↔ AI",
+          td: "The moat is Agent Loop + Turn Log + Stage — not CRDT multiplayer. Text stays source of truth; surfaces can evolve.",
+          v1k: "Not", v1v: "Chat dumps, opaque rewrites, or embedding an OOXML suite.",
+          v2k: "But", v2v: "propose → review → accept/reject; humans decide what enters SoT.",
+          v3k: "Trail", v3v: "Proposals, accepts, and reverts are auditable across Web / desktop / IM.",
+          ph: "Three principles",
+          p1t: "Humans can always intervene", p1d: "Diff visible by default; one-click whole-file revert on Stage.",
+          p2t: "Text SoT", p2d: "Doc/Slides = Markdown; Sheet = CSV / .danmo-sheet.json.",
+          p3t: "Review layer, not OT", p3d: "No Yjs multiplayer docs — we deepen co-review, not CRDT.",
+        },
+        surf: {
+          t0: "Doc", d0: "Selection polish · TipTap",
+          t1: "Slides", d1: "Page-scoped edit · MD",
+          t2: "Sheet", d2: "Range fill · CSV SoT",
+          banner: "AI changed this file — review before continuing",
+          diff: "View diff", keep: "Keep", revert: "Revert",
+          flowTitle: "What this turn did",
+          docTitle: "Positioning",
+          docOld: "Just another coding agent.",
+          docNew: "A Work Agent for long-horizon work — coding is a lane, not the ceiling.",
+          docBody: "Document Stage ships reports and decks; humans join via ask_user and AI Diff.",
+          docLead: "Select a paragraph → polish / rewrite. After the turn, Stage shows a review banner against the pre-turn snapshot.",
+          scopeDoc: "Scope: selection",
+          slidesLead: "Current-page scope; Markdown split by ---. AI edits one page; Present HTML is derived by Stage.",
+          scopeSlide: "Scope: current page",
+          sl1t: "Agenda", sl1d: "Problem · approach · cadence",
+          sl2t: "Approach", sl2d: "Four-beat co-review · text SoT",
+          sl3t: "Next", sl3d: "Pilot · metrics · retro",
+          sheetLead: "Selection range in the prompt; formulas stay string cells. Changed cells highlight; whole sheet can revert.",
+          scopeSheet: "Scope: selection D2:D4",
+          th1: "Account", th2: "ARR", th3: "Pri", th4: "Next step",
+          cell1: "Demo this week", cell2: "Send case", cell3: "Add POC",
+        },
+        rev: {
+          diffTitle: "AI Diff",
+          diffMeta: "vs pre-turn snapshot",
+          title: "Keep, revert, or accept hunks",
+          lead: "P0: whole-file Keep / Revert. P1: tick hunks and accept only what you want — polish long docs without taking everything.",
+          keep: "Keep all",
+          revert: "Revert to snapshot",
+          hunk: "Accept selected hunks",
+          l1: "Positioning",
+          l2: "Just another coding agent.",
+          l3: "A Work Agent for long-horizon work —",
+          l4: "coding is a lane, not the ceiling.",
+          l5: "",
+          l6: "Talk next week.",
+          l7: "Finish the pilot retro this week.",
+          n1: "office-edit is a normal session turn — not a separate /office/ai API.",
+          n2: "Permissions gate risky tools; content acceptance is AI Diff review.",
+          n3: "IM without Stage auto-commits; open the file later to inspect file_changes.",
+          n4: "Code Stage shares AI Diff; coding edits stay on Composer, not Office polish.",
+        },
+        hint: "HTML toggles language & sections · embed on the landing page or export for social",
+      },
+    };
+
+    const $ = (sel, el = document) => el.querySelector(sel);
+    const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
+
+    function getByPath(obj, path) {
+      return path.split(".").reduce((o, k) => (o == null ? o : o[k]), obj);
+    }
+
+    function applyI18n(lang) {
+      const dict = I18N[lang];
+      document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+      $$("[data-i18n]").forEach((node) => {
+        const key = node.getAttribute("data-i18n");
+        const val = getByPath(dict, key);
+        if (val != null) node.textContent = val;
+      });
+      $$("[data-section-tab]").forEach((btn, i) => {
+        btn.textContent = dict.nav[i];
+      });
+      $$("[data-lang]").forEach((btn) => {
+        btn.setAttribute("aria-pressed", String(btn.dataset.lang === lang));
+      });
+    }
+
+    function restartProgress(stage) {
+      stage.classList.remove("is-playing");
+      const bar = $(".progress > i", stage);
+      void bar.offsetWidth;
+      stage.classList.add("is-playing");
+    }
+
+    function replay(el) {
+      if (!el) return;
+      el.style.display = "none";
+      void el.offsetWidth;
+      el.style.display = "";
+    }
+
+    function init() {
+      const params = new URLSearchParams(location.search);
+      let lang = params.get("lang") === "en" ? "en" : "zh";
+      let section = params.get("section") || "loop";
+      if (!["loop", "surfaces", "review"].includes(section)) section = "loop";
+      if (params.has("record")) document.body.classList.add("record");
+      const auto = params.has("tour") || params.has("record");
+
+      const stage = $("[data-stage]");
+      const sectionTabs = $$("[data-section-tab]");
+      const sections = $$("[data-section]");
+
+      let surf = 0;
+      let timer;
+
+      const fast = params.has("record") || params.get("tour") === "fast";
+      const CYCLE = fast
+        ? { loop: 6500, surfaces: 5000, review: 6500 }
+        : { loop: 11000, surfaces: 9000, review: 10000 };
+
+      function showSection(name, { restartSurf = true } = {}) {
+        section = name;
+        sectionTabs.forEach((btn) => {
+          btn.setAttribute("aria-selected", String(btn.dataset.sectionTab === name));
+        });
+        sections.forEach((sec) => {
+          const on = sec.dataset.section === name;
+          sec.classList.toggle("is-active", on);
+          sec.toggleAttribute("hidden", !on);
+          if (on) replay(sec);
+        });
+        stage.style.setProperty("--cycle", `${CYCLE[name]}ms`);
+        restartProgress(stage);
+        if (name === "surfaces" && restartSurf) showSurf(0);
+      }
+
+      function showSurf(i) {
+        surf = i;
+        $$("[data-surf]").forEach((btn, idx) => {
+          btn.setAttribute("aria-selected", String(idx === i));
+        });
+        $$("[data-surf-card]").forEach((card, idx) => {
+          const on = idx === i;
+          card.classList.toggle("is-active", on);
+          card.toggleAttribute("hidden", !on);
+          if (on) replay(card);
+        });
+      }
+
+      sectionTabs.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          clearInterval(timer);
+          showSection(btn.dataset.sectionTab);
+          if (auto) startTour();
+        });
+      });
+
+      $$("[data-surf]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          clearInterval(timer);
+          showSurf(Number(btn.dataset.surf));
+          if (auto) startTour();
+        });
+      });
+
+      $$("[data-lang]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          lang = btn.dataset.lang;
+          applyI18n(lang);
+          const url = new URL(location.href);
+          url.searchParams.set("lang", lang);
+          history.replaceState(null, "", url);
+        });
+      });
+
+      const order = ["loop", "surfaces", "review"];
+      function startTour() {
+        clearInterval(timer);
+        let tick = 0;
+        const plan = [];
+        order.forEach((name) => {
+          if (name === "surfaces") {
+            for (let i = 0; i < 3; i++) plan.push({ section: name, surf: i, ms: CYCLE.surfaces / 3 });
+          } else {
+            plan.push({ section: name, ms: CYCLE[name] });
+          }
+        });
+        const run = () => {
+          const step = plan[tick % plan.length];
+          showSection(step.section, { restartSurf: step.surf == null });
+          if (step.surf != null) showSurf(step.surf);
+          tick += 1;
+          timer = setTimeout(run, step.ms);
+        };
+        run();
+      }
+
+      applyI18n(lang);
+      showSection(section);
+      if (auto) startTour();
+    }
+
+    init();
+  </script>
+</body>
+</html>

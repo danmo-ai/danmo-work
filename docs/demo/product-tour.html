@@ -760,6 +760,7 @@
     <p class="hint">
       <span data-i18n="hint"></span>
       · <a href="https://github.com/danmo-ai/danmo-work">danmo-ai/danmo-work</a>
+      · <a href="./office-coedit-tour.html">Office co-edit</a>
     </p>
   </main>
 
@@ -768,7 +769,7 @@
       zh: {
         eyebrow: "产品演示",
         title: "架构 · 亮点 · 产能，一条思维链讲完",
-        subtitle: "不是又一个 Coding CLI。一流 Agent Loop 底盘，面向长程工作：文档、幻灯片、表格、MCP 与 IM，同一条 Turn Log。",
+          subtitle: "不是又一个 Coding CLI。一流 Agent Loop 底盘，面向长程工作：文档、幻灯片、表格上的人机共审，加上 MCP 与 IM，同一条 Turn Log。",
         stageTitle: "Danmo Work Tour",
         stageMeta: "Architecture · Highlights · Capacity",
         nav: ["架构设计", "亮点功能", "产能示例"],
@@ -788,15 +789,15 @@
           l4: "work.db · store.db · logs",
         },
         hi: {
-          t0: "Document Stage", d0: "文档 / 幻灯片 / 表格 / 预览",
+          t0: "Document Stage", d0: "文档 / 幻灯片 / 表格 · AI Diff 共审",
           t1: "多 Agent 委派", d1: "同一思维链，硬隔离",
           t2: "Turn Log", d2: "恢复 · 回放 · 改结果",
           t3: "Memory + Table Store", d3: "可检视记忆与业务流水",
           t4: "MCP + 自动化", d4: "连接器、密钥、cron/webhook",
           t5: "IM 通道", d5: "微信 · 飞书 · 企微 · QQ",
-          c0t: "产物落在 Stage，不在聊天框",
-          c0l: "按文件类型切换编辑器与 AI 作用域；HTML/图片走 Preview，点选批注直接改。",
-          c0m: "可编辑 · 可预览 · 可 AI 润色",
+          c0t: "人与 AI 共审编辑 Office",
+          c0l: "选区 / 页 / 表 → [office-edit]；Turn 后 AI Diff：保留 · 回滚 · 分块接受。文本仍是真相源。",
+          c0m: "Intent · Propose · Review · Commit",
           c1t: "子 Agent 是 Tool，不是并行黑盒",
           c1l: "delegate_agent 开独立 Turn；父链只收 Report，轨迹仍可检视。",
           c2t: "执行轨迹可信任",
@@ -840,7 +841,7 @@
       en: {
         eyebrow: "Product tour",
         title: "Architecture, highlights, capacity — one thinking trail",
-        subtitle: "Not just another coding CLI. Coding-agent-grade loop for long-horizon work: docs, slides, sheets, MCP & IM on one Turn Log.",
+          subtitle: "Not just another coding CLI. Coding-agent-grade loop for long-horizon work: human↔AI Office co-edit, plus MCP & IM on one Turn Log.",
         stageTitle: "Danmo Work Tour",
         stageMeta: "Architecture · Highlights · Capacity",
         nav: ["Architecture", "Highlights", "Capacity"],
@@ -860,15 +861,15 @@
           l4: "work.db · store.db · logs",
         },
         hi: {
-          t0: "Document Stage", d0: "Docs / slides / sheets / preview",
+          t0: "Document Stage", d0: "Docs / slides / sheets · AI Diff review",
           t1: "Multi-agent", d1: "Same chain, hard isolation",
           t2: "Turn Log", d2: "Resume · replay · edit",
           t3: "Memory + Table Store", d3: "Visible memory & business rows",
           t4: "MCP + Automations", d4: "Connectors, secrets, cron/webhook",
           t5: "IM channels", d5: "WeChat · Feishu · WeCom · QQ",
-          c0t: "Artifacts live in Stage, not the chat void",
-          c0l: "Editors switch by file kind; Preview supports element annotate → edit.",
-          c0m: "Edit · preview · AI polish",
+          c0t: "Human ↔ AI Office co-edit",
+          c0l: "Selection / page / sheet → [office-edit]; after the turn, AI Diff: Keep · Revert · hunks. Text stays SoT.",
+          c0m: "Intent · Propose · Review · Commit",
           c1t: "Sub-agents are Tools, not opaque sessions",
           c1l: "delegate_agent opens an isolated Turn; parent continues on Report.",
           c2t: "A trail you can trust",
