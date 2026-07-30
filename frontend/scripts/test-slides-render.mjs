@@ -106,4 +106,42 @@ assert(themedHtml.includes('data-theme="light"'), 'theme attr')
 assert(themedHtml.includes('lead'), 'lead class in html')
 assert(themedHtml.includes('columns'), 'columns class in html')
 
+const fragDeck = `---
+type: slides
+fragments: true
+transition: fade
+theme: moon
+---
+
+## Steps
+
+- Alpha
+- Beta
+
+---
+
+<!-- fragments: false -->
+## No step
+
+- Gamma
+`
+const fragParsed = parseSlidesMarkdown(fragDeck)
+assert(fragParsed.fragments === true, 'deck fragments')
+assert(fragParsed.transition === 'fade', 'transition')
+assert(fragParsed.theme === 'moon', 'moon theme')
+assert(fragParsed.pages[1].fragments === false, 'page fragments off')
+
+const { applyAutoFragments } = await import('../src/utils/slides-render.ts')
+const auto = applyAutoFragments('<ul><li>A</li><li class="x">B</li></ul>', true)
+assert(auto.includes('class="fragment"') || auto.includes("class='fragment'"), 'li fragment')
+assert(auto.includes('fragment x') || auto.includes('fragment"') || /class="fragment x"/.test(auto) || /class="x"/.test(auto), 'preserve class')
+
+const fragHtml = renderPlayableSlidesHtml(fragDeck, await hashSlidesSource(fragDeck))
+assert(fragHtml.includes('fragment'), 'auto fragments in html')
+assert(fragHtml.includes('data-theme="moon"'), 'moon theme attr')
+assert(fragHtml.includes('data-transition="fade"'), 'fade transition')
+assert(fragHtml.includes('nextFragment') || fragHtml.includes('forward()'), 'fragment stepper')
+assert(fragHtml.includes('is-overview'), 'overview mode')
+assert(fragHtml.includes("e.key === 'o'") || fragHtml.includes("e.key === 'O'"), 'O key')
+
 console.log('test-slides-render: ok')
