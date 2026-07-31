@@ -9,185 +9,127 @@
 
 **Open-source AI Work Agent** — coding-agent-grade loop for long-horizon work. Self-hosted, multi-agent, MIT.
 
-Not just another powerful coding agent. Not a workflow graph you babysit. Danmo Work is a **human–AI co-thinking workspace**: the same Agent Loop that handles files, shell, and multi-agent coding also **co-edits docs, slides, and sheets on Document Stage** — propose → review → keep/revert — with every Tool Call logged so you can **resume, replay, and edit the thinking trail**.
+A human–AI co-thinking workspace: the same Agent Loop handles files, shell, and multi-agent coding, and **co-edits docs, slides, and sheets** on Document Stage (propose → review → keep/revert). Every Tool Call is logged — resume, replay, or edit the trail and continue.
 
-> Code, research reports, decks, sheets, demos, and automations — from desktop, web, CLI/TUI, or WeChat / Feishu / WeCom / QQ — on one trail.
+> Code, reports, decks, sheets, demos, automations — from Web, Desktop, CLI/TUI, or WeChat / Feishu / WeCom / QQ — on one trail.
 
 | | |
 |--|--|
-| **Positioning** | General-purpose **Work Agent** — coding is a first-class lane, not the ceiling |
-| **Control** | **Pure LLM-driven** — no hand-maintained graph / role router / product “mode” |
-| **Abstraction** | **Everything is a Tool** — `delegate_agent`, `ask_user`, memory, table store, MCP, files… |
+| **Positioning** | General-purpose **Work Agent** — coding is a lane, not the ceiling |
+| **Control** | **Pure LLM-driven** — no hand-maintained graph / role router / mode |
+| **Abstraction** | **Everything is a Tool** — `delegate_agent`, `ask_user`, memory, table store, MCP… |
 | **State** | **Log is state** — Turn Log → recover, replay, edit a result and continue |
-| **Office** | **Human ↔ AI co-edit** — Document Stage + AI Diff (Keep / Revert / hunks); text stays SoT |
+| **Office** | Document Stage + AI Diff (Keep / Revert / hunks); text stays source of truth |
 | **Surfaces** | Web · Desktop · CLI · TUI · IM channels · Document Stage |
 
-MIT · Anthropic & OpenAI-compatible providers · Local-first data under `~/.danmo-work/`
+MIT · Anthropic & OpenAI-compatible providers · Local-first under `~/.danmo-work/`
 
 ---
 
-## Why Danmo Work (in 30 seconds)
+## Install
 
-Most open-source agents stop at **writing code**: terminal pair-programmers, IDE plugins, sandboxed software engineers. Strong loops — narrow job.
+| Platform | Package |
+|----------|---------|
+| **macOS** (Apple Silicon) | Homebrew (recommended) or `.dmg` |
+| **Windows** | Setup `.exe` |
+| **Linux** (x86_64) | AppImage / `.deb` |
 
-Danmo Work keeps a **coding-agent-grade** execution core, then asks a wider question: **how do humans and models co-think through real work** — code, research, docs, slides, ops, connectors — over a long horizon, with a trail you can trust?
+All binaries: [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest).
 
-| You get | Instead of |
-|---------|------------|
-| One thinking chain + hard-isolated sub-agents | Parallel sessions / opaque handoffs |
-| Document Stage + **AI Diff co-review** (doc / slides / sheet) | Chat that dumps Markdown into a void |
-| Keep / Revert / accept hunks vs pre-turn snapshot | Opaque AI overwrite you can’t unwind |
-| Inspectable Memory + schema-free Table Store | Black-box product memory or another vector DB |
-| MCP Connectors + cron/webhook Automations | One-off scripts glued outside the loop |
-| WeChat · Feishu · WeCom · QQ on the same loop | “Deploy a public webhook” IM hacks |
-| Resume / replay / edit Tool Results | Restart the chat and hope |
-
-**Mainstream:** developer or product orchestrates; LLM executes.  
-**Danmo Work:** LLM orchestrates on one chain; you supply capability units; humans join as peers via `ask_user`.
-
----
-
-## Try it
-
-| Platform | Channel | How |
-|----------|---------|-----|
-| **macOS** (Apple Silicon) | **Homebrew** (recommended if you use brew) | see below |
-| **macOS** (Apple Silicon) | `.dmg` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
-| **Windows** | Setup `.exe` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
-| **Linux** (x86_64) | AppImage / `.deb` | [GitHub Releases](https://github.com/danmo-ai/danmo-work/releases/latest) |
-
-### macOS — Homebrew
+### macOS
 
 ```bash
 brew tap danmo-ai/tap
 brew install --cask danmo-work
+# upgrade: brew update && brew upgrade --cask danmo-work
 ```
 
-Upgrade later: `brew update && brew upgrade --cask danmo-work`.
+Fallback: `brew tap danmo-ai/danmo-work https://github.com/danmo-ai/danmo-work.git`
 
-Fallback (tap this repo directly):  
-`brew tap danmo-ai/danmo-work https://github.com/danmo-ai/danmo-work.git`
-
-The cask downloads the `.dmg` from GitHub Releases. (A China mirror at `releases.danmo.ai` is optional later.)
-
-Not Apple-notarized yet — on first launch, right-click the app → **Open** (or allow under System Settings → Privacy & Security).
-
-### macOS — DMG
-
-Download `Danmo.Work_*_arm64.dmg` from [Releases](https://github.com/danmo-ai/danmo-work/releases/latest), drag into Applications, then right-click → Open the first time.
+Or download `Danmo.Work_*_arm64.dmg` from Releases → Applications. Not Apple-notarized yet — first launch: right-click → **Open**.
 
 ### Windows
 
-Download `Danmo.Work_*_x64-setup.exe` from [Releases](https://github.com/danmo-ai/danmo-work/releases/latest).
-
-Until Authenticode is enabled in release CI ([SignPath setup](docs/windows-authenticode.md)), SmartScreen may warn — **More info → Run anyway**. On Windows 11 with Smart App Control, unsigned installers can be hard-blocked; signing is the real fix.
+Download `Danmo.Work_*_x64-setup.exe`. Until Authenticode is enabled ([SignPath](docs/windows-authenticode.md)), SmartScreen may warn — **More info → Run anyway**.
 
 ### Linux
 
-Download from [Releases](https://github.com/danmo-ai/danmo-work/releases/latest):
+```bash
+chmod +x Danmo.Work_*_amd64.AppImage && ./Danmo.Work_*_amd64.AppImage
+# or: sudo apt install ./Danmo.Work_*_amd64.deb
+```
 
-- **AppImage** — `chmod +x Danmo.Work_*_amd64.AppImage && ./Danmo.Work_*_amd64.AppImage`
-- **`.deb`** — `sudo apt install ./Danmo.Work_*_amd64.deb` (Debian/Ubuntu)
-
-Needs a desktop environment with WebKitGTK. Auto-update uses the AppImage channel.
+Needs WebKitGTK. Auto-update uses the AppImage channel.
 
 ### From source
 
-Needs sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui):
+Needs sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui). Then:
 
 ```bash
 make dev-web   # → http://localhost:5801/app/
 ```
 
-Add an LLM API key in the UI (or `~/.danmo-work/config.yaml`). Full flow: [Quick start](#quick-start).
+Add an LLM API key in the UI or `~/.danmo-work/config.yaml`. See [Development](#development).
 
 ---
 
-## Who it’s for
+## Highlights
 
-- **Builders & operators** who need an agent that finishes *work products*, not only PRs
-- **Developers** who want a coding-agent-grade CLI/TUI — and the same loop for everything after the diff
-- **Teams behind a firewall** who want Feishu / WeCom / QQ without a public callback URL
-- **Power users** who want Memory, Table Store, and Turn Log to be **visible and editable**
-- **Anyone tired of Graph/Role frameworks** that fight the model’s planning instead of feeding it Tools
+| You get | Instead of |
+|---------|------------|
+| One thinking chain + hard-isolated sub-agents | Parallel sessions / opaque handoffs |
+| Document Stage + **AI Diff** (doc / slides / sheet) | Chat that dumps Markdown into a void |
+| Keep / Revert / accept hunks vs pre-turn snapshot | Opaque overwrite you can’t unwind |
+| Inspectable Memory + schema-free Table Store | Black-box memory or another vector DB |
+| MCP + cron/webhook Automations | Scripts glued outside the loop |
+| WeChat · Feishu · WeCom · QQ on the same loop | Public-webhook IM hacks |
+| Resume / replay / edit Tool Results | Restart the chat and hope |
 
----
+**Mainstream:** developer orchestrates; LLM executes.  
+**Danmo Work:** LLM orchestrates on one chain; you supply Tools; humans join via `ask_user`.
 
-## Work Agent, not coding-only — comparison
-
-Typical OSS coding agents excel at **code-centric loops**. Danmo Work runs a loop in that class — then adds **work runtime + co-thinking UX** on the same trail.
-
-| Dimension | Typical OSS coding agents | Agent frameworks (LangGraph / CrewAI / AutoGen) | **Danmo Work** |
-|-----------|---------------------------|--------------------------------------------------|----------------|
-| Primary job | Code, PR, terminal | App/workflow orchestration | **Long-horizon work (incl. coding) + artifacts** |
-| Agent loop | Strong, code-focused | Developer-written graph / roles | **Coding-agent-grade + pure LLM Tool Call planning** |
-| Sub-agents | Extra session or skill | Handoff / crew roles | `delegate_agent` on **same chain**, hard isolation |
-| Human in the loop | Approvals / chat | Preset nodes | `ask_user` Tool — model chooses when |
-| Artifacts | Repo diffs | App-defined | Diffs **+ Document Stage** + **AI Diff co-review**: doc · slides · sheet · preview |
-| Memory | Product-private or none | Buffers / external vector DBs | Explicit `memory_*` + scoped SQLite + UI tab |
-| Business data | Files / DIY DB | LangGraph Store etc. | Built-in **Table Store** (`store.db`, schema-free) |
-| Connectors | MCP / plugins (varies) | DIY | MCP catalog + secrets + permissions + automations |
-| IM / chat ingress | Rare / DIY | Rare | **WeChat · Feishu · WeCom · QQ** (outbound WS) |
-| Durability | Session / container | Optional checkpointer | **Turn Log = state** (resume · replay · edit) |
-| License / host | Mostly OSS | OSS libs | **MIT, self-hosted**, Web/Desktop/CLI/TUI |
-
-Use the CLI/TUI as your daily coding agent when the job is code. Stay in the same Work Agent when the job is **the work around the code** — docs, decks, data, connectors, and IM.
+| Dimension | Typical coding agents | Agent frameworks | **Danmo Work** |
+|-----------|----------------------|------------------|----------------|
+| Job | Code / PR / terminal | Workflow graphs | Long-horizon work + artifacts |
+| Loop | Strong, code-focused | Dev-written graph / roles | Coding-grade + pure LLM Tool planning |
+| Sub-agents | Extra session / skill | Handoff / crew | `delegate_agent` on same chain |
+| Human | Approvals / chat | Preset nodes | `ask_user` — model chooses when |
+| Artifacts | Repo diffs | App-defined | Diffs + Document Stage + AI Diff |
+| Durability | Session / container | Optional checkpointer | **Turn Log = state** |
+| Host | Mostly OSS | OSS libs | **MIT, self-hosted** |
 
 ---
 
-## Product value
-
-1. **Co-edit Office with the Agent** — select scope, let AI propose, review AI Diff, Keep / Revert / accept hunks; Markdown & CSV stay source of truth.
-2. **Finish the job, not the chat** — Stage-native docs, Markdown slides, sheets, and HTML preview stay in the project filesystem.
-3. **Trust through transparency** — every Tool Call is persisted; recover mid-turn; edit a Tool Result and continue.
-4. **Scale capability without scaling complexity** — new power = new Tool / Skill / MCP server, not a new graph language.
-5. **Meet people where they already chat** — same Agent Loop from phone WeChat or Feishu cards; tools still run on your machine.
-6. **Local-first ownership** — config, DB, turn logs, secrets under `~/.danmo-work/`; bring your own model keys.
-
----
-
-## See it
-
-Architecture · highlights · capacity — bilingual animated tour (HTML first; GIF/MP4 for sharing):
+## Workspace
 
 ![Product tour (EN)](docs/demo/product-tour-en.gif)
 
-Interactive (ZH/EN toggle): [`docs/demo/product-tour.html`](docs/demo/product-tour.html) · [MP4](docs/demo/product-tour-en.mp4)
+[Interactive tour](docs/demo/product-tour.html) · [MP4](docs/demo/product-tour-en.mp4) · [Office co-edit tour](docs/demo/office-coedit-tour.html)?lang=en&tour=1
 
-**Human ↔ AI Office co-edit** (Intent → Propose → Review → Commit):
-
-[`docs/demo/office-coedit-tour.html`](docs/demo/office-coedit-tour.html)?lang=en&tour=1
-
-Three-pane workspace: project sidebar · agent execution Stream · right panel (Plan / Files / **Memory** / Changes / Terminal). Center **Document Stage** switches toolbar by file kind.
+Three panes: project sidebar · agent Stream · right panel (Plan / Files / **Memory** / Changes / Terminal). Center **Document Stage** switches toolbar by file kind.
 
 ### Human ↔ AI Office co-edit
 
-You and the Agent are **co-editors** — not “AI rewrites the file silently,” and not multiplayer CRDT docs. Four beats on Document Stage:
+Not silent overwrite, not CRDT multiplayer — four beats on Document Stage:
 
-1. **Intent** — selection / current slide / cell range + instruction; toolbar builds `[office-edit]`
-2. **Propose** — same Agent Loop (`read_file` + `apply_patch` / `edit`); pre-turn snapshot captured
-3. **Review** — Stage banner: View Diff · Keep · Revert; optionally accept selected hunks
-4. **Commit** — Keep leaves SoT; Revert restores the snapshot; trail stays in Turn Log / `file_changes`
+1. **Intent** — selection / slide / cell range + instruction → `[office-edit]`
+2. **Propose** — same Agent Loop; pre-turn snapshot
+3. **Review** — View Diff · Keep · Revert · accept hunks
+4. **Commit** — Keep keeps SoT; Revert restores snapshot; trail in Turn Log
 
-| Kind | Source of truth | Co-edit scope |
-|------|-----------------|---------------|
-| **Doc** | GFM `.md` | Selection or whole doc · TipTap |
-| **Slides** | Markdown pages split by `---` | Current page · Present HTML derived by Stage |
-| **Sheet** | `.csv` / `.danmo-sheet.json` | Selection range · grid + fill |
-| **Preview** | Generic `.html`, images, URLs | Click DOM → annotate → Composer |
-| **Code / Diff** | Project source / git / AI Diff | AI Diff review (coding stays on Composer) |
+| Kind | Source of truth | Scope |
+|------|-----------------|-------|
+| **Doc** | GFM `.md` | Selection or whole doc |
+| **Slides** | Markdown pages (`---`) | Current page |
+| **Sheet** | `.csv` / `.danmo-sheet.json` | Selection range |
+| **Preview** | `.html`, images, URLs | Click DOM → annotate → Composer |
+| **Code / Diff** | Source / git / AI Diff | AI Diff review |
 
-Animated walkthrough: [`office-coedit-tour.html`](docs/demo/office-coedit-tour.html) · design notes: [`human-ai-coedit-plan.md`](docs/human-ai-coedit-plan.md)
+Design notes: [`docs/human-ai-coedit-plan.md`](docs/human-ai-coedit-plan.md).
 
-### Document Stage — docs, slides, sheets, preview
+### Preview annotate
 
-Open any project file from Files → center Stage. Editable kinds use format-specific editors + AI; generic HTML / images / URLs use **Preview** (URL bar + Design mode). AI polish runs as a normal **session turn** (not a separate `/office/ai` API).
-
-Toolbar builds an `[office-edit]` prompt → `POST /sessions/:id/turns`. Dirty content auto-saves before AI; scope can be selection / full document / this slide / whole sheet. After the turn, Stage shows the **AI review banner** when the open file changed, then reloads and restores scroll (and slides page index).
-
-### Point at the page — don’t describe it
-
-In Stage **Preview**, click a DOM element, annotate, confirm into Composer. The model gets exact HTML/CSS context — **select → annotate → edit**.
+In Stage **Preview**, click a DOM element, annotate, send to Composer — the model gets exact HTML/CSS context.
 
 ![Browser element annotate](docs/screenshots/ui-browser-annotate.png)
 
@@ -195,126 +137,98 @@ In Stage **Preview**, click a DOM element, annotate, confirm into Composer. The 
 |-------------------|------------------|-----------|
 | ![Market report](docs/screenshots/ui-market-report.png) | ![Cooking demo](docs/screenshots/ui-cooking-demo.png) | ![Snake game](docs/screenshots/ui-snake-game.png) |
 
-- **Research & report** — web fetch, structured writing, live HTML preview  
-- **Interactive demo** — step-by-step demo with playback controls  
-- **Mini-game** — generate a playable page, then iterate via element annotate  
+### Channels
 
-### Channels (WeChat · Feishu · WeCom · QQ)
+Same Agent Loop from IM; tools run on your machine. Sessions keyed by `(channel, account, peer)` — no cross-talk.
 
-Same Agent Loop from IM — tools on your machine; Turn Log in Teams. Sessions keyed by `(channel, account, peer)` so multiple channels on one project **don’t mix chats**.
+| Channel | Connect | Notes |
+|---------|---------|-------|
+| **WeChat** | iLink long-poll | Default project, text-menu approvals, media in |
+| **Feishu** | Outbound WebSocket | No public URL; cards, approvals, `/project` |
+| **WeCom** | Outbound WebSocket | Smart Robot; stream placeholder → final answer |
+| **QQ** | Outbound Gateway WS | Keyboard approvals, C2C stream, group tool deny |
 
-| Channel | How it connects | Highlights |
-|---------|-----------------|------------|
-| **WeChat** | Phone WeChat (iLink long-poll) | Account default project + `/project`; text-menu approvals; image/file in |
-| **Feishu** | Outbound WebSocket (no public URL) | Cards/forms, approvals, progress, media, `/project` |
-| **WeCom** | Outbound WebSocket | Admin Smart Robot → Settings; stream placeholder then final answer |
-| **QQ** | Outbound Gateway WebSocket | Keyboard approvals, C2C stream, group deny-tools, `/project` |
+| Desktop | Phone |
+|---------|-------|
+| ![WeChat session](docs/screenshots/wx1.png) | ![WeChat chat](docs/screenshots/wx2.png) |
 
-| Desktop (WeChat-tagged session) | Phone (WeChat chat) |
-|---------------------------------|---------------------|
-| ![WeChat session in Teams](docs/screenshots/wx1.png) | ![DQ-Teams AI in WeChat](docs/screenshots/wx2.png) |
+### Experts, skills, connectors
 
-### Experts, skills, connectors & data plane
+Capability units — not a workflow graph. Summon skills via `@` in Composer.
 
-Edit prompts, Agentskills (`SKILL.md`), sandbox / delegation in the UI — **capability units**, not a workflow graph. Summon skills from Composer via `@` / button.
+| Expert prompts | Skill library | Runtime |
+|----------------|---------------|---------|
+| ![Expert](docs/screenshots/ui-expert-prompts.png) | ![Skills](docs/screenshots/ui-skill-editor.png) | ![Runtime](docs/screenshots/ui-runtime-settings.png) |
 
-| Expert prompt editor | Skill library | Runtime & sandbox |
-|----------------------|---------------|-------------------|
-| ![Explorer system prompt](docs/screenshots/ui-expert-prompts.png) | ![playable-slides skill](docs/screenshots/ui-skill-editor.png) | ![Runtime settings](docs/screenshots/ui-runtime-settings.png) |
-
-- **Experts** — local + market agents; overview / prompt / skills / tools / knowledge  
-- **Skills** — built-in & custom Agentskills; instructions, files, tool bindings  
-- **Connectors (MCP)** — catalog (Composio / OpenConnector / GitHub / Notion / Feishu…); `tools/list` → `mcp_<server>_<tool>` on the loop; encrypted secrets; `external` risk → permission gate  
-- **Automations** — cron / webhook start real session turns with Turn Log replay  
-- **Memory** — `memory_update` / `memory_read` (scopes: user · project · agent); Memory tab  
-- **Table Store** — schema-free `table_*` tools on isolated `store.db` for digests, counters, cursors (not Memory, not files)  
-- **Runtime** — turn limits, tool output hard cap (`runtime.tools.max_output_chars`, default 50k), max delegation depth, memory TopK, OS sandbox & network policy  
+- **Experts** — local + market agents (prompt / skills / tools / knowledge)
+- **Skills** — Agentskills (`SKILL.md`); built-in & custom
+- **MCP** — catalog → `mcp_<server>_<tool>`; encrypted secrets; permission gate
+- **Automations** — cron / webhook → real session turns
+- **Memory** — `memory_*` (user / project / agent); Memory tab
+- **Table Store** — schema-free `table_*` on `store.db`
+- **Runtime** — turn limits, tool output cap, delegation depth, sandbox / network
 
 ---
 
-## Design philosophy
+## Design
 
 ### Everything is a Tool
 
-| Traditional concept | Unified abstraction |
-|---------------------|---------------------|
-| Sub-agent delegation | `delegate_agent` |
+| Concept | Tool |
+|---------|------|
+| Sub-agent | `delegate_agent` |
 | User interaction | `ask_user` |
-| Skills | `read_skill` / skill bindings |
-| Knowledge | `search_kb` |
-| Durable memory | `memory_update` / `memory_read` |
-| Business rows | `table_upsert` / `table_query` / … |
-| Files | `read_file` / `write` / `edit` / … |
-| External APIs | `http_request` / MCP / `web_fetch` · `web_search` |
+| Skills / knowledge | `read_skill` / `search_kb` |
+| Memory / rows | `memory_*` / `table_*` |
+| Files / APIs | `read_file` / `edit` / MCP / `web_*` |
 
-One abstraction (Tool), one loop (Agent Loop), one execution store (Turn Log). New capability = new Tool.
+One abstraction, one loop, one store (Turn Log). New capability = new Tool.
 
 ### Pure LLM-driven control
 
-No developer-maintained graph, role router, or mode switch — the model plans Tool Calls on one loop:
+No developer graph or mode flag — the model plans Tool Calls:
 
 ```
-User input
-    ↓
-[LLM] → plans Tool Call DAG
-    ↓
-Execute tools (Agent Loop)
-    ↓
-Need clarification? → ask_user
-    ↓
-Need to remember? → memory_*  |  Need rows? → table_*
-    ↓
-Need delegation? → delegate_agent
-      → fresh Turn (system + goal; parent transcript not inherited)
-      → own tools / skills / knowledge → same Agent Loop
-      → Report only → parent continues
-    ↓
-Done → deliver result
+User input → [LLM] plans Tool Call DAG → execute
+  → clarify? ask_user
+  → remember? memory_*  |  rows? table_*
+  → delegate? delegate_agent (isolated child → Report)
+  → done
 ```
-
-Coding vs “work” emerges from configuration and `ask_user` defaults — not an explicit `mode` flag.
 
 ### Log is state
 
-- Every Tool Call (input, output, latency, rationale) persisted  
-- Failures recoverable — retry from any step  
-- Full replay for debug and audit  
-- Humans can edit any Tool Result; the agent continues  
+Every Tool Call (input, output, latency, rationale) is persisted. Recover mid-turn, full replay, or edit a Tool Result and continue.
 
 ### Memory vs Table Store vs Knowledge
 
 | Store | Role |
 |-------|------|
-| **Memory** | Lasting prefs / conventions the model *chooses* to keep |
-| **Table Store** | Queryable business rows (digests, cursors) in `store.db` |
-| **Knowledge** | Human-curated docs bound to an agent (`search_kb`) |
-| **Compaction** | Session-local summary when context truncates — not durable memory |
+| **Memory** | Prefs / conventions the model chooses to keep |
+| **Table Store** | Queryable business rows in `store.db` |
+| **Knowledge** | Human-curated docs (`search_kb`) |
+| **Compaction** | Session-local summary — not durable memory |
 
----
-
-## Concept model
+### Concept model
 
 ```
 Project/
-  └── Session (long-horizon, days/weeks)
-        ├── Turn-1  ← one [input → agent reply]
-        │     ├── Step: LLM call (function calling)
-        │     ├── Step: Tool exec → inject result
-        │     └── ...
-        ├── Turn-2  ← follow-up days later
+  └── Session (days/weeks)
+        ├── Turn-1  ← [input → reply]
+        │     ├── Step: LLM call
+        │     └── Step: Tool exec → inject result
+        ├── Turn-2
         ├── ~ Checkpoint (compaction) ~
         └── Turn-N
 ```
 
 | Concept | Definition |
 |---------|------------|
-| **Project** | Task collection bound to a filesystem directory |
-| **Session / Task** | Multi-turn interaction around one goal |
-| **Turn** | One [input → agent reply], containing N LLM Steps |
+| **Project** | Task set bound to a filesystem directory |
+| **Session** | Multi-turn interaction around one goal |
+| **Turn** | One [input → reply], containing N Steps |
 | **Step** | One LLM request/response inside a Turn |
-| **Delegated agent** | `delegate_agent` Tool; isolated child; Report back |
-| **ask_user** | Asking the user is a Tool; loop pauses for the reply |
-| **Memory / Table Store** | Cross-session facts vs schema-free business rows |
+| **Delegated agent** | Isolated child via `delegate_agent`; Report back |
 
 ---
 
@@ -333,26 +247,24 @@ server/   cli/   tui/    frontend/ (Vue 3 + Vite)
   core/store/sqlite + turnlog + store.db
 ```
 
-| Layer | Directory | Role |
-|-------|-----------|------|
-| Entry points | `server/` `cli/` `tui/` | HTTP (Gin), CLI, TUI |
-| Frontend | `frontend/` | Vue 3 + Vite + Document Stage |
+| Layer | Path | Role |
+|-------|------|------|
+| Entry | `server/` `cli/` `tui/` | HTTP (Gin), CLI, TUI |
+| Frontend | `frontend/` | Vue 3 + Document Stage |
 | Bootstrap | `core/bootstrap/` | DI, config |
-| Services | `core/service/` | Session, Project, Agent, Skill, MCP, channels, … |
+| Services | `core/service/` | Session, Project, Agent, Skill, MCP, channels… |
 | Runtime | `core/runtime/` | Turn loop, prompt, compaction, permission, tools |
 | Domain / Ports | `core/domain/` `core/port/` | Entities & interfaces |
 | Adapters | `core/adapter/` | LLM + IM (Feishu / QQ / Weixin / WeCom) |
-| Store | `core/store/` | SQLite (`work.db`) + Turn Log + Table Store (`store.db`) |
+| Store | `core/store/` | `work.db` + Turn Log + `store.db` |
 
 Deep dive: [`docs/core-design.md`](docs/core-design.md).
 
 ---
 
-## Prerequisites
+## Development
 
-- Go 1.26+
-- Node.js 20+ (frontend / desktop)
-- Sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui) (`file:../../dq-ui/packages/*`)
+**Prerequisites:** Go 1.26+, Node.js 20+, sibling [`dq-ui`](https://github.com/danmo-ai/dq-ui):
 
 ```text
 Workspace/
@@ -360,29 +272,28 @@ Workspace/
   dq-ui/
 ```
 
-## Quick start
+### Quick start
 
 ```bash
 make dev-web          # backend :7801 + Vite :5801 → http://localhost:5801/app/
 make dev-desktop      # backend + Tauri webview
-make backend          # backend only (debugger-friendly)
-
+make backend          # backend only
 make dev-cli          # CLI (no server)
 make dev-tui          # TUI (no server)
 make stop             # stop all DQ_DEV processes
-```
 
-```bash
 mkdir -p ~/.danmo-work
 cp config.example.yaml ~/.danmo-work/config.yaml
-# Add LLM provider API keys in the UI or config
+# Add LLM API keys in the UI or config
 ```
 
-## Build & pack
+Desktop with an already-running backend: `SKIP_BACKEND=1 make dev-desktop`.
+
+### Build & pack
 
 ```bash
-make build-all              # frontend dist + Go server/cli/tui
-make build-go               # all three Go binaries
+make build-all              # frontend + Go server/cli/tui
+make build-go               # Go binaries only
 make pack-macos-desktop     # .dmg / .app
 make pack-linux-desktop     # AppImage / .deb
 make pack-windows-desktop   # .exe
@@ -393,89 +304,68 @@ make clean                  # rm -rf out/
 out/
   frontend/dist/     # Vite production (served at /app/)
   server/            # danmo-work, danmo-work-cli, danmo-work-tui
-  desktop/bundle/    # Tauri installers (macOS / Linux / Windows)
-  env/               # optional OCI agent env tar (Release asset)
+  desktop/bundle/    # Tauri installers
+  env/               # optional OCI agent env tar
   run/               # Dev PIDs, logs, wrappers
 ```
 
-## Test
+### Test
 
 ```bash
 make test               # layer check + go test ./...
 make test-integration   # integration tests
 ```
 
-### Harbor agent compare (Terminal-Bench 2.0)
-
-Official **terminal-bench@2.0** (**89** tasks). Tasks are **not in git** — sync locally, then Harbor + Podman. Pass = Mean reward ≥ 1.0.
-
-How-to: [`evals/dq_harbor/README.md`](evals/dq_harbor/README.md) · Scores: [`evals/dq_harbor/COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md).
+Harbor Terminal-Bench 2.0 (89 tasks, sync locally — not in git): [`evals/dq_harbor/README.md`](evals/dq_harbor/README.md) · scores: [`COMPARE_RESULTS.md`](evals/dq_harbor/COMPARE_RESULTS.md).
 
 ```bash
-podman machine start                                    # macOS if needed
 make eval-harbor-base
 GH_TOKEN=$(gh auth token) make eval-harbor-sync-tb2
 make eval-harbor-bin
-export WORK_MODEL=deepseek/deepseek-v4-flash WORK_API_KEY=... WORK_BASE_URL=https://api.deepseek.com
+export WORK_MODEL=... WORK_API_KEY=... WORK_BASE_URL=...
 make eval-harbor-smoke
-./evals/dq_harbor/compare_agents.sh                     # vs OpenCode / OpenHands
+./evals/dq_harbor/compare_agents.sh
 ```
 
-## Environment
+### Environment
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `WORK_CONFIG` | `~/.danmo-work/config.yaml` | YAML config |
 | `WORK_DB_PATH` | `~/.danmo-work/work.db` | Engine SQLite |
-| `WORK_STORE_DB_PATH` | `~/.danmo-work/store.db` | Agent Table Store |
+| `WORK_STORE_DB_PATH` | `~/.danmo-work/store.db` | Table Store |
 | `WORK_DATA_DIR` | `~/.danmo-work/data` | Projects / turn logs |
 | `DQ_BACKEND_PORT` | `7801` | Dev backend |
 | `DQ_FRONTEND_PORT` | `5801` | Dev frontend |
 | `VITE_API_BASE_URL` | `""` | Frontend API base (empty = same origin) |
 
-### Custom skill directories
-
-Each new turn scans Agentskills (`skill-name/SKILL.md`) in memory — **not SQLite** — into `<available_skills>`:
+**Custom skills** (Agentskills, scanned each turn into memory — not SQLite):
 
 | Path | Scope |
 |------|-------|
-| `~/.agents/skills/` | User |
-| `~/.danmo-work/skills/` | User |
-| `<projectRoot>/.agents/skills/` | Project |
-| `<projectRoot>/.danmo-work/skills/` | Project |
+| `~/.agents/skills/` · `~/.danmo-work/skills/` | User |
+| `<project>/.agents/skills/` · `<project>/.danmo-work/skills/` | Project |
 
-Later paths win on ID collision. Disk changes apply next turn.
+Later paths win on ID collision.
 
-## Desktop (Tauri)
+### CI / release
 
-```bash
-make dev-desktop
-# or with an already-running backend:
-SKIP_BACKEND=1 make dev-desktop
-```
+`.github/workflows/release.yml` on `v*` tags or `workflow_dispatch` → macOS `.dmg`/`.app`, Linux AppImage/`.deb`, Windows `.exe`.
 
-## CI / release
+macOS also via Homebrew: `brew tap danmo-ai/tap` ([`danmo-ai/homebrew-tap`](https://github.com/danmo-ai/homebrew-tap); cask: [`Casks/danmo-work.rb`](Casks/danmo-work.rb)).
 
-`.github/workflows/release.yml` on `v*` tags or `workflow_dispatch`:
-
-| Job | Artifact |
-|-----|----------|
-| macOS desktop | `out/desktop/bundle/*.dmg`, `*.app` |
-| Linux desktop | `out/desktop/bundle/*.AppImage`, `*.deb` |
-| Windows desktop | `out/desktop/bundle/*.exe` |
-
-**macOS channels:** GitHub Releases `.dmg`, or Homebrew (`brew tap danmo-ai/tap` → [`danmo-ai/homebrew-tap`](https://github.com/danmo-ai/homebrew-tap), synced by `HOMEBREW_TAP_TOKEN` / **Publish Homebrew Tap**). Cask source of truth: [`Casks/danmo-work.rb`](Casks/danmo-work.rb).
+---
 
 ## Docs
 
 | Doc | Description |
 |-----|-------------|
-| [docs/core-design.md](docs/core-design.md) | Core design: agent architecture, channels, Stage |
-| [docs/agent-table-store-plan.md](docs/agent-table-store-plan.md) | Schema-free Table Store (`store.db`) |
-| [docs/channel-qq-feishu-plan.md](docs/channel-qq-feishu-plan.md) | QQ / Feishu / Weixin channels (Phase A–C) |
-| [docs/launch-posts.md](docs/launch-posts.md) | Community launch drafts |
+| [docs/core-design.md](docs/core-design.md) | Agent architecture, channels, Stage |
+| [docs/human-ai-coedit-plan.md](docs/human-ai-coedit-plan.md) | Office co-edit design |
+| [docs/agent-table-store-plan.md](docs/agent-table-store-plan.md) | Table Store (`store.db`) |
+| [docs/channel-qq-feishu-plan.md](docs/channel-qq-feishu-plan.md) | IM channels |
 | [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor Terminal-Bench 2.0 |
-| [AGENTS.md](AGENTS.md) | Contributor / agent quick reference |
+| [AGENTS.md](AGENTS.md) | Contributor quick reference |
 | [config.example.yaml](config.example.yaml) | Full config reference |
 
 ## License
