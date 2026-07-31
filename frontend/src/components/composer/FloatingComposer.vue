@@ -1074,13 +1074,6 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
               />
             </DqSelect>
           </div>
-          <p
-            v-if="selectedLeadHint"
-            class="composer-agent-hint"
-            :title="selectedLeadHint"
-          >
-            {{ selectedLeadHint }}
-          </p>
         </div>
 
         <span
@@ -1338,22 +1331,9 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
 
 .composer-agent-picker {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
   min-width: 0;
-  max-width: min(420px, 55vw);
   flex-shrink: 1;
-}
-
-.composer-agent-hint {
-  margin: 0;
-  padding: 0 2px;
-  font-size: 11px;
-  line-height: 1.35;
-  color: var(--dq-label-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .composer-agent-seg--compact :deep(.dq-segmented__item) {
