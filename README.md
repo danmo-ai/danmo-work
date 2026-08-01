@@ -50,7 +50,7 @@ Or download `Danmo.Work_*_arm64.dmg` from Releases → Applications. Not Apple-n
 
 ### Windows
 
-Download `Danmo.Work_*_x64-setup.exe`. Until Authenticode is enabled ([SignPath](docs/windows-authenticode.md)), SmartScreen may warn — **More info → Run anyway**.
+Download `Danmo.Work_*_x64-setup.exe`. Until Authenticode is enabled, SmartScreen may warn — **More info → Run anyway**.
 
 ### Linux
 
@@ -128,8 +128,6 @@ Not silent overwrite, not CRDT multiplayer — four beats on Document Stage:
 | **Sheet** | `.csv` / `.danmo-sheet.json` | Selection range |
 | **Preview** | `.html`, images, URLs | Click DOM → annotate → Composer |
 | **Code / Diff** | Source / git / AI Diff | AI Diff review |
-
-Design notes: [`docs/human-ai-coedit-plan.md`](docs/human-ai-coedit-plan.md).
 
 ### Preview annotate
 
@@ -371,9 +369,6 @@ macOS also via Homebrew: `brew tap danmo-ai/tap` ([`danmo-ai/homebrew-tap`](http
 | Doc | Description |
 |-----|-------------|
 | [docs/core-design.md](docs/core-design.md) | Agent architecture, channels, Stage |
-| [docs/human-ai-coedit-plan.md](docs/human-ai-coedit-plan.md) | Office co-edit design |
-| [docs/agent-table-store-plan.md](docs/agent-table-store-plan.md) | Table Store (`store.db`) |
-| [docs/channel-qq-feishu-plan.md](docs/channel-qq-feishu-plan.md) | IM channels |
 | [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor Terminal-Bench 2.0 |
 | [AGENTS.md](AGENTS.md) | Contributor quick reference |
 | [config.example.yaml](config.example.yaml) | Full config reference |

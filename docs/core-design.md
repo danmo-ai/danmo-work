@@ -29,7 +29,7 @@ Danmo Work 是一个**通用型 AI Work Agent**，兼具基本的 AI Coding 能�
 | Sub-Agent | `delegate_agent` Tool：接收参数，返回结果，可被委派 |
 | 用户交互 | `ask_user` Tool：带选项、推荐、字段，返回用户反馈 |
 | 技能/能力 | `read_skill` / Skill 绑定：封装特定领域能力 |
-| 知识检索 | `search_kb` Tool：知识库检索，返回上下文（章级 BM25；见 [knowledge-base-plan.md](./knowledge-base-plan.md)） |
+| 知识检索 | `search_kb` Tool：知识库检索，返回上下文（章级 BM25） |
 | 持久记忆 | `memory_update` / `memory_read`：跨会话事实（user / project / agent） |
 | 文件操作 | `read_file` / `write` / `edit` / `apply_patch` / `exec_shell` |
 | 外部 API / 连接器 | `http_request`（通用 REST）/ **连接器**（产品名；实现多为 MCP）/ `web_fetch`·`web_search`；禁止一 API 一 builtin Tool |
@@ -135,7 +135,7 @@ Danmo Work 是一个**通用型 AI Work Agent**，兼具基本的 AI Coding 能�
 | **委派 Agent** | 委派动作是 `delegate_agent` tool；子 Agent 在隔离 Turn 下运行，最终报告作为 tool result 反馈父 Turn |
 | **ask_user** | 向用户提问也是 tool；Agent 调用后暂停等待用户响应，用户输入作为 tool result 继续 |
 | **Memory** | Agent 主动写入的跨会话事实；`memory_update` / `memory_read`；作用域 user / project / agent；SQLite `memories` 表（`work.db`） |
-| **Table Store** | Agent 业务流水（schema-free）；`table_upsert` / `table_get` / `table_query` / `table_delete` / `table_list`；独立 `store.db`；见 [agent-table-store-plan.md](./agent-table-store-plan.md) |
+| **Table Store** | Agent 业务流水（schema-free）；`table_upsert` / `table_get` / `table_query` / `table_delete` / `table_list`；独立 `store.db` |
 
 **层次关系**：
 
@@ -320,7 +320,7 @@ OpenAI-compat 路径上，模型常把 `write`/`edit` 等内容里的未转义�
 | `ApprovalManager` | 审批记录 |
 | `LLMConfigManager` | 模型配置 |
 | `MCPManager` | MCP Server 配置 |
-| `KnowledgeManager` | 知识库（MD SoT + 章级 FTS；见 [knowledge-base-plan.md](./knowledge-base-plan.md)） |
+| `KnowledgeManager` | 知识库（MD SoT + 章级 FTS） |
 | `ConfigManager` | YAML 配置 |
 | `ChannelIngress` | IM 入站 → Session Turn → 经 `ChannelEndpoint` 出站；`HandleInteraction` |
 | `*Bridge` / `*Endpoint` | 各平台连接与差异化投递（飞书 / QQ / 微信 / 企微） |
@@ -472,8 +472,6 @@ table_get / table_query / table_delete / table_list
   → runtime 注入 scope_id；硬配额见 runtime.table.*
 ```
 
-完整方案见 [agent-table-store-plan.md](./agent-table-store-plan.md)。
-
 ### 7.5 Tool 统一接口（概念）
 
 ```
@@ -489,9 +487,7 @@ Tool:
 
 ## 8. 权限与审批
 
-完整模型见 **[permission-model.md](./permission-model.md)**（Soft Gate × Hard Enforcement）。
-
-摘要：
+摘要（Soft Gate × Hard Enforcement）：
 
 - **Soft**：`permission.Gate` — discuss/plan 拒绝写/执行；强沙箱内安全 shell 放行；危险命令 / 弱沙箱 / external·MCP 询问。
 - **Hard**：OS sandbox（FS）+ `network` 三态（deny / allowlist 正向代理 / allow）；主机 HTTP 与 shell 共用出站策略。
@@ -571,7 +567,7 @@ Tool 刚执行完时已按 `runtime.tools.max_output_chars` 做硬上限（§6.3
 | **Compaction Checkpoint** | 引擎自动摘要 | Session 内 | 注入 system prompt |
 | **Knowledge** | 人工文档（`~/.danmo-work/knowledge/` MD SoT） | 绑定 Agent KB | 章级 `search_kb` + 自动 top-K 注入（FTS5 BM25；可选向量混合） |
 
-落地细节见 [knowledge-base-plan.md](./knowledge-base-plan.md)。会话内被压缩丢掉的消息召回（BM25-at-compaction）为后续议题，与 durable Memory 独立。
+会话内被压缩丢掉的消息召回（BM25-at-compaction）为后续议题，与 durable Memory 独立。
 
 ### 10.4 KV Cache 友好分区（设计目标）
 
@@ -603,7 +599,7 @@ Zone C — Scratch:  当前 Turn 的 user + Step 消息
 
 ## 12. IM 通道（ChannelEndpoint）
 
-手机 IM 与桌面共用同一套 Agent Loop；差异收敛在 Endpoint，**Ingress 无平台业务分支**。契约见 `core/port/channel.go`；规划与落地状态见 [`channel-qq-feishu-plan.md`](channel-qq-feishu-plan.md)。
+手机 IM 与桌面共用同一套 Agent Loop；差异收敛在 Endpoint，**Ingress 无平台业务分支**。契约见 `core/port/channel.go`。
 
 ### 12.1 编排
 
@@ -690,7 +686,7 @@ Stage 工具栏（润色 / 修改 / …）
 
 保存 API：`PUT /api/v1/projects/:id/files/content`。
 
-**人机审阅（AI Diff）**：回合前快照存于 `sessions/<sid>/snapshots/<turnId>/`；`GET .../ai-review/diff` 对比快照与当前盘；Revert 写回快照；Diff Stage 支持按 hunk 接受（见 [human-ai-coedit-plan.md](./human-ai-coedit-plan.md)）。
+**人机审阅（AI Diff）**：回合前快照存于 `sessions/<sid>/snapshots/<turnId>/`；`GET .../ai-review/diff` 对比快照与当前盘；Revert 写回快照；Diff Stage 支持按 hunk 接受。
 
 源码改码：不挂 Office AI 工具栏；用户通过 Composer 选区批注（`## Selected Code` + File/Lines）或对话驱动 Agent `edit`/`apply_patch`；打开 Stage 的 Composer 回合同样会 snapshot 该 path。
 

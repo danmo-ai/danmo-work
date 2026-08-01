@@ -101,10 +101,10 @@ Skill marketplace: configure `market.sources` (git catalog, curated
 skill library (Skills → Market tab).
 
 Agent table store (`table_*` tools) persists schema-free business rows in
-`store.db` (isolated from `work.db`). See `docs/agent-table-store-plan.md`.
+`store.db` (isolated from `work.db`).
 
 Knowledge bases store Markdown under `knowledge/<kbId>/` with chapter FTS
-in `work.db`; see `docs/knowledge-base-plan.md`.
+in `work.db`.
 
 On first launch, existing data may be migrated from
 `~/Library/Application Support/com.danmo.work/` or `./data/work.db`.

@@ -51,7 +51,7 @@ brew install --cask danmo-work
 
 ### Windows
 
-下载 `Danmo.Work_*_x64-setup.exe`。在启用 Authenticode（[SignPath 说明](docs/windows-authenticode.md)）之前，SmartScreen 可能拦截，选择 **更多信息 → 仍要运行** 即可。
+下载 `Danmo.Work_*_x64-setup.exe`。在启用 Authenticode 之前，SmartScreen 可能拦截，选择 **更多信息 → 仍要运行** 即可。
 
 ### Linux
 
@@ -129,8 +129,6 @@ Danmo Work 是：**模型在同一条链上编排**；你提供能力（Tool / S
 | **表格** | `.csv` / `.danmo-sheet.json` | 选中区域 |
 | **预览** | `.html`、图片、外链 | 点选 DOM → 批注 → 写入 Composer |
 | **代码 / Diff** | 源码 / git / AI Diff | AI Diff 审阅 |
-
-设计说明见 [`docs/human-ai-coedit-plan.md`](docs/human-ai-coedit-plan.md)。
 
 ### 预览页：点哪里改哪里
 
@@ -372,9 +370,6 @@ macOS 也可通过 Homebrew 安装：`brew tap danmo-ai/tap`（仓库 [`danmo-ai
 | 文档 | 内容 |
 |------|------|
 | [docs/core-design.md](docs/core-design.md) | Agent 架构、通道、Stage |
-| [docs/human-ai-coedit-plan.md](docs/human-ai-coedit-plan.md) | Office 人机协作设计 |
-| [docs/agent-table-store-plan.md](docs/agent-table-store-plan.md) | Table Store（`store.db`） |
-| [docs/channel-qq-feishu-plan.md](docs/channel-qq-feishu-plan.md) | IM 通道 |
 | [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor Terminal-Bench 2.0 |
 | [AGENTS.md](AGENTS.md) | 贡献者速查 |
 | [config.example.yaml](config.example.yaml) | 完整配置参考 |
