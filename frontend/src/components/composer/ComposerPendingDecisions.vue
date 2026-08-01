@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PermissionAskBlock from '@/components/center/PermissionAskBlock.vue'
 import AskUserBlock, { type AskUserFormField } from '@/components/center/AskUserBlock.vue'
@@ -30,7 +30,7 @@ export type PendingAskItem = {
 const props = defineProps<{
   permissions: PendingPermissionItem[]
   asks: PendingAskItem[]
-  /** Max expanded decision cards; remainder collapses behind a count. */
+  /** Initial expanded decision cards before “show all”. */
   maxVisible?: number
 }>()
 
@@ -42,7 +42,8 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const maxVisible = computed(() => Math.max(1, props.maxVisible ?? 2))
+const collapsedMax = computed(() => Math.max(1, props.maxVisible ?? 2))
+const expanded = ref(false)
 
 const items = computed(() => {
   const out: Array<
@@ -59,8 +60,19 @@ const items = computed(() => {
   return out
 })
 
-const visible = computed(() => items.value.slice(0, maxVisible.value))
-const hiddenCount = computed(() => Math.max(0, items.value.length - visible.value.length))
+watch(
+  () => items.value.length,
+  (n) => {
+    if (n <= collapsedMax.value) expanded.value = false
+  },
+)
+
+const visible = computed(() =>
+  expanded.value ? items.value : items.value.slice(0, collapsedMax.value),
+)
+const hiddenCount = computed(() =>
+  expanded.value ? 0 : Math.max(0, items.value.length - collapsedMax.value),
+)
 
 const empty = computed(() => items.value.length === 0)
 </script>
@@ -102,9 +114,22 @@ const empty = computed(() => items.value.length === 0)
       </template>
     </div>
 
-    <p v-if="hiddenCount > 0" class="composer-decisions__more">
-      {{ t('composer.pendingDecisionsMore', { n: hiddenCount }) }}
-    </p>
+    <button
+      v-if="hiddenCount > 0"
+      type="button"
+      class="composer-decisions__more"
+      @click="expanded = true"
+    >
+      {{ t('composer.pendingDecisionsShowAll', { n: hiddenCount }) }}
+    </button>
+    <button
+      v-else-if="expanded && items.length > collapsedMax"
+      type="button"
+      class="composer-decisions__more"
+      @click="expanded = false"
+    >
+      {{ t('composer.pendingDecisionsShowLess') }}
+    </button>
   </div>
 </template>
 
@@ -171,7 +196,17 @@ const empty = computed(() => items.value.length === 0)
 
 .composer-decisions__more {
   margin: 0;
+  align-self: flex-start;
+  border: 0;
+  padding: 0;
+  background: transparent;
   font-size: var(--dq-font-size-caption);
-  color: var(--dq-label-secondary);
+  font-weight: 500;
+  color: var(--dq-accent);
+  cursor: pointer;
+}
+
+.composer-decisions__more:hover {
+  text-decoration: underline;
 }
 </style>

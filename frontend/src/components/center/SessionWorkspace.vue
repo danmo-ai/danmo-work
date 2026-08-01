@@ -717,10 +717,8 @@ function delegateCardAwaitingLabel(seq: number): string {
   return ''
 }
 
-function delegateCardLinkLabel(seq: number): string {
-  const childId = delegateChildTurnId(seq)
-  if (childTurnNeedsApproval(childId)) return t('sessions.goApprove')
-  if (childTurnNeedsAsk(childId)) return t('sessions.goAnswer')
+function delegateCardLinkLabel(_seq: number): string {
+  // Approvals/answers are acted on in Composer; drill-in is for context only.
   return t('sessions.viewExpertWork')
 }
 
@@ -1682,9 +1680,8 @@ function onTitleKeydown(e: KeyboardEvent) {
                     :payload="ev.payload"
                     :decided="isApprovalDecided(ev.payload)"
                     :deciding="isPermissionDeciding(ev.payload)"
-                    :show-actions="shouldShowApprovalActions(ev.payload)"
+                    :show-actions="false"
                     :anchor-seq="ev.seq"
-                    @decide="onPermissionDecide(ev, $event)"
                   />
                 </template>
 
@@ -1701,7 +1698,7 @@ function onTitleKeydown(e: KeyboardEvent) {
                     :expired="isAskExpired(ev)"
                     :answering="answeringAskIds.has(askUserId(ev.payload))"
                     :answer="askUserAnswer(ev.payload)"
-                    @resolve="onAskUserResolve(ev, $event)"
+                    :interactive="false"
                   />
                 </template>
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
   payload: unknown
@@ -8,6 +9,8 @@ const props = defineProps<{
   showActions?: boolean
   anchorSeq?: number
 }>()
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   decide: [payload: { decision: 'allow' | 'deny'; scope: 'once' | 'session' }]
@@ -113,6 +116,7 @@ const pending = computed(() => Boolean(props.showActions) && !props.decided)
         拒绝
       </DqButton>
     </div>
+    <p v-else-if="!decided" class="permission-ask__hint">{{ t('sessions.decideInComposer') }}</p>
   </div>
 </template>
 
@@ -175,6 +179,13 @@ const pending = computed(() => Boolean(props.showActions) && !props.decided)
   flex-wrap: wrap;
   gap: 6px;
   margin-left: auto;
+}
+
+.permission-ask__hint {
+  margin: 0;
+  width: 100%;
+  font-size: var(--dq-font-size-footnote);
+  color: var(--dq-label-tertiary);
 }
 
 .permission-ask--settled {

@@ -13,19 +13,24 @@ export interface AskUserFormField {
   placeholder?: string
 }
 
-const props = defineProps<{
-  payload: unknown
-  anchorSeq?: number
-  question: string
-  options: string[]
-  defaultOption?: string
-  formFields: AskUserFormField[]
-  resolved: boolean
-  expired: boolean
-  answering?: boolean
-  answer?: string
-  askId: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    payload: unknown
+    anchorSeq?: number
+    question: string
+    options: string[]
+    defaultOption?: string
+    formFields: AskUserFormField[]
+    resolved: boolean
+    expired: boolean
+    answering?: boolean
+    answer?: string
+    askId: string
+    /** When false, show read-only context (timeline); actions live in Composer. */
+    interactive?: boolean
+  }>(),
+  { interactive: true },
+)
 
 const emit = defineEmits<{
   resolve: [answer: string]
@@ -118,6 +123,10 @@ function pickOption(opt: string) {
 
     <template v-else-if="expired">
       <span class="ask-user-block__expired">{{ t('sessions.askExpired') }}</span>
+    </template>
+
+    <template v-else-if="!interactive">
+      <span class="ask-user-block__hint">{{ t('sessions.decideInComposer') }}</span>
     </template>
 
     <template v-else>
@@ -226,6 +235,11 @@ function pickOption(opt: string) {
 }
 
 .ask-user-block__expired {
+  font-size: var(--dq-font-size-footnote);
+  color: var(--dq-label-tertiary);
+}
+
+.ask-user-block__hint {
   font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-tertiary);
 }
