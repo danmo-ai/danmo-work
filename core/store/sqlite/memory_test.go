@@ -82,6 +82,71 @@ func TestMemoryRepoUpsertAndScopeIsolation(t *testing.T) {
 	}
 }
 
+func TestMemoryRepoIncludeAllAgents(t *testing.T) {
+	st, err := New(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := st.Memories()
+	ctx := context.Background()
+
+	if _, err := repo.Upsert(ctx, domain.Memory{
+		Scope: domain.MemoryScopeUser, ScopeID: domain.MemoryUserScopeID,
+		Key: "lang", Content: "zh",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Upsert(ctx, domain.Memory{
+		Scope: domain.MemoryScopeAgent, ScopeID: "team",
+		Key: "lead", Content: "team note",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Upsert(ctx, domain.Memory{
+		Scope: domain.MemoryScopeAgent, ScopeID: "researcher",
+		Key: "search_provider_limitations", Content: "bing is weak",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Lead-only filter misses the subagent write.
+	leadOnly, err := repo.Search(ctx, domain.MemoryQuery{
+		Scopes: []domain.MemoryScopeRef{
+			{Scope: domain.MemoryScopeUser, ScopeID: domain.MemoryUserScopeID},
+			{Scope: domain.MemoryScopeAgent, ScopeID: "team"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(leadOnly) != 2 {
+		t.Fatalf("lead-only expected 2, got %d", len(leadOnly))
+	}
+
+	// Panel query: user + all agents.
+	all, err := repo.Search(ctx, domain.MemoryQuery{
+		Scopes: []domain.MemoryScopeRef{
+			{Scope: domain.MemoryScopeUser, ScopeID: domain.MemoryUserScopeID},
+		},
+		IncludeAllAgents: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 3 {
+		t.Fatalf("allAgents expected 3, got %d", len(all))
+	}
+	var sawResearcher bool
+	for _, m := range all {
+		if m.Scope == domain.MemoryScopeAgent && m.ScopeID == "researcher" {
+			sawResearcher = true
+		}
+	}
+	if !sawResearcher {
+		t.Fatal("expected researcher agent memory in allAgents results")
+	}
+}
+
 func TestMemoryRepoKeywordSearch(t *testing.T) {
 	st, err := New(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {

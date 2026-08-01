@@ -421,61 +421,6 @@ func findKeepStart(messages []Message, cutTokens int) int {
 	return keepStart
 }
 
-// truncateToolResultsToBudget copies msgs and shrinks tool_result contents
-// (oldest first) until the estimate is <= budget. Pair structure is preserved.
-func truncateToolResultsToBudget(msgs []Message, budget int) []Message {
-	if budget <= 0 || len(msgs) == 0 || estimateTokenCount(msgs) <= budget {
-		return msgs
-	}
-	out := make([]Message, len(msgs))
-	copy(out, msgs)
-	const minChars = 64
-	for estimateTokenCount(out) > budget {
-		progressed := false
-		over := estimateTokenCount(out) - budget
-		cutChars := over * tokenEstimateDivisor
-		if cutChars < 32 {
-			cutChars = 32
-		}
-		for i := range out {
-			if out[i].Role != RoleTool {
-				continue
-			}
-			content := out[i].Content
-			if len(content) <= minChars {
-				continue
-			}
-			newLen := len(content) - cutChars
-			if newLen < minChars {
-				newLen = minChars
-			}
-			if newLen >= len(content) {
-				newLen = len(content) / 2
-				if newLen < minChars {
-					newLen = minChars
-				}
-			}
-			if newLen >= len(content) {
-				continue
-			}
-			out[i].Content = content[:newLen] + "\n...(truncated)"
-			progressed = true
-			if estimateTokenCount(out) <= budget {
-				return out
-			}
-			over = estimateTokenCount(out) - budget
-			cutChars = over * tokenEstimateDivisor
-			if cutChars < 32 {
-				cutChars = 32
-			}
-		}
-		if !progressed {
-			break
-		}
-	}
-	return out
-}
-
 // extractLatestTodos walks messages newest-first and returns the last todowrite list.
 func extractLatestTodos(messages []Message) []domain.CompactionTodoItem {
 	for i := len(messages) - 1; i >= 0; i-- {
@@ -596,10 +541,39 @@ func estimateMessageTokens(m Message) int {
 	for _, tc := range m.ToolCalls {
 		n += len(tc.ID) / tokenEstimateDivisor
 		n += len(tc.Name) / tokenEstimateDivisor
-		raw, _ := json.Marshal(tc.Arguments)
-		n += len(raw) / tokenEstimateDivisor
+		// Avoid json.Marshal in the hot path — it dominates loadRetainedHistory
+		// when transcripts contain many large tool_call argument maps.
+		n += estimateArgsBytes(tc.Arguments) / tokenEstimateDivisor
 	}
 	return n
+}
+
+// estimateArgsBytes approximates serialized argument size without JSON encoding.
+func estimateArgsBytes(v any) int {
+	switch x := v.(type) {
+	case nil:
+		return 0
+	case string:
+		return len(x)
+	case []byte:
+		return len(x)
+	case map[string]any:
+		n := 2
+		for k, val := range x {
+			n += len(k) + 2 + estimateArgsBytes(val)
+		}
+		return n
+	case []any:
+		n := 2
+		for _, val := range x {
+			n += estimateArgsBytes(val) + 1
+		}
+		return n
+	case bool, int, int32, int64, float32, float64:
+		return 8
+	default:
+		return 32
+	}
 }
 
 const compactionPrompt = `You are writing a compaction handoff for an AI agent that will continue this session.

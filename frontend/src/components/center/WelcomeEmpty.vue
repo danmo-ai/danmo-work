@@ -89,14 +89,15 @@ function goSettings() {
 
 .welcome-empty__title {
   margin: 0;
-  font-size: var(--dq-font-size-heading);
+  font-size: var(--dq-welcome-title-size, var(--dq-font-size-hero));
   font-weight: 700;
   color: var(--dq-label-primary);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+  line-height: var(--dq-line-height-tight);
 }
 
 .welcome-empty__subtitle {
-  margin: 10px 0 0;
+  margin: 12px 0 0;
   font-size: var(--dq-font-size-secondary);
   color: var(--dq-label-secondary);
   line-height: 1.55;
@@ -109,8 +110,9 @@ function goSettings() {
   gap: 12px;
   max-width: 360px;
   padding: 16px 20px;
-  border-radius: 12px;
+  border-radius: var(--dq-shell-radius);
   background: color-mix(in srgb, var(--dq-system-orange) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dq-system-orange) 22%, transparent);
   color: var(--dq-label-primary);
   font-size: var(--dq-font-size-body);
 }
@@ -134,20 +136,24 @@ function goSettings() {
 .welcome-empty__chip {
   max-width: 300px;
   padding: 10px 14px;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
-  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
+  border-radius: var(--dq-shell-radius);
+  border: 1px solid var(--dq-welcome-chip-border);
+  background: var(--dq-welcome-chip-bg);
   color: var(--dq-label-primary);
   font-size: var(--dq-font-size-footnote);
   line-height: 1.45;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
 }
 
 .welcome-empty__chip:hover {
   border-color: color-mix(in srgb, var(--dq-accent) 40%, transparent);
-  background: color-mix(in srgb, var(--dq-accent) 8%, transparent);
+  background: var(--dq-welcome-chip-hover);
+}
+
+.welcome-empty__chip:active {
+  transform: scale(0.98);
 }
 
 .welcome-empty__hint {

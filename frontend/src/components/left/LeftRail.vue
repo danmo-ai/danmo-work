@@ -407,7 +407,7 @@ watch(() => projects.projects.length, (len) => {
       <DqIconButton :aria-label="$t('navigation.newSession')" @click="onNewSession()">
         <DqIcon :size="18"><Plus /></DqIcon>
       </DqIconButton>
-      <DqIconButton aria-label="展开侧栏" @click="expandLeftRail">
+      <DqIconButton :aria-label="$t('navigation.expandSidebar')" @click="expandLeftRail">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M9 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
@@ -424,10 +424,17 @@ watch(() => projects.projects.length, (len) => {
     <template v-else>
       <aside class="module-sidebar__panel">
         <div class="module-sidebar__top">
-          <DqButton type="primary" class="module-sidebar__new-session" @click="onNewSession()">
-            <DqIcon :size="16"><Plus /></DqIcon>
-            {{ $t('navigation.newSession') }}
-          </DqButton>
+          <div class="module-sidebar__new-row">
+            <DqButton type="primary" class="module-sidebar__new-session" @click="onNewSession()">
+              <DqIcon :size="16"><Plus /></DqIcon>
+              {{ $t('navigation.newSession') }}
+            </DqButton>
+            <DqIconButton class="module-sidebar__collapse" :aria-label="$t('navigation.collapseSidebar')" @click="collapseLeftRail">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </DqIconButton>
+          </div>
 
           <div class="module-sidebar__search">
             <DqInput v-model="sidebarSearch" size="sm" :placeholder="$t('navigation.searchPlaceholder')" />
@@ -747,13 +754,34 @@ watch(() => projects.projects.length, (len) => {
   position: relative;
   display: flex;
   flex-direction: column;
-  min-width: 44px;
+  min-width: var(--dq-shell-rail-width-collapsed, 44px);
   max-width: 320px;
   height: 100%;
   min-height: 0;
   transition: width 0.2s ease;
-  border-right: 1px solid var(--work-glass-border);
-  background: var(--work-glass-bg);
+  border: none;
+  border-right: 1px solid var(--dq-shell-sidebar-border);
+  border-radius: 0;
+  background: var(--dq-shell-sidebar-bg);
+  -webkit-backdrop-filter: var(--dq-shell-sidebar-blur);
+  backdrop-filter: var(--dq-shell-sidebar-blur);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.module-sidebar__new-row {
+  display: flex;
+  align-items: center;
+  gap: var(--dq-space-xs);
+}
+
+.module-sidebar__new-row .module-sidebar__new-session {
+  flex: 1;
+  min-width: 0;
+}
+
+.module-sidebar__collapse {
+  flex-shrink: 0;
 }
 
 .module-sidebar.is-collapsed {
@@ -821,7 +849,7 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .module-sidebar__new-session {
-  width: 100%;
+  width: auto;
   justify-content: center;
   gap: 6px;
 }
@@ -846,8 +874,8 @@ watch(() => projects.projects.length, (len) => {
   font-size: var(--dq-font-size-caption);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--dq-label-tertiary);
+  letter-spacing: 0.04em;
+  color: var(--dq-label-secondary);
 }
 
 .module-sidebar__view-toggle {
@@ -861,16 +889,16 @@ watch(() => projects.projects.length, (len) => {
 .module-sidebar__view-btn {
   border: none;
   background: transparent;
-  color: var(--dq-label-tertiary);
-  font-size: 10px;
+  color: var(--dq-label-secondary);
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
-  padding: 2px 6px;
+  padding: 2px 7px;
   cursor: pointer;
 }
 
 .module-sidebar__view-btn.is-active {
-  background: color-mix(in srgb, var(--dq-accent) 12%, transparent);
-  color: var(--dq-accent);
+  background: var(--dq-accent-tint-strong, var(--dq-accent-surface));
+  color: var(--dq-label-primary);
 }
 
 .module-sidebar__section-add {
@@ -1056,8 +1084,9 @@ watch(() => projects.projects.length, (len) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--dq-font-size-body);
-  font-weight: 500;
+  font-size: var(--dq-font-size-secondary);
+  font-weight: 550;
+  color: inherit;
 }
 
 .project-tree__rename-input {
@@ -1106,23 +1135,20 @@ watch(() => projects.projects.length, (len) => {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--dq-label-secondary);
-  font-size: var(--dq-font-size-footnote);
+  color: var(--dq-label-primary);
+  font-size: var(--dq-font-size-body);
+  font-weight: 500;
   cursor: pointer;
   text-align: left;
   flex: 1;
   min-width: 0;
-  transition: color 0.12s ease;
-}
-
-.project-tree__session:hover {
-  background: transparent;
-  color: var(--dq-label-primary);
+  transition: color 0.12s ease, background 0.12s ease;
 }
 
 .project-tree__session.is-active {
-  background: color-mix(in srgb, var(--dq-accent) 10%, var(--dq-fill-tertiary));
-  color: var(--dq-accent);
+  background: var(--dq-surface-list-selected-strong, var(--dq-accent-tint-strong));
+  color: var(--dq-label-primary);
+  font-weight: 600;
 }
 
 .project-tree__session-action {
@@ -1198,9 +1224,9 @@ watch(() => projects.projects.length, (len) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
-  color: var(--dq-label-tertiary);
+  color: var(--dq-label-secondary);
 }
 
 .project-tree__session.is-running .project-tree__session-badge {
@@ -1229,11 +1255,11 @@ watch(() => projects.projects.length, (len) => {
   align-items: center;
   justify-content: space-between;
   padding: 4px 8px;
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--dq-label-quaternary);
+  color: var(--dq-label-secondary);
 }
 
 .session-board__count {
@@ -1256,7 +1282,7 @@ watch(() => projects.projects.length, (len) => {
 
 .project-tree__weixin-badge {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   line-height: 1;
   padding: 2px 5px;
   border-radius: 4px;
@@ -1269,14 +1295,26 @@ watch(() => projects.projects.length, (len) => {
   font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
   padding-left: 8px;
+  transition: color 0.15s ease;
 }
 
-.project-tree__session:hover .project-tree__session-time {
+.project-tree__session:hover .project-tree__session-time,
+.project-tree__session.is-active .project-tree__session-time {
   color: var(--dq-label-secondary);
 }
 
 .project-tree__session.is-active .project-tree__session-time {
   color: var(--dq-accent);
+}
+
+.module-sidebar:not(.is-collapsed) .project-tree__session-badge {
+  opacity: 0.85;
+}
+
+@media (max-width: 1100px) {
+  .module-sidebar:not(.is-collapsed) .project-tree__session-badge:not(.is-running):not(.is-waiting) {
+    display: none;
+  }
 }
 
 .module-sidebar__modules {

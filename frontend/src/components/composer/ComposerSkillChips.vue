@@ -52,14 +52,14 @@ const { t } = useI18n()
   border: 1px solid color-mix(in srgb, var(--dq-accent) 28%, transparent);
   border-radius: 6px;
   background: color-mix(in srgb, var(--dq-accent) 8%, transparent);
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   line-height: 1.3;
   color: var(--dq-text-primary, inherit);
 }
 
 .skill-chip__badge {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--dq-accent);
@@ -88,7 +88,7 @@ const { t } = useI18n()
   color: inherit;
   opacity: 0.55;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--dq-font-size-body);
   line-height: 1;
 }
 

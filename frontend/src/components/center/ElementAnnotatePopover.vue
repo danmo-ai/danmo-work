@@ -152,14 +152,14 @@ function shortSummary(): string {
 }
 
 .el-annotate__title {
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
   color: var(--dq-label-primary);
 }
 
 .el-annotate__summary {
   margin-top: 2px;
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-tertiary);
   word-break: break-all;
   line-height: 1.4;
@@ -186,7 +186,7 @@ function shortSummary(): string {
 
 .el-annotate__label {
   display: block;
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-secondary);
   margin-bottom: 6px;
 }
@@ -202,7 +202,7 @@ function shortSummary(): string {
   border: 1px solid var(--dq-glass-border-strong);
   background: color-mix(in srgb, var(--dq-bg-base) 55%, transparent);
   color: var(--dq-label-primary);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   line-height: 1.45;
   font-family: inherit;
 }
@@ -224,7 +224,7 @@ function shortSummary(): string {
   border: 1px solid transparent;
   border-radius: 8px;
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   cursor: pointer;
   font-family: inherit;
 }
@@ -241,7 +241,7 @@ function shortSummary(): string {
 
 .el-annotate__btn--primary {
   background: var(--dq-accent);
-  color: #fff;
+  color: var(--dq-on-accent);
 }
 
 .el-annotate__btn--primary:hover {
@@ -250,7 +250,7 @@ function shortSummary(): string {
 
 .el-annotate__hint {
   margin-top: 8px;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-quaternary);
   text-align: right;
 }

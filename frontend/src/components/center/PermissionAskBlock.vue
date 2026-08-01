@@ -65,9 +65,21 @@ const pending = computed(() => Boolean(props.showActions) && !props.decided)
 </script>
 
 <template>
+  <!-- Decided: quiet footnote — no tool-name wall -->
   <div
+    v-if="decided && !pending"
+    class="permission-ask permission-ask--settled"
+    :data-event-anchor="anchorSeq"
+    :title="`${reasonLabel}: ${toolName}`"
+  >
+    <span class="permission-ask__settled-dot" aria-hidden="true" />
+    <span class="permission-ask__settled-text">已处理 · {{ reasonLabel }}</span>
+  </div>
+
+  <div
+    v-else
     class="permission-ask"
-    :class="{ 'is-pending': pending, 'is-decided': decided && !pending }"
+    :class="{ 'is-pending': pending }"
     :data-event-anchor="anchorSeq"
   >
     <div class="permission-ask__main">
@@ -101,7 +113,6 @@ const pending = computed(() => Boolean(props.showActions) && !props.decided)
         拒绝
       </DqButton>
     </div>
-    <span v-else-if="decided" class="permission-ask__resolved">已处理</span>
   </div>
 </template>
 
@@ -166,11 +177,28 @@ const pending = computed(() => Boolean(props.showActions) && !props.decided)
   margin-left: auto;
 }
 
-.permission-ask__resolved {
-  margin-left: auto;
-  font-size: var(--dq-font-size-footnote);
-  font-weight: 500;
+.permission-ask--settled {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
   color: var(--dq-label-secondary);
-  opacity: 0.75;
+  font-size: var(--dq-font-size-caption);
+}
+
+.permission-ask__settled-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--dq-label-tertiary);
+}
+
+.permission-ask__settled-text {
+  color: var(--dq-label-secondary);
 }
 </style>

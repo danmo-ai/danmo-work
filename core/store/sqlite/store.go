@@ -838,15 +838,22 @@ func (r *memoryRepo) GetByKey(ctx context.Context, scope domain.MemoryScope, sco
 }
 
 func (r *memoryRepo) Search(ctx context.Context, q domain.MemoryQuery) ([]domain.Memory, error) {
-	if len(q.Scopes) == 0 {
+	if len(q.Scopes) == 0 && !q.IncludeAllAgents {
 		return nil, nil
 	}
 
-	clauses := make([]string, 0, len(q.Scopes))
+	clauses := make([]string, 0, len(q.Scopes)+1)
 	args := make([]any, 0, len(q.Scopes)*2)
 	for _, ref := range q.Scopes {
 		clauses = append(clauses, "(scope = ? AND scope_id = ?)")
 		args = append(args, string(ref.Scope), ref.ScopeID)
+	}
+	if q.IncludeAllAgents {
+		clauses = append(clauses, "scope = ?")
+		args = append(args, string(domain.MemoryScopeAgent))
+	}
+	if len(clauses) == 0 {
+		return nil, nil
 	}
 
 	db := r.s.db.WithContext(ctx).Model(&memoryModel{}).

@@ -1,4 +1,12 @@
-/* Danmo Work — layout & glass surfaces (tokens from @danqing/dq-tokens/dq-mac.css) */
+/* Danmo Work — layout & glass surfaces (tokens from @danqing/dq-tokens)
+
+   Type scale — 4 steps only:
+     caption 12  badges / timestamps / kbd
+     body    14  UI default (sidebar, tools, forms, plan, tables)
+     prose   16  chat & long-form
+     title   20  session / page titles
+   Never hardcode 10/11px. Prefer body over caption for readable text.
+*/
 
 /* Hide number input spinner arrows */
 input[type="number"]::-webkit-inner-spin-button,
@@ -15,18 +23,7 @@ body.app-is-resizing {
   user-select: none;
 }
 
-:root {
-  /* App semantic layer — only tokens still referenced by product CSS */
-  --work-radius-island: var(--dq-radius-group);
-  --work-radius-card: var(--dq-radius-group);
-  --work-glass-bg: var(--dq-glass-sidebar-bg);
-  --work-glass-border: var(--dq-glass-border);
-  --work-glass-border-subtle: var(--dq-border-subtle);
-  --work-glass-inset: color-mix(in srgb, var(--dq-label-quaternary) 20%, transparent);
-  --work-glass-shadow: var(--dq-shadow-lg);
-  --work-surface-muted: color-mix(in srgb, var(--dq-bg-elevated) 55%, transparent);
-  --work-surface-head: color-mix(in srgb, var(--dq-bg-elevated) 70%, transparent);
-}
+/* Material tokens live in @danqing/dq-tokens themes — do not fork here. */
 
 html,
 body,
@@ -40,14 +37,39 @@ html {
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+/* Native form controls (textarea/input) follow theme; without this, macOS
+   paints light system chrome over dark UI → washed gray + unreadable text. */
+html:not(.dark) {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
 body {
-  background: var(--dq-bg-page);
+  background-color: var(--dq-bg-page);
+  background-image: var(--dq-bg-page-glow);
+  background-repeat: no-repeat;
   color: var(--dq-label-primary);
   font-family: var(--dq-font-sans);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* Light themes: subpixel (auto). Antialiased only on dark — otherwise ink washes out. */
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
   text-rendering: optimizeLegibility;
   transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+html.dark body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Chat reading column — product guarantee */
+.agent-msg.dq-prose {
+  color: var(--dq-msg-agent-fg, var(--dq-label-primary));
+  font-size: var(--dq-font-size-prose);
+  font-weight: 500;
 }
 
 /* ── Scrollbar ── */
@@ -83,12 +105,12 @@ body {
   font-size: var(--dq-font-size-footnote);
 }
 
-/* Flat edge-docked shell marker (no page glow) */
 .teams-app {
   height: 100%;
   min-height: 0;
   color: var(--dq-label-primary);
   box-sizing: border-box;
+  background: transparent;
 }
 
 .teams-app__main {
@@ -109,11 +131,11 @@ body {
   margin: 0;
 }
 
-/* Resource / panel surface — flat docked (glass only on floating overlays) */
+/* Resource / panel surface — flush shell */
 .float-island {
   border-radius: 0;
-  border: 1px solid var(--work-glass-border);
-  background: var(--dq-bg-base);
+  border: none;
+  background: var(--dq-shell-stream-bg);
   min-height: 0;
   overflow: hidden;
 }
@@ -127,23 +149,17 @@ body {
   min-height: 0;
 }
 
-/* 左侧栏贴边停靠：仅左栏不要圆角，便于与顶/左边缘连通 */
-.teams-app .teams-left-rail,
-.teams-app .teams-left-rail__strip,
-.teams-app .agent-sidebar__panel {
-  border-radius: 0;
-}
-
 .teams-app .teams-left-rail {
   height: 100%;
-  border-right: 1px solid var(--work-glass-border);
-  background: var(--work-glass-bg);
+  border-right: 1px solid var(--dq-shell-sidebar-border);
+  background: var(--dq-shell-sidebar-bg);
+  -webkit-backdrop-filter: var(--dq-shell-sidebar-blur);
+  backdrop-filter: var(--dq-shell-sidebar-blur);
 }
 
 .teams-app .agent-sidebar__panel {
   border: none;
   box-shadow: none;
-  backdrop-filter: none;
   background: transparent;
 }
 
@@ -156,8 +172,8 @@ body {
 
 .teams-app .teams-right-rail {
   height: 100%;
-  border-left: 1px solid var(--work-glass-border);
-  background: var(--work-glass-bg);
+  border-left: 1px solid var(--dq-shell-divider);
+  background: var(--dq-shell-sidebar-bg);
 }
 
 .teams-app .agent-inspector__panel,
@@ -206,13 +222,13 @@ body {
   flex: 1;
   min-height: 0;
   padding: 10px 0;
-  border-radius: var(--work-radius-island);
-  border: 1px solid var(--work-glass-border);
-  background: var(--work-glass-bg);
+  border-radius: var(--dq-shell-radius);
+  border: 1px solid var(--dq-shell-divider);
+  background: var(--dq-shell-sidebar-bg);
   backdrop-filter: var(--dq-glass-blur-heavy);
   box-shadow:
-    0 0 0 1px var(--work-glass-inset) inset,
-    var(--work-glass-shadow);
+    0 0 0 1px var(--dq-fill-on-glass-subtle) inset,
+    var(--dq-shadow-lg);
 }
 
 .teams-left-rail__strip-label {
@@ -236,12 +252,12 @@ body {
 }
 
 .teams-left-panel.float-island {
-  border: 1px solid var(--work-glass-border);
-  background: var(--work-glass-bg);
+  border: 1px solid var(--dq-shell-divider);
+  background: var(--dq-shell-sidebar-bg);
   backdrop-filter: var(--dq-glass-blur-heavy);
   box-shadow:
-    0 0 0 1px var(--work-glass-inset) inset,
-    var(--work-glass-shadow);
+    0 0 0 1px var(--dq-fill-on-glass-subtle) inset,
+    var(--dq-shadow-lg);
 }
 
 .teams-left-panel .dq-surface-card__header {
@@ -337,13 +353,13 @@ body.teams-is-resizing {
   flex: 1;
   min-height: 0;
   padding: 10px 0;
-  border-radius: var(--work-radius-island);
-  border: 1px solid var(--work-glass-border);
-  background: var(--work-glass-bg);
+  border-radius: var(--dq-shell-radius);
+  border: 1px solid var(--dq-shell-divider);
+  background: var(--dq-shell-sidebar-bg);
   backdrop-filter: var(--dq-glass-blur-heavy);
   box-shadow:
-    0 0 0 1px var(--work-glass-inset) inset,
-    var(--work-glass-shadow);
+    0 0 0 1px var(--dq-fill-on-glass-subtle) inset,
+    var(--dq-shadow-lg);
 }
 
 .teams-right-rail__strip-label {
@@ -367,12 +383,12 @@ body.teams-is-resizing {
 }
 
 .teams-right-panel.float-island {
-  border: 1px solid var(--work-glass-border);
-  background: var(--work-glass-bg);
+  border: 1px solid var(--dq-shell-divider);
+  background: var(--dq-shell-sidebar-bg);
   backdrop-filter: var(--dq-glass-blur-heavy);
   box-shadow:
-    0 0 0 1px var(--work-glass-inset) inset,
-    var(--work-glass-shadow);
+    0 0 0 1px var(--dq-fill-on-glass-subtle) inset,
+    var(--dq-shadow-lg);
 }
 
 .teams-right-panel .dq-surface-card__header {
@@ -664,38 +680,36 @@ body.teams-is-resizing {
 
 .composer-float__card {
   overflow: hidden;
-  border-radius: var(--dq-radius-menu);
-  background: var(--dq-glass-popover-bg);
-  border: 1px solid var(--dq-glass-border-strong);
-  box-shadow: var(--dq-shadow-glass);
+  border-radius: var(--dq-composer-radius);
+  background: var(--dq-glass-floating-bar-bg, var(--dq-bg-elevated));
+  border: 1px solid var(--dq-composer-border);
+  box-shadow: var(--dq-composer-shadow);
   backdrop-filter: var(--dq-glass-blur-heavy);
   -webkit-backdrop-filter: var(--dq-glass-blur-heavy);
-  transition: border-color var(--dq-transition-hover), box-shadow var(--dq-transition-hover);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .composer-float:focus-within .composer-float__card {
-  border-color: color-mix(in srgb, var(--dq-accent) 28%, transparent);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--dq-accent) 12%, transparent),
-    0 12px 40px color-mix(in srgb, var(--dq-mask) 24%, transparent);
+  border-color: color-mix(in srgb, var(--dq-label-primary) 22%, transparent);
+  box-shadow: var(--dq-composer-shadow);
 }
 
 .composer-float.is-compose .composer-float__card {
-  border-color: color-mix(in srgb, var(--dq-accent) 30%, var(--dq-separator));
+  border-color: var(--dq-border-strong, var(--dq-border));
 }
 
 .composer-float.is-closed .composer-float__card {
-  border-color: color-mix(in srgb, var(--dq-warning) 25%, var(--dq-border));
+  border-color: color-mix(in srgb, var(--dq-warning) 30%, var(--dq-border));
 }
 
 .composer-float.is-locked .composer-float__card {
-  border-color: var(--work-glass-border-subtle);
-  box-shadow: 0 0 0 1px var(--work-glass-inset) inset;
+  border-color: var(--dq-border-subtle);
+  box-shadow: 0 0 0 1px var(--dq-fill-on-glass-subtle) inset;
 }
 
 .composer-float.is-locked:focus-within .composer-float__card {
-  border-color: var(--work-glass-border-subtle);
-  box-shadow: 0 0 0 1px var(--work-glass-inset) inset;
+  border-color: var(--dq-border-subtle);
+  box-shadow: 0 0 0 1px var(--dq-fill-on-glass-subtle) inset;
 }
 
 .composer-float__hint--muted {
@@ -784,7 +798,7 @@ body.teams-is-resizing {
 
 .task-list__filter:hover {
   color: var(--dq-label-secondary);
-  background: var(--work-surface-head);
+  background: var(--dq-shell-header-bg);
 }
 
 .task-list__filter.is-active {
@@ -1301,134 +1315,21 @@ body.teams-is-resizing {
   background: color-mix(in srgb, var(--dq-bg-elevated) 55%, transparent);
 }
 
-.md-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 0;
-  height: 100%;
-}
-
-.md-editor__label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.md-editor__label {
-  font-size: var(--dq-font-size-footnote);
-  font-weight: 500;
-  color: var(--dq-label-secondary);
-}
-
-.md-editor__tabs {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 8px;
-  background: var(--dq-fill-tertiary);
-}
-
-.md-editor__tabs--solo {
-  align-self: flex-start;
-}
-
-.md-editor__tab {
-  padding: 4px 10px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--dq-label-tertiary);
-  font: inherit;
-  font-size: var(--dq-font-size-footnote);
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    color 0.15s ease,
-    background 0.15s ease;
-}
-
-.md-editor__tab:hover {
-  color: var(--dq-label-secondary);
-}
-
-.md-editor__tab.is-active {
-  background: var(--dq-bg-elevated);
-  color: var(--dq-label-primary);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--dq-mask) 12%, transparent);
-}
-
-.md-editor__body {
-  flex: 1;
-  min-height: 200px;
-  border: 1px solid var(--dq-border-subtle);
-  border-radius: 10px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--dq-bg-base) 60%, transparent);
-}
-
-.md-editor__body.is-edit .md-editor__pane--edit,
-.md-editor__body.is-preview .md-editor__pane--preview {
-  height: 100%;
-}
-
-.md-editor__body.is-split {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-}
-
-.md-editor__pane {
-  min-height: 0;
-  min-width: 0;
-}
-
-.md-editor__body.is-split .md-editor__pane--edit {
-  border-right: 1px solid var(--dq-separator-light);
-}
-
-.md-editor__textarea {
-  width: 100%;
-  height: 100%;
-  min-height: 240px;
-  padding: 12px 14px;
-  border: none;
-  background: transparent;
-  color: var(--dq-label-primary);
-  font: inherit;
-  font-size: var(--dq-font-size-body);
-  line-height: 1.55;
-  font-family: var(--dq-font-mono);
-  resize: none;
-  outline: none;
-  box-sizing: border-box;
-}
-
-.md-editor__pane--preview {
-  overflow-y: auto;
-  padding: 12px 14px;
-}
-
-.md-editor__empty {
-  font-size: var(--dq-font-size-body);
-  color: var(--dq-label-quaternary);
-}
-
 /* —— Generic resource manager shell (reusable for skills/knowledge/mcp/automations) —— */
 .resource-shell {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   gap: 0;
   overflow: hidden;
-  border-radius: var(--work-radius-island);
+  border-radius: 0;
 }
 
 .resource-rail {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-right: 1px solid var(--dq-separator-light);
-  background: color-mix(in srgb, var(--dq-bg-base) 50%, transparent);
+  border-right: 1px solid var(--dq-shell-divider);
+  background: var(--dq-shell-sidebar-bg);
 }
 
 .resource-rail__head {

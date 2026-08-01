@@ -112,6 +112,9 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 	if err := os.WriteFile(resolvedPath, []byte(replacement), 0644); err != nil {
 		return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", resolvedPath, err)
 	}
+	// Own write updates the snapshot so a later edit in this turn does not
+	// fail with "changed since last read" unless something else touched the file.
+	noteReadFile(input, resolvedPath)
 
 	diff := generateUnifiedDiff(relPath, content, replacement)
 	return domain.ToolResult{

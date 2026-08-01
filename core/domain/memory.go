@@ -28,6 +28,9 @@ type Memory struct {
 type MemoryQuery struct {
 	// Scopes lists (scope, scopeID) pairs that are visible for this turn.
 	Scopes []MemoryScopeRef
+	// IncludeAllAgents adds every agent-scoped memory (any scope_id). Used by
+	// the Memory panel so subagent writes are visible beside the lead agent.
+	IncludeAllAgents bool
 	// Scope optionally restricts results to one scope name (user|project|agent).
 	Scope MemoryScope
 	// Key exact-match filter (optional).

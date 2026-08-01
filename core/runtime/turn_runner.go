@@ -16,13 +16,14 @@ import (
 )
 
 const (
-	turnToolTextMaxChars      = 2000
-	turnHugeResultThreshold   = 60000
-	defaultMaxToolOutputChars = 50000
-	turnTokenEstimateDivisor  = 4
-	doomPatternWindow         = 8
-	doomDescribeMaxLen        = 200
-	toolErrorHint             = "\n[Analyze the error above and try a different approach.]"
+	turnToolTextMaxChars         = 2000
+	defaultKeepRecentToolSteps   = 3
+	turnHugeResultThreshold      = 60000
+	defaultMaxToolOutputChars    = 50000
+	turnTokenEstimateDivisor     = 4
+	doomPatternWindow            = 8
+	doomDescribeMaxLen           = 200
+	toolErrorHint                = "\n[Analyze the error above and try a different approach.]"
 )
 
 const maxStepsPrompt = `<system-reminder>
@@ -204,6 +205,8 @@ type turnRunCfg struct {
 	compactionEnabled      bool
 	compactionMaxTokens    int
 	compactionTriggerRatio float64
+	toolTruncateChars      int
+	keepRecentToolSteps    int
 }
 
 func NewTurnRunner(llm port.LLMProvider, stream port.EventStream, perm *permission.Gate, reg *tool.Registry, configStore port.ConfigStore) *TurnRunner {
@@ -222,6 +225,8 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 		maxToolOutputChars:     defaultMaxToolOutputChars,
 		compactionMaxTokens:    128000,
 		compactionTriggerRatio: 0.85,
+		toolTruncateChars:      turnToolTextMaxChars,
+		keepRecentToolSteps:    defaultKeepRecentToolSteps,
 	}
 	if p.ConfigStore != nil {
 		if c, err := p.ConfigStore.Load(ctx); err == nil {
@@ -249,6 +254,12 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 			cfg.compactionEnabled = rt.Compaction.Enabled
 			cfg.compactionMaxTokens = rt.Compaction.MaxTokens
 			cfg.compactionTriggerRatio = rt.Compaction.TriggerRatio
+			if rt.Compaction.ToolTruncate > 0 {
+				cfg.toolTruncateChars = rt.Compaction.ToolTruncate
+			}
+			if rt.Compaction.KeepRecentToolSteps > 0 {
+				cfg.keepRecentToolSteps = rt.Compaction.KeepRecentToolSteps
+			}
 		}
 	}
 	return cfg
@@ -955,7 +966,7 @@ func (p *TurnRunner) compactMessages(messages []Message, cfg turnRunCfg) []Messa
 		return messages
 	}
 	messages = p.dedupToolResults(messages)
-	messages = p.truncateToolResults(messages)
+	messages = truncateToolResults(messages, cfg.toolTruncateChars, cfg.keepRecentToolSteps)
 	messages = p.enforceToolPairing(messages)
 	budget := budgetTokens(cfg)
 	if estimateTurnTokens(messages) > budget && budget > 0 {
@@ -1006,15 +1017,50 @@ func (p *TurnRunner) dedupToolResults(messages []Message) []Message {
 	return result
 }
 
-func (p *TurnRunner) truncateToolResults(messages []Message) []Message {
+// recentToolCallIDs returns tool_call IDs belonging to the last keepSteps
+// assistant messages that issued tools (one LLM step each).
+func recentToolCallIDs(messages []Message, keepSteps int) map[string]struct{} {
+	if keepSteps <= 0 {
+		return nil
+	}
+	protected := make(map[string]struct{})
+	found := 0
+	for i := len(messages) - 1; i >= 0; i-- {
+		m := messages[i]
+		if m.Role != RoleAssistant || len(m.ToolCalls) == 0 {
+			continue
+		}
+		for _, tc := range m.ToolCalls {
+			if tc.ID != "" {
+				protected[tc.ID] = struct{}{}
+			}
+		}
+		found++
+		if found >= keepSteps {
+			break
+		}
+	}
+	return protected
+}
+
+// truncateToolResults caps older tool results; the latest keepRecentSteps LLM
+// tool-call batches keep full content (still subject to max_output_chars at execute).
+func truncateToolResults(messages []Message, maxChars, keepRecentSteps int) []Message {
+	if maxChars <= 0 {
+		maxChars = turnToolTextMaxChars
+	}
+	protected := recentToolCallIDs(messages, keepRecentSteps)
 	result := make([]Message, len(messages))
 	copy(result, messages)
 	for i := range result {
 		if result[i].Role != RoleTool {
 			continue
 		}
+		if _, ok := protected[result[i].ToolCallID]; ok {
+			continue
+		}
 		content := result[i].Content
-		limit := turnToolTextMaxChars
+		limit := maxChars
 		if isHugeResult(content) {
 			limit = turnHugeResultThreshold
 		}

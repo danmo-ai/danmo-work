@@ -32,6 +32,7 @@ const rightTab = defineModel<RightTab>('tab', { required: true })
 
 const emit = defineEmits<{
   openInOffice: [path: string]
+  collapse: []
 }>()
 
 const { t } = useI18n()
@@ -84,6 +85,16 @@ defineExpose({
   <div class="right-workspace">
     <div class="right-workspace__tabs">
       <DqPillTabs v-model="rightTab" size="sm" :items="pillItems" />
+      <DqIconButton
+        class="right-workspace__collapse"
+        :aria-label="t('navigation.collapseRightPanel')"
+        :title="t('navigation.collapseRightPanel')"
+        @click="emit('collapse')"
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </DqIconButton>
     </div>
 
     <div class="right-workspace__body">
@@ -138,14 +149,26 @@ defineExpose({
   min-width: 0;
   min-height: 0;
   height: 100%;
-  background: var(--dq-bg-base);
+  background: transparent;
 }
 
 .right-workspace__tabs {
   flex-shrink: 0;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--dq-border-subtle);
-  overflow-x: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 6px 6px 8px;
+  border-bottom: 1px solid var(--dq-shell-divider);
+  min-width: 0;
+}
+
+.right-workspace__tabs :deep(.dq-pill-tabs) {
+  flex: 1;
+  min-width: 0;
+}
+
+.right-workspace__collapse {
+  flex-shrink: 0;
 }
 
 .right-workspace__body {
@@ -158,7 +181,7 @@ defineExpose({
 
 .right-workspace__empty {
   padding: 24px 16px;
-  font-size: var(--dq-font-size-footnote);
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-tertiary);
   text-align: center;
 }

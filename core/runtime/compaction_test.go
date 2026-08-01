@@ -484,24 +484,6 @@ func TestFindKeepStartSplitsOversizedTurn(t *testing.T) {
 	}
 }
 
-func TestTruncateToolResultsToBudget(t *testing.T) {
-	msgs := []Message{
-		{Role: RoleUser, Content: "u"},
-		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c1", Name: "read_file"}}},
-		{Role: RoleTool, ToolCallID: "c1", Name: "read_file", Content: strings.Repeat("Z", 4000)},
-	}
-	out := truncateToolResultsToBudget(msgs, 100)
-	if estimateTokenCount(out) > 100 {
-		t.Fatalf("still over budget: %d", estimateTokenCount(out))
-	}
-	if out[0].Role != RoleUser || out[1].Role != RoleAssistant || out[2].Role != RoleTool {
-		t.Fatalf("structure broken: %+v", out)
-	}
-	if len(out[2].Content) >= 4000 {
-		t.Fatal("expected tool result truncation")
-	}
-}
-
 func TestCompactToRetainStoresSkip(t *testing.T) {
 	mock := llm.NewMock().AddText("handoff note")
 	stream := NewStreamEventManager(nil)

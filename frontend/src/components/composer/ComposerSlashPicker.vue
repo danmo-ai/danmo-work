@@ -138,7 +138,7 @@ defineExpose({ onKeydown, confirmActive, move })
 }
 
 .slash-picker__title {
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
   opacity: 0.75;
 }
@@ -148,7 +148,7 @@ defineExpose({ onKeydown, confirmActive, move })
   background: transparent;
   cursor: pointer;
   opacity: 0.5;
-  font-size: 16px;
+  font-size: var(--dq-font-size-prose);
   line-height: 1;
   padding: 0 4px;
   color: inherit;
@@ -185,27 +185,27 @@ defineExpose({ onKeydown, confirmActive, move })
 }
 
 .slash-picker__trigger {
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   font-weight: 700;
   font-family: var(--dq-font-mono);
   color: var(--dq-accent);
 }
 
 .slash-picker__label {
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   opacity: 0.8;
 }
 
 .slash-picker__desc {
   margin: 2px 0 0;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   line-height: 1.35;
   opacity: 0.65;
 }
 
 .slash-picker__empty {
   padding: 16px 12px;
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   opacity: 0.6;
   text-align: center;
 }

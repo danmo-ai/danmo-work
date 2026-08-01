@@ -202,7 +202,7 @@ function onPick(id: string) {
 
 .active-sessions__row-state {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   color: var(--dq-label-tertiary);
 }

@@ -752,7 +752,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
   min-height: 0;
 }
 
-.resource-section--prompt .md-editor {
+.resource-section--prompt .work-md {
   flex: 1;
   min-height: 360px;
 }

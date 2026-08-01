@@ -64,7 +64,7 @@ const preview = computed(() => truncatePreview(props.text))
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--dq-label-tertiary);
+  color: var(--dq-label-secondary);
   cursor: pointer;
   text-align: left;
   font: inherit;
@@ -80,23 +80,22 @@ const preview = computed(() => truncatePreview(props.text))
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--dq-font-size-footnote);
-  color: var(--dq-label-tertiary);
-  font-style: italic;
+  font-size: var(--dq-font-size-body);
+  color: var(--dq-label-secondary);
+  font-style: normal;
 }
 
 .thinking-block__hint {
   flex: 1;
   min-width: 0;
-  font-size: var(--dq-font-size-footnote);
-  color: var(--dq-label-tertiary);
+  font-size: var(--dq-font-size-body);
+  color: var(--dq-label-secondary);
 }
 
 .thinking-block__meta {
   flex-shrink: 0;
   font-size: var(--dq-font-size-caption);
-  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
-  opacity: 0.75;
+  color: var(--dq-label-secondary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -117,7 +116,7 @@ const preview = computed(() => truncatePreview(props.text))
   padding: 8px 10px;
   border-radius: 6px;
   background: color-mix(in srgb, var(--dq-label-primary) 3%, transparent);
-  font-size: var(--dq-font-size-footnote);
+  font-size: var(--dq-font-size-body);
   line-height: 1.5;
   color: var(--dq-label-secondary);
   white-space: pre-wrap;

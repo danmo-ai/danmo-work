@@ -27,6 +27,7 @@ import { toast } from '@/utils/feedback'
 import { apiBaseUrl, saveBlobAs } from '@/utils/desktop'
 import type { ElementAttachment } from '@/types/element-attachment'
 import type { CodeSelectionAttachment } from '@/types/code-attachment'
+import type { OfficeEditAttachment } from '@/types/office-edit-attachment'
 import { fetchJSON } from '@/api/client'
 import { formatTokenCount, useSessionContextUsage } from '@/composables/useSessionContextUsage'
 import { routeOfficeFile } from '@/utils/office-route'
@@ -38,17 +39,37 @@ const { t } = useI18n()
 const sessions = useSessionsStore()
 const workspaceUi = useWorkspaceUiStore()
 const sessionActivity = useSessionActivityStore()
-const { rightTab, stage, layoutMode } = storeToRefs(workspaceUi)
+const { rightTab, stage, layoutMode, rightPanelCollapsed } = storeToRefs(workspaceUi)
 const rightPanelRef = ref<InstanceType<typeof RightWorkspacePanel> | null>(null)
 const { tokensForTurn } = useSessionContextUsage()
 const isEditingTitle = ref(false)
 const editingTitle = ref('')
 const composerRef = ref<InstanceType<typeof FloatingComposer> | null>(null)
 
-// ── Split mode: 60:40 default ──
+// ── Split mode: stream-heavy default ──
 const bodyRef = ref<HTMLElement | null>(null)
 const SPLIT_STORAGE_KEY = 'session-split-percent-v1'
-const splitPercent = ref(60)
+const splitPercent = ref(68)
+const RIGHT_STRIP_PX = 40
+
+const isChatLayout = computed(() => layoutMode.value === 'chat' || !stage.value)
+const isStageLayout = computed(() => layoutMode.value === 'stage' && !!stage.value)
+
+/** Grid columns for chat / stage; immersive leaves layout to CSS. */
+const bodyGridStyle = computed(() => {
+  if (layoutMode.value === 'immersive' && stage.value) return undefined
+  if (isStageLayout.value) {
+    return {
+      gridTemplateColumns: rightPanelCollapsed.value
+        ? `minmax(200px, 26%) minmax(0, 1fr) ${RIGHT_STRIP_PX}px`
+        : 'minmax(200px, 26%) minmax(0, 1fr) minmax(200px, 24%)',
+    }
+  }
+  // Chat (or stage closed): stream | split | right
+  return rightPanelCollapsed.value
+    ? { gridTemplateColumns: `minmax(0, 1fr) ${RIGHT_STRIP_PX}px` }
+    : { gridTemplateColumns: `${splitPercent.value}% 8px minmax(0, 1fr)` }
+})
 
 onMounted(() => {
   const saved = Number(localStorage.getItem(SPLIT_STORAGE_KEY))
@@ -113,6 +134,10 @@ function onStageAttachCodeSelection(att: CodeSelectionAttachment) {
   composerRef.value?.addCodeSelectionAttachment(att)
 }
 
+function onStageAttachOfficeEdit(att: OfficeEditAttachment) {
+  composerRef.value?.addOfficeEditAttachment(att)
+}
+
 /** Manual expand/collapse overrides for individual tool cards. */
 const toolCardExpandOverride = ref(new Map<number, boolean>())
 function findToolCardBySeq(seq: number): ToolCard | undefined {
@@ -133,7 +158,7 @@ function isToolCardExpanded(seq: number) {
   const card = findToolCardBySeq(seq)
   if (!card) return false
   if (card.name === 'delegate_agent' && delegateCardAwaiting(seq)) return true
-  return card.status === 'running' || card.status === 'error' || card.status === 'pending'
+  return card.status === 'running' || card.status === 'pending'
 }
 function toggleToolCard(seq: number) {
   toolCardExpandOverride.value.set(seq, !isToolCardExpanded(seq))
@@ -150,8 +175,8 @@ function toggleToolGroup(seq: number, cards: ToolCard[]) {
 function isToolGroupExpanded(seq: number, cards: ToolCard[]): boolean {
   const override = toolGroupExpandOverride.value.get(seq)
   if (override !== undefined) return override
-  // Default: open while in-flight / error / awaiting; collapse when all settled OK.
-  return cards.some((c) => c.status === 'running' || c.status === 'pending' || c.status === 'error')
+  // Default: open while in-flight / awaiting; collapse when settled (including errors).
+  return cards.some((c) => c.status === 'running' || c.status === 'pending')
 }
 
 const expandedThinking = ref(new Set<number>())
@@ -211,14 +236,21 @@ const composerStyle = ref<Record<string, string>>({})
 const composerOverlayPx = ref(140)
 let composerResizeObs: ResizeObserver | null = null
 
+function chatColumnMaxPx(): number {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--dq-chat-column-max').trim()
+  const n = Number.parseFloat(raw)
+  return Number.isFinite(n) && n > 0 ? n : 720
+}
+
 function updateComposerPosition() {
   const el = scrollAreaRef.value
   if (!el) return
   const rect = el.getBoundingClientRect()
-  const w = Math.min(720, rect.width - 48)
+  const gutter = 48
+  const w = Math.min(chatColumnMaxPx(), Math.max(280, rect.width - gutter))
   composerStyle.value = {
-    left: rect.left + (rect.width - w) / 2 + 'px',
-    width: w + 'px',
+    left: `${rect.left + (rect.width - w) / 2}px`,
+    width: `${w}px`,
   }
 }
 
@@ -235,6 +267,8 @@ function syncComposerLayout() {
 }
 
 watch(splitPercent, () => { nextTick(syncComposerLayout) })
+watch(rightPanelCollapsed, () => { nextTick(syncComposerLayout) })
+watch(layoutMode, () => { nextTick(syncComposerLayout) })
 watch(
   () => workspaceUi.pendingApprovals,
   () => { nextTick(syncComposerLayout) },
@@ -604,18 +638,39 @@ function toolGroupCards(ev: StreamEvent): ToolCard[] {
 
 const delegateLinkMap = computed(() => {
   const m = new Map<number, string>()
-  let lastDelegateSeq = -1
   for (const turn of Object.values(turnMap.value)) {
+    // Parallel delegate_agent cards land in one __tool_group__; match each
+    // delegate.started by callId when present, else FIFO by appearance order.
+    const seqByCallId = new Map<string, number>()
+    const pendingSeqs: number[] = []
     for (const ev of turn.events) {
       forEachToolCard(ev, (p) => {
-        if (p.name === 'delegate_agent') lastDelegateSeq = p.seq
+        if (p.name !== 'delegate_agent') return
+        pendingSeqs.push(p.seq)
+        if (p.callId) seqByCallId.set(p.callId, p.seq)
       })
-      if (ev.type === 'delegate.started' && lastDelegateSeq >= 0) {
-        const payload = asRecord(ev.payload)
-        const childTurnId = String(payload?.childTurnId ?? '')
-        if (childTurnId) m.set(lastDelegateSeq, childTurnId)
-        lastDelegateSeq = -1
+      if (ev.type !== 'delegate.started') continue
+      const payload = asRecord(ev.payload)
+      const childTurnId = String(payload?.childTurnId ?? '')
+      if (!childTurnId) continue
+
+      const callId = String(payload?.callId ?? '')
+      let seq = -1
+      if (callId && seqByCallId.has(callId)) {
+        seq = seqByCallId.get(callId)!
+        seqByCallId.delete(callId)
+        const idx = pendingSeqs.indexOf(seq)
+        if (idx >= 0) pendingSeqs.splice(idx, 1)
+      } else if (pendingSeqs.length > 0) {
+        seq = pendingSeqs.shift()!
+        for (const [cid, s] of seqByCallId) {
+          if (s === seq) {
+            seqByCallId.delete(cid)
+            break
+          }
+        }
       }
+      if (seq >= 0) m.set(seq, childTurnId)
     }
   }
   return m
@@ -846,6 +901,31 @@ function finalText(ev: StreamEvent): string {
   return String(p?.text ?? p?.summary ?? p?.content ?? '')
 }
 
+/** Skip events that would leave empty timeline rows (extra vertical gaps). */
+function isTimelineEventVisible(ev: StreamEvent): boolean {
+  switch (ev.type) {
+    case '__tool_group__':
+    case '__tool_card__':
+    case 'agent.thinking':
+    case 'permission.ask':
+    case 'ask_user.pending':
+    case 'context.compacted':
+    case 'error':
+    case 'capability.activated':
+    case 'report':
+      return true
+    case 'agent.message':
+      return Boolean(finalText(ev).trim())
+    default:
+      // user.message / delegate.* / llm.usage / turn.* are handled elsewhere or noise
+      return false
+  }
+}
+
+function timelineEvents(turn: StreamTurn): StreamEvent[] {
+  return turn.events.filter(isTimelineEventVisible)
+}
+
 function toolName(ev: StreamEvent): string {
   const p = asRecord(ev.payload)
   return String(p?.tool ?? p?.name ?? ev.type)
@@ -1006,6 +1086,15 @@ function reportSteps(ev: StreamEvent): number {
 function reportSummary(ev: StreamEvent): string {
   const p = asRecord(ev.payload)
   return String(p?.summary ?? '')
+}
+
+/** Backend copies final assistant text into report.summary; skip re-rendering that body. */
+function shouldShowReportSummary(turn: StreamTurn, ev: StreamEvent): boolean {
+  const summary = reportSummary(ev).trim()
+  if (!summary) return false
+  return !turn.events.some(
+    (e) => e.type === 'agent.message' && finalText(e).trim() === summary,
+  )
 }
 
 function stepTitle(ev: StreamEvent): string {
@@ -1440,7 +1529,10 @@ function onTitleKeydown(e: KeyboardEvent) {
             {{ sessions.currentSession.title || sessions.currentSession.content }}
           </h2>
         </template>
-        <DqTag :type="statusType">{{ statusLabel }}</DqTag>
+        <DqTag
+          :type="statusType"
+          :effect="sessions.currentSession?.status === 'active' ? 'dark' : 'light'"
+        >{{ statusLabel }}</DqTag>
         <ActiveSessionsBar
           class="session-workspace__active"
           @select="(id) => { sessions.selectSession(id); router.push({ name: 'sessions', params: { id } }) }"
@@ -1464,19 +1556,21 @@ function onTitleKeydown(e: KeyboardEvent) {
       ref="bodyRef"
       class="session-workspace__body"
       :class="{
-        'session-workspace__body--stage': layoutMode === 'stage' && !!stage,
+        'session-workspace__body--stage': isStageLayout,
         'session-workspace__body--immersive': layoutMode === 'immersive' && !!stage,
       }"
-      :style="layoutMode === 'chat' || !stage
-        ? { gridTemplateColumns: `${splitPercent}% 8px 1fr` }
-        : undefined"
+      :style="bodyGridStyle"
     >
-      <div v-show="layoutMode !== 'immersive'" class="session-workspace__stream">
+      <div
+        v-show="layoutMode !== 'immersive'"
+        class="session-workspace__stream"
+        :style="rightPanelCollapsed && isChatLayout ? { gridColumn: '1' } : undefined"
+      >
       <div
         ref="scrollAreaRef"
         class="session-workspace__scroll"
         :class="{ 'has-approval-rail': approvalAnchors.length > 0 }"
-        :style="{ paddingBottom: `${composerOverlayPx + 16}px` }"
+        :style="{ paddingBottom: `${composerOverlayPx + 28}px` }"
         @scroll="onScrollAreaScroll"
       >
         <div v-if="sessions.composingNew && !sessions.currentSession" class="session-workspace__empty">
@@ -1521,7 +1615,7 @@ function onTitleKeydown(e: KeyboardEvent) {
             @download="downloadTurnLog(turn.id)"
           >
             <template #timeline>
-              <div v-for="ev in turn.events" :key="ev.seq" class="turn__event">
+              <div v-for="ev in timelineEvents(turn)" :key="ev.seq" class="turn__event">
                 <template v-if="ev.type === '__tool_group__'">
                   <ToolCardGroup
                     :cards="toolGroupCards(ev)"
@@ -1559,7 +1653,7 @@ function onTitleKeydown(e: KeyboardEvent) {
                   />
                 </template>
 
-                <template v-else-if="ev.type === 'agent.message'">
+                <template v-else-if="ev.type === 'agent.message' && finalText(ev).trim()">
                   <AgentMessageBlock :html="renderMarkdown(finalText(ev))" />
                 </template>
 
@@ -1568,7 +1662,11 @@ function onTitleKeydown(e: KeyboardEvent) {
                     <DqTag :type="reportStatusType(ev)">{{ reportStatusLabel(ev) }}</DqTag>
                     <span v-if="reportConfidence(ev) !== null" class="turn__report-meta-confidence">置信度 {{ reportConfidence(ev) }}</span>
                     <span v-if="reportSteps(ev)" class="turn__report-meta-steps">{{ reportSteps(ev) }} 步</span>
-                    <div v-if="reportSummary(ev)" class="turn__report-meta-summary" v-html="renderMarkdown(reportSummary(ev))" />
+                    <div
+                      v-if="shouldShowReportSummary(turn, ev)"
+                      class="turn__report-meta-summary"
+                      v-html="renderMarkdown(reportSummary(ev))"
+                    />
                   </div>
                 </template>
 
@@ -1638,7 +1736,7 @@ function onTitleKeydown(e: KeyboardEvent) {
       </div>
 
       <div
-        v-show="layoutMode === 'chat' || !stage"
+        v-show="isChatLayout && !rightPanelCollapsed"
         class="session-workspace__split"
         @pointerdown="onSplitResizePointerDown"
       />
@@ -1649,15 +1747,34 @@ function onTitleKeydown(e: KeyboardEvent) {
         :project-id="sessions.selectedProjectId"
         @attach-element="onStageAttachElement"
         @attach-code-selection="onStageAttachCodeSelection"
+        @attach-office-edit="onStageAttachOfficeEdit"
       />
 
       <div
-        v-show="layoutMode === 'stage' && !!stage"
+        v-show="isStageLayout"
         class="session-workspace__split session-workspace__split--static"
       />
 
-      <div v-show="layoutMode !== 'immersive'" class="session-workspace__right">
+      <div
+        v-show="layoutMode !== 'immersive'"
+        class="session-workspace__right"
+        :class="{ 'is-collapsed': rightPanelCollapsed }"
+        :style="rightPanelCollapsed && isChatLayout ? { gridColumn: '2' } : undefined"
+      >
+        <button
+          v-if="rightPanelCollapsed"
+          type="button"
+          class="session-workspace__right-strip"
+          :aria-label="t('navigation.expandRightPanel')"
+          :title="t('navigation.expandRightPanel')"
+          @click="workspaceUi.setRightPanelCollapsed(false)"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
         <RightWorkspacePanel
+          v-else
           ref="rightPanelRef"
           v-model:tab="rightTab"
           :stream-events="sessions.streamEvents"
@@ -1666,6 +1783,7 @@ function onTitleKeydown(e: KeyboardEvent) {
           :changes-count="workspaceUi.changesCount"
           :agent-id="sessions.selectedAgentId"
           @open-in-office="openFileInOffice"
+          @collapse="workspaceUi.setRightPanelCollapsed(true)"
         />
       </div>
     </div>
@@ -1693,7 +1811,8 @@ function onTitleKeydown(e: KeyboardEvent) {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--dq-bg-base);
+  background: transparent;
+  border-radius: inherit;
 }
 
 .session-workspace__head {
@@ -1702,10 +1821,41 @@ function onTitleKeydown(e: KeyboardEvent) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--work-glass-border);
-  background: var(--work-glass-bg);
-  backdrop-filter: blur(8px);
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--dq-shell-divider);
+  background: transparent;
+}
+
+.session-workspace__right.is-collapsed {
+  margin: 0;
+  border: none;
+  border-left: 1px solid var(--dq-shell-divider);
+  background: var(--dq-shell-sidebar-bg);
+  border-radius: 0;
+  overflow: hidden;
+  z-index: 6;
+}
+
+.session-workspace__right-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-width: 40px;
+  height: 100%;
+  padding: 14px 0 0;
+  border: none;
+  background: transparent;
+  color: var(--dq-label-secondary);
+  cursor: pointer;
+  z-index: 6;
+}
+
+.session-workspace__right-strip:hover {
+  color: var(--dq-accent);
+  background: color-mix(in srgb, var(--dq-accent) 8%, transparent);
 }
 
 .session-workspace__identity {
@@ -1779,7 +1929,8 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .session-workspace__body--stage {
-  grid-template-columns: minmax(200px, 26%) 1fr minmax(200px, 24%);
+  /* Columns set via bodyGridStyle so collapse can shrink the right strip. */
+  grid-template-columns: minmax(200px, 26%) minmax(0, 1fr) minmax(200px, 24%);
 }
 
 .session-workspace__body--immersive {
@@ -1809,11 +1960,12 @@ function onTitleKeydown(e: KeyboardEvent) {
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 20px 24px 160px; /* padding-bottom overridden inline from composer height */
+  padding: var(--dq-chat-gutter, 24px) var(--dq-chat-gutter, 24px) 120px;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
+
 
 .session-workspace__scroll.has-approval-rail {
   padding-right: 64px;
@@ -1876,7 +2028,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   transform: translateY(-50%);
   padding: 2px 6px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   line-height: 1.3;
   white-space: nowrap;
@@ -1934,9 +2086,9 @@ function onTitleKeydown(e: KeyboardEvent) {
 .session-workspace__turns {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--dq-chat-turn-gap, 12px);
   width: 100%;
-  max-width: 720px;
+  max-width: var(--dq-chat-column-max, 720px);
 }
 
 .turn-breadcrumbs {
@@ -2073,7 +2225,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 .turn__report-meta-summary :deep(code) {
   font-family: var(--dq-font-mono);
-  font-size: 0.88em;
+  font-size: var(--dq-font-size-caption);
   padding: 2px 5px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
@@ -2148,7 +2300,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 .turn__step[data-step-phase='end'] .turn__step-badge {
   background: var(--dq-accent);
-  color: var(--dq-color-white);
+  color: var(--dq-on-accent);
   border-color: var(--dq-accent);
 }
 
@@ -2201,7 +2353,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   border-radius: 7px;
   font-size: var(--dq-font-size-body);
   font-weight: 700;
-  color: var(--dq-color-white);
+  color: var(--dq-on-accent);
   background: var(--dq-accent);
 }
 
@@ -2291,13 +2443,13 @@ function onTitleKeydown(e: KeyboardEvent) {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 10px 14px;
+  padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--dq-danger) 25%, transparent);
   background: color-mix(in srgb, var(--dq-danger) 6%, transparent);
   color: var(--dq-danger);
-  font-size: var(--dq-font-size-body);
-  line-height: 1.5;
+  font-size: var(--dq-font-size-caption);
+  line-height: 1.45;
 }
 
 .turn__error-svg {
@@ -2344,8 +2496,14 @@ function onTitleKeydown(e: KeyboardEvent) {
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-  border-left: 1px solid var(--work-glass-border);
-  background: var(--work-glass-bg);
+  margin: 0;
+  border: none;
+  border-left: 1px solid var(--dq-shell-divider);
+  background: var(--dq-shell-panel-bg);
+  -webkit-backdrop-filter: var(--dq-shell-panel-blur);
+  backdrop-filter: var(--dq-shell-panel-blur);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .session-workspace__right > :deep(.right-workspace) {

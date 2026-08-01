@@ -181,6 +181,7 @@ const runtimeForm = ref({
   doomLoopThreshold: 10,
   maxStepsDefault: 200,
   maxLLMFailures: 3,
+  llmHttpTimeoutSec: 600,
   maxToolOutputChars: 50000,
   maxDelegationDepth: 3,
   readTopK: 10,
@@ -194,6 +195,7 @@ const runtimeForm = ref({
   compactionTurnInterval: 6,
   compactionSubInterval: 4,
   compactionToolTruncate: 2000,
+  compactionKeepRecentToolSteps: 3,
 })
 
 const sandboxStatusText = computed(() => {
@@ -1208,6 +1210,14 @@ const hasFooterActions = computed(() => {
                   <span class="slider-row__value">{{ runtimeForm.maxLLMFailures }}</span>
                 </div>
               </div>
+              <div class="settings-field settings-field--half">
+                <span class="settings-field__label">{{ $t('settings.llmHttpTimeoutSec') }}</span>
+                <div class="slider-row">
+                  <DqSlider v-model="runtimeForm.llmHttpTimeoutSec" :min="60" :max="1800" :step="30" />
+                  <span class="slider-row__value">{{ runtimeForm.llmHttpTimeoutSec }}s</span>
+                </div>
+                <span class="settings-field__hint">{{ $t('settings.llmHttpTimeoutSecHint') }}</span>
+              </div>
             </div>
           </div>
 
@@ -1535,6 +1545,15 @@ const hasFooterActions = computed(() => {
                   <div class="slider-row">
                     <DqSlider v-model="runtimeForm.compactionToolTruncate" :min="500" :max="8000" :step="500" />
                     <span class="slider-row__value">{{ runtimeForm.compactionToolTruncate }}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="settings-form-row">
+                <div class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.compactionKeepRecentToolSteps') }}</span>
+                  <div class="slider-row">
+                    <DqSlider v-model="runtimeForm.compactionKeepRecentToolSteps" :min="1" :max="20" :step="1" />
+                    <span class="slider-row__value">{{ runtimeForm.compactionKeepRecentToolSteps }}</span>
                   </div>
                 </div>
               </div>
@@ -2653,7 +2672,7 @@ const hasFooterActions = computed(() => {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--work-glass-bg);
+  background: var(--dq-shell-sidebar-bg);
 }
 
 /* ── Form control consistency ── */
@@ -2661,7 +2680,7 @@ const hasFooterActions = computed(() => {
 /* Make DqInput match shared control density */
 .settings-view :deep(.dq-input) {
   background: var(--dq-glass-control-bg-solid);
-  border-color: var(--work-glass-border);
+  border-color: var(--dq-shell-divider);
   min-height: 28px;
   font-size: var(--dq-font-size-body);
 }
@@ -2684,8 +2703,8 @@ const hasFooterActions = computed(() => {
 .settings-sidebar {
   flex-shrink: 0;
   width: 200px;
-  border-right: 1px solid var(--work-glass-border);
-  background: var(--work-glass-bg);
+  border-right: 1px solid var(--dq-shell-divider);
+  background: var(--dq-shell-sidebar-bg);
   display: flex;
   flex-direction: column;
   padding: 16px 12px;
@@ -2876,7 +2895,7 @@ const hasFooterActions = computed(() => {
 }
 
 .market-source-card {
-  border: 1px solid var(--work-glass-border);
+  border: 1px solid var(--dq-shell-divider);
   border-radius: 10px;
   padding: 14px;
   margin-bottom: 12px;
@@ -3049,7 +3068,7 @@ const hasFooterActions = computed(() => {
   padding: 14px;
   border-radius: 12px;
   background: var(--dq-bg-elevated);
-  border: 1px solid var(--work-glass-border);
+  border: 1px solid var(--dq-shell-divider);
 }
 
 .model-list__head {
@@ -3090,7 +3109,7 @@ const hasFooterActions = computed(() => {
 
 .model-list__item:hover {
   background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
-  border-color: var(--work-glass-border);
+  border-color: var(--dq-shell-divider);
 }
 
 .model-list__item.is-disabled {
@@ -3122,7 +3141,7 @@ const hasFooterActions = computed(() => {
   border-radius: 6px;
   background: transparent;
   color: var(--dq-label-tertiary);
-  font-size: 16px;
+  font-size: var(--dq-font-size-prose);
   line-height: 1;
   cursor: pointer;
 }
@@ -3166,12 +3185,12 @@ const hasFooterActions = computed(() => {
 }
 
 .provider-card {
-  border-radius: 0;
+  border-radius: var(--dq-radius-control-sm);
   border: none;
   background: transparent;
   overflow: visible;
   padding: 16px 0;
-  border-bottom: 1px solid var(--work-glass-border);
+  border-bottom: 1px solid var(--dq-shell-divider);
 }
 
 .provider-card:last-child {
@@ -3222,7 +3241,7 @@ const hasFooterActions = computed(() => {
   padding: 4px 10px;
   border-radius: 6px;
   background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
-  border: 1px solid var(--work-glass-border);
+  border: 1px solid var(--dq-shell-divider);
   font-size: var(--dq-font-size-footnote);
 }
 
@@ -3272,7 +3291,7 @@ const hasFooterActions = computed(() => {
   gap: 6px;
   padding: 16px 10px;
   border-radius: 12px;
-  border: 1px solid var(--work-glass-border);
+  border: 1px solid var(--dq-shell-divider);
   background: var(--dq-bg-elevated);
   cursor: pointer;
   transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
@@ -3368,7 +3387,7 @@ const hasFooterActions = computed(() => {
 
 /* Subsection divider within settings panel */
 .settings-subsection {
-  border-top: 1px solid var(--work-glass-border);
+  border-top: 1px solid var(--dq-shell-divider);
   padding-top: 16px;
 }
 
@@ -3388,7 +3407,7 @@ const hasFooterActions = computed(() => {
 /* Model limits list */
 .model-limit-list {
   margin-top: 12px;
-  border: 1px solid var(--work-glass-border);
+  border: 1px solid var(--dq-shell-divider);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -3398,7 +3417,7 @@ const hasFooterActions = computed(() => {
   align-items: center;
   padding: 8px 12px;
   background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
-  border-bottom: 1px solid var(--work-glass-border);
+  border-bottom: 1px solid var(--dq-shell-divider);
   font-size: var(--dq-font-size-footnote);
   font-weight: 600;
   color: var(--dq-label-secondary);
@@ -3459,7 +3478,7 @@ const hasFooterActions = computed(() => {
   flex-direction: column;
   padding: 14px;
   border-radius: 14px;
-  border: 1.5px solid var(--work-glass-border);
+  border: 1.5px solid var(--dq-shell-divider);
   background: var(--dq-bg-elevated);
   cursor: pointer;
   text-align: left;
@@ -3540,7 +3559,7 @@ const hasFooterActions = computed(() => {
   height: 24px;
   border-radius: 50%;
   background: var(--dq-accent);
-  color: var(--dq-color-white);
+  color: var(--dq-on-accent);
   display: flex;
   align-items: center;
   justify-content: center;

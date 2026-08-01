@@ -52,6 +52,12 @@ const nameSummary = computed(() => {
   if (names.length <= 3) return names.join(', ')
   return `${names.slice(0, 3).join(', ')} +${names.length - 3}`
 })
+
+const statusHint = computed(() => {
+  if (counts.value.running > 0) return t('sessions.toolsRunning', { n: counts.value.running })
+  if (counts.value.error > 0) return t('sessions.toolsError', { n: counts.value.error })
+  return ''
+})
 </script>
 
 <template>
@@ -63,35 +69,34 @@ const nameSummary = computed(() => {
       'is-error': counts.error > 0 && !hasRunning,
     }"
   >
-    <div class="tool-group__header" @click="emit('toggle')">
-      <div class="tool-group__meta">
+    <button
+      type="button"
+      class="tool-group__header"
+      :title="nameSummary"
+      @click="emit('toggle')"
+    >
+      <span class="tool-group__dot" aria-hidden="true" />
+      <span class="tool-group__label">
         <span class="tool-group__title">{{ t('sessions.toolsGroup', { n: counts.total }) }}</span>
         <span v-if="!expanded && nameSummary" class="tool-group__names">{{ nameSummary }}</span>
-      </div>
-      <div class="tool-group__actions">
-        <span v-if="counts.running > 0" class="tool-group__badge is-running">
-          <span class="tool-group__spinner" />
-          {{ counts.running }}
-        </span>
-        <span v-if="counts.completed > 0" class="tool-group__badge is-done">✓ {{ counts.completed }}</span>
-        <span v-if="counts.error > 0" class="tool-group__badge is-error">✗ {{ counts.error }}</span>
-        <span v-if="counts.cancelled > 0" class="tool-group__badge is-cancelled">{{ counts.cancelled }}</span>
-        <svg
-          class="tool-group__chevron"
-          :class="{ 'is-open': expanded }"
-          viewBox="0 0 24 24"
-          width="14"
-          height="14"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </div>
-    </div>
+        <span v-if="statusHint" class="tool-group__hint">{{ statusHint }}</span>
+      </span>
+      <svg
+        class="tool-group__chevron"
+        :class="{ 'is-open': expanded }"
+        viewBox="0 0 24 24"
+        width="12"
+        height="12"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <polyline points="6 9 12 15 18 9" />
+      </svg>
+    </button>
 
     <div v-show="expanded" class="tool-group__body">
       <ToolCardBlock
@@ -111,34 +116,53 @@ const nameSummary = computed(() => {
 </template>
 
 <style scoped>
+/* Quiet footnote row — not a dashboard card wall */
 .tool-group {
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
-  background: color-mix(in srgb, var(--dq-label-primary) 2%, transparent);
-  overflow: hidden;
-}
-
-.tool-group.is-running {
-  border-color: color-mix(in srgb, var(--dq-accent) 30%, transparent);
-}
-
-.tool-group.is-error {
-  border-color: color-mix(in srgb, var(--dq-danger) 28%, transparent);
+  border: none;
+  background: transparent;
+  border-radius: 0;
 }
 
 .tool-group__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 7px;
+  width: 100%;
+  min-height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
-  user-select: none;
+  transition: color 0.12s ease;
 }
 
-.tool-group__meta {
+.tool-group__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--dq-label-quaternary);
+}
+
+.tool-group.is-running .tool-group__dot {
+  background: var(--dq-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 22%, transparent);
+}
+
+.tool-group.is-error .tool-group__dot {
+  background: var(--dq-danger);
+}
+
+.tool-group:not(.is-running):not(.is-error) .tool-group__dot {
+  background: var(--dq-label-quaternary);
+}
+
+.tool-group__label {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
   min-width: 0;
   flex: 1;
@@ -146,8 +170,8 @@ const nameSummary = computed(() => {
 
 .tool-group__title {
   flex-shrink: 0;
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
-  font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-primary);
 }
 
@@ -156,59 +180,36 @@ const nameSummary = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--dq-font-size-caption);
+  font-size: var(--dq-font-size-body);
+  color: var(--dq-label-secondary);
   font-family: var(--dq-font-mono, ui-monospace, monospace);
-  color: var(--dq-label-tertiary);
 }
 
-.tool-group__actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.tool-group__header:hover .tool-group__title,
+.tool-group.is-expanded .tool-group__title,
+.tool-group.is-running .tool-group__title,
+.tool-group.is-error .tool-group__title {
+  color: var(--dq-label-primary);
+}
+
+.tool-group__hint {
   flex-shrink: 0;
-}
-
-.tool-group__badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
-  border-radius: 8px;
   font-size: var(--dq-font-size-caption);
-  font-weight: 600;
+  color: var(--dq-label-secondary);
+  font-weight: 500;
 }
 
-.tool-group__badge.is-running {
-  background: color-mix(in srgb, var(--dq-accent) 12%, transparent);
+.tool-group.is-running .tool-group__hint {
   color: var(--dq-accent);
 }
 
-.tool-group__badge.is-done {
-  background: color-mix(in srgb, var(--dq-success) 12%, transparent);
-  color: var(--dq-success);
-}
-
-.tool-group__badge.is-error {
-  background: color-mix(in srgb, var(--dq-danger) 12%, transparent);
+.tool-group.is-error .tool-group__hint {
   color: var(--dq-danger);
 }
 
-.tool-group__badge.is-cancelled {
-  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
-  color: var(--dq-label-secondary);
-}
-
-.tool-group__spinner {
-  width: 8px;
-  height: 8px;
-  border: 1.5px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: tool-group-spin 0.7s linear infinite;
-}
-
 .tool-group__chevron {
-  color: var(--dq-label-tertiary);
+  flex-shrink: 0;
+  color: var(--dq-label-quaternary);
   transition: transform 0.15s ease;
 }
 
@@ -219,19 +220,42 @@ const nameSummary = computed(() => {
 .tool-group__body {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 0 6px 6px;
-  border-top: 1px solid color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
+  gap: 2px;
+  margin: 4px 0 8px;
+  padding: 4px 0 4px 13px;
+  border-left: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
 }
 
-.tool-group__body :deep(.dq-tool-card) {
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--dq-label-primary) 2.5%, transparent);
+.tool-group__body :deep(.dq-tool-card),
+.tool-group__body :deep(.dq-tool-card.is-running),
+.tool-group__body :deep(.dq-tool-card.is-awaiting),
+.tool-group__body :deep(.dq-tool-card.is-error) {
+  border: none !important;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 
-@keyframes tool-group-spin {
-  to {
-    transform: rotate(360deg);
-  }
+.tool-group__body :deep(.dq-tool-card__header) {
+  min-height: 24px;
+  padding: 1px 0;
+}
+
+.tool-group__body :deep(.dq-tool-card__header:hover) {
+  background: transparent;
+}
+
+.tool-group__body :deep(.dq-tool-card__name) {
+  font-weight: 500;
+  color: var(--dq-label-tertiary);
+}
+
+.tool-group__body :deep(.dq-tool-card__body) {
+  border-top: none;
+  padding: 4px 0 8px 0;
+}
+
+.tool-group__body :deep(.dq-tool-card__badge.is-completed) {
+  color: var(--dq-label-quaternary);
 }
 </style>

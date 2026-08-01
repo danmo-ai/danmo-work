@@ -253,7 +253,6 @@ func (c *captureStream) Unsubscribe(sessionID string, ch chan domain.StreamEvent
 func (c *captureStream) ListSince(sessionID string, since int64) []domain.StreamEvent { return nil }
 
 func TestTruncateToolResults_BySizeNotName(t *testing.T) {
-	p := &TurnRunner{}
 	long := make([]byte, turnToolTextMaxChars+50)
 	for i := range long {
 		long[i] = 'x'
@@ -262,7 +261,8 @@ func TestTruncateToolResults_BySizeNotName(t *testing.T) {
 		{Role: RoleTool, Name: "any_tool", Content: string(long)},
 		{Role: RoleTool, Name: "read_file", Content: "short"},
 	}
-	out := p.truncateToolResults(msgs)
+	// keepRecentSteps=0 → truncate all
+	out := truncateToolResults(msgs, turnToolTextMaxChars, 0)
 	if len(out[0].Content) <= turnToolTextMaxChars {
 		t.Fatalf("expected truncation marker on long content, len=%d", len(out[0].Content))
 	}
@@ -271,6 +271,33 @@ func TestTruncateToolResults_BySizeNotName(t *testing.T) {
 	}
 	if out[1].Content != "short" {
 		t.Fatalf("short content should be unchanged, got %q", out[1].Content)
+	}
+}
+
+func TestTruncateToolResults_KeepsRecentSteps(t *testing.T) {
+	long := strings.Repeat("x", turnToolTextMaxChars+100)
+	msgs := []Message{
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "old-1", Name: "delegate_agent"}}},
+		{Role: RoleTool, ToolCallID: "old-1", Name: "delegate_agent", Content: long},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "mid-1", Name: "web_search"}}},
+		{Role: RoleTool, ToolCallID: "mid-1", Name: "web_search", Content: long},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{
+			{ID: "new-1", Name: "delegate_agent"},
+			{ID: "new-2", Name: "delegate_agent"},
+		}},
+		{Role: RoleTool, ToolCallID: "new-1", Name: "delegate_agent", Content: long},
+		{Role: RoleTool, ToolCallID: "new-2", Name: "delegate_agent", Content: long},
+	}
+	// Keep last 2 steps (mid + new); truncate old only.
+	out := truncateToolResults(msgs, turnToolTextMaxChars, 2)
+	if !strings.Contains(out[1].Content, "[truncated") {
+		t.Fatalf("old step should be truncated, len=%d", len(out[1].Content))
+	}
+	if out[3].Content != long {
+		t.Fatalf("mid step should stay full, len=%d", len(out[3].Content))
+	}
+	if out[5].Content != long || out[6].Content != long {
+		t.Fatalf("newest step tool results should stay full")
 	}
 }
 

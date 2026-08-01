@@ -77,6 +77,7 @@ type DelegateStartedPayload struct {
 	AgentID     string `json:"agentId"`
 	Goal        string `json:"goal"`
 	ChildTurnID string `json:"childTurnId"`
+	CallID      string `json:"callId,omitempty"`
 }
 
 type DelegateCompletedPayload struct {

@@ -23,34 +23,33 @@ if [[ ! -d node_modules ]]; then
   npm install
 fi
 
+# Tauri externalBin requires a target-tripled sidecar even in dev.
+OS="$(uname -s)"
+ARCH="$(uname -m)"
+case "$OS-$ARCH" in
+  Darwin-arm64) TRIPLE="aarch64-apple-darwin" ;;
+  Darwin-x86_64) TRIPLE="x86_64-apple-darwin" ;;
+  Linux-x86_64) TRIPLE="x86_64-unknown-linux-gnu" ;;
+  MINGW*-x86_64|MSYS*-x86_64|CYGWIN*-x86_64) TRIPLE="x86_64-pc-windows-msvc" ;;
+  *)
+    echo "Unsupported platform: $OS-$ARCH" >&2
+    exit 1
+    ;;
+esac
+SIDECAR_NAME="danmo-work-backend-$TRIPLE"
+if [[ "$TRIPLE" == *"-pc-windows-msvc" ]]; then
+  SIDECAR_NAME="$SIDECAR_NAME.exe"
+fi
+SIDECAR_PATH="$DQ_ROOT/desktop/src-tauri/bin/$SIDECAR_NAME"
+if [[ ! -f "$SIDECAR_PATH" ]]; then
+  echo "==> Sidecar missing ($SIDECAR_NAME); building..."
+  "$SCRIPT_DIR/build_sidecar.sh"
+fi
+echo "==> Sidecar binary: $SIDECAR_PATH"
+echo ""
+
 if [[ "${SKIP_BACKEND:-0}" == "1" ]]; then
   echo "==> SKIP_BACKEND=1: using external backend (e.g. GoLand on port ${BACKEND_PORT})"
-  echo ""
-
-  # Verify sidecar binary exists for Tauri build
-  OS="$(uname -s)"
-  ARCH="$(uname -m)"
-  case "$OS-$ARCH" in
-    Darwin-arm64) TRIPLE="aarch64-apple-darwin" ;;
-    Darwin-x86_64) TRIPLE="x86_64-apple-darwin" ;;
-    Linux-x86_64) TRIPLE="x86_64-unknown-linux-gnu" ;;
-    MINGW*-x86_64|MSYS*-x86_64|CYGWIN*-x86_64) TRIPLE="x86_64-pc-windows-msvc" ;;
-    *)
-      echo "Unsupported platform: $OS-$ARCH" >&2
-      exit 1
-      ;;
-  esac
-  SIDECAR_NAME="danmo-work-backend-$TRIPLE"
-  if [[ "$TRIPLE" == *"-pc-windows-msvc" ]]; then
-    SIDECAR_NAME="$SIDECAR_NAME.exe"
-  fi
-  SIDECAR_PATH="$DQ_ROOT/desktop/src-tauri/bin/$SIDECAR_NAME"
-  if [[ ! -f "$SIDECAR_PATH" ]]; then
-    echo "ERROR: sidecar binary not found: $SIDECAR_PATH" >&2
-    echo "Run: make build-sidecar" >&2
-    exit 1
-  fi
-  echo "==> Sidecar binary: $SIDECAR_PATH"
   echo ""
 else
   DEV_BACKEND_BIN="$DQ_RUN_DIR/backend-bin"

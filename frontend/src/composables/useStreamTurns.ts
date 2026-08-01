@@ -46,10 +46,7 @@ export function groupConsecutiveToolCards(events: StreamEvent[]): StreamEvent[] 
     const start = i
     while (i < events.length && events[i].type === '__tool_card__') i++
     const run = events.slice(start, i)
-    if (run.length === 1) {
-      out.push(run[0])
-      continue
-    }
+    // Always wrap as a group, including a single tool.
     const cards = run.map((e) => e.payload as ToolCard)
     out.push({
       seq: run[0].seq,

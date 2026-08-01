@@ -146,7 +146,7 @@ function priorityColor(priority: TodoItem['priority']): string {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--work-glass-bg);
+  background: var(--dq-shell-sidebar-bg);
   font-size: var(--dq-font-size-body);
 }
 
@@ -257,12 +257,12 @@ function priorityColor(priority: TodoItem['priority']): string {
 }
 
 .plan-panel__group-count {
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   padding: 1px 6px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
-  color: var(--dq-label-tertiary);
+  color: var(--dq-label-secondary);
 }
 
 .plan-panel__item {
@@ -279,11 +279,12 @@ function priorityColor(priority: TodoItem['priority']): string {
 }
 
 .plan-panel__item.is-done {
-  color: var(--dq-label-tertiary);
+  color: var(--dq-label-secondary);
 }
 
 .plan-panel__item.is-done .plan-panel__item-text {
   text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--dq-label-secondary) 55%, transparent);
 }
 
 .plan-panel__item.is-cancelled {

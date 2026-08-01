@@ -34,9 +34,10 @@ async function load() {
   try {
     const qs = new URLSearchParams()
     if (props.projectId) qs.set('projectId', props.projectId)
-    if (props.agentId) qs.set('agentId', props.agentId)
+    // Include all agent-scoped memories (subagents write under their own id).
+    qs.set('allAgents', 'true')
     const q = qs.toString()
-    items.value = asArray(await fetchJSON<MemoryItem[]>(`/memories${q ? `?${q}` : ''}`))
+    items.value = asArray(await fetchJSON<MemoryItem[]>(`/memories?${q}`))
   } catch (e) {
     items.value = []
     // Outdated sidecars may lack /memories — don't spam toasts while switching sessions.
@@ -106,14 +107,19 @@ watch(
 
 watch(
   () => props.streamEvents?.length ?? 0,
-  () => {
+  (len, prev) => {
     const events = props.streamEvents
-    if (!events?.length) return
-    const last = events[events.length - 1]
-    if (last?.type !== 'tool.completed') return
-    const payload = asRecord(last.payload)
-    if (String(payload?.name ?? '') === 'memory_update') {
-      void load()
+    if (!events?.length || len <= (prev ?? 0)) return
+    // Refresh when any newly arrived event is a memory_update completion
+    // (including nested delegate child turns on the same session stream).
+    for (let i = prev ?? 0; i < events.length; i++) {
+      const ev = events[i]
+      if (ev?.type !== 'tool.completed') continue
+      const payload = asRecord(ev.payload)
+      if (String(payload?.name ?? '') === 'memory_update') {
+        void load()
+        return
+      }
     }
   },
 )
@@ -165,6 +171,7 @@ defineExpose({
           </div>
           <p class="memory-card__content">{{ m.content }}</p>
           <div class="memory-card__meta">
+            <span v-if="m.scope !== 'user' && m.scopeId" class="memory-card__scope-id">{{ m.scopeId }}</span>
             <span v-if="m.updatedAt">{{ formatTime(m.updatedAt) }}</span>
           </div>
         </article>
@@ -240,7 +247,7 @@ defineExpose({
 .memory-group__title {
   margin: 0 0 6px;
   padding: 0 4px;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -282,7 +289,7 @@ defineExpose({
   background: transparent;
   color: var(--dq-label-tertiary);
   cursor: pointer;
-  font-size: 16px;
+  font-size: var(--dq-font-size-prose);
   line-height: 1;
 }
 
@@ -302,7 +309,16 @@ defineExpose({
 
 .memory-card__meta {
   margin-top: 8px;
-  font-size: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
+}
+
+.memory-card__scope-id {
+  font-family: var(--dq-font-mono, ui-monospace, monospace);
+  opacity: 0.9;
 }
 </style>

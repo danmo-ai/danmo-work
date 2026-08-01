@@ -33,14 +33,6 @@ function turnStatusLabel(status?: string) {
   return status ? (map[status] ?? status) : ''
 }
 
-function turnStatusType(status?: string): 'info' | 'success' | 'danger' | 'warning' | 'neutral' {
-  if (status === 'running') return 'info'
-  if (status === 'completed') return 'success'
-  if (status === 'failed' || status === 'timeout') return 'danger'
-  if (status === 'cancelled') return 'warning'
-  return 'neutral'
-}
-
 const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
 </script>
 
@@ -48,7 +40,14 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
   <section class="turn-section">
     <div v-if="showDivider" class="turn-section__divider" />
 
-    <div class="turn-section__header" @click="emit('toggle-collapse')">
+    <div
+      class="turn-section__header"
+      :class="{
+        'is-running': turn.status === 'running' || summary.runningTools > 0,
+        'is-failed': turn.status === 'failed' || turn.status === 'timeout' || summary.errorTools > 0,
+      }"
+      @click="emit('toggle-collapse')"
+    >
       <div class="turn-section__header-left">
         <button
           type="button"
@@ -56,32 +55,25 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
           :class="{ 'is-collapsed': collapsed }"
           @click.stop="emit('toggle-collapse')"
         >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </button>
-        <span class="turn-section__number">Turn #{{ turnIndex + 1 }}</span>
-        <DqTag v-if="turn.status" :type="turnStatusType(turn.status)" size="sm">
-          {{ turnStatusLabel(turn.status) }}
-        </DqTag>
+        <span class="turn-section__number">Turn {{ turnIndex + 1 }}</span>
+        <span
+          v-if="turn.status && turn.status !== 'completed'"
+          class="turn-section__status"
+        >{{ turnStatusLabel(turn.status) }}</span>
         <span v-if="summary.runningTools > 0" class="turn-section__live-dot" />
       </div>
 
       <div class="turn-section__header-right">
         <div class="turn-section__summary-strip">
-          <template v-if="summary.toolCount > 0">
-            <span v-if="summary.completedTools > 0" class="turn-section__summary-item turn-section__summary-item--success">
-              ✓ {{ summary.completedTools }}
-            </span>
-            <span v-if="summary.errorTools > 0" class="turn-section__summary-item turn-section__summary-item--error">
-              ✗ {{ summary.errorTools }}
-            </span>
-            <span v-if="summary.runningTools > 0" class="turn-section__summary-item turn-section__summary-item--running">
-              ● {{ summary.runningTools }}
-            </span>
-          </template>
-          <span v-if="summary.tokensUsed > 0" class="turn-section__summary-item turn-section__summary-item--tokens">
-            {{ formatTokenCount(summary.tokensUsed) }} tokens
+          <span v-if="summary.toolCount > 0" class="turn-section__summary-item">
+            {{ summary.toolCount }} tools
+          </span>
+          <span v-if="summary.tokensUsed > 0" class="turn-section__summary-item">
+            {{ formatTokenCount(summary.tokensUsed) }}
           </span>
         </div>
         <button type="button" class="turn-section__download-btn" title="下载 Turn Log" @click.stop="emit('download')">
@@ -114,20 +106,15 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
 .turn-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding-bottom: 8px;
+  gap: 10px;
+  padding-bottom: 4px;
 }
 
 .turn-section__divider {
   height: 1px;
   border: none;
-  background: repeating-linear-gradient(
-    to right,
-    var(--dq-border) 0,
-    var(--dq-border) 6px,
-    transparent 6px,
-    transparent 12px
-  );
+  background: var(--dq-shell-divider);
+  opacity: 0.7;
 }
 
 .turn-section__header {
@@ -136,14 +123,16 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
   justify-content: space-between;
   gap: 8px;
   cursor: pointer;
-  padding: 4px 0;
-  border-radius: 6px;
-  transition: background 0.12s ease;
+  padding: 1px 0;
+  border-radius: 0;
+  transition: color 0.12s ease;
   user-select: none;
 }
 
-.turn-section__header:hover {
-  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
+.turn-section__header:hover .turn-section__number,
+.turn-section__header.is-running .turn-section__number,
+.turn-section__header.is-failed .turn-section__number {
+  color: var(--dq-label-secondary);
 }
 
 .turn-section__header-left,
@@ -184,62 +173,49 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
 }
 
 .turn-section__live-dot {
-  width: 7px;
-  height: 7px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: var(--dq-success);
+  background: var(--dq-accent);
   flex-shrink: 0;
-  animation: turn-live-pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes turn-live-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--dq-success) 40%, transparent); }
-  50% { opacity: 0.6; box-shadow: 0 0 0 4px color-mix(in srgb, var(--dq-success) 0%, transparent); }
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 18%, transparent);
 }
 
 .turn-section__number {
-  font-size: var(--dq-font-size-caption);
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
-  color: var(--dq-label-tertiary);
-  letter-spacing: 0.02em;
+  color: var(--dq-label-secondary);
+  letter-spacing: 0.01em;
+}
+
+.turn-section__status {
+  font-size: var(--dq-font-size-body);
+  font-weight: 500;
+  color: var(--dq-label-secondary);
+}
+
+.turn-section__header.is-running .turn-section__status {
+  color: var(--dq-accent);
+}
+
+.turn-section__header.is-failed .turn-section__status {
+  color: var(--dq-danger);
 }
 
 .turn-section__summary-strip {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: var(--dq-font-size-caption);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+  color: var(--dq-label-secondary);
 }
 
 .turn-section__summary-item {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 1px 6px;
-  border-radius: 999px;
   line-height: 1.4;
-}
-
-.turn-section__summary-item--success {
-  color: var(--dq-success);
-  background: color-mix(in srgb, var(--dq-success) 14%, transparent);
-}
-
-.turn-section__summary-item--error {
-  color: var(--dq-danger);
-  background: color-mix(in srgb, var(--dq-danger) 14%, transparent);
-}
-
-.turn-section__summary-item--running {
-  color: var(--dq-accent);
-  background: color-mix(in srgb, var(--dq-accent) 14%, transparent);
-}
-
-.turn-section__summary-item--tokens {
-  color: var(--dq-label-secondary);
-  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
 }
 
 .turn-section__download-btn {
@@ -254,7 +230,13 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
   background: transparent;
   color: var(--dq-label-tertiary);
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  opacity: 0;
+  transition: background 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+}
+
+.turn-section__header:hover .turn-section__download-btn,
+.turn-section__header:focus-within .turn-section__download-btn {
+  opacity: 1;
 }
 
 .turn-section__download-btn:hover {
@@ -265,7 +247,7 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
 .turn-section__body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--dq-chat-block-gap, 10px);
 }
 
 .turn-section__agent {
@@ -277,7 +259,8 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  /* Tighter than theme --dq-chat-block-gap so tool footnotes sit close */
+  gap: 4px;
 }
 
 .turn-section__timeline :deep(.turn__event) {

@@ -246,7 +246,7 @@ watch(
   flex-wrap: wrap;
 }
 .diff-surface__badge {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   padding: 2px 6px;
   border-radius: 4px;
@@ -267,7 +267,7 @@ watch(
   border-radius: 6px;
   background: var(--dq-fill-tertiary);
   color: var(--dq-label-primary);
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
   cursor: pointer;
 }
 .diff-surface__btn:hover:not(:disabled) {
@@ -280,6 +280,6 @@ watch(
 .diff-surface__status {
   padding: 24px;
   color: var(--dq-label-tertiary);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
 }
 </style>

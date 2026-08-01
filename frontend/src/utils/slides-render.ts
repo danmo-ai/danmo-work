@@ -292,24 +292,25 @@ export function renderPlayableSlidesHtml(md: string, srcHash: string): string {
   }
   .slide.active { opacity:1; pointer-events:auto; z-index:1; transform:none; }
   .slide.lead { text-align:center; align-items:center; }
-  .slide.lead h1 { font-size: clamp(2.4rem, 6vw, 3.8rem); letter-spacing:-0.02em; }
+  .slide { font-size: var(--dq-font-size-prose); }
+  .slide.lead h1 { font-size: 2.4em; letter-spacing:-0.02em; }
   .slide.lead > *:first-child { margin-top:0; }
   .slide.columns.active { display:grid; grid-template-columns:1fr 1fr; gap:2.5vw; align-items:start; justify-content:stretch; }
   .slide.columns > * { min-width:0; }
-  .slide h1 { font-size: clamp(2rem, 5vw, 3.25rem); margin:0 0 0.4em; line-height:1.15; font-weight:700; }
-  .slide h2 { font-size: clamp(1.5rem, 3.5vw, 2.25rem); margin:0 0 0.5em; line-height:1.2; }
-  .slide h3 { font-size:1.35rem; margin:0 0 0.5em; }
-  .slide p, .slide li { font-size: clamp(1.05rem, 2vw, 1.35rem); line-height:1.45;
+  .slide h1 { font-size: 2em; margin:0 0 0.4em; line-height:1.15; font-weight:700; }
+  .slide h2 { font-size: 1.5em; margin:0 0 0.5em; line-height:1.2; }
+  .slide h3 { font-size: var(--dq-font-size-title); margin:0 0 0.5em; }
+  .slide p, .slide li { font-size: 1em; line-height:1.45;
     font-family: "Source Sans 3", "Helvetica Neue", Arial, sans-serif; }
   body[data-theme="academic"] .slide p, body[data-theme="academic"] .slide li {
     font-family: "Source Serif 4", Georgia, serif; }
   .slide ul, .slide ol { margin:0.2em 0 0; padding-left:1.2em; }
   .slide li { margin:0.35em 0; }
   .slide pre { background:var(--code-bg); border:1px solid var(--border); border-radius:10px; padding:1em 1.2em;
-    overflow:auto; font-size: clamp(0.9rem, 1.6vw, 1.1rem); line-height:1.45; box-shadow: 0 1px 0 color-mix(in srgb, #000 12%, transparent); }
+    overflow:auto; font-size: 0.9em; line-height:1.45; box-shadow: 0 1px 0 color-mix(in srgb, #000 12%, transparent); }
   .slide code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  .slide :not(pre) > code { background: color-mix(in srgb, var(--accent) 12%, transparent); padding:0.1em 0.35em; border-radius:4px; font-size:0.92em; }
-  .slide blockquote { margin:0; padding-left:1em; border-left:4px solid var(--accent); color:var(--muted); font-size:1.4rem; }
+  .slide :not(pre) > code { background: color-mix(in srgb, var(--accent) 12%, transparent); padding:0.1em 0.35em; border-radius:4px; font-size: var(--dq-font-size-caption); }
+  .slide blockquote { margin:0; padding-left:1em; border-left:4px solid var(--accent); color:var(--muted); font-size: var(--dq-font-size-title); }
   .slide table { border-collapse:collapse; font-family: "Source Sans 3", Arial, sans-serif; width:auto; max-width:100%; }
   .slide th, .slide td { border:1px solid var(--border); padding:0.45em 0.8em; }
   .slide th { background: color-mix(in srgb, var(--accent) 10%, transparent); text-align:left; }
@@ -322,15 +323,18 @@ export function renderPlayableSlidesHtml(md: string, srcHash: string): string {
 
   #bar { position:fixed; left:0; right:0; bottom:0; height:4px; background:var(--border); z-index:5; }
   #bar > i { display:block; height:100%; width:0; background:var(--accent); transition:width .2s; }
-  #counter { position:fixed; right:16px; bottom:14px; z-index:6; font: 12px/1 ui-sans-serif, system-ui, sans-serif;
+  #counter { position:fixed; right:16px; bottom:14px; z-index:6;
+    font-family: ui-sans-serif, system-ui, sans-serif; font-size: var(--dq-font-size-caption); line-height: 1;
     color:var(--muted); letter-spacing:0.04em; }
-  #hint { position:fixed; left:16px; bottom:14px; z-index:6; font: 11px/1.3 ui-sans-serif, system-ui, sans-serif;
+  #hint { position:fixed; left:16px; bottom:14px; z-index:6;
+    font-family: ui-sans-serif, system-ui, sans-serif; font-size: var(--dq-font-size-caption); line-height: 1.3;
     color:var(--muted); opacity:0.75; }
   #presenter { display:none; position:fixed; inset:auto 16px 28px 16px; z-index:7; padding:12px 14px;
     background:rgba(0,0,0,.78); border:1px solid var(--border); border-radius:8px; max-height:32vh; overflow:auto;
-    font: 13px/1.4 "Source Sans 3", Arial, sans-serif; color:#e5e7eb; white-space:pre-wrap; }
+    font-family: "Source Sans 3", Arial, sans-serif; font-size: var(--dq-font-size-body); line-height: 1.4;
+    color:#e5e7eb; white-space:pre-wrap; }
   #presenter.on { display:block; }
-  #presenter .meta { color:#9ca3af; font-size:11px; margin-bottom:6px; }
+  #presenter .meta { color:#9ca3af; font-size: var(--dq-font-size-caption); margin-bottom:6px; }
 
   /* Overview (Reveal-inspired) */
   body.is-overview #deck { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:14px;

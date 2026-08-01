@@ -186,7 +186,7 @@ watch(items, () => ensureSelection())
   width: 14px;
   height: 14px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 700;
   background: rgba(217, 119, 6, 0.15);
   color: #b45309;

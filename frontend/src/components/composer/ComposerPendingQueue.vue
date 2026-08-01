@@ -286,7 +286,7 @@ async function steerToCurrentTurn(id: string) {
   justify-content: center;
   border: 0;
   border-radius: 8px;
-  color: var(--dq-color-white);
+  color: var(--dq-on-accent);
   background: var(--dq-accent);
   cursor: pointer;
 }
@@ -314,7 +314,7 @@ async function steerToCurrentTurn(id: string) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 650;
   color: var(--dq-accent);
   background: color-mix(in srgb, var(--dq-accent) 12%, transparent);

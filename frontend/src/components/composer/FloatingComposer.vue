@@ -23,8 +23,13 @@ import {
   type ComposerAttachment,
   type CodeComposerAttachment,
   type ElementComposerAttachment,
+  type OfficeComposerAttachment,
 } from '@/types/composer-attachment'
 import type { CodeSelectionAttachment } from '@/types/code-attachment'
+import {
+  officeEditSnapshotPaths,
+  type OfficeEditAttachment,
+} from '@/types/office-edit-attachment'
 import {
   detectAtSkillQuery,
   prependSkillSummon,
@@ -114,18 +119,11 @@ watch(() => sessions.selectedEffort, (effort) => {
   }
 })
 
-const primaryAgents = computed(() => {
-  const list = sessions.agents.filter((a) => a.mode !== 'subagent')
-  const order = ['default', 'team', 'planner']
-  return [...list].sort((a, b) => {
-    const ai = order.indexOf(a.id)
-    const bi = order.indexOf(b.id)
-    const ao = ai === -1 ? order.length : ai
-    const bo = bi === -1 ? order.length : bi
-    if (ao !== bo) return ao - bo
-    return a.name.localeCompare(b.name, 'zh-CN')
-  })
-})
+const primaryAgents = computed(() =>
+  [...sessions.agents.filter((a) => a.mode !== 'subagent')].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+  ),
+)
 
 const placeholder = computed(() =>
   sessions.composingNew ? t('composer.placeholderNew') : t('composer.placeholderContinue'),
@@ -192,37 +190,32 @@ const useAgentSegmented = computed(() => primaryAgents.value.length > 0 && prima
 
 const agentOptions = computed(() =>
   primaryAgents.value.map((a) => ({
-    label: leadAgentShortLabel(a),
+    label: a.name,
     value: a.id,
   })),
 )
+
+/** DqSegmented/DqSelect require string|number; store may be null before catalog loads. */
+const selectedAgentModel = computed({
+  get: () => sessions.selectedAgentId ?? primaryAgents.value[0]?.id ?? '',
+  set: (v: string | number) => {
+    sessions.selectedAgentId = String(v)
+  },
+})
 
 const selectedLeadAgent = computed(() =>
   primaryAgents.value.find((a) => a.id === sessions.selectedAgentId),
 )
 
-const selectedLeadHint = computed(() => leadAgentHint(selectedLeadAgent.value))
-
-function leadAgentShortLabel(agent: { id: string; name: string }): string {
-  if (agent.id === 'default' || agent.id === 'team' || agent.id === 'planner') {
-    return t(`composer.agentMode.${agent.id}`)
-  }
-  return agent.name
-}
-
-function leadAgentHint(agent: { id: string; name: string; description?: string; persona?: string; canDelegate?: boolean } | undefined): string {
+const selectedLeadHint = computed(() => {
+  const agent = selectedLeadAgent.value
   if (!agent) return ''
-  let base = ''
-  if (agent.id === 'default' || agent.id === 'team' || agent.id === 'planner') {
-    base = t(`composer.agentModeHint.${agent.id}`)
-  } else {
-    base = (agent.description || agent.persona || '').trim() || t('composer.agentModeHint.custom')
-  }
+  const base = (agent.description || agent.persona || '').trim()
   if (agent.canDelegate) {
-    return `${base} ${t('composer.canDelegateHint')}`
+    return base ? `${base} ${t('composer.canDelegateHint')}` : t('composer.canDelegateHint')
   }
   return base
-}
+})
 
 function clearGitStatus() {
   gitBranch.value = ''
@@ -358,6 +351,16 @@ function addCodeSelectionAttachment(att: CodeSelectionAttachment) {
   focusInput()
 }
 
+function addOfficeEditAttachment(att: OfficeEditAttachment) {
+  const wrapped: OfficeComposerAttachment = {
+    id: att.id,
+    kind: 'office',
+    data: att,
+  }
+  attachments.value = [...attachments.value, wrapped]
+  focusInput()
+}
+
 function removeAttachment(id: string) {
   attachments.value = attachments.value.filter((a) => a.id !== id)
   if (editingId.value === id) {
@@ -366,8 +369,14 @@ function removeAttachment(id: string) {
   }
 }
 
-function startEditAnnotation(att: ElementComposerAttachment | CodeComposerAttachment) {
+function startEditAnnotation(
+  att: ElementComposerAttachment | CodeComposerAttachment | OfficeComposerAttachment,
+) {
   editingId.value = att.id
+  if (att.kind === 'office') {
+    editingAnnotation.value = att.data.instruction
+    return
+  }
   editingAnnotation.value = att.data.annotation
 }
 
@@ -382,6 +391,9 @@ function saveEditAnnotation() {
     }
     if (a.kind === 'code') {
       return { ...a, data: { ...a.data, annotation: note } }
+    }
+    if (a.kind === 'office') {
+      return { ...a, data: { ...a.data, instruction: note } }
     }
     return a
   })
@@ -406,6 +418,20 @@ function clearComposer() {
 function getTextarea(): HTMLTextAreaElement | null {
   return inputWrap.value?.querySelector('textarea') ?? null
 }
+
+function autosizeTextarea() {
+  const ta = getTextarea()
+  if (!ta) return
+  ta.style.height = 'auto'
+  const maxRaw = getComputedStyle(document.documentElement).getPropertyValue('--dq-composer-max-height').trim()
+  const maxPx = Number.parseFloat(maxRaw) || 240
+  const next = Math.min(Math.max(ta.scrollHeight, 40), maxPx)
+  ta.style.height = `${next}px`
+}
+
+watch(content, () => {
+  nextTick(autosizeTextarea)
+})
 
 function closeSkillPickers() {
   buttonPickerOpen.value = false
@@ -664,8 +690,14 @@ async function send() {
   try {
     const stagePath = workspaceUi.stage?.path
     const snapKinds = new Set(['doc', 'slides', 'sheet', 'code'])
-    const snapshotPaths =
-      stagePath && workspaceUi.stage && snapKinds.has(workspaceUi.stage.kind) ? [stagePath] : undefined
+    const officePaths = officeEditSnapshotPaths(
+      attachments.value.filter((a): a is OfficeComposerAttachment => a.kind === 'office').map((a) => a.data),
+    )
+    const paths = new Set<string>(officePaths)
+    if (stagePath && workspaceUi.stage && snapKinds.has(workspaceUi.stage.kind)) {
+      paths.add(stagePath)
+    }
+    const snapshotPaths = paths.size ? [...paths] : undefined
     await sessions.sendTurn(text, imageAtts, snapshotPaths ? { snapshotPaths } : undefined)
     clearComposer()
     focusInput()
@@ -788,7 +820,13 @@ function onDrop(e: DragEvent) {
   for (const f of files) addLocalFile(f)
 }
 
-defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelectionAttachment })
+defineExpose({
+  focusInput,
+  appendContent,
+  addElementAttachment,
+  addCodeSelectionAttachment,
+  addOfficeEditAttachment,
+})
 </script>
 
 <template>
@@ -834,7 +872,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
     </div>
 
     <!-- Upper card: input + model/effort/send -->
-    <div class="composer-float__card">
+    <div class="composer-float__card dq-glass--composer">
       <div v-if="dragOver" class="composer-float__drop">{{ t('composer.dropHint') }}</div>
 
       <div v-if="isTurnRunning" class="composer-float__banner composer-float__banner--run">
@@ -1048,7 +1086,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
         >
           <DqSegmented
             v-if="useAgentSegmented"
-            v-model="sessions.selectedAgentId"
+            v-model="selectedAgentModel"
             size="sm"
             class="composer-agent-seg composer-agent-seg--compact"
             :options="agentOptions"
@@ -1060,7 +1098,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
             class="composer-select composer-select--agent"
           >
             <DqSelect
-              v-model="sessions.selectedAgentId"
+              v-model="selectedAgentModel"
               size="sm"
               variant="ghost"
               :aria-label="t('composer.selectAgent')"
@@ -1070,7 +1108,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
                 v-for="a in primaryAgents"
                 :key="a.id"
                 :value="a.id"
-                :label="leadAgentShortLabel(a)"
+                :label="a.name"
               />
             </DqSelect>
           </div>
@@ -1187,8 +1225,8 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
 }
 
 .composer-float__banner--run {
-  color: var(--dq-accent);
-  background: color-mix(in srgb, var(--dq-accent) 8%, transparent);
+  color: var(--dq-label-primary);
+  background: var(--dq-accent-tint-strong, color-mix(in srgb, var(--dq-accent) 14%, transparent));
 }
 
 .composer-float__run-dot {
@@ -1209,11 +1247,12 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
   background: transparent !important;
   box-shadow: none !important;
   resize: none;
-  min-height: 0 !important;
-  height: calc(2 * 1.45em) !important;
-  max-height: calc(2 * 1.45em) !important;
+  min-height: calc(2.4 * 1.45em) !important;
+  height: auto !important;
+  max-height: var(--dq-composer-max-height, 240px) !important;
   line-height: 1.45;
   overflow-y: auto;
+  field-sizing: content;
 }
 
 .composer-float__file-input {
@@ -1248,7 +1287,8 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
 
 .composer-float__tray {
   position: relative;
-  z-index: 1;
+  /* Above card overlap so tray controls (esp. last agent segment) stay clickable */
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1256,7 +1296,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
   margin-top: -10px;
   padding: 14px 10px 6px;
   min-width: 0;
-  border-radius: 0 0 var(--dq-radius-menu) var(--dq-radius-menu);
+  border-radius: 0 0 var(--dq-composer-radius) var(--dq-composer-radius);
   background: color-mix(in srgb, var(--dq-glass-popover-bg) 92%, var(--dq-bg-base));
   border: 1px solid var(--dq-glass-border-strong);
   border-top: none;
@@ -1268,9 +1308,10 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
 
 .composer-float__tray-leading {
   display: flex;
+  flex: 1 1 auto;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
@@ -1293,9 +1334,9 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  flex: 0 1 auto;
-  max-width: min(100%, 420px);
-  min-width: 0;
+  flex: 0 1 140px;
+  max-width: 200px;
+  min-width: 64px;
   height: 28px;
   padding: 0 8px;
   border-radius: 6px;
@@ -1332,8 +1373,8 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
 .composer-agent-picker {
   display: flex;
   align-items: center;
-  min-width: 0;
-  flex-shrink: 1;
+  flex-shrink: 0;
+  overflow: visible;
 }
 
 .composer-agent-seg--compact :deep(.dq-segmented__item) {
@@ -1410,8 +1451,9 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
 }
 
 .composer-select--project {
-  flex: 0 1 160px;
-  max-width: 200px;
+  flex: 0 1 120px;
+  min-width: 72px;
+  max-width: 160px;
 }
 
 .composer-select--model {
@@ -1522,7 +1564,7 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
   border: none;
   border-radius: 10px;
   background: var(--dq-accent);
-  color: var(--dq-color-white);
+  color: var(--dq-on-accent);
   font-size: var(--dq-font-size-footnote);
   font-weight: 650;
   cursor: pointer;
@@ -1556,9 +1598,9 @@ defineExpose({ focusInput, appendContent, addElementAttachment, addCodeSelection
   height: 18px;
   padding: 0 5px;
   border-radius: 5px;
-  background: color-mix(in srgb, #000 18%, transparent);
+  background: color-mix(in srgb, var(--dq-on-accent) 18%, transparent);
   font-family: var(--dq-font-mono, ui-monospace, monospace);
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   opacity: 0.9;
 }

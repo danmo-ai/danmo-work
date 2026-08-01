@@ -284,7 +284,7 @@ defineExpose({
 .preview-surface__hint {
   margin: 0;
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-accent);
   background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--dq-accent) 20%, transparent);
@@ -306,7 +306,7 @@ defineExpose({
   border: 1px solid var(--dq-border);
   background: var(--dq-bg-elevated);
   color: var(--dq-label-primary);
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   outline: none;
   font-family: var(--dq-font-mono, ui-monospace, monospace);
 }
@@ -332,11 +332,11 @@ defineExpose({
 }
 .preview-surface__btn:hover {
   background: var(--dq-accent);
-  color: #fff;
+  color: var(--dq-on-accent);
 }
 .preview-surface__btn.is-active {
   background: var(--dq-accent);
-  color: #fff;
+  color: var(--dq-on-accent);
 }
 .preview-surface__stage {
   position: relative;

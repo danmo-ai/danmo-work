@@ -1,28 +1,22 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { useEditor, EditorContent } from '@tiptap/vue-3'
-import type { Editor } from '@tiptap/core'
-import { BubbleMenu } from '@tiptap/vue-3/menus'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { MdEditor, type ExposeParam, type Themes } from 'md-editor-v3'
+import 'md-editor-v3/lib/style.css'
 import { useI18n } from 'vue-i18n'
-import {
-  createOfficeDocExtensions,
-  defaultSlashCommands,
-  extractTocHeadings,
-  type SlashCommandItem,
-  type TocHeading,
-} from '@/utils/tiptap-extensions'
-import { editorToMarkdown, selectionToMarkdown } from '@/utils/tiptap-markdown'
+import { storeToRefs } from 'pinia'
+import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
 
 const props = withDefaults(
   defineProps<{
-    /** Markdown content to display (controlled via setContent / watch). */
     content?: string
     editable?: boolean
     placeholder?: string
-    /** Show sticky format toolbar when editable. */
+    /** Kept for API compat; md-editor always shows its toolbar when editable. */
     showToolbar?: boolean
-    /** Show outline from headings (useful in view/read mode). */
+    /** Show catalog outline when true. */
     showToc?: boolean
+    /** Selection floating AI: polish / expand / modify (Office Doc). Works in edit + view. */
+    enableSelectionAi?: boolean
   }>(),
   {
     content: '',
@@ -30,219 +24,418 @@ const props = withDefaults(
     placeholder: '',
     showToolbar: true,
     showToc: true,
+    enableSelectionAi: false,
   },
 )
 
 const emit = defineEmits<{
   update: []
   selectionEmpty: [empty: boolean]
+  aiEdit: [
+    payload: {
+      action: 'polish' | 'continue' | 'modify'
+      instruction: string
+      selection: string
+      startLine?: number
+      endLine?: number
+    },
+  ]
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const themeStore = useThemeStore()
+const { currentTheme } = storeToRefs(themeStore)
+
+const editorId = `md-doc-${Math.random().toString(36).slice(2, 10)}`
 const rootRef = ref<HTMLElement | null>(null)
-const slashOpen = ref(false)
-const slashQuery = ref('')
-const slashIndex = ref(0)
-const slashPos = ref<{ top: number; left: number } | null>(null)
-const slashRange = ref<{ from: number; to: number } | null>(null)
-const toc = ref<TocHeading[]>([])
+const mdRef = ref<ExposeParam>()
+const text = ref(props.content || '')
+const suppressUpdate = ref(false)
 
-const slashItems = computed(() => defaultSlashCommands((k) => t(k)))
+const aiAnnotateOpen = ref(false)
+const aiInstruction = ref('')
+const aiInputRef = ref<HTMLTextAreaElement | null>(null)
+const aiSelectionMarkdown = ref('')
+const aiSelectionLines = ref<{ startLine: number; endLine: number } | null>(null)
+const floatPos = ref<{ top: number; left: number } | null>(null)
+const hasSelection = ref(false)
 
-const filteredSlash = computed(() => {
-  const q = slashQuery.value.trim().toLowerCase()
-  if (!q) return slashItems.value
-  return slashItems.value.filter((item) => {
-    const hay = [item.id, item.label, ...(item.keywords ?? [])].join('\n').toLowerCase()
-    return hay.includes(q) || item.id.startsWith(q)
-  })
+const mdTheme = computed<Themes>(() => {
+  const opt = THEME_OPTIONS.find((o) => o.id === currentTheme.value)
+  return opt?.dark ? 'dark' : 'light'
 })
 
-const editor = useEditor({
-  extensions: createOfficeDocExtensions({
-    placeholder: props.placeholder || t('office.docPlaceholder'),
-  }),
-  content: props.content || '',
-  contentType: 'markdown',
-  editable: props.editable,
-  onUpdate: ({ editor: ed }) => {
-    const core = ed as unknown as Editor
-    refreshToc(core)
-    detectSlash(core)
-    emit('update')
-  },
-  onSelectionUpdate: ({ editor: ed }) => {
-    const core = ed as unknown as Editor
-    emit('selectionEmpty', core.state.selection.empty)
-    detectSlash(core)
-  },
-  editorProps: {
-    handleKeyDown: (_view, event) => {
-      if (!slashOpen.value) return false
-      if (event.key === 'ArrowDown') {
-        event.preventDefault()
-        slashIndex.value = Math.min(slashIndex.value + 1, Math.max(0, filteredSlash.value.length - 1))
-        return true
-      }
-      if (event.key === 'ArrowUp') {
-        event.preventDefault()
-        slashIndex.value = Math.max(slashIndex.value - 1, 0)
-        return true
-      }
-      if (event.key === 'Enter' || event.key === 'Tab') {
-        const item = filteredSlash.value[slashIndex.value]
-        if (item) {
-          event.preventDefault()
-          runSlash(item)
-          return true
-        }
-      }
-      if (event.key === 'Escape') {
-        closeSlash()
-        return true
-      }
-      return false
-    },
-  },
+const mdLanguage = computed(() => (String(locale.value).startsWith('zh') ? 'zh-CN' : 'en-US'))
+
+const toolbarsExclude = computed(() => {
+  const exclude: Array<
+    | 'github'
+    | 'save'
+    | 'htmlPreview'
+    | 'catalog'
+  > = ['github', 'save', 'htmlPreview']
+  if (!props.showToc) exclude.push('catalog')
+  return exclude
 })
-
-function refreshToc(ed: Editor | null | undefined = editor.value as unknown as Editor | null) {
-  if (!ed) {
-    toc.value = []
-    return
-  }
-  toc.value = extractTocHeadings(ed)
-}
-
-function detectSlash(ed: Editor) {
-  if (!props.editable || !ed.isEditable) {
-    closeSlash()
-    return
-  }
-  const { $from, empty } = ed.state.selection
-  if (!empty) {
-    closeSlash()
-    return
-  }
-  const textBefore = $from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc')
-  const m = textBefore.match(/(^|[\s])\/([^\s]*)$/)
-  if (!m) {
-    closeSlash()
-    return
-  }
-  const query = m[2] ?? ''
-  const slashOffset = textBefore.length - query.length - 1
-  const from = $from.start() + slashOffset
-  const to = $from.pos
-  slashQuery.value = query
-  slashRange.value = { from, to }
-  slashOpen.value = true
-  slashIndex.value = 0
-  const coords = ed.view.coordsAtPos(from)
-  const rootBox = rootRef.value?.getBoundingClientRect()
-  if (rootBox) {
-    slashPos.value = {
-      top: coords.bottom - rootBox.top + 6,
-      left: Math.max(8, coords.left - rootBox.left),
-    }
-  }
-}
-
-function closeSlash() {
-  slashOpen.value = false
-  slashQuery.value = ''
-  slashRange.value = null
-  slashPos.value = null
-}
-
-function runSlash(item: SlashCommandItem) {
-  const ed = editor.value
-  if (!ed || !slashRange.value) return
-  const { from, to } = slashRange.value
-  ed.chain().focus().deleteRange({ from, to }).run()
-  closeSlash()
-  item.run(ed)
-}
-
-function setContent(md: string, opts?: { emitUpdate?: boolean }) {
-  editor.value?.commands.setContent(md || '', {
-    contentType: 'markdown',
-    emitUpdate: opts?.emitUpdate ?? false,
-  })
-  refreshToc()
-}
 
 function getMarkdown(): string {
-  if (!editor.value) return ''
-  return editorToMarkdown(editor.value)
+  return text.value
+}
+
+function getPreviewEl(): HTMLElement | null {
+  return rootRef.value?.querySelector('.md-editor-preview') as HTMLElement | null
+}
+
+/** DOM selection inside rendered preview (view / preview-only mode). */
+function getDomSelectionInPreview(): { text: string; range: Range } | null {
+  const preview = getPreviewEl()
+  if (!preview) return null
+  const sel = window.getSelection()
+  if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null
+  const range = sel.getRangeAt(0)
+  if (!preview.contains(range.commonAncestorContainer)) return null
+  const text = sel.toString()
+  if (!text.trim()) return null
+  return { text, range }
 }
 
 function getSelectionMarkdown(): string {
-  if (!editor.value) return ''
-  return selectionToMarkdown(editor.value)
+  if (props.editable) {
+    const selected = mdRef.value?.getSelectedText()
+    if (selected) return selected
+  } else {
+    const dom = getDomSelectionInPreview()
+    if (dom?.text) return dom.text
+  }
+  return aiSelectionMarkdown.value
+}
+
+function getSelectionLines(): { startLine: number; endLine: number } | null {
+  if (!props.editable) return aiSelectionLines.value
+  const view = mdRef.value?.getEditorView()
+  if (!view) return aiSelectionLines.value
+  const { from, to } = view.state.selection.main
+  if (from === to) return null
+  return {
+    startLine: view.state.doc.lineAt(from).number,
+    endLine: view.state.doc.lineAt(to).number,
+  }
 }
 
 function isSelectionEmpty(): boolean {
-  return editor.value?.state.selection.empty ?? true
-}
-
-function scrollToHeading(h: TocHeading) {
-  const ed = editor.value
-  if (!ed) return
-  ed.chain().focus().setTextSelection(h.pos + 1).run()
-  const dom = ed.view.nodeDOM(h.pos)
-  if (dom instanceof HTMLElement) {
-    dom.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  if (aiAnnotateOpen.value) return false
+  if (props.editable) {
+    const view = mdRef.value?.getEditorView()
+    if (!view) return true
+    return view.state.selection.main.empty
   }
+  return !getDomSelectionInPreview()
 }
 
-async function promptLink() {
-  const ed = editor.value
-  if (!ed) return
-  const prev = (ed.getAttributes('link').href as string) || ''
-  const href = window.prompt(t('office.linkPrompt'), prev)
-  if (href === null) return
-  if (!href.trim()) {
-    ed.chain().focus().extendMarkRange('link').unsetLink().run()
+function setContent(md: string, opts?: { emitUpdate?: boolean }) {
+  const next = md || ''
+  if (next === text.value) return
+  suppressUpdate.value = !(opts?.emitUpdate ?? true)
+  text.value = next
+  void nextTick(() => {
+    suppressUpdate.value = false
+  })
+}
+
+function onChange(v: string) {
+  text.value = v
+  if (suppressUpdate.value) return
+  emit('update')
+  syncSelection()
+}
+
+function captureAiSelection(): string {
+  if (props.editable) {
+    const view = mdRef.value?.getEditorView()
+    if (!view) return ''
+    const { from, to, empty } = view.state.selection.main
+    if (empty) return ''
+    const md = view.state.sliceDoc(from, to)
+    aiSelectionMarkdown.value = md
+    aiSelectionLines.value = {
+      startLine: view.state.doc.lineAt(from).number,
+      endLine: view.state.doc.lineAt(to).number,
+    }
+    return md
+  }
+  // View mode: plain text from rendered preview (no reliable MD line map).
+  const dom = getDomSelectionInPreview()
+  if (!dom) return aiSelectionMarkdown.value
+  aiSelectionMarkdown.value = dom.text
+  aiSelectionLines.value = null
+  return dom.text
+}
+
+function closeAiAnnotate() {
+  aiAnnotateOpen.value = false
+  aiInstruction.value = ''
+  aiSelectionMarkdown.value = ''
+  aiSelectionLines.value = null
+}
+
+function emitAiEdit(
+  action: 'polish' | 'continue' | 'modify',
+  instruction: string,
+  selection: string,
+  lineRange: { startLine: number; endLine: number } | null,
+) {
+  emit('aiEdit', {
+    action,
+    instruction,
+    selection,
+    startLine: lineRange?.startLine,
+    endLine: lineRange?.endLine,
+  })
+}
+
+function requestAiWithDefaultNote(action: 'polish' | 'continue') {
+  const selection = captureAiSelection()
+  if (!selection.trim()) return
+  const lineRange = aiSelectionLines.value
+  const note =
+    action === 'polish' ? t('office.defaultPolishNote') : t('office.defaultExpandNote')
+  closeAiAnnotate()
+  floatPos.value = null
+  emitAiEdit(action, note, selection, lineRange)
+}
+
+function openAiAnnotate() {
+  const selection = captureAiSelection()
+  if (!selection.trim()) return
+  aiAnnotateOpen.value = true
+  aiInstruction.value = ''
+  void nextTick(() => aiInputRef.value?.focus())
+}
+
+function confirmAiModify() {
+  const note = aiInstruction.value.trim()
+  const selection = aiSelectionMarkdown.value || captureAiSelection()
+  if (!selection.trim()) {
+    closeAiAnnotate()
     return
   }
-  ed.chain().focus().extendMarkRange('link').setLink({ href: href.trim() }).run()
+  const lineRange = aiSelectionLines.value
+  closeAiAnnotate()
+  floatPos.value = null
+  emitAiEdit('modify', note, selection, lineRange)
 }
 
-watch(
-  () => props.editable,
-  (editable) => {
-    editor.value?.setEditable(editable)
-    if (!editable) closeSlash()
-  },
-)
+function onAiAnnotateKeydown(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault()
+    confirmAiModify()
+    return
+  }
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    closeAiAnnotate()
+  }
+}
+
+function updateFloatFromCoords(startTop: number, startLeft: number, endRight: number, endTop: number) {
+  const root = rootRef.value
+  if (!root) {
+    floatPos.value = null
+    return
+  }
+  const rootRect = root.getBoundingClientRect()
+  const midX = (startLeft + endRight) / 2
+  const top = Math.min(startTop, endTop) - rootRect.top - 40
+  floatPos.value = {
+    top: Math.max(4, top),
+    left: Math.max(8, Math.min(midX - rootRect.left, rootRect.width - 8)),
+  }
+}
+
+function updateFloatPosition() {
+  if (!props.enableSelectionAi) {
+    floatPos.value = null
+    return
+  }
+  if (props.editable) {
+    const view = mdRef.value?.getEditorView()
+    if (!view) {
+      floatPos.value = null
+      return
+    }
+    const { from, to, empty } = view.state.selection.main
+    if (empty) {
+      floatPos.value = null
+      return
+    }
+    const start = view.coordsAtPos(from)
+    const end = view.coordsAtPos(to)
+    if (!start || !end) {
+      floatPos.value = null
+      return
+    }
+    updateFloatFromCoords(start.top, start.left, end.right, end.top)
+    return
+  }
+  const dom = getDomSelectionInPreview()
+  if (!dom) {
+    floatPos.value = null
+    return
+  }
+  const rect = dom.range.getBoundingClientRect()
+  if (!rect.width && !rect.height) {
+    floatPos.value = null
+    return
+  }
+  updateFloatFromCoords(rect.top, rect.left, rect.right, rect.top)
+}
+
+function syncSelection() {
+  if (!props.enableSelectionAi) {
+    hasSelection.value = false
+    floatPos.value = null
+    emit('selectionEmpty', true)
+    return
+  }
+  if (aiAnnotateOpen.value) {
+    emit('selectionEmpty', false)
+    hasSelection.value = true
+    updateFloatPosition()
+    return
+  }
+  const empty = isSelectionEmpty()
+  hasSelection.value = !empty
+  emit('selectionEmpty', empty)
+  if (empty) {
+    floatPos.value = null
+    return
+  }
+  updateFloatPosition()
+}
+
+function onPreviewSelectionEvent() {
+  if (props.editable || !props.enableSelectionAi) return
+  void nextTick(syncSelection)
+}
+
+let previewListenersBound = false
+
+function bindPreviewSelectionListeners() {
+  if (previewListenersBound || props.editable || !props.enableSelectionAi) return
+  const root = rootRef.value
+  if (!root) return
+  root.addEventListener('mouseup', onPreviewSelectionEvent)
+  root.addEventListener('keyup', onPreviewSelectionEvent)
+  document.addEventListener('selectionchange', onPreviewSelectionEvent)
+  previewListenersBound = true
+}
+
+function unbindPreviewSelectionListeners() {
+  if (!previewListenersBound) return
+  const root = rootRef.value
+  if (root) {
+    root.removeEventListener('mouseup', onPreviewSelectionEvent)
+    root.removeEventListener('keyup', onPreviewSelectionEvent)
+  }
+  document.removeEventListener('selectionchange', onPreviewSelectionEvent)
+  previewListenersBound = false
+}
+
+function syncPreviewSelectionListeners() {
+  if (!props.editable && props.enableSelectionAi) bindPreviewSelectionListeners()
+  else unbindPreviewSelectionListeners()
+}
+
+/** md-editor keeps previewOnly in internal state; prop alone is not enough on mount. */
+function applyEditableMode() {
+  const md = mdRef.value
+  if (!md) return
+  if (props.editable) {
+    // Source-only edit — split preview eats too much horizontal space.
+    md.togglePreviewOnly(false)
+    md.togglePreview(false)
+    if (props.showToc) md.toggleCatalog(true)
+  } else {
+    md.togglePreviewOnly(true)
+    md.toggleCatalog(false)
+  }
+}
+
+function onRemount() {
+  mdRef.value?.domEventHandlers({
+    mouseup: () => {
+      void nextTick(syncSelection)
+    },
+    keyup: () => {
+      void nextTick(syncSelection)
+    },
+    blur: () => {
+      if (!aiAnnotateOpen.value) {
+        // Keep float briefly; clear if selection truly empty on next tick.
+        void nextTick(syncSelection)
+      }
+    },
+  })
+  applyEditableMode()
+  syncPreviewSelectionListeners()
+  syncSelection()
+}
 
 watch(
   () => props.content,
   (md) => {
-    const ed = editor.value
-    if (!ed) return
-    if (normalizeCmp(md || '') === normalizeCmp(editorToMarkdown(ed))) return
-    if (ed.isFocused && props.editable) return
+    if ((md || '') === text.value) return
+    // Avoid clobbering while user is typing.
+    const view = mdRef.value?.getEditorView()
+    if (view?.hasFocus && props.editable) return
     setContent(md || '', { emitUpdate: false })
   },
 )
 
-function normalizeCmp(md: string) {
-  return md.replace(/\s+$/, '')
-}
+watch(
+  () => props.editable,
+  () => {
+    closeAiAnnotate()
+    floatPos.value = null
+    void nextTick(() => {
+      applyEditableMode()
+      syncPreviewSelectionListeners()
+      syncSelection()
+    })
+  },
+)
+
+watch(
+  () => props.enableSelectionAi,
+  (enabled) => {
+    if (!enabled) {
+      closeAiAnnotate()
+      floatPos.value = null
+      hasSelection.value = false
+      emit('selectionEmpty', true)
+    }
+    void nextTick(() => {
+      syncPreviewSelectionListeners()
+      if (enabled) syncSelection()
+    })
+  },
+)
+
+onMounted(() => {
+  syncPreviewSelectionListeners()
+})
 
 onBeforeUnmount(() => {
-  editor.value?.destroy()
+  unbindPreviewSelectionListeners()
+  closeAiAnnotate()
 })
 
 defineExpose({
-  editor,
   setContent,
   getMarkdown,
   getSelectionMarkdown,
+  getSelectionLines,
   isSelectionEmpty,
-  refreshToc,
 })
 </script>
 
@@ -250,109 +443,83 @@ defineExpose({
   <div
     ref="rootRef"
     class="md-rich"
-    :class="{
-      'is-readonly': !editable,
-      'has-toc': showToc && toc.length > 0,
-    }"
+    :class="{ 'is-readonly': !editable }"
   >
-    <aside v-if="showToc && toc.length > 0" class="md-rich__toc" aria-label="outline">
-      <div class="md-rich__toc-title">{{ t('office.toc') }}</div>
+    <MdEditor
+      :id="editorId"
+      ref="mdRef"
+      v-model="text"
+      :theme="mdTheme"
+      :language="mdLanguage"
+      :placeholder="placeholder || t('office.docPlaceholder')"
+      :preview="false"
+      :preview-only="!editable"
+      :toolbars-exclude="toolbarsExclude"
+      :footers="[]"
+      :style="{ height: '100%' }"
+      class="md-rich__editor"
+      @on-change="onChange"
+      @on-remount="onRemount"
+    />
+
+    <!-- Floating selection AI — edit (CM) + view (DOM preview selection) -->
+    <div
+      v-if="enableSelectionAi && hasSelection && floatPos && !aiAnnotateOpen"
+      class="md-rich__ai-float"
+      :style="{ top: `${floatPos.top}px`, left: `${floatPos.left}px` }"
+      @mousedown.prevent
+    >
       <button
-        v-for="h in toc"
-        :key="h.id"
         type="button"
-        class="md-rich__toc-item"
-        :class="`is-h${h.level}`"
-        :title="h.text"
-        @click="scrollToHeading(h)"
+        class="md-rich__ai-btn"
+        :title="t('office.bubbleAiPolish')"
+        @mousedown.prevent="requestAiWithDefaultNote('polish')"
       >
-        {{ h.text }}
+        {{ t('office.bubbleAiPolish') }}
       </button>
-    </aside>
+      <button
+        type="button"
+        class="md-rich__ai-btn"
+        :title="t('office.bubbleAiExpand')"
+        @mousedown.prevent="requestAiWithDefaultNote('continue')"
+      >
+        {{ t('office.bubbleAiExpand') }}
+      </button>
+      <button
+        type="button"
+        class="md-rich__ai-btn"
+        :title="t('office.bubbleAiModify')"
+        @mousedown.prevent="openAiAnnotate"
+      >
+        {{ t('office.bubbleAiModify') }}
+      </button>
+    </div>
 
-    <div class="md-rich__main">
-      <div v-if="showToolbar && editable" class="md-rich__toolbar" role="toolbar">
-        <button type="button" class="md-rich__btn" :title="t('office.fmtBold')" @click="editor?.chain().focus().toggleBold().run()">
-          <strong>B</strong>
-        </button>
-        <button type="button" class="md-rich__btn" :title="t('office.fmtItalic')" @click="editor?.chain().focus().toggleItalic().run()">
-          <em>I</em>
-        </button>
-        <button type="button" class="md-rich__btn" :title="t('office.fmtStrike')" @click="editor?.chain().focus().toggleStrike().run()">
-          <s>S</s>
-        </button>
-        <button type="button" class="md-rich__btn" :title="t('office.fmtCode')" @click="editor?.chain().focus().toggleCode().run()">
-          code
-        </button>
-        <span class="md-rich__sep" />
-        <button type="button" class="md-rich__btn" :title="t('office.fmtH1')" @click="editor?.chain().focus().toggleHeading({ level: 1 }).run()">
-          H1
-        </button>
-        <button type="button" class="md-rich__btn" :title="t('office.fmtH2')" @click="editor?.chain().focus().toggleHeading({ level: 2 }).run()">
-          H2
-        </button>
-        <button type="button" class="md-rich__btn" :title="t('office.fmtH3')" @click="editor?.chain().focus().toggleHeading({ level: 3 }).run()">
-          H3
-        </button>
-        <span class="md-rich__sep" />
-        <button type="button" class="md-rich__btn" :title="t('office.slashBullet')" @click="editor?.chain().focus().toggleBulletList().run()">
-          •
-        </button>
-        <button type="button" class="md-rich__btn" :title="t('office.slashOrdered')" @click="editor?.chain().focus().toggleOrderedList().run()">
-          1.
-        </button>
-        <button type="button" class="md-rich__btn" :title="t('office.slashTask')" @click="editor?.chain().focus().toggleTaskList().run()">
-          ☐
-        </button>
-        <button type="button" class="md-rich__btn" :title="t('office.slashQuote')" @click="editor?.chain().focus().toggleBlockquote().run()">
-          “
-        </button>
-        <button type="button" class="md-rich__btn" :title="t('office.slashTable')" @click="editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()">
-          ▦
-        </button>
-        <button type="button" class="md-rich__btn" :title="t('office.fmtLink')" @click="promptLink">
-          link
-        </button>
-      </div>
-
-      <div class="md-rich__scroll">
-        <EditorContent v-if="editor" :editor="editor" class="md-rich__editor dq-prose" />
-
-        <BubbleMenu
-          v-if="editor && editable"
-          :editor="editor"
-          :options="{ placement: 'top', offset: 8 }"
-          class="md-rich__bubble"
-        >
-          <button type="button" class="md-rich__btn" @click="editor.chain().focus().toggleBold().run()">
-            <strong>B</strong>
+    <div
+      v-if="enableSelectionAi && aiAnnotateOpen"
+      class="md-rich__ai-dialog"
+      role="dialog"
+      @keydown="onAiAnnotateKeydown"
+    >
+      <div class="md-rich__ai-dialog-backdrop" @click="closeAiAnnotate" />
+      <div class="md-rich__ai-annotate">
+        <div class="md-rich__ai-annotate-title">{{ t('office.selectionAnnotateTitle') }}</div>
+        <textarea
+          ref="aiInputRef"
+          v-model="aiInstruction"
+          class="md-rich__ai-annotate-input"
+          rows="3"
+          :placeholder="t('office.selectionAnnotatePlaceholder')"
+        />
+        <div class="md-rich__ai-annotate-actions">
+          <button type="button" class="md-rich__ai-btn" @click="closeAiAnnotate">
+            {{ t('common.cancel') }}
           </button>
-          <button type="button" class="md-rich__btn" @click="editor.chain().focus().toggleItalic().run()">
-            <em>I</em>
-          </button>
-          <button type="button" class="md-rich__btn" @click="editor.chain().focus().toggleCode().run()">
-            code
-          </button>
-          <button type="button" class="md-rich__btn" @click="promptLink">link</button>
-        </BubbleMenu>
-
-        <div
-          v-if="slashOpen && filteredSlash.length && slashPos"
-          class="md-rich__slash"
-          :style="{ top: `${slashPos.top}px`, left: `${slashPos.left}px` }"
-        >
-          <button
-            v-for="(item, i) in filteredSlash"
-            :key="item.id"
-            type="button"
-            class="md-rich__slash-item"
-            :class="{ 'is-active': i === slashIndex }"
-            @mousedown.prevent="runSlash(item)"
-          >
-            <span class="md-rich__slash-label">{{ item.label }}</span>
-            <span class="md-rich__slash-id">/{{ item.id }}</span>
+          <button type="button" class="md-rich__ai-btn md-rich__ai-btn--primary" @click="confirmAiModify">
+            {{ t('office.selectionAnnotateConfirm') }}
           </button>
         </div>
+        <div class="md-rich__ai-annotate-hint">{{ t('office.selectionAnnotateHint') }}</div>
       </div>
     </div>
   </div>
@@ -368,243 +535,131 @@ defineExpose({
   background: var(--dq-bg-base);
   color: var(--dq-label-primary);
 }
-.md-rich.has-toc {
-  gap: 0;
-}
-.md-rich__toc {
-  flex: 0 0 168px;
-  border-right: 1px solid var(--dq-separator-light);
-  padding: 16px 10px;
-  overflow: auto;
-  background: color-mix(in srgb, var(--dq-bg-elevated) 35%, transparent);
-}
-.md-rich__toc-title {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--dq-label-tertiary);
-  margin-bottom: 8px;
-  padding: 0 6px;
-}
-.md-rich__toc-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  border: 0;
-  background: transparent;
-  color: var(--dq-label-secondary);
-  font-size: 12px;
-  line-height: 1.35;
-  padding: 5px 6px;
-  border-radius: 4px;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.md-rich__toc-item:hover {
-  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
-  color: var(--dq-label-primary);
-}
-.md-rich__toc-item.is-h1 {
-  font-weight: 600;
-  color: var(--dq-label-primary);
-}
-.md-rich__toc-item.is-h2 {
-  padding-left: 14px;
-}
-.md-rich__toc-item.is-h3,
-.md-rich__toc-item.is-h4,
-.md-rich__toc-item.is-h5,
-.md-rich__toc-item.is-h6 {
-  padding-left: 22px;
-  font-size: 11px;
-}
-.md-rich__main {
+.md-rich__editor {
   flex: 1;
-  min-width: 0;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
+  width: 100%;
+  border: none !important;
+  border-radius: 0 !important;
 }
-.md-rich__toolbar {
-  flex-shrink: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  align-items: center;
-  padding: 6px 10px;
+.md-rich :deep(.md-editor) {
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  --md-bk-color: var(--dq-bg-base);
+  --md-color: var(--dq-label-primary);
+  --md-bk-color-outstand: var(--dq-bg-elevated);
+  --md-border-color: var(--dq-separator-light);
+  --md-scrollbar-bg-color: transparent;
+  --md-scrollbar-thumb-color: color-mix(in srgb, var(--dq-label-quaternary) 50%, transparent);
+}
+.md-rich :deep(.md-editor-toolbar-wrapper) {
+  background: var(--dq-bg-elevated);
   border-bottom: 1px solid var(--dq-separator-light);
-  background: color-mix(in srgb, var(--dq-bg-elevated) 40%, transparent);
 }
-.md-rich__sep {
-  width: 1px;
-  height: 16px;
-  margin: 0 4px;
-  background: var(--dq-separator-light);
+.md-rich.is-readonly :deep(.md-editor-toolbar-wrapper) {
+  display: none;
 }
-.md-rich__btn {
-  height: 28px;
-  min-width: 28px;
-  padding: 0 7px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--dq-label-primary);
-  font-size: 12px;
-  cursor: pointer;
+.md-rich.is-readonly :deep(.md-editor-preview) {
+  user-select: text;
+  cursor: text;
 }
-.md-rich__btn:hover {
-  background: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
-}
-.md-rich__scroll {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 20px 24px 56px;
-}
-.md-rich.is-readonly .md-rich__scroll {
-  padding-top: 28px;
-  padding-bottom: 72px;
-}
-.md-rich__editor :deep(.tiptap) {
-  outline: none;
-  min-height: 240px;
-  max-width: 720px;
-  margin: 0 auto;
-  font-size: 15px;
-  line-height: 1.7;
-  color: var(--dq-label-primary);
-}
-.md-rich.is-readonly .md-rich__editor :deep(.tiptap) {
-  caret-color: transparent;
-  font-size: 16px;
-  line-height: 1.75;
-  max-width: 680px;
-}
-.md-rich__editor :deep(.tiptap h1) {
-  font-size: 1.85em;
-  font-weight: 700;
-  line-height: 1.25;
-  margin: 1.2em 0 0.5em;
-  letter-spacing: -0.02em;
-}
-.md-rich__editor :deep(.tiptap h2) {
-  font-size: 1.4em;
-  font-weight: 650;
-  line-height: 1.3;
-  margin: 1.15em 0 0.45em;
-}
-.md-rich__editor :deep(.tiptap h3) {
-  font-size: 1.15em;
-  font-weight: 600;
-  margin: 1em 0 0.4em;
-}
-.md-rich__editor :deep(.tiptap p) {
-  margin: 0.55em 0;
-}
-.md-rich__editor :deep(.tiptap blockquote) {
-  margin: 0.8em 0;
-  padding: 0.15em 0 0.15em 0.9em;
-  border-left: 3px solid var(--dq-accent);
-  color: var(--dq-label-secondary);
-}
-.md-rich__editor :deep(.tiptap pre) {
-  margin: 0.8em 0;
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--dq-fill-tertiary) 80%, transparent);
-  overflow: auto;
-  font-size: 13px;
-}
-.md-rich__editor :deep(.tiptap code) {
-  font-family: var(--dq-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.92em;
-}
-.md-rich__editor :deep(.tiptap p.is-editor-empty:first-child::before) {
-  color: var(--dq-label-quaternary);
-  content: attr(data-placeholder);
-  float: left;
-  height: 0;
-  pointer-events: none;
-}
-.md-rich__editor :deep(.tiptap table) {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 0.9em 0;
-  table-layout: fixed;
-}
-.md-rich__editor :deep(.tiptap th),
-.md-rich__editor :deep(.tiptap td) {
-  border: 1px solid var(--dq-border);
-  padding: 6px 10px;
-  vertical-align: top;
-}
-.md-rich__editor :deep(.tiptap th) {
-  background: color-mix(in srgb, var(--dq-fill-tertiary) 70%, transparent);
-  font-weight: 600;
-}
-.md-rich__editor :deep(.tiptap ul[data-type='taskList']) {
-  list-style: none;
-  padding-left: 0;
-}
-.md-rich__editor :deep(.tiptap ul[data-type='taskList'] li) {
+.md-rich__ai-float {
+  position: absolute;
+  z-index: 20;
+  transform: translateX(-50%);
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-.md-rich__editor :deep(.tiptap ul[data-type='taskList'] li > label) {
-  margin-top: 0.3em;
-}
-.md-rich__bubble {
-  display: flex;
+  align-items: center;
   gap: 2px;
   padding: 4px;
   border-radius: 8px;
   border: 1px solid var(--dq-border);
   background: var(--dq-bg-elevated);
   box-shadow: 0 6px 20px color-mix(in srgb, #000 18%, transparent);
+  white-space: nowrap;
 }
-.md-rich__slash {
+.md-rich__ai-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--dq-label-secondary);
+  font: inherit;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.md-rich__ai-btn:hover {
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  color: var(--dq-label-primary);
+}
+.md-rich__ai-btn--primary {
+  background: var(--dq-accent);
+  color: var(--dq-on-accent);
+  font-weight: 600;
+}
+.md-rich__ai-btn--primary:hover {
+  background: var(--dq-accent-hover);
+  color: var(--dq-on-accent);
+}
+.md-rich__ai-dialog {
   position: absolute;
-  z-index: 20;
-  min-width: 220px;
-  max-height: 260px;
-  overflow: auto;
-  padding: 4px;
-  border-radius: 8px;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.md-rich__ai-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, #000 35%, transparent);
+}
+.md-rich__ai-annotate {
+  position: relative;
+  z-index: 1;
+  width: min(360px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
   border: 1px solid var(--dq-border);
   background: var(--dq-bg-elevated);
-  box-shadow: 0 8px 24px color-mix(in srgb, #000 16%, transparent);
+  box-shadow: 0 12px 40px color-mix(in srgb, #000 28%, transparent);
 }
-.md-rich__slash-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  border: 0;
-  background: transparent;
+.md-rich__ai-annotate-title {
+  font-size: var(--dq-font-size-caption);
+  font-weight: 600;
   color: var(--dq-label-primary);
-  text-align: left;
-  padding: 7px 8px;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 13px;
 }
-.md-rich__slash-item:hover,
-.md-rich__slash-item.is-active {
-  background: color-mix(in srgb, var(--dq-accent) 14%, transparent);
+.md-rich__ai-annotate-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 64px;
+  padding: 8px 10px;
+  border: 1px solid var(--dq-border);
+  border-radius: 6px;
+  background: var(--dq-bg-base);
+  color: var(--dq-label-primary);
+  font-size: var(--dq-font-size-caption);
+  font-family: inherit;
+  box-sizing: border-box;
 }
-.md-rich__slash-id {
-  color: var(--dq-label-tertiary);
-  font-size: 11px;
-  font-family: var(--dq-font-mono, ui-monospace, monospace);
+.md-rich__ai-annotate-input:focus {
+  outline: none;
+  border-color: var(--dq-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 12%, transparent);
 }
-@media (max-width: 720px) {
-  .md-rich__toc {
-    display: none;
-  }
+.md-rich__ai-annotate-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.md-rich__ai-annotate-hint {
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-quaternary);
 }
 </style>

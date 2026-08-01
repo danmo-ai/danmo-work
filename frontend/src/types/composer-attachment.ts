@@ -6,8 +6,12 @@ import {
   serializeCodeSelectionAttachments,
   type CodeSelectionAttachment,
 } from '@/types/code-attachment'
+import {
+  serializeOfficeEditAttachments,
+  type OfficeEditAttachment,
+} from '@/types/office-edit-attachment'
 
-export type ComposerAttachmentKind = 'image' | 'file' | 'element' | 'code'
+export type ComposerAttachmentKind = 'image' | 'file' | 'element' | 'code' | 'office'
 
 export interface ImageComposerAttachment {
   id: string
@@ -40,11 +44,18 @@ export interface CodeComposerAttachment {
   data: CodeSelectionAttachment
 }
 
+export interface OfficeComposerAttachment {
+  id: string
+  kind: 'office'
+  data: OfficeEditAttachment
+}
+
 export type ComposerAttachment =
   | ImageComposerAttachment
   | FileComposerAttachment
   | ElementComposerAttachment
   | CodeComposerAttachment
+  | OfficeComposerAttachment
 
 /** API payload for vision models (matches domain.UserAttachment). */
 export interface ApiUserAttachment {
@@ -77,6 +88,9 @@ export function buildComposerUserInput(
   const codes = atts
     .filter((a): a is CodeComposerAttachment => a.kind === 'code')
     .map((a) => a.data)
+  const offices = atts
+    .filter((a): a is OfficeComposerAttachment => a.kind === 'office')
+    .map((a) => a.data)
   const files = atts.filter((a): a is FileComposerAttachment => a.kind === 'file')
 
   let body = buildUserInputWithAttachments(text, elements)
@@ -84,6 +98,11 @@ export function buildComposerUserInput(
   const codeBlocks = serializeCodeSelectionAttachments(codes)
   if (codeBlocks) {
     body = body ? `${body}\n\n${codeBlocks}` : codeBlocks
+  }
+
+  const officeBlocks = serializeOfficeEditAttachments(offices)
+  if (officeBlocks) {
+    body = body ? `${body}\n\n${officeBlocks}` : officeBlocks
   }
 
   if (files.length) {

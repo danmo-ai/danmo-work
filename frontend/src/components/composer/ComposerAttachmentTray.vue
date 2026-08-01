@@ -5,9 +5,11 @@ import {
   type ComposerAttachment,
   type CodeComposerAttachment,
   type ElementComposerAttachment,
+  type OfficeComposerAttachment,
 } from '@/types/composer-attachment'
 import { chipLabel, chipTooltip } from '@/types/element-attachment'
 import { codeChipLabel, codeChipTooltip } from '@/types/code-attachment'
+import { officeChipLabel, officeChipTooltip } from '@/types/office-edit-attachment'
 
 defineProps<{
   attachments: ComposerAttachment[]
@@ -17,7 +19,7 @@ defineProps<{
 
 const emit = defineEmits<{
   remove: [id: string]
-  'edit-start': [att: ElementComposerAttachment | CodeComposerAttachment]
+  'edit-start': [att: ElementComposerAttachment | CodeComposerAttachment | OfficeComposerAttachment]
   'edit-save': []
   'edit-cancel': []
   'update:editingAnnotation': [value: string]
@@ -74,6 +76,31 @@ const { t } = useI18n()
             <span class="att-card__sub">
               {{ t('composer.attachCode') }}
               <template v-if="att.data.annotation"> · {{ att.data.annotation }}</template>
+            </span>
+          </div>
+          <button
+            type="button"
+            class="att-card__action"
+            :title="t('composer.editAnnotation')"
+            @click="emit('edit-start', att)"
+          >
+            ✎
+          </button>
+        </template>
+
+        <!-- Office polish / modify -->
+        <template v-else-if="att.kind === 'office'">
+          <div class="att-card__icon att-card__icon--office" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+          </div>
+          <div class="att-card__meta" :title="officeChipTooltip(att.data)">
+            <span class="att-card__name">{{ officeChipLabel(att.data) }}</span>
+            <span class="att-card__sub">
+              {{ t('composer.attachOffice') }}
+              <template v-if="att.data.instruction"> · {{ att.data.instruction }}</template>
             </span>
           </div>
           <button
@@ -204,6 +231,10 @@ const { t } = useI18n()
   color: var(--dq-accent);
 }
 
+.att-card__icon--office {
+  color: var(--dq-accent);
+}
+
 .att-card__meta {
   min-width: 0;
   display: flex;
@@ -212,7 +243,7 @@ const { t } = useI18n()
 }
 
 .att-card__name {
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
   color: var(--dq-label-primary);
   overflow: hidden;
@@ -221,7 +252,7 @@ const { t } = useI18n()
 }
 
 .att-card__sub {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -230,7 +261,7 @@ const { t } = useI18n()
 
 .att-card__badge {
   margin-left: 4px;
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   opacity: 0.8;
 }
 
@@ -242,7 +273,7 @@ const { t } = useI18n()
   background: transparent;
   color: var(--dq-label-tertiary);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   line-height: 1;
   padding: 2px 4px;
 }
@@ -253,7 +284,7 @@ const { t } = useI18n()
 
 .att-card__remove {
   right: 4px;
-  font-size: 14px;
+  font-size: var(--dq-font-size-body);
 }
 
 .att-card__action:hover,
@@ -275,7 +306,7 @@ const { t } = useI18n()
   border: 1px solid var(--dq-border);
   background: var(--dq-bg-elevated);
   color: var(--dq-label-primary);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
 }
 
 .att-tray__edit-btn {
@@ -285,7 +316,7 @@ const { t } = useI18n()
   border: 1px solid var(--dq-border);
   background: var(--dq-fill-tertiary);
   color: var(--dq-label-primary);
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   cursor: pointer;
 }
 

@@ -198,7 +198,7 @@ async function uninstallItem(item: MarketListing) {
 }
 .market-browser__sources {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-text-secondary, #888);
 }
 .market-browser__warnings {
@@ -208,7 +208,7 @@ async function uninstallItem(item: MarketListing) {
 }
 .market-browser__error {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-danger, #dc2626);
   line-height: 1.4;
   word-break: break-word;
@@ -228,11 +228,11 @@ async function uninstallItem(item: MarketListing) {
 }
 .market-card__title {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--dq-font-size-title);
   font-weight: 600;
 }
 .market-card__badge {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   padding: 1px 6px;
   border-radius: 999px;
   background: var(--dq-accent-soft, rgba(16, 185, 129, 0.12));
@@ -244,13 +244,13 @@ async function uninstallItem(item: MarketListing) {
 }
 .market-card__desc {
   margin: 10px 0 0;
-  font-size: 14px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-text-secondary, #666);
   line-height: 1.5;
 }
 .market-card__compat {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
   color: #b45309;
   line-height: 1.4;
 }
@@ -259,12 +259,12 @@ async function uninstallItem(item: MarketListing) {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-text-tertiary, #999);
   align-items: center;
 }
 .market-card__meta code {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
 }
 .market-card__link {
   color: var(--dq-accent, #059669);
@@ -275,7 +275,7 @@ async function uninstallItem(item: MarketListing) {
 }
 .market-card__deps {
   margin-top: 10px;
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-text-secondary, #666);
   display: flex;
   flex-wrap: wrap;
@@ -283,11 +283,11 @@ async function uninstallItem(item: MarketListing) {
   align-items: center;
 }
 .market-card__deps code {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
 }
 .market-card__next {
   margin: 12px 0 0;
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
   line-height: 1.45;
   color: var(--dq-text-secondary, #666);
 }

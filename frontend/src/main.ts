@@ -25,8 +25,8 @@ import '@danqing/dq-ui/style.css'
 import '@danqing/dq-shell/style.css'
 import '@/styles/work.css'
 
-// Theme class is managed by theme store; default flash before init is mac dark
-document.documentElement.classList.add('dq-mac', 'dark')
+// Theme class is managed by theme store; default flash before init is Tokyo Night
+document.documentElement.classList.add('dq-tokyo-night', 'dark')
 
 function isRecoverableRuntimeError(err: unknown): boolean {
   if (!err) return false

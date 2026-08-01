@@ -84,7 +84,9 @@ defineExpose({ hunkCount })
   margin: 0;
   padding: 10px 12px;
   overflow: auto;
-  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--dq-font-size-caption);
+  line-height: 1.45;
   white-space: pre;
   flex: 1;
   min-height: 0;

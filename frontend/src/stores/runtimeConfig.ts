@@ -23,6 +23,7 @@ export interface RuntimeForm {
   doomLoopThreshold: number
   maxStepsDefault: number
   maxLLMFailures: number
+  llmHttpTimeoutSec: number
   maxToolOutputChars: number
   maxDelegationDepth: number
   readTopK: number
@@ -36,6 +37,7 @@ export interface RuntimeForm {
   compactionTurnInterval: number
   compactionSubInterval: number
   compactionToolTruncate: number
+  compactionKeepRecentToolSteps: number
 }
 
 function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
@@ -62,6 +64,7 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     doomLoopThreshold: rt.turn.doomLoopThreshold,
     maxStepsDefault: rt.turn.maxStepsDefault,
     maxLLMFailures: rt.turn.maxLLMFailures ?? 3,
+    llmHttpTimeoutSec: rt.turn.llmHttpTimeoutSec ?? 600,
     maxToolOutputChars: rt.tools?.maxOutputChars ?? 50000,
     maxDelegationDepth: rt.team.maxDelegationDepth,
     readTopK: rt.memory.readTopK,
@@ -75,6 +78,7 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     compactionTurnInterval: rt.compaction?.turnInterval ?? 6,
     compactionSubInterval: rt.compaction?.subInterval ?? 4,
     compactionToolTruncate: rt.compaction?.toolTruncate ?? 2000,
+    compactionKeepRecentToolSteps: rt.compaction?.keepRecentToolSteps ?? 3,
   }
 }
 
@@ -178,6 +182,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
           doomLoopThreshold: form.doomLoopThreshold,
           maxStepsDefault: form.maxStepsDefault,
           maxLLMFailures: form.maxLLMFailures,
+          llmHttpTimeoutSec: form.llmHttpTimeoutSec,
         },
         tools: {
           maxOutputChars: form.maxToolOutputChars,
@@ -202,6 +207,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
           turnInterval: form.compactionTurnInterval,
           subInterval: form.compactionSubInterval,
           toolTruncate: form.compactionToolTruncate,
+          keepRecentToolSteps: form.compactionKeepRecentToolSteps,
         },
       }
       const req: UpdateConfigFileRequest = { runtime }

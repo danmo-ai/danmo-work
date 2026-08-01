@@ -20,6 +20,7 @@ export interface OfficeStageState {
 }
 
 const LEFT_RAIL_COLLAPSED_KEY = 'app-left-collapsed'
+const RIGHT_PANEL_COLLAPSED_KEY = 'app-right-collapsed'
 
 function readPersistedLeftRailCollapsed(): boolean {
   try {
@@ -32,6 +33,22 @@ function readPersistedLeftRailCollapsed(): boolean {
 function writePersistedLeftRailCollapsed(collapsed: boolean) {
   try {
     localStorage.setItem(LEFT_RAIL_COLLAPSED_KEY, collapsed ? '1' : '0')
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function readPersistedRightPanelCollapsed(): boolean {
+  try {
+    return localStorage.getItem(RIGHT_PANEL_COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writePersistedRightPanelCollapsed(collapsed: boolean) {
+  try {
+    localStorage.setItem(RIGHT_PANEL_COLLAPSED_KEY, collapsed ? '1' : '0')
   } catch {
     /* ignore quota / private mode */
   }
@@ -57,6 +74,12 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
    * null = no pending restore (user toggled during Stage, or Stage never auto-collapsed).
    */
   const leftRailCollapsedBeforeStage = ref<boolean | null>(null)
+  const rightPanelCollapsed = ref(readPersistedRightPanelCollapsed())
+  /**
+   * Snapshot of right-panel collapsed before Stage auto-collapse.
+   * null = no pending restore (user toggled during Stage, or Stage never auto-collapsed).
+   */
+  const rightPanelCollapsedBeforeStage = ref<boolean | null>(null)
 
   function setRightTab(tab: RightWorkspaceTab) {
     rightTab.value = tab
@@ -67,6 +90,17 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     leftRailCollapsed.value = collapsed
     writePersistedLeftRailCollapsed(collapsed)
     leftRailCollapsedBeforeStage.value = null
+  }
+
+  /** User (or UI) toggles the right panel; persists preference and cancels Stage restore. */
+  function setRightPanelCollapsed(collapsed: boolean) {
+    rightPanelCollapsed.value = collapsed
+    writePersistedRightPanelCollapsed(collapsed)
+    rightPanelCollapsedBeforeStage.value = null
+  }
+
+  function toggleRightPanelCollapsed() {
+    setRightPanelCollapsed(!rightPanelCollapsed.value)
   }
 
   function collapseLeftRailForStage() {
@@ -86,16 +120,33 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     // Persisted preference was never overwritten by temp collapse.
   }
 
+  function collapseRightPanelForStage() {
+    if (rightPanelCollapsed.value) return
+    if (rightPanelCollapsedBeforeStage.value == null) {
+      rightPanelCollapsedBeforeStage.value = false
+    }
+    rightPanelCollapsed.value = true
+    // Do not write localStorage — temporary for Stage focus.
+  }
+
+  function restoreRightPanelAfterStage() {
+    if (rightPanelCollapsedBeforeStage.value == null) return
+    rightPanelCollapsed.value = rightPanelCollapsedBeforeStage.value
+    rightPanelCollapsedBeforeStage.value = null
+  }
+
   function openStage(next: OfficeStageState) {
     stage.value = { ...next }
     layoutMode.value = next.mode === 'present' ? 'immersive' : 'stage'
     collapseLeftRailForStage()
+    collapseRightPanelForStage()
   }
 
   function closeStage() {
     stage.value = null
     layoutMode.value = 'chat'
     restoreLeftRailAfterStage()
+    restoreRightPanelAfterStage()
   }
 
   function setStageMode(mode: OfficeMode) {
@@ -164,8 +215,12 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     composerPrefillToken,
     leftRailCollapsed,
     leftRailCollapsedBeforeStage,
+    rightPanelCollapsed,
+    rightPanelCollapsedBeforeStage,
     setRightTab,
     setLeftRailCollapsed,
+    setRightPanelCollapsed,
+    toggleRightPanelCollapsed,
     openStage,
     closeStage,
     setStageMode,

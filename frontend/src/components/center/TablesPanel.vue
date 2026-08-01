@@ -307,7 +307,7 @@ defineExpose({ refresh })
   gap: 8px;
 }
 .tables-panel__title {
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
   color: var(--dq-label-primary);
 }
@@ -318,7 +318,7 @@ defineExpose({ refresh })
   border-radius: 5px;
   background: var(--dq-fill-tertiary);
   color: var(--dq-label-primary);
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   cursor: pointer;
 }
 .tables-panel__btn:hover:not(:disabled) {
@@ -337,12 +337,12 @@ defineExpose({ refresh })
   padding: 0 8px;
   background: var(--dq-bg-base);
   color: var(--dq-label-primary);
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   outline: none;
 }
 .tables-panel__status,
 .tables-panel__hint {
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-tertiary);
   padding: 8px 4px;
 }
@@ -374,11 +374,11 @@ defineExpose({ refresh })
   box-shadow: inset 2px 0 0 var(--dq-accent);
 }
 .tables-panel__table-name {
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
 }
 .tables-panel__table-meta {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
 }
 .tables-panel__rows {
@@ -406,11 +406,11 @@ defineExpose({ refresh })
   margin-bottom: 6px;
 }
 .tables-panel__key {
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-accent);
 }
 .tables-panel__time {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
 }
 .tables-panel__preview,
@@ -423,7 +423,7 @@ defineExpose({ refresh })
   background: color-mix(in srgb, var(--dq-fill-tertiary) 60%, transparent);
   color: var(--dq-label-secondary);
   font-family: var(--dq-font-mono, ui-monospace, Menlo, monospace);
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;

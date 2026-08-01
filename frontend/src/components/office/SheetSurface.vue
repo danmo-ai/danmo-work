@@ -483,7 +483,7 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
 }
 .sheet-surface__status {
   padding: 24px;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-tertiary);
 }
 .sheet-surface__toolbar {
@@ -508,7 +508,7 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
   border-radius: 5px;
   background: var(--dq-fill-tertiary);
   color: var(--dq-label-secondary);
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   cursor: pointer;
 }
 .sheet-surface__tab.is-active {
@@ -523,7 +523,7 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
   border-radius: 6px;
   background: var(--dq-fill-tertiary);
   color: var(--dq-label-primary);
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   cursor: pointer;
 }
 .sheet-surface__btn:hover:not(:disabled) {
@@ -548,7 +548,7 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
   position: sticky;
   background: color-mix(in srgb, var(--dq-bg-elevated) 85%, transparent);
   color: var(--dq-label-tertiary);
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   z-index: 2;
   border-bottom: 1px solid var(--dq-border);
@@ -600,7 +600,7 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
 }
 .sheet-surface__range {
   margin-left: 8px;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
@@ -613,7 +613,7 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
   width: 100%;
   border: 0;
   padding: 6px 8px;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   background: transparent;
   color: var(--dq-label-primary);
   outline: none;

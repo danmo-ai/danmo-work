@@ -93,6 +93,9 @@ func (h *Write) Execute(_ context.Context, input map[string]any) (domain.ToolRes
 	if err := os.WriteFile(resolvedPath, []byte(content), 0644); err != nil {
 		return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", resolvedPath, err)
 	}
+	// Own write updates the snapshot so a later edit/write in this turn does not
+	// fail with "changed since last read" unless something else touched the file.
+	noteReadFile(input, resolvedPath)
 
 	msg := fmt.Sprintf("Wrote file %q (%d bytes)", path, len(content))
 	op := "create"

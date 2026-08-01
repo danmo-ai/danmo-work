@@ -308,7 +308,7 @@ defineExpose({
 }
 .slides-surface__status {
   padding: 24px;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-tertiary);
 }
 .slides-surface__frame {
@@ -341,7 +341,7 @@ defineExpose({
 .slides-surface__pane-label {
   flex-shrink: 0;
   padding: 6px 12px;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -354,7 +354,7 @@ defineExpose({
   overflow: auto;
   padding: 20px 22px 40px;
   background: color-mix(in srgb, var(--dq-bg-elevated) 25%, var(--dq-bg-base));
-  font-size: 15px;
+  font-size: var(--dq-font-size-prose);
   line-height: 1.6;
 }
 .slides-surface__preview :deep(h1),
@@ -397,11 +397,11 @@ defineExpose({
   box-shadow: inset 2px 0 0 var(--dq-accent);
 }
 .slides-surface__thumb-num {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
 }
 .slides-surface__thumb-title {
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -413,7 +413,7 @@ defineExpose({
   resize: none;
   padding: 16px 20px;
   font-family: var(--dq-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   line-height: 1.55;
   outline: none;
   background: transparent;

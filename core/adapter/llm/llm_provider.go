@@ -4,19 +4,32 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
-	"danmo-work/core/service"
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
+	"danmo-work/core/service"
 )
 
 type DefaultLLMProviderClient struct {
-	mgr     *service.LLMConfigManager
+	mgr      *service.LLMConfigManager
 	modelCfg *service.ModelConfigRegistry
+	configs  *service.ConfigManager
 }
 
-func NewDefaultLLMProvider(mgr *service.LLMConfigManager, modelCfg *service.ModelConfigRegistry) port.LLMProvider {
-	return &DefaultLLMProviderClient{mgr: mgr, modelCfg: modelCfg}
+func NewDefaultLLMProvider(mgr *service.LLMConfigManager, modelCfg *service.ModelConfigRegistry, configs *service.ConfigManager) port.LLMProvider {
+	return &DefaultLLMProviderClient{mgr: mgr, modelCfg: modelCfg, configs: configs}
+}
+
+func (c *DefaultLLMProviderClient) chatTimeout(ctx context.Context) time.Duration {
+	if c.configs != nil {
+		if cfg, err := c.configs.Get(ctx); err == nil && cfg != nil {
+			if sec := cfg.Runtime.Turn.LLMHTTPTimeoutSec; sec > 0 {
+				return time.Duration(sec) * time.Second
+			}
+		}
+	}
+	return DefaultChatHTTPTimeout
 }
 
 func (c *DefaultLLMProviderClient) Chat(ctx context.Context, req port.LLMChatRequest) (port.LLMChatResponse, error) {
@@ -88,13 +101,14 @@ func (c *DefaultLLMProviderClient) Chat(ctx context.Context, req port.LLMChatReq
 		}
 	}
 
+	timeout := c.chatTimeout(ctx)
 	switch cfg.Provider {
 	case domain.LLMProviderAnthropic:
-		return NewAnthropicProvider(cfg.BaseURL, cfg.APIKey).Chat(ctx, req, effort, effortCfg)
+		return NewAnthropicProviderWithTimeout(cfg.BaseURL, cfg.APIKey, timeout).Chat(ctx, req, effort, effortCfg)
 	case domain.LLMProviderMock:
 		return NewMock().Chat(ctx, req)
 	default:
-		return NewHTTPProvider(cfg.BaseURL, cfg.APIKey).Chat(ctx, req, effort)
+		return NewHTTPProviderWithTimeout(cfg.BaseURL, cfg.APIKey, timeout).Chat(ctx, req, effort)
 	}
 }
 

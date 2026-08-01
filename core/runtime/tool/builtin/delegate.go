@@ -14,7 +14,7 @@ type DelegateAgent struct {
 	Stream          port.EventStream
 	Agents          *service.AgentManager
 	KnowledgeSearch func(kbIDs []string, query string, k int) []string
-	RunSubTurn      func(ctx context.Context, sessionID, modelID, parentTurnID string, agent domain.Agent, goal string, parentPath []domain.TurnPathEntry) (domain.Report, error)
+	RunSubTurn      func(ctx context.Context, sessionID, modelID, parentTurnID, callID string, agent domain.Agent, goal string, parentPath []domain.TurnPathEntry) (domain.Report, error)
 }
 
 func (h *DelegateAgent) Name() string                { return "delegate_agent" }
@@ -58,6 +58,7 @@ func (h *DelegateAgent) Execute(ctx context.Context, input map[string]any) (doma
 	sessionID, _ := input["__session_id"].(string)
 	modelID, _ := input["__model_id"].(string)
 	parentTurnID, _ := input["__turn_id"].(string)
+	callID, _ := input["__call_id"].(string)
 	parentPath := turnPathFromInput(input, parentTurnID)
 
 	agent, err := h.Agents.Get(ctx, agentID)
@@ -65,7 +66,7 @@ func (h *DelegateAgent) Execute(ctx context.Context, input map[string]any) (doma
 		return domain.ToolResult{}, fmt.Errorf("unknown agent %q", agentID)
 	}
 
-	report, err := h.RunSubTurn(ctx, sessionID, modelID, parentTurnID, *agent, goal, parentPath)
+	report, err := h.RunSubTurn(ctx, sessionID, modelID, parentTurnID, callID, *agent, goal, parentPath)
 	if err != nil {
 		return domain.ToolResult{}, err
 	}

@@ -261,7 +261,7 @@ defineExpose({ refresh, totalCount })
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--work-glass-bg);
+  background: var(--dq-shell-sidebar-bg);
   font-size: var(--dq-font-size-body);
 }
 
@@ -367,7 +367,7 @@ defineExpose({ refresh, totalCount })
   font-size: var(--dq-font-size-caption);
   font-weight: 700;
   font-family: var(--dq-font-mono);
-  color: var(--dq-color-white);
+  color: #fff;
   background: color-mix(in srgb, var(--dq-label-secondary) 60%, transparent);
 }
 
@@ -386,6 +386,7 @@ defineExpose({ refresh, totalCount })
 .changes-panel__item.is-renamed .changes-panel__item-status,
 .changes-panel__item.is-copied .changes-panel__item-status {
   background: var(--dq-accent);
+  color: var(--dq-on-accent);
 }
 
 .changes-panel__item.is-untracked .changes-panel__item-status {
@@ -403,7 +404,7 @@ defineExpose({ refresh, totalCount })
 .changes-panel__item-copy {
   flex-shrink: 0;
   opacity: 0;
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-tertiary);
   padding: 0 2px;
   line-height: 1.45;
@@ -412,7 +413,7 @@ defineExpose({ refresh, totalCount })
 .changes-panel__item-ask {
   flex-shrink: 0;
   opacity: 0;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   color: var(--dq-accent);
   padding: 0 4px;

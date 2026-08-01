@@ -601,6 +601,9 @@ func listMemories(h *Handler) gin.HandlerFunc {
 		}
 		projectID := strings.TrimSpace(c.Query("projectId"))
 		agentID := strings.TrimSpace(c.Query("agentId"))
+		// Memory panel: include every agent-scoped row so subagent memory_update
+		// (e.g. researcher) is visible while the session lead is team/default.
+		allAgents, _ := strconv.ParseBool(strings.TrimSpace(c.Query("allAgents")))
 		scopes := []domain.MemoryScopeRef{{
 			Scope:   domain.MemoryScopeUser,
 			ScopeID: domain.MemoryUserScopeID,
@@ -611,14 +614,15 @@ func listMemories(h *Handler) gin.HandlerFunc {
 				ScopeID: projectID,
 			})
 		}
-		if agentID != "" {
+		if agentID != "" && !allAgents {
 			scopes = append(scopes, domain.MemoryScopeRef{
 				Scope:   domain.MemoryScopeAgent,
 				ScopeID: agentID,
 			})
 		}
 		items, err := h.Store.Memories().Search(c, domain.MemoryQuery{
-			Scopes: scopes,
+			Scopes:           scopes,
+			IncludeAllAgents: allAgents,
 		})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

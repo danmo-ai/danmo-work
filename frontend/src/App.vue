@@ -112,19 +112,19 @@ watch(() => llm.models, (newModels, oldModels) => {
   justify-content: center;
   height: 100vh;
   padding: 24px;
-  background: var(--dq-bg-base);
+  background: var(--dq-shell-stream-bg);
 }
 
 .app-boot__status {
   margin: 0;
-  font-size: var(--dq-font-size-body, 14px);
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-secondary);
 }
 
 .app-boot__error {
   margin: 0;
   max-width: 480px;
-  font-size: var(--dq-font-size-body, 14px);
+  font-size: var(--dq-font-size-body);
   color: var(--dq-danger, #ff453a);
   text-align: center;
   line-height: 1.5;
@@ -138,7 +138,10 @@ watch(() => llm.models, (newModels, oldModels) => {
   grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
-  background: var(--dq-bg-base);
+  gap: 0;
+  padding: 0;
+  box-sizing: border-box;
+  background: var(--dq-shell-stream-bg);
 }
 
 .app-workspace {
@@ -149,14 +152,16 @@ watch(() => llm.models, (newModels, oldModels) => {
   min-height: 0;
   overflow: hidden;
   padding: 0;
-  background: transparent;
+  background: var(--dq-shell-stream-bg);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .app-workspace :deep(.resource-shell) {
-  border-radius: 0;
-  border-top: none;
-  border-bottom: none;
-  border-right: none;
   height: 100%;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
 }
 </style>

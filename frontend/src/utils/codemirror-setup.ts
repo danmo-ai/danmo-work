@@ -82,7 +82,7 @@ export function createEditorTheme(dark: boolean): Extension {
   const chrome = EditorView.theme({
     '&': {
       height: '100%',
-      fontSize: '13px',
+      fontSize: 'var(--dq-font-size-body)',
     },
     '.cm-scroller': {
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',

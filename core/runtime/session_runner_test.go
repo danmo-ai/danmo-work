@@ -1,13 +1,16 @@
 package runtime
 
 import (
+	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
 	"danmo-work/core/runtime/tool/builtin"
+	"danmo-work/core/service"
 )
 
 func TestReserveSessionTurnPreventsConcurrentStartAndResume(t *testing.T) {
@@ -247,5 +250,111 @@ func TestAppendTurnPath(t *testing.T) {
 	}
 	if len(parent) != 1 {
 		t.Fatalf("append must not mutate parent, got %+v", parent)
+	}
+}
+
+type memTurnRepo struct {
+	mu    sync.Mutex
+	turns map[string]domain.TurnLog
+}
+
+func (r *memTurnRepo) Create(_ context.Context, t domain.TurnLog) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.turns == nil {
+		r.turns = map[string]domain.TurnLog{}
+	}
+	r.turns[t.ID] = t
+	return nil
+}
+
+func (r *memTurnRepo) UpdateStatus(_ context.Context, id string, status domain.TurnStatus) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t, ok := r.turns[id]
+	if !ok {
+		return errors.New("not found")
+	}
+	t.Status = status
+	r.turns[id] = t
+	return nil
+}
+
+func (r *memTurnRepo) Get(_ context.Context, id string) (domain.TurnLog, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t, ok := r.turns[id]
+	if !ok {
+		return domain.TurnLog{}, errors.New("not found")
+	}
+	return t, nil
+}
+
+func (r *memTurnRepo) ListBySession(_ context.Context, sessionID string) ([]domain.TurnLog, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]domain.TurnLog, 0)
+	for _, t := range r.turns {
+		if t.SessionID == sessionID {
+			out = append(out, t)
+		}
+	}
+	return out, nil
+}
+
+func (r *memTurnRepo) ListByStatus(_ context.Context, status domain.TurnStatus) ([]domain.TurnLog, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]domain.TurnLog, 0)
+	for _, t := range r.turns {
+		if t.Status == status {
+			out = append(out, t)
+		}
+	}
+	return out, nil
+}
+
+type noopStream struct{}
+
+func (noopStream) Publish(_ context.Context, sessionID, turnID, typ string, _ any) domain.StreamEvent {
+	return domain.StreamEvent{SessionID: sessionID, TurnID: turnID, Type: typ}
+}
+func (noopStream) Subscribe(string) chan domain.StreamEvent             { return nil }
+func (noopStream) Unsubscribe(string, chan domain.StreamEvent)          {}
+func (noopStream) ListSince(string, int64) []domain.StreamEvent         { return nil }
+
+func TestCancelTurnEagerlyClearsRunningStatus(t *testing.T) {
+	repo := &memTurnRepo{turns: map[string]domain.TurnLog{
+		"turn-1": {
+			ID:        "turn-1",
+			SessionID: "session-1",
+			Status:    domain.TurnRunning,
+			Goal:      "stuck",
+		},
+	}}
+	engine := &Engine{
+		turns:  service.NewTurnManager(repo),
+		stream: noopStream{},
+		cancel: map[string]context.CancelFunc{},
+	}
+	// Register a cancel func as if the turn goroutine is alive in this process.
+	// Old bug: CancelTurn called cancel() and returned without updating DB.
+	_, cancel := context.WithCancel(context.Background())
+	engine.cancel["turn-1"] = cancel
+	if err := engine.reserveSessionTurn("session-1", "turn-1"); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+
+	engine.CancelTurn(context.Background(), "turn-1")
+
+	got, err := repo.Get(context.Background(), "turn-1")
+	if err != nil {
+		t.Fatalf("get turn: %v", err)
+	}
+	if got.Status != domain.TurnCancelled {
+		t.Fatalf("expected cancelled after CancelTurn, got %s", got.Status)
+	}
+	if id := engine.ActiveTurnID("session-1"); id != "" {
+		t.Fatalf("expected activeTurns cleared after CancelTurn, still %q", id)
 	}
 }

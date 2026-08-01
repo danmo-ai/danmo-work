@@ -13,20 +13,33 @@ import (
 	"danmo-work/core/port"
 )
 
+// DefaultChatHTTPTimeout covers waiting for the full non-streaming response.
+// High-effort reasoning models (e.g. deepseek max) regularly exceed 2 minutes.
+const DefaultChatHTTPTimeout = 10 * time.Minute
+
 type HTTPProvider struct {
 	baseURL string
 	apiKey  string
+	timeout time.Duration
 	client  *http.Client
 }
 
 func NewHTTPProvider(baseURL, apiKey string) *HTTPProvider {
+	return NewHTTPProviderWithTimeout(baseURL, apiKey, DefaultChatHTTPTimeout)
+}
+
+func NewHTTPProviderWithTimeout(baseURL, apiKey string, timeout time.Duration) *HTTPProvider {
 	if baseURL == "" {
 		baseURL = "https://api.openai.com/v1"
+	}
+	if timeout <= 0 {
+		timeout = DefaultChatHTTPTimeout
 	}
 	return &HTTPProvider{
 		baseURL: baseURL,
 		apiKey:  apiKey,
-		client:  &http.Client{Timeout: 120 * time.Second},
+		timeout: timeout,
+		client:  &http.Client{Timeout: timeout},
 	}
 }
 
@@ -72,8 +85,8 @@ func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort
 	}
 
 	body := map[string]any{
-		"model":      model,
-		"messages":   messages,
+		"model":    model,
+		"messages": messages,
 	}
 	if req.GenParams != nil {
 		gp := req.GenParams
@@ -104,7 +117,7 @@ func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort
 				"function": map[string]any{
 					"name":        t.Name,
 					"description": t.Description,
-					"parameters":  t.Parameters,
+					"parameters":   t.Parameters,
 				},
 			})
 		}
@@ -136,13 +149,13 @@ func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort
 
 	resp, err := p.client.Do(hReq)
 	if err != nil {
-		return port.LLMChatResponse{}, err
+		return port.LLMChatResponse{}, wrapHTTPTimeout(err, p.timeout)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return port.LLMChatResponse{}, err
+		return port.LLMChatResponse{}, wrapHTTPTimeout(err, p.timeout)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return port.LLMChatResponse{}, classifyHTTPError(resp.StatusCode, respBody)
@@ -153,7 +166,7 @@ func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort
 			Message struct {
 				Content          string `json:"content"`
 				ReasoningContent string `json:"reasoning_content"`
-				ToolCalls []struct {
+				ToolCalls        []struct {
 					ID       string `json:"id"`
 					Function struct {
 						Name      string          `json:"name"`
@@ -272,6 +285,21 @@ func classifyHTTPError(statusCode int, body []byte) error {
 	default:
 		return fmt.Errorf("llm http %d: %s", statusCode, truncate(body, 200))
 	}
+}
+
+func wrapHTTPTimeout(err error, timeout time.Duration) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "Client.Timeout") || strings.Contains(msg, "context deadline exceeded") {
+		sec := int(timeout / time.Second)
+		if sec <= 0 {
+			sec = int(DefaultChatHTTPTimeout / time.Second)
+		}
+		return fmt.Errorf("LLM request timed out after %ds (raise runtime.turn.llm_http_timeout_sec for long reasoning): %w", sec, err)
+	}
+	return err
 }
 
 func truncate(b []byte, maxLen int) string {

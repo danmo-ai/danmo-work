@@ -176,7 +176,7 @@ defineExpose({ onKeydown, confirmActive, move })
 }
 
 .skill-picker__title {
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
   opacity: 0.75;
 }
@@ -186,7 +186,7 @@ defineExpose({ onKeydown, confirmActive, move })
   background: transparent;
   cursor: pointer;
   opacity: 0.5;
-  font-size: 16px;
+  font-size: var(--dq-font-size-prose);
   line-height: 1;
   padding: 0 4px;
   color: inherit;
@@ -209,7 +209,7 @@ defineExpose({ onKeydown, confirmActive, move })
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
 }
 
 .skill-picker__search-input:focus {
@@ -245,7 +245,7 @@ defineExpose({ onKeydown, confirmActive, move })
 }
 
 .skill-picker__name {
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -254,14 +254,14 @@ defineExpose({ onKeydown, confirmActive, move })
 
 .skill-picker__source {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--dq-font-size-caption);
   opacity: 0.55;
 }
 
 .skill-picker__desc {
   margin: 2px 0 0;
   padding-right: 18px;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   line-height: 1.35;
   opacity: 0.65;
   display: -webkit-box;
@@ -275,12 +275,12 @@ defineExpose({ onKeydown, confirmActive, move })
   top: 8px;
   right: 10px;
   color: var(--dq-accent);
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
 }
 
 .skill-picker__empty {
   padding: 16px 12px;
-  font-size: 12px;
+  font-size: var(--dq-font-size-body);
   opacity: 0.6;
   text-align: center;
 }

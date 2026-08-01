@@ -276,20 +276,20 @@ defineExpose({ save })
   flex-wrap: wrap;
 }
 .code-surface__lang {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--dq-label-tertiary);
 }
 .code-surface__sel {
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
   font-variant-numeric: tabular-nums;
   color: var(--dq-accent);
 }
 .code-surface__hint {
   flex: 1;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
   min-width: 0;
   overflow: hidden;
@@ -303,7 +303,7 @@ defineExpose({ save })
   border-radius: 6px;
   background: var(--dq-fill-tertiary);
   color: var(--dq-label-primary);
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -317,7 +317,7 @@ defineExpose({ save })
 .code-surface__status {
   padding: 24px;
   color: var(--dq-label-tertiary);
-  font-size: 13px;
+  font-size: var(--dq-font-size-body);
 }
 .code-surface__editor {
   min-height: 0;

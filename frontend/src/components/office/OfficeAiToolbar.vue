@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useSessionsStore } from '@/stores/sessions'
 import {
-  buildOfficeEditPrompt,
   type OfficeEditScope,
   type OfficeKind,
 } from '@/utils/office-route'
+import {
+  createOfficeEditAttachment,
+  type OfficeEditAttachment,
+  type OfficeEditAction,
+} from '@/types/office-edit-attachment'
 import { toast } from '@/utils/feedback'
 
 type EditableOfficeKind = Exclude<OfficeKind, 'preview' | 'code' | 'diff'>
@@ -15,6 +18,7 @@ const props = defineProps<{
   path: string
   kind: EditableOfficeKind
   getSelectionMarkdown: () => string
+  getSelectionLines?: () => { startLine: number; endLine: number } | null
   getEditScope: () => OfficeEditScope
   ensureSaved: () => Promise<boolean>
   scope: OfficeEditScope
@@ -23,11 +27,10 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  started: []
+  attachOfficeEdit: [att: OfficeEditAttachment]
 }>()
 
 const { t } = useI18n()
-const sessions = useSessionsStore()
 const instruction = ref('')
 const busy = ref(false)
 
@@ -38,20 +41,25 @@ const scopeHint = computed(() => {
   return t('office.scopeSheet')
 })
 
-async function run(action: 'polish' | 'modify' | 'continue' | 'slide-page' | 'sheet') {
+async function run(
+  action: OfficeEditAction,
+  opts?: {
+    instruction?: string
+    selection?: string
+    scope?: OfficeEditScope
+    startLine?: number
+    endLine?: number
+  },
+) {
   if (busy.value || props.disabled) return
-  if (!sessions.currentSessionId) {
-    toast.error(t('office.needSession'))
-    return
-  }
 
   busy.value = true
   try {
     const saved = await props.ensureSaved()
     if (!saved) return
 
-    let selection = props.getSelectionMarkdown()
-    const scope = props.getEditScope()
+    let selection = opts?.selection ?? props.getSelectionMarkdown()
+    const scope = opts?.scope ?? props.getEditScope()
     if (!selection.trim()) {
       if (action === 'continue') {
         selection = '(cursor / end of document)'
@@ -61,34 +69,49 @@ async function run(action: 'polish' | 'modify' | 'continue' | 'slide-page' | 'sh
       }
     }
 
-    const mappedAction =
+    const mappedAction: OfficeEditAction =
       props.kind === 'slides' && action === 'modify'
         ? 'slide-page'
         : props.kind === 'sheet' && action === 'modify'
           ? 'sheet'
           : action
 
-    const prompt = buildOfficeEditPrompt({
+    const lineRange =
+      opts?.startLine != null && opts?.endLine != null
+        ? { startLine: opts.startLine, endLine: opts.endLine }
+        : scope === 'selection'
+          ? props.getSelectionLines?.() ?? null
+          : null
+
+    let note = opts?.instruction !== undefined ? opts.instruction : instruction.value
+    // Polish / expand carry a default editable note when the user left the field empty.
+    if (!note.trim()) {
+      if (mappedAction === 'polish') note = t('office.defaultPolishNote')
+      else if (mappedAction === 'continue') note = t('office.defaultExpandNote')
+    }
+    const att = createOfficeEditAttachment({
       action: mappedAction,
       path: props.path,
-      kind: props.kind,
-      selection,
-      instruction: instruction.value,
-      pageIndex: props.pageIndex,
+      officeKind: props.kind,
       scope,
-      review: 'commit',
+      selection,
+      instruction: note,
+      pageIndex: props.pageIndex,
+      startLine: lineRange?.startLine,
+      endLine: lineRange?.endLine,
     })
 
-    await sessions.sendTurn(prompt, undefined, { snapshotPaths: [props.path] })
+    emit('attachOfficeEdit', att)
     instruction.value = ''
-    emit('started')
-    toast.success(t('office.turnStarted'))
+    toast.success(t('office.officeAttached'))
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : t('office.turnFailed'))
+    toast.error(e instanceof Error ? e.message : t('office.attachFailed'))
   } finally {
     busy.value = false
   }
 }
+
+defineExpose({ run })
 </script>
 
 <template>
@@ -102,13 +125,13 @@ async function run(action: 'polish' | 'modify' | 'continue' | 'slide-page' | 'sh
       @keydown.enter.prevent="run('modify')"
     />
     <button class="office-ai__btn" :disabled="disabled || busy" @click="run('polish')">
-      {{ t('office.polish') }}
+      {{ t('office.bubbleAiPolish') }}
     </button>
-    <button class="office-ai__btn office-ai__btn--primary" :disabled="disabled || busy" @click="run('modify')">
-      {{ t('office.modify') }}
+    <button class="office-ai__btn" :disabled="disabled || busy" @click="run('continue')">
+      {{ t('office.bubbleAiExpand') }}
     </button>
-    <button v-if="kind === 'doc'" class="office-ai__btn" :disabled="disabled || busy" @click="run('continue')">
-      {{ t('office.continue') }}
+    <button class="office-ai__btn" :disabled="disabled || busy" @click="run('modify')">
+      {{ t('office.bubbleAiModify') }}
     </button>
   </div>
 </template>
@@ -123,7 +146,7 @@ async function run(action: 'polish' | 'modify' | 'continue' | 'slide-page' | 'sh
 }
 .office-ai__scope {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
   white-space: nowrap;
   padding: 0 2px;
@@ -137,7 +160,7 @@ async function run(action: 'polish' | 'modify' | 'continue' | 'slide-page' | 'sh
   border-radius: 6px;
   background: var(--dq-bg-elevated);
   color: var(--dq-label-primary);
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
 }
 .office-ai__input::placeholder {
   color: var(--dq-label-quaternary);
@@ -154,7 +177,7 @@ async function run(action: 'polish' | 'modify' | 'continue' | 'slide-page' | 'sh
   border-radius: 6px;
   background: var(--dq-fill-tertiary);
   color: var(--dq-label-primary);
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -168,7 +191,7 @@ async function run(action: 'polish' | 'modify' | 'continue' | 'slide-page' | 'sh
 .office-ai__btn--primary {
   background: var(--dq-accent);
   border-color: transparent;
-  color: #fff;
+  color: var(--dq-on-accent);
 }
 .office-ai__btn--primary:hover:not(:disabled) {
   background: var(--dq-accent-hover);

@@ -138,6 +138,66 @@ func TestEditRequiresReadFirst(t *testing.T) {
 	}
 }
 
+func TestEditConsecutiveWithoutReread(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "test.txt")
+	os.WriteFile(f, []byte("alpha beta gamma\n"), 0644)
+
+	ft := setupTracker(dir)
+	ft.NoteRead(f)
+
+	h := &Edit{}
+	input := map[string]any{
+		"path":           f,
+		"oldString":      "alpha",
+		"newString":      "ALPHA",
+		"__work_dir":     dir,
+		"__file_tracker": ft,
+	}
+	if _, err := h.Execute(nil, input); err != nil {
+		t.Fatalf("first edit: %v", err)
+	}
+
+	// Second edit must not fail just because our own first write changed mtime.
+	input["oldString"] = "beta"
+	input["newString"] = "BETA"
+	if _, err := h.Execute(nil, input); err != nil {
+		t.Fatalf("second edit without re-read: %v", err)
+	}
+
+	saved, _ := os.ReadFile(f)
+	if got := string(saved); got != "ALPHA BETA gamma\n" {
+		t.Fatalf("unexpected content: %q", got)
+	}
+}
+
+func TestEditStillDetectsExternalChange(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "test.txt")
+	os.WriteFile(f, []byte("hello world\n"), 0644)
+
+	ft := setupTracker(dir)
+	ft.NoteRead(f)
+
+	// External modification after the tracked read.
+	os.WriteFile(f, []byte("hello world\nchanged\n"), 0644)
+
+	h := &Edit{}
+	_, err := h.Execute(nil, map[string]any{
+		"path":           f,
+		"oldString":      "hello",
+		"newString":      "goodbye",
+		"__work_dir":     dir,
+		"__file_tracker": ft,
+	})
+	if err == nil {
+		t.Fatal("expected error after external change")
+	}
+	if !strings.Contains(err.Error(), "has changed since it was last read") {
+		t.Errorf("expected stale-read error, got: %v", err)
+	}
+}
+
 func TestEditMultipleExactMatches(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "test.txt")

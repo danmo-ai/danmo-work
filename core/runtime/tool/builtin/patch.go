@@ -201,6 +201,9 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 			h.rollbackWrites(writes)
 			return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", fp.relPath, err)
 		}
+		// Own write updates the snapshot so a later edit/write in this turn does not
+		// fail with "changed since last read" unless something else touched the file.
+		noteReadFile(input, fp.path)
 
 		results = append(results, fmt.Sprintf("Patched %q (%d hunks)", fp.relPath, len(fp.hunks)))
 		op := "update"

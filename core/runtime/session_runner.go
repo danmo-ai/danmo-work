@@ -434,7 +434,9 @@ func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, m
 	e.updateSessionStatus(sessionID, domain.SessionStatusActive)
 	go func() {
 		defer e.finishSessionTurn(sessionID, turnID)
-		s, err := e.sessions.Get(ctx, sessionID)
+		// Do not use the HTTP request ctx — it is cancelled when StartTurn returns.
+		bg := context.Background()
+		s, err := e.sessions.Get(bg, sessionID)
 		if err != nil {
 			return
 		}
@@ -446,7 +448,7 @@ func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, m
 		if targetModelID == "" {
 			targetModelID = s.ModelID
 		}
-		agent, err := e.agents.Get(ctx, targetAgentID)
+		agent, err := e.agents.Get(bg, targetAgentID)
 		if err != nil {
 			return
 		}
@@ -471,23 +473,25 @@ func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, m
 }
 
 func (e *Engine) CancelTurn(ctx context.Context, turnID string) {
+	bg := context.Background()
+
+	// Interrupt the in-memory goroutine when this process owns it.
 	e.mu.Lock()
 	cancel, ok := e.cancel[turnID]
 	e.mu.Unlock()
 	if ok {
 		cancel()
+	}
+
+	t, err := e.turns.Get(bg, turnID)
+	if err != nil {
 		return
 	}
 
-	// Child/delegate turns share the parent context and are not registered in
-	// e.cancel. Cancelling by child ID (or healing a zombie "running" child after
-	// the parent already ended) must still clear DB status so the UI leaves
-	// the Composer "running" state.
-	t, err := e.turns.Get(context.Background(), turnID)
-	if err != nil || t.Status != domain.TurnRunning {
-		return
-	}
-	turns, _ := e.turns.ListBySession(context.Background(), t.SessionID)
+	// Child/delegate turns share the parent context and may not be in e.cancel.
+	// Cancel every other running turn in the session and clear their DB status
+	// so Composer leaves the "running" state immediately.
+	turns, _ := e.turns.ListBySession(bg, t.SessionID)
 	for _, other := range turns {
 		if other.ID == turnID || other.Status != domain.TurnRunning {
 			continue
@@ -498,11 +502,28 @@ func (e *Engine) CancelTurn(ctx context.Context, turnID string) {
 		if found {
 			c()
 		}
+		_ = e.turns.UpdateStatus(bg, other.ID, domain.TurnCancelled)
+		e.stream.Publish(bg, t.SessionID, other.ID, domain.EventTurnFailed, domain.ErrorPayload{
+			Message: "cancelled", Kind: "cancelled",
+		})
+		// Do not wait for a stuck child goroutine to finishSessionTurn.
+		e.releaseSessionTurn(t.SessionID, other.ID)
 	}
-	_ = e.turns.UpdateStatus(context.Background(), turnID, domain.TurnCancelled)
-	e.stream.Publish(context.Background(), t.SessionID, turnID, domain.EventTurnFailed, domain.ErrorPayload{
-		Message: "cancelled", Kind: "cancelled",
-	})
+
+	// Eagerly persist cancel even when cancel() was called above. Previously we
+	// returned after cancel() and relied on the turn goroutine to update DB —
+	// if that goroutine was blocked (or owned by another process sharing the
+	// DB), the Composer stop button looked broken while status stayed "running".
+	if t.Status == domain.TurnRunning {
+		_ = e.turns.UpdateStatus(bg, turnID, domain.TurnCancelled)
+		e.stream.Publish(bg, t.SessionID, turnID, domain.EventTurnFailed, domain.ErrorPayload{
+			Message: "cancelled", Kind: "cancelled",
+		})
+		e.updateSessionStatus(t.SessionID, domain.SessionStatusCompleted)
+	}
+	// Always clear the in-memory reservation. finishSessionTurn may never run if
+	// the turn goroutine is blocked ignoring cancel (e.g. hung LLM stream).
+	e.releaseSessionTurn(t.SessionID, turnID)
 }
 
 func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error {
@@ -1087,6 +1108,14 @@ func (e *Engine) resolveWorkDir(ctx context.Context, projectID string) string {
 }
 
 func (e *Engine) afterTurn(sessionID, turnID, agentID string, rep domain.Report, err error, messages []Message, model string) {
+	// CancelTurn persists "cancelled" immediately for UI responsiveness. Do not
+	// let a late-finishing goroutine resurrect the turn as completed/failed.
+	if cur, getErr := e.turns.Get(context.Background(), turnID); getErr == nil && cur.Status == domain.TurnCancelled {
+		if err != nil && errors.Is(err, context.Canceled) {
+			e.updateSessionStatus(sessionID, domain.SessionStatusCompleted)
+		}
+		return
+	}
 	if err != nil {
 		kind := "turn"
 		msg := err.Error()
@@ -1114,6 +1143,9 @@ func (e *Engine) afterTurn(sessionID, turnID, agentID string, rep domain.Report,
 }
 
 func (e *Engine) updateSessionStatus(sessionID string, status domain.SessionStatus) {
+	if e.sessions == nil {
+		return
+	}
 	s, err := e.sessions.Get(context.Background(), sessionID)
 	if err != nil {
 		return
@@ -1183,8 +1215,9 @@ func (e *Engine) maybeCompact(ctx context.Context, sessionID, turnID string, tur
 	e.clearSessionTurnMessages(sessionID)
 }
 
-// loadRetainedHistory loads compaction-bounded session messages and shrinks
-// oversized tool results so the retain window stays near cutTokens.
+// loadRetainedHistory loads compaction-bounded session messages.
+// Window size is owned solely by maybeCompact (checkpoint retain cursor);
+// do not re-truncate here — that path previously froze turns on huge history.
 func (e *Engine) loadRetainedHistory(sessionID string, cp *domain.CompactionCheckpoint) []Message {
 	retainFrom := ""
 	skip := 0
@@ -1192,12 +1225,7 @@ func (e *Engine) loadRetainedHistory(sessionID string, cp *domain.CompactionChec
 		retainFrom = cp.RetainFromTurnID
 		skip = cp.RetainSkipMessages
 	}
-	msgs := chatMessagesToRuntime(e.turnLog.LoadSessionMessages(sessionID, retainFrom, skip))
-	cfg := e.compactionMgr.loadCfg(context.Background())
-	if cfg.cutTokens > 0 {
-		msgs = truncateToolResultsToBudget(msgs, cfg.cutTokens)
-	}
-	return msgs
+	return chatMessagesToRuntime(e.turnLog.LoadSessionMessages(sessionID, retainFrom, skip))
 }
 
 // alwaysOnBuiltinTools are mounted for every agent without requiring ToolBindings.
@@ -1251,7 +1279,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 	delegator := &builtin.DelegateAgent{
 		Stream: e.stream, Agents: e.agents,
 		KnowledgeSearch: e.knowledge.Search,
-		RunSubTurn: func(ctx context.Context, sessionID, modelID, parentTurnID string, workerAgent domain.Agent, goal string, parentPath []domain.TurnPathEntry) (domain.Report, error) {
+		RunSubTurn: func(ctx context.Context, sessionID, modelID, parentTurnID, callID string, workerAgent domain.Agent, goal string, parentPath []domain.TurnPathEntry) (domain.Report, error) {
 			childTurnID := fmt.Sprintf("turn-%d", time.Now().UnixNano())
 			workDir := e.dataDir
 			projectID := ""
@@ -1269,7 +1297,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 				WorkDir: workDir, ProjectID: projectID, Path: childPath,
 			}
 			e.stream.Publish(ctx, sessionID, parentTurnID, domain.EventDelegateStarted, domain.DelegateStartedPayload{
-				AgentID: workerAgent.ID, Goal: goal, ChildTurnID: childTurnID,
+				AgentID: workerAgent.ID, Goal: goal, ChildTurnID: childTurnID, CallID: callID,
 			})
 
 			// Isolated child runner so parallel delegate_agent calls do not

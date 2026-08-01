@@ -188,7 +188,7 @@ func New(cfg Config) *Core {
 
 	llmConfig := service.NewLLMConfigManager(llmConfigRepo, modelCfg)
 
-	client := llm.NewDefaultLLMProvider(llmConfig, modelCfg)
+	client := llm.NewDefaultLLMProvider(llmConfig, modelCfg, configManager)
 
 	// Always use the config-backed client so providers added after startup
 	// (Settings → LLM) are picked up on the next Chat call. Mock is only used

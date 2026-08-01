@@ -236,6 +236,7 @@ export interface ConfigFile {
       doomLoopThreshold: number
       maxStepsDefault: number
       maxLLMFailures: number
+      llmHttpTimeoutSec?: number
     }
     tools?: {
       maxOutputChars: number
@@ -260,6 +261,7 @@ export interface ConfigFile {
       turnInterval: number
       subInterval: number
       toolTruncate: number
+      keepRecentToolSteps?: number
     }
   }
   search: SearchConfig
@@ -393,6 +395,7 @@ export interface RuntimeConfigForm {
   doomLoopThreshold: number
   maxStepsDefault: number
   maxLLMFailures: number
+  llmHttpTimeoutSec: number
   maxToolOutputChars: number
   maxDelegationDepth: number
   readTopK: number
@@ -406,5 +409,6 @@ export interface RuntimeConfigForm {
   compactionTurnInterval: number
   compactionSubInterval: number
   compactionToolTruncate: number
+  compactionKeepRecentToolSteps: number
 }
 

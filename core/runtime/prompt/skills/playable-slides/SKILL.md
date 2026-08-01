@@ -51,8 +51,9 @@ Aligned with Marp/Marpit facts of life so Stage (and future Marp engines) can re
 Satisfy at least one; prefer **both** filename and frontmatter:
 
 - Filename `*-slides.md`, or path contains `/slides/` / `/deck/`, or basename starts with `slides.`
-- Frontmatter `type: slides`
-- Body has multiple `---` page breaks
+- Frontmatter `type: slides` (required for content-based routing — bare `---` body dividers alone do **not** open as slides; reports use those as section breaks)
+
+Page breaks inside a deck remain a line that is only `---`.
 
 ### Skeleton
 

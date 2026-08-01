@@ -929,19 +929,14 @@ function formatSize(bytes: number): string {
   min-height: 0;
 }
 
-.resource-section--body .md-editor {
+.resource-section--body .work-md {
   flex: 1;
   min-height: 360px;
 }
 
-.resource-section--body .md-editor__body {
+.resource-section--body .work-md__body {
   flex: 1;
   min-height: 320px;
-}
-
-.resource-section--body .md-editor__textarea {
-  min-height: 320px;
-  resize: vertical;
 }
 
 .resource-section__toolbar {

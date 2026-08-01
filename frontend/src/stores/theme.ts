@@ -43,7 +43,7 @@ function getStoredTheme(): ThemeId {
   } catch {
     // ignore
   }
-  return 'mac'
+  return 'tokyo-night'
 }
 
 export const useThemeStore = defineStore('theme', () => {

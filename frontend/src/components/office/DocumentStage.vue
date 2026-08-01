@@ -15,9 +15,14 @@ import DiffSurface from '@/components/office/DiffSurface.vue'
 import OfficeAiToolbar from '@/components/office/OfficeAiToolbar.vue'
 import { confirm, toast } from '@/utils/feedback'
 import type { OfficeEditScope } from '@/utils/office-route'
+import { exportMarkdownPdf } from '@/utils/md-export-pdf'
 import { siblingSlidesMarkdownPath } from '@/utils/slides-render'
 import type { ElementAttachment } from '@/types/element-attachment'
 import type { CodeSelectionAttachment } from '@/types/code-attachment'
+import {
+  createOfficeEditAttachment,
+  type OfficeEditAttachment,
+} from '@/types/office-edit-attachment'
 
 const props = defineProps<{
   projectId: string
@@ -26,6 +31,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   attachElement: [att: ElementAttachment]
   attachCodeSelection: [att: CodeSelectionAttachment]
+  attachOfficeEdit: [att: OfficeEditAttachment]
 }>()
 
 const { t } = useI18n()
@@ -41,6 +47,7 @@ const docRef = ref<InstanceType<typeof DocSurface> | null>(null)
 const slidesRef = ref<InstanceType<typeof SlidesSurface> | null>(null)
 const sheetRef = ref<InstanceType<typeof SheetSurface> | null>(null)
 const codeRef = ref<InstanceType<typeof CodeSurface> | null>(null)
+const aiToolbarRef = ref<InstanceType<typeof OfficeAiToolbar> | null>(null)
 const dirty = ref(false)
 const pageIndex = ref(0)
 const editScope = ref<OfficeEditScope>('document')
@@ -88,13 +95,67 @@ function getSelectionMarkdown(): string {
   return surface?.getSelectionMarkdown?.() || ''
 }
 
+function getSelectionLines(): { startLine: number; endLine: number } | null {
+  if (stage.value?.kind !== 'doc') return null
+  const surface = docRef.value as { getSelectionLines?: () => { startLine: number; endLine: number } | null } | null
+  return surface?.getSelectionLines?.() ?? null
+}
+
 function getEditScope(): OfficeEditScope {
   return editScope.value
+}
+
+async function onDocAiEdit(payload: {
+  action: 'polish' | 'continue' | 'modify'
+  instruction: string
+  selection: string
+  startLine?: number
+  endLine?: number
+}) {
+  if (!stage.value || stage.value.kind !== 'doc') return
+  editScope.value = 'selection'
+  const saved = await ensureSaved()
+  if (!saved) return
+  const att = createOfficeEditAttachment({
+    action: payload.action,
+    path: stage.value.path,
+    officeKind: 'doc',
+    scope: 'selection',
+    selection: payload.selection,
+    instruction: payload.instruction,
+    startLine: payload.startLine,
+    endLine: payload.endLine,
+  })
+  emit('attachOfficeEdit', att)
+  toast.success(t('office.officeAttached'))
+}
+
+function onAttachOfficeEdit(att: OfficeEditAttachment) {
+  emit('attachOfficeEdit', att)
 }
 
 async function save(opts?: { quiet?: boolean }) {
   const surface = activeSurface.value?.value
   await surface?.save?.(opts)
+}
+
+const exportingPdf = ref(false)
+
+async function exportPdf() {
+  if (!stage.value || stage.value.kind !== 'doc' || exportingPdf.value) return
+  exportingPdf.value = true
+  try {
+    if (dirty.value) {
+      await save({ quiet: true })
+    }
+    const md =
+      (docRef.value as { getMarkdown?: () => string } | null)?.getMarkdown?.() || ''
+    await exportMarkdownPdf(md, stage.value.path)
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('office.exportPdfFailed'))
+  } finally {
+    exportingPdf.value = false
+  }
 }
 
 /** Flush dirty edits to disk before AI reads the file. Auto-saves; confirms if save fails. */
@@ -313,6 +374,14 @@ defineExpose({ save })
           {{ t('office.save') }}
         </button>
         <button
+          v-if="stage.kind === 'doc'"
+          class="document-stage__btn"
+          :disabled="exportingPdf || turnRunning"
+          @click="exportPdf"
+        >
+          {{ t('office.exportPdf') }}
+        </button>
+        <button
           class="document-stage__btn"
           @click="workspaceUi.layoutMode = layoutMode === 'immersive' ? 'stage' : 'immersive'"
         >
@@ -340,16 +409,19 @@ defineExpose({ save })
       </span>
     </div>
 
-    <div v-if="editableKind && stage.mode === 'edit'" class="document-stage__ai">
+    <!-- Slides/Sheet: attach polish/modify chips to Composer (doc uses selection bubble). -->
+    <div v-if="editableKind && editableKind !== 'doc' && stage.mode === 'edit'" class="document-stage__ai">
       <OfficeAiToolbar
+        ref="aiToolbarRef"
         :path="stage.path"
         :kind="editableKind"
-        :page-index="pageIndex"
-        :disabled="turnRunning"
+        :page-index="editableKind === 'slides' ? pageIndex : undefined"
         :get-selection-markdown="getSelectionMarkdown"
+        :get-selection-lines="getSelectionLines"
         :get-edit-scope="getEditScope"
         :ensure-saved="ensureSaved"
         :scope="editScope"
+        @attach-office-edit="onAttachOfficeEdit"
       />
     </div>
 
@@ -363,6 +435,7 @@ defineExpose({ save })
       :turn-running="turnRunning"
       @dirty="dirty = $event"
       @scope="editScope = $event"
+      @ai-edit="onDocAiEdit"
     />
     <SlidesSurface
       v-else-if="stage.kind === 'slides'"
@@ -442,7 +515,7 @@ defineExpose({ save })
   padding: 8px 12px;
   border-bottom: 1px solid var(--dq-separator-light);
   background: color-mix(in srgb, var(--dq-accent) 12%, var(--dq-bg-elevated));
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
 }
 .document-stage__ai-banner-text {
   color: var(--dq-label-primary);
@@ -470,7 +543,7 @@ defineExpose({ save })
   min-width: 0;
 }
 .document-stage__badge {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -481,7 +554,7 @@ defineExpose({ save })
   flex-shrink: 0;
 }
 .document-stage__path {
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -489,10 +562,10 @@ defineExpose({ save })
 }
 .document-stage__dirty {
   color: var(--dq-system-orange);
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
 }
 .document-stage__running {
-  font-size: 11px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-accent);
 }
 .document-stage__actions {
@@ -514,7 +587,7 @@ defineExpose({ save })
   height: 26px;
   padding: 0 8px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-secondary);
   cursor: pointer;
 }
@@ -533,7 +606,7 @@ defineExpose({ save })
   border-radius: 6px;
   background: var(--dq-fill-tertiary);
   color: var(--dq-label-primary);
-  font-size: 12px;
+  font-size: var(--dq-font-size-caption);
   cursor: pointer;
 }
 .document-stage__btn:hover:not(:disabled) {

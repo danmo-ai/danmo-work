@@ -2,7 +2,7 @@
 
 Marp-compatible subset for Danmo Slides Stage. Stage programmatically renders playable HTML — author **Markdown only**.
 
-Keep decks Stage-routable: `type: slides` frontmatter and/or `*-slides.md` filename; pages split by a line that is only `---`.
+Keep decks Stage-routable: `type: slides` frontmatter and/or `*-slides.md` filename (bare `---` dividers alone do not route as slides); pages split by a line that is only `---`.
 
 ## Fragments + theme (Present)
 

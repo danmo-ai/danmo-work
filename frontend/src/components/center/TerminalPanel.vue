@@ -4,6 +4,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { apiBaseUrl } from '@/utils/desktop'
+import { dqFontSizePx } from '@/utils/font-size'
 
 const props = defineProps<{ projectId: string }>()
 
@@ -87,7 +88,7 @@ function reconnect() {
 onMounted(() => {
   term = new Terminal({
     cursorBlink: true,
-    fontSize: 12,
+    fontSize: dqFontSizePx('--dq-font-size-caption'),
     fontFamily: 'var(--dq-font-mono), "SF Mono", Monaco, Menlo, Consolas, monospace',
     theme: terminalTheme(),
     scrollback: 5000,

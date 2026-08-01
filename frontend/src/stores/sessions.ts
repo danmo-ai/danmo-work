@@ -409,6 +409,14 @@ export const useSessionsStore = defineStore('sessions', () => {
   async function cancelTurn(turnId: string) {
     const sid = currentSessionId.value
     if (!sid) return
+    const markCancelled = (id: string) => {
+      turns.value = turns.value.map((t) =>
+        t.id === id && t.status === 'running' ? { ...t, status: 'cancelled' } : t,
+      )
+    }
+    // Optimistic: clear Composer "running" immediately even if the server is slow
+    // to persist cancel (or a blocked turn goroutine lags behind).
+    markCancelled(turnId)
     await fetchJSON(`/sessions/${sid}/turns/${turnId}`, { method: 'DELETE' })
     await loadTurns(sid)
     // Heal zombie child turns left "running" after parent cancel (pre-fix race).
@@ -421,6 +429,13 @@ export const useSessionsStore = defineStore('sessions', () => {
       }
     }
     if (leftovers.length) await loadTurns(sid)
+    // Old backends (or a stuck goroutine) may still report "running" after DELETE.
+    // Keep Composer unlocked so Stop does not appear ineffective.
+    for (const t of turns.value) {
+      if (t.status === 'running' && (t.id === turnId || leftovers.some((x) => x.id === t.id))) {
+        markCancelled(t.id)
+      }
+    }
   }
 
   async function resumeTurn(turnId: string) {

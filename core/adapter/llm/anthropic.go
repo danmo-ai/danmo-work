@@ -16,17 +16,26 @@ import (
 type AnthropicProvider struct {
 	baseURL string
 	apiKey  string
+	timeout time.Duration
 	client  *http.Client
 }
 
 func NewAnthropicProvider(baseURL, apiKey string) *AnthropicProvider {
+	return NewAnthropicProviderWithTimeout(baseURL, apiKey, DefaultChatHTTPTimeout)
+}
+
+func NewAnthropicProviderWithTimeout(baseURL, apiKey string, timeout time.Duration) *AnthropicProvider {
 	if baseURL == "" {
 		baseURL = "https://api.anthropic.com/v1"
+	}
+	if timeout <= 0 {
+		timeout = DefaultChatHTTPTimeout
 	}
 	return &AnthropicProvider{
 		baseURL: baseURL,
 		apiKey:  apiKey,
-		client:  &http.Client{Timeout: 120 * time.Second},
+		timeout: timeout,
+		client:  &http.Client{Timeout: timeout},
 	}
 }
 
@@ -126,13 +135,13 @@ func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest, e
 
 	resp, err := p.client.Do(hReq)
 	if err != nil {
-		return port.LLMChatResponse{}, err
+		return port.LLMChatResponse{}, wrapHTTPTimeout(err, p.timeout)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return port.LLMChatResponse{}, err
+		return port.LLMChatResponse{}, wrapHTTPTimeout(err, p.timeout)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return port.LLMChatResponse{}, classifyHTTPError(resp.StatusCode, respBody)

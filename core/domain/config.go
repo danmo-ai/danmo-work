@@ -59,6 +59,10 @@ type ConfigCompactionSection struct {
 	TurnInterval int     `json:"turnInterval" mapstructure:"turn_interval"`
 	SubInterval  int     `json:"subInterval" mapstructure:"sub_interval"`
 	ToolTruncate int     `json:"toolTruncate" mapstructure:"tool_truncate"`
+	// KeepRecentToolSteps is how many latest LLM steps (assistant tool_call
+	// batches) keep full tool results during turn-internal truncation.
+	// Older steps are truncated to ToolTruncate. Default 3.
+	KeepRecentToolSteps int `json:"keepRecentToolSteps" mapstructure:"keep_recent_tool_steps"`
 }
 
 type ConfigTurnSection struct {
@@ -67,6 +71,10 @@ type ConfigTurnSection struct {
 	// MaxLLMFailures is consecutive LLM Chat errors before the turn fails
 	// (independent of max_steps). Resets after any successful Chat response.
 	MaxLLMFailures int `json:"maxLLMFailures" mapstructure:"max_llm_failures"`
+	// LLMHTTPTimeoutSec is the per-request HTTP client timeout for non-streaming
+	// LLM Chat (includes waiting for the full response body). High-effort
+	// reasoning models often need well above 120s. Default 600.
+	LLMHTTPTimeoutSec int `json:"llmHttpTimeoutSec" mapstructure:"llm_http_timeout_sec"`
 }
 
 // ConfigToolsSection controls local tool execution safeguards.
