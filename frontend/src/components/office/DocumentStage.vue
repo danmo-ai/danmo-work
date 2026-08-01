@@ -150,7 +150,15 @@ async function exportPdf() {
     }
     const md =
       (docRef.value as { getMarkdown?: () => string } | null)?.getMarkdown?.() || ''
-    await exportMarkdownPdf(md, stage.value.path)
+    const result = await exportMarkdownPdf(md, stage.value.path)
+    if (!result.ok) return // user cancelled save dialog
+    if (result.method === 'download') {
+      toast.success(t('office.exportPdfDownloaded'))
+    } else if (result.path) {
+      toast.success(t('office.exportPdfSaved', { path: result.path }))
+    } else {
+      toast.success(t('office.exportPdfOk'))
+    }
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('office.exportPdfFailed'))
   } finally {

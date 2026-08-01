@@ -22,12 +22,22 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
+      // html2pdf.js → html2canvas; stock html2canvas rejects CSS color()/oklch.
+      html2canvas: 'html2canvas-pro',
     },
     dedupe: ['vue'],
   },
   optimizeDeps: {
     // Linked file: packages — exclude so Vite loads fresh dist (avoids stale Dq* exports).
-    include: ['reka-ui', 'codemirror', '@codemirror/language-data', '@codemirror/view', '@codemirror/state'],
+    include: [
+      'reka-ui',
+      'codemirror',
+      '@codemirror/language-data',
+      '@codemirror/view',
+      '@codemirror/state',
+      'html2canvas-pro',
+      'html2pdf.js',
+    ],
     exclude: ['@danqing/dq-tokens', '@danqing/dq-ui', '@danqing/dq-shell'],
   },
   server: {

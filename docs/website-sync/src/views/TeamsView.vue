@@ -85,6 +85,27 @@ const beats = [
         </li>
       </ol>
 
+      <div class="pair coedit-shots">
+        <figure class="reveal" style="transition-delay: 60ms">
+          <img
+            src="/screenshots/ui-office-coedit.png"
+            alt="Human and AI co-editing a report on Document Stage"
+            width="3456"
+            height="2168"
+          />
+          <figcaption>Human ↔ AI co-edit — Agent trail beside the live document</figcaption>
+        </figure>
+        <figure class="reveal" style="transition-delay: 120ms">
+          <img
+            src="/screenshots/ui-ai-doc-modify.png"
+            alt="Select a paragraph and choose AI polish, expand, or modify"
+            width="3456"
+            height="2168"
+          />
+          <figcaption>AI modify — select text → polish / expand / rewrite</figcaption>
+        </figure>
+      </div>
+
       <div class="demo-frame reveal">
         <div class="demo-bar">
           <strong>Feature tour</strong>
@@ -181,6 +202,35 @@ const beats = [
           <p>{{ p.copy }}</p>
         </li>
       </ul>
+    </section>
+
+    <section class="shots container">
+      <h2 class="reveal section-title">LLM-driven expert team</h2>
+      <p class="reveal section-lede">
+        No hand-wired crew graph. In Team mode you state a clear goal; the lead model plans
+        <code>delegate_agent</code> calls with explicit goal and context — parallel researchers,
+        then a document agent — and continues when children Report back.
+      </p>
+      <div class="pair">
+        <figure class="reveal" style="transition-delay: 60ms">
+          <img
+            src="/screenshots/ui-team-intent.png"
+            alt="Team mode with a detailed research brief and clear requirements"
+            width="3456"
+            height="2168"
+          />
+          <figcaption>Clear intent — detailed brief, Team mode on</figcaption>
+        </figure>
+        <figure class="reveal" style="transition-delay: 120ms">
+          <img
+            src="/screenshots/ui-team-delegate.png"
+            alt="Lead agent delegates to researchers then document expert with an explicit goal"
+            width="3456"
+            height="2168"
+          />
+          <figcaption>Clear delegation — goal + context on each child agent</figcaption>
+        </figure>
+      </div>
     </section>
 
     <section class="shots container">
@@ -458,6 +508,24 @@ const beats = [
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.25rem;
+}
+
+.coedit-shots {
+  margin: 2rem 0 2.25rem;
+}
+
+.coedit-shots img {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: contain;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.coedit-shots figcaption {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--label-faint);
 }
 
 .pair.weixin {

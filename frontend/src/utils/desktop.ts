@@ -53,29 +53,67 @@ export function installTauriMacosShell(): void {
   document.documentElement.classList.add('dq-tauri-macos');
 }
 
+export type SaveBlobFilter = { name: string; extensions: string[] }
+
 export type SaveBlobResult =
   | { ok: true; path?: string; method: 'dialog' | 'picker' | 'download' }
   | { ok: false; cancelled: true }
+
+const EXT_MIME: Record<string, string> = {
+  zip: 'application/zip',
+  pdf: 'application/pdf',
+  md: 'text/markdown',
+  txt: 'text/plain',
+  json: 'application/json',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+}
+
+function pickerAccept(filters?: SaveBlobFilter[]): Record<string, string[]> {
+  const list = filters?.length ? filters : [{ name: 'Zip', extensions: ['zip'] }]
+  const accept: Record<string, string[]> = {}
+  for (const f of list) {
+    for (const ext of f.extensions) {
+      const key = ext.replace(/^\./, '').toLowerCase()
+      const mime = EXT_MIME[key] || 'application/octet-stream'
+      const dotted = `.${key}`
+      ;(accept[mime] ??= []).push(dotted)
+    }
+  }
+  return accept
+}
+
+async function resolveBlob(blobOrFactory: Blob | (() => Promise<Blob>)): Promise<Blob> {
+  return typeof blobOrFactory === 'function' ? await blobOrFactory() : blobOrFactory
+}
 
 /**
  * Save a Blob with a location prompt when possible.
  * - Tauri desktop: native Save dialog, then write via sidecar command.
  * - Chromium: File System Access `showSaveFilePicker`.
  * - Otherwise: browser default download (usually ~/Downloads), no folder picker.
+ *
+ * Pass a factory `() => Promise<Blob>` to open the dialog first (keeps the
+ * user-gesture chain), then build bytes only after the path is chosen.
  */
 export async function saveBlobAs(
-  blob: Blob,
+  blobOrFactory: Blob | (() => Promise<Blob>),
   fileName: string,
-  opts?: { filters?: Array<{ name: string; extensions: string[] }> },
+  opts?: { filters?: SaveBlobFilter[]; defaultPath?: string },
 ): Promise<SaveBlobResult> {
+  const filters = opts?.filters ?? [{ name: 'Zip', extensions: ['zip'] }]
+  const suggestedName = fileName.replace(/\\/g, '/').split('/').pop() || fileName
+
   if (isTauriRuntime()) {
     const { save } = await import('@tauri-apps/plugin-dialog')
     const { invoke } = await import('@tauri-apps/api/core')
     const path = await save({
-      defaultPath: fileName,
-      filters: opts?.filters ?? [{ name: 'Zip', extensions: ['zip'] }],
+      defaultPath: opts?.defaultPath || suggestedName,
+      filters,
     })
     if (!path) return { ok: false, cancelled: true }
+    const blob = await resolveBlob(blobOrFactory)
     const buf = new Uint8Array(await blob.arrayBuffer())
     await invoke('write_file_bytes', { path, contents: Array.from(buf) })
     return { ok: true, path, method: 'dialog' }
@@ -90,14 +128,15 @@ export async function saveBlobAs(
   if (typeof w.showSaveFilePicker === 'function') {
     try {
       const handle = await w.showSaveFilePicker({
-        suggestedName: fileName,
+        suggestedName,
         types: [
           {
-            description: opts?.filters?.[0]?.name ?? 'Zip',
-            accept: { 'application/zip': ['.zip'] },
+            description: filters[0]?.name ?? 'File',
+            accept: pickerAccept(filters),
           },
         ],
       })
+      const blob = await resolveBlob(blobOrFactory)
       const writable = await handle.createWritable()
       await writable.write(blob)
       await writable.close()
@@ -111,10 +150,11 @@ export async function saveBlobAs(
     }
   }
 
+  const blob = await resolveBlob(blobOrFactory)
   const objectUrl = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = objectUrl
-  a.download = fileName
+  a.download = suggestedName
   a.style.display = 'none'
   document.body.appendChild(a)
   a.click()

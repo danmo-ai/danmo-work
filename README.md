@@ -117,6 +117,10 @@ Not silent overwrite, not CRDT multiplayer — four beats on Document Stage:
 3. **Review** — View Diff · Keep · Revert · accept hunks
 4. **Commit** — Keep keeps SoT; Revert restores snapshot; trail in Turn Log
 
+| Human ↔ AI co-edit | AI modify selection |
+|--------------------|---------------------|
+| ![Office co-edit on Document Stage](docs/screenshots/ui-office-coedit.png) | ![Select text → AI polish / expand / modify](docs/screenshots/ui-ai-doc-modify.png) |
+
 | Kind | Source of truth | Scope |
 |------|-----------------|-------|
 | **Doc** | GFM `.md` | Selection or whole doc |
@@ -195,6 +199,12 @@ User input → [LLM] plans Tool Call DAG → execute
   → delegate? delegate_agent (isolated child → Report)
   → done
 ```
+
+Expert team collaboration is the same loop in **Team** mode: you state a clear goal; the lead model decides whom to summon, writes a precise `delegate_agent` brief (goal + context), and continues when children Report back.
+
+| Clear intent (Team) | LLM-driven delegation |
+|---------------------|------------------------|
+| ![Team mode with a detailed research brief](docs/screenshots/ui-team-intent.png) | ![Parallel researchers then document agent with an explicit goal](docs/screenshots/ui-team-delegate.png) |
 
 ### Log is state
 

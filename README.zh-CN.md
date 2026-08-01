@@ -118,6 +118,10 @@ Danmo Work 是：**模型在同一条链上编排**；你提供能力（Tool / S
 3. **审阅** — 查看 Diff，可整份保留、整份回滚，或按 hunk 接受
 4. **落定** — 保留则写入真相源；回滚则恢复快照；全过程记入 Turn Log
 
+| 人与 AI 共同编辑 | AI 修改文档 |
+|------------------|------------|
+| ![Document Stage 上人与 AI 共编](docs/screenshots/ui-office-coedit.png) | ![选中段落 → AI 润色 / 扩写 / 修改](docs/screenshots/ui-ai-doc-modify.png) |
+
 | 类型 | 真相源 | 协作范围 |
 |------|--------|----------|
 | **文档** | GFM `.md` | 选区或全文 |
@@ -196,6 +200,12 @@ Danmo Work 是：**模型在同一条链上编排**；你提供能力（Tool / S
   → 需要委派？delegate_agent（隔离子 Agent → 回报）
   → 完成
 ```
+
+专家团协作就是同一套循环开 **Team** 模式：你把目标和要求写清楚；主 Agent 自行决定委派谁、用清晰的 `delegate_agent` 说明（goal + context），子 Agent 回报后再继续。
+
+| 意图清晰（Team） | LLM 自主委派 |
+|------------------|--------------|
+| ![Team 模式：详细调研要求](docs/screenshots/ui-team-intent.png) | ![并行调研再委派文档专家，goal 写清](docs/screenshots/ui-team-delegate.png) |
 
 ### 日志即状态
 
