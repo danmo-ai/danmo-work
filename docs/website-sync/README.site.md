@@ -1,14 +1,27 @@
 # Danmo Website
 
-Official English marketing site for [Danmo](https://github.com/danmo-ai) — local-first AI for create, collaborate, and inbox.
+[English](README.md) · [中文](README.zh-CN.md)
 
-**Live:** [https://danmo-ai.github.io/](https://danmo-ai.github.io/)
+Marketing site for [Danmo](https://github.com/danmo-ai) — local-first AI for create, collaborate, and inbox.
 
-## Products
+**Site:** https://danmo-ai.github.io/
 
-- **Make** — plugin-style image & video generation (MLX / CUDA)
-- **Work** — human ↔ AI Office co-edit on a coding-agent-grade loop (docs / slides / sheets + AI Diff); multi-agent, MCP, IM
-- **Inbox** — AI email information-flow organizer
+## Stack
+
+Vue 3 · Vite · TypeScript · Vue Router
+
+Published as the org GitHub Pages site (`danmo-ai.github.io`).
+
+## Pages
+
+| Path | Product | Focus |
+| --- | --- | --- |
+| `/` | Home | Suite overview |
+| `/make` | Make | Local image & video generation (MLX / CUDA) |
+| `/work` | Work | Human ↔ AI Office co-edit; LLM-driven expert team |
+| `/inbox` | Inbox | AI email as information flow |
+
+Legacy routes `/studio`, `/teams`, `/mail` redirect to the paths above.
 
 ## Feature tours (static HTML)
 
@@ -17,24 +30,35 @@ Served from `public/demos/`:
 - [`/demos/office-coedit-tour.html`](https://danmo-ai.github.io/demos/office-coedit-tour.html?lang=en&tour=1) — Intent → Propose → Review → Commit
 - [`/demos/product-tour.html`](https://danmo-ai.github.io/demos/product-tour.html?lang=en&tour=1) — Architecture · Highlights · Capacity
 
-Synced from [`danmo-work/docs/demo`](https://github.com/danmo-ai/danmo-work/tree/main/docs/demo).
+Synced from [`danmo-work/docs/demo`](https://github.com/danmo-ai/danmo-work/tree/main/docs/demo) and screenshots under `docs/screenshots/`.
 
-## Develop
+## Quick start
+
+Requires Node.js 22+.
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Build
-
-```bash
-npm run build
-npm run preview
-```
+| Command | Action |
+| --- | --- |
+| `npm run dev` | Local dev server |
+| `npm run build` | Type-check, build to `dist/`, write `404.html` for SPA fallback |
+| `npm run preview` | Preview the production build |
 
 ## Deploy
 
-Pushes to `main` publish via GitHub Pages (Actions). This repo is the org site `danmo-ai.github.io`.
+Push to `main` (or run the workflow manually). CI builds and deploys via [GitHub Actions](.github/workflows/deploy.yml).
 
-Built with Vue 3 + Vite + TypeScript.
+## Layout
+
+```
+src/
+  components/   Header, footer, product hero
+  views/        Page views
+  router/       Routes & redirects
+  styles/       Global CSS
+public/         Favicon, icons, screenshots, demos
+brand/          Brand SVGs
+```
