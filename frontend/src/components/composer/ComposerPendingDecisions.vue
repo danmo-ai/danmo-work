@@ -37,7 +37,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   decide: [event: StreamEvent, payload: { decision: 'allow' | 'deny'; scope: 'once' | 'session' }]
   resolve: [event: StreamEvent, answer: string]
-  'jump-timeline': []
 }>()
 
 const { t } = useI18n()
@@ -75,16 +74,26 @@ const hiddenCount = computed(() =>
 )
 
 const empty = computed(() => items.value.length === 0)
+
+const onlyAsks = computed(
+  () => props.asks.length > 0 && props.permissions.length === 0,
+)
 </script>
 
 <template>
-  <div v-if="!empty" class="composer-decisions" role="region" :aria-label="t('composer.pendingDecisions')">
+  <div
+    v-if="!empty"
+    class="composer-decisions"
+    :class="{ 'is-ask-only': onlyAsks }"
+    role="region"
+    :aria-label="t('composer.pendingDecisions')"
+  >
     <div class="composer-decisions__head">
-      <span class="composer-decisions__title">{{ t('composer.pendingDecisions') }}</span>
+      <span class="composer-decisions__mark" aria-hidden="true" />
+      <span class="composer-decisions__title">{{
+        onlyAsks ? t('sessions.askNeedsYou') : t('composer.pendingDecisions')
+      }}</span>
       <span class="composer-decisions__count">{{ items.length }}</span>
-      <button type="button" class="composer-decisions__jump" @click="emit('jump-timeline')">
-        {{ t('sessions.jumpToPending') }}
-      </button>
     </div>
 
     <div class="composer-decisions__list">
@@ -135,15 +144,35 @@ const empty = computed(() => items.value.length === 0)
 
 <style scoped>
 .composer-decisions {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   margin-bottom: 8px;
-  padding: 10px 12px;
-  border-radius: 14px;
+  padding: 12px 14px 12px 16px;
+  border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--dq-warning, #d97706) 28%, transparent);
-  background: color-mix(in srgb, var(--dq-warning, #d97706) 6%, var(--dq-bg-elevated, var(--dq-bg-base)));
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
+  background: color-mix(in srgb, var(--dq-warning, #d97706) 7%, var(--dq-bg-elevated, var(--dq-bg-base)));
+  overflow: hidden;
+}
+
+.composer-decisions.is-ask-only {
+  border-color: color-mix(in srgb, var(--dq-accent) 36%, transparent);
+  background: color-mix(in srgb, var(--dq-accent) 8%, var(--dq-bg-elevated, var(--dq-bg-base)));
+}
+
+.composer-decisions::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--dq-warning, #d97706);
+}
+
+.composer-decisions.is-ask-only::before {
+  background: var(--dq-accent);
 }
 
 .composer-decisions__head {
@@ -153,45 +182,50 @@ const empty = computed(() => items.value.length === 0)
   min-width: 0;
 }
 
+.composer-decisions__mark {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--dq-warning, #d97706);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-warning, #d97706) 22%, transparent);
+}
+
+.composer-decisions.is-ask-only .composer-decisions__mark {
+  background: var(--dq-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 22%, transparent);
+}
+
 .composer-decisions__title {
-  font-size: var(--dq-font-size-footnote);
-  font-weight: 600;
+  font-size: var(--dq-font-size-body);
+  font-weight: 650;
   color: var(--dq-label-primary);
+  letter-spacing: 0.01em;
 }
 
 .composer-decisions__count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 18px;
-  height: 18px;
+  min-width: 20px;
+  height: 20px;
   padding: 0 6px;
   border-radius: 999px;
   font-size: var(--dq-font-size-caption);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--dq-warning, #d97706);
   background: color-mix(in srgb, var(--dq-warning, #d97706) 16%, transparent);
 }
 
-.composer-decisions__jump {
-  margin-left: auto;
-  border: 0;
-  background: transparent;
+.composer-decisions.is-ask-only .composer-decisions__count {
   color: var(--dq-accent);
-  font-size: var(--dq-font-size-caption);
-  font-weight: 500;
-  cursor: pointer;
-  padding: 2px 0;
-}
-
-.composer-decisions__jump:hover {
-  text-decoration: underline;
+  background: color-mix(in srgb, var(--dq-accent) 16%, transparent);
 }
 
 .composer-decisions__list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .composer-decisions__more {

@@ -878,16 +878,14 @@ defineExpose({
       <div v-if="isTurnRunning" class="composer-float__banner composer-float__banner--run">
         <span class="composer-float__run-dot" />
         {{ t('composer.running') }}
-        <span v-if="hasPendingApproval" class="composer-float__banner-sep">·</span>
-        <button
-          v-if="hasPendingApproval"
-          type="button"
-          class="composer-float__jump composer-float__jump--inline"
-          @click="emit('jump-pending')"
-        >
-          {{ t('sessions.pendingApprovalHintCount', { n: workspaceUi.pendingApprovals }) }}
-        </button>
+        <template v-if="hasPendingApproval">
+          <span class="composer-float__banner-sep">·</span>
+          <span class="composer-float__banner-text">{{
+            t('sessions.pendingApprovalHintCount', { n: workspaceUi.pendingApprovals })
+          }}</span>
+        </template>
       </div>
+      <!-- Pending cards sit in ComposerPendingDecisions above — no “go handle” jump here. -->
       <div
         v-else-if="hasPendingApproval"
         class="composer-float__banner composer-float__banner--warn"
@@ -895,13 +893,6 @@ defineExpose({
         <span class="composer-float__banner-text">{{
           t('sessions.pendingApprovalHintCount', { n: workspaceUi.pendingApprovals })
         }}</span>
-        <button
-          type="button"
-          class="composer-float__jump"
-          @click="emit('jump-pending')"
-        >
-          {{ t('sessions.jumpToPending') }}
-        </button>
       </div>
 
       <ComposerAttachmentTray

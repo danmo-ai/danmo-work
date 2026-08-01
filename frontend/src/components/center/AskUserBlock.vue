@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from '@/utils/feedback'
 
@@ -41,6 +41,35 @@ const { t } = useI18n()
 const textValue = ref('')
 const selectedOption = ref('')
 const formValues = ref<Record<string, unknown>>({})
+const answerExpanded = ref(false)
+
+const pending = computed(() => !props.resolved && !props.expired)
+const answerText = computed(() => (props.answer || '').trim())
+const answerPreview = computed(() => {
+  const raw = answerText.value
+  if (!raw) return t('sessions.askAnswered')
+  const oneLine = raw.replace(/\s+/g, ' ')
+  if (oneLine.length <= 72) return oneLine
+  return `${oneLine.slice(0, 72)}…`
+})
+const answerTruncated = computed(() => {
+  const raw = answerText.value
+  if (!raw) return false
+  return raw.includes('\n') || raw.replace(/\s+/g, ' ').length > 72
+})
+
+/** Single text/number field → compact question + input row (no redundant label). */
+const singleSimpleField = computed(() => {
+  if (props.formFields.length !== 1) return null
+  const f = props.formFields[0]
+  if (f.type === 'text' || f.type === 'number') return f
+  return null
+})
+
+function isRecommended(opt: string): boolean {
+  const def = (props.defaultOption ?? '').trim()
+  return Boolean(def && def === opt)
+}
 
 function initFormValues() {
   if (Object.keys(formValues.value).length > 0) return
@@ -70,6 +99,10 @@ function initSelectedOption() {
 watch(
   () => [props.askId, props.formFields, props.options, props.defaultOption] as const,
   () => {
+    formValues.value = {}
+    selectedOption.value = ''
+    textValue.value = ''
+    answerExpanded.value = false
     if (props.formFields.length > 0) initFormValues()
     if (props.options.length > 0) initSelectedOption()
   },
@@ -81,10 +114,11 @@ function submitForm() {
   for (const f of props.formFields) {
     const v = formValues.value[f.name]
     if (f.required && (v === '' || v === undefined || v === null)) {
-      toast.warning(`请填写 ${f.label}`)
+      toast.warning(t('sessions.askRequiredToast', { label: f.label }))
       return
     }
   }
+  // Keep 是/否 in the submitted answer string so IM formatFormAnswer stays compatible.
   const lines = props.formFields.map((f) => {
     const v = formValues.value[f.name]
     const display = f.type === 'boolean' ? (v ? '是' : '否') : String(v ?? '')
@@ -103,102 +137,163 @@ function pickOption(opt: string) {
   selectedOption.value = opt
   emit('resolve', opt)
 }
+
+function toggleAnswer() {
+  if (!answerTruncated.value) return
+  answerExpanded.value = !answerExpanded.value
+}
 </script>
 
 <template>
-  <div class="ask-user-block" :data-event-anchor="anchorSeq">
-    <div class="ask-user-block__header">
-      <svg class="ask-user-block__icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      </svg>
-      <span class="ask-user-block__question">{{ question }}</span>
+  <div
+    v-if="resolved && !pending"
+    class="ask-user-block ask-user-block--settled"
+    :data-event-anchor="anchorSeq"
+    :title="answerText || t('sessions.askAnswered')"
+  >
+    <button
+      v-if="answerTruncated"
+      type="button"
+      class="ask-user-block__settled-btn"
+      @click="toggleAnswer"
+    >
+      <span class="ask-user-block__settled-text">
+        {{ t('sessions.askAnswered') }} · {{ answerExpanded ? answerText : answerPreview }}
+      </span>
+    </button>
+    <span v-else class="ask-user-block__settled-text">
+      {{ t('sessions.askAnswered') }} · {{ answerPreview }}
+    </span>
+  </div>
+
+  <div
+    v-else-if="pending && !interactive"
+    class="ask-user-block ask-user-block--timeline"
+    :data-event-anchor="anchorSeq"
+  >
+    <span class="ask-user-block__timeline-text">
+      {{ t('sessions.askBadge') }} · {{ question }}
+    </span>
+    <span class="ask-user-block__hint">{{ t('sessions.decideInComposer') }}</span>
+  </div>
+
+  <div
+    v-else-if="expired"
+    class="ask-user-block ask-user-block--timeline"
+    :data-event-anchor="anchorSeq"
+  >
+    <span class="ask-user-block__timeline-text">{{ question }}</span>
+    <span class="ask-user-block__hint">{{ t('sessions.askExpired') }}</span>
+  </div>
+
+  <div
+    v-else
+    class="ask-user-block is-interactive"
+    :data-event-anchor="anchorSeq"
+  >
+    <p class="ask-user-block__question">{{ question }}</p>
+
+    <!-- Single text field: input + submit on one row -->
+    <div v-if="singleSimpleField" class="ask-user-block__combo">
+      <input
+        :type="singleSimpleField.type"
+        :placeholder="singleSimpleField.placeholder || t('sessions.askPlaceholder')"
+        :value="formValues[singleSimpleField.name]"
+        class="ask-user-block__form-input"
+        :disabled="answering"
+        @input="formValues[singleSimpleField.name] = ($event.target as HTMLInputElement).value"
+        @keydown.enter="submitForm()"
+      />
+      <DqButton type="primary" size="sm" :disabled="answering" @click="submitForm">
+        {{ t('sessions.askSubmit') }}
+      </DqButton>
     </div>
 
-    <template v-if="resolved">
-      <div class="ask-user-block__answer">
-        <span class="ask-user-block__answer-label">你的回复</span>
-        <p class="ask-user-block__answer-text">{{ answer || '已回复' }}</p>
-      </div>
-    </template>
-
-    <template v-else-if="expired">
-      <span class="ask-user-block__expired">{{ t('sessions.askExpired') }}</span>
-    </template>
-
-    <template v-else-if="!interactive">
-      <span class="ask-user-block__hint">{{ t('sessions.decideInComposer') }}</span>
-    </template>
-
-    <template v-else>
-      <div v-if="formFields.length > 0" class="ask-user-block__form">
-        <label v-for="field in formFields" :key="field.name" class="ask-user-block__form-field">
-          <span class="ask-user-block__form-label">
-            {{ field.label }}
-            <span v-if="field.required" class="ask-user-block__form-required">*</span>
-          </span>
-          <input
-            v-if="field.type === 'text' || field.type === 'number'"
-            :type="field.type"
-            :placeholder="field.placeholder ?? ''"
-            :value="formValues[field.name]"
-            class="ask-user-block__form-input"
-            @input="formValues[field.name] = ($event.target as HTMLInputElement).value"
-          />
-          <select
-            v-else-if="field.type === 'select'"
-            :value="String(formValues[field.name] ?? '')"
-            class="ask-user-block__form-input"
-            @change="formValues[field.name] = ($event.target as HTMLSelectElement).value"
-          >
-            <option value="" disabled>请选择...</option>
-            <option v-for="opt in field.options ?? []" :key="opt" :value="opt">{{ opt }}</option>
-          </select>
-          <DqSwitch
-            v-else-if="field.type === 'boolean'"
-            :model-value="Boolean(formValues[field.name])"
-            size="sm"
-            @update:model-value="(v: boolean) => (formValues[field.name] = v)"
-          />
-        </label>
-        <DqButton type="primary" size="sm" :disabled="answering" @click="submitForm">提交</DqButton>
-      </div>
-
-      <template v-else-if="options.length > 0">
-        <div class="ask-user-block__options">
+    <div v-else-if="formFields.length > 0" class="ask-user-block__form">
+      <label
+        v-for="field in formFields"
+        :key="field.name"
+        class="ask-user-block__form-field"
+        :class="{ 'ask-user-block__form-field--bool': field.type === 'boolean' }"
+      >
+        <span class="ask-user-block__form-label">
+          {{ field.label }}
+          <span v-if="field.required" class="ask-user-block__form-required">*</span>
+        </span>
+        <input
+          v-if="field.type === 'text' || field.type === 'number'"
+          :type="field.type"
+          :placeholder="field.placeholder || t('sessions.askPlaceholder')"
+          :value="formValues[field.name]"
+          class="ask-user-block__form-input"
+          :disabled="answering"
+          @input="formValues[field.name] = ($event.target as HTMLInputElement).value"
+        />
+        <div v-else-if="field.type === 'select'" class="ask-user-block__options">
           <DqButton
-            v-for="opt in options"
+            v-for="opt in field.options ?? []"
             :key="opt"
             size="sm"
             :disabled="answering"
-            :type="selectedOption === opt ? 'primary' : 'default'"
-            @click="pickOption(opt)"
+            :type="String(formValues[field.name] ?? '') === opt ? 'primary' : 'default'"
+            @click="formValues[field.name] = opt"
           >
             {{ opt }}
           </DqButton>
         </div>
-        <div class="ask-user-block__input-row">
-          <input
-            v-model="textValue"
-            placeholder="或输入自定义回答..."
-            :disabled="answering"
-            @keydown.enter="submitText()"
-          />
-          <DqButton type="primary" size="sm" :disabled="answering" @click="submitText()">回复</DqButton>
-        </div>
-      </template>
+        <DqSwitch
+          v-else-if="field.type === 'boolean'"
+          :model-value="Boolean(formValues[field.name])"
+          size="sm"
+          :disabled="answering"
+          @update:model-value="(v: boolean) => (formValues[field.name] = v)"
+        />
+      </label>
+      <div class="ask-user-block__actions">
+        <DqButton type="primary" size="sm" :disabled="answering" @click="submitForm">
+          {{ t('sessions.askSubmit') }}
+        </DqButton>
+      </div>
+    </div>
 
-      <template v-else>
-        <div class="ask-user-block__input-row">
-          <input
-            v-model="textValue"
-            placeholder="输入你的回答..."
-            :disabled="answering"
-            @keydown.enter="submitText()"
-          />
-          <DqButton type="primary" size="sm" :disabled="answering" @click="submitText()">回复</DqButton>
-        </div>
-      </template>
+    <template v-else-if="options.length > 0">
+      <div class="ask-user-block__options">
+        <DqButton
+          v-for="opt in options"
+          :key="opt"
+          size="sm"
+          :disabled="answering"
+          :type="isRecommended(opt) || selectedOption === opt ? 'primary' : 'default'"
+          :title="isRecommended(opt) ? t('sessions.askRecommended') : undefined"
+          @click="pickOption(opt)"
+        >
+          {{ opt }}
+        </DqButton>
+      </div>
+      <div class="ask-user-block__combo ask-user-block__combo--secondary">
+        <input
+          v-model="textValue"
+          :placeholder="t('sessions.askCustomPlaceholder')"
+          :disabled="answering"
+          @keydown.enter="submitText()"
+        />
+        <DqButton type="default" size="sm" :disabled="answering" @click="submitText()">
+          {{ t('sessions.askReply') }}
+        </DqButton>
+      </div>
     </template>
+
+    <div v-else class="ask-user-block__combo">
+      <input
+        v-model="textValue"
+        :placeholder="t('sessions.askPlaceholder')"
+        :disabled="answering"
+        @keydown.enter="submitText()"
+      />
+      <DqButton type="primary" size="sm" :disabled="answering" @click="submitText()">
+        {{ t('sessions.askReply') }}
+      </DqButton>
+    </div>
   </div>
 </template>
 
@@ -207,66 +302,77 @@ function pickOption(opt: string) {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
-  background: color-mix(in srgb, var(--dq-label-primary) 3%, transparent);
   color: var(--dq-label-primary);
   font-size: var(--dq-font-size-body);
   scroll-margin-bottom: 96px;
 }
 
-.ask-user-block__header {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+.ask-user-block.is-interactive {
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
-.ask-user-block__icon {
-  flex-shrink: 0;
-  margin-top: 2px;
-  color: var(--dq-accent);
-  opacity: 0.75;
+.ask-user-block--timeline {
+  gap: 2px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: var(--dq-font-size-caption);
+}
+
+.ask-user-block__timeline-text {
+  color: var(--dq-label-secondary);
+  line-height: 1.45;
+  word-break: break-word;
 }
 
 .ask-user-block__question {
-  font-weight: 500;
-  line-height: 1.45;
-}
-
-.ask-user-block__expired {
-  font-size: var(--dq-font-size-footnote);
-  color: var(--dq-label-tertiary);
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  word-break: break-word;
 }
 
 .ask-user-block__hint {
+  margin: 0;
   font-size: var(--dq-font-size-footnote);
   color: var(--dq-label-tertiary);
 }
 
-.ask-user-block__answer {
+.ask-user-block--settled {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
-  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
-}
-
-.ask-user-block__answer-label {
+  flex-direction: row;
+  align-items: center;
+  min-height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
   font-size: var(--dq-font-size-caption);
-  font-weight: 600;
-  color: var(--dq-label-tertiary);
 }
 
-.ask-user-block__answer-text {
-  margin: 0;
-  font-size: var(--dq-font-size-body);
-  line-height: 1.5;
+.ask-user-block__settled-text {
   color: var(--dq-label-secondary);
   white-space: pre-wrap;
   word-break: break-word;
+  line-height: 1.45;
+}
+
+.ask-user-block__settled-btn {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.ask-user-block__settled-btn:hover .ask-user-block__settled-text {
+  color: var(--dq-label-primary);
 }
 
 .ask-user-block__options {
@@ -275,26 +381,40 @@ function pickOption(opt: string) {
   gap: 6px;
 }
 
-.ask-user-block__input-row {
+.ask-user-block__combo {
   display: flex;
   gap: 8px;
   align-items: center;
 }
 
-.ask-user-block__input-row input {
+.ask-user-block__combo--secondary {
+  padding-top: 2px;
+}
+
+.ask-user-block__combo input,
+.ask-user-block__form-input {
   flex: 1;
   min-width: 0;
-  padding: 7px 10px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 14%, transparent);
-  background: var(--dq-bg-base, transparent);
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--dq-accent) 28%, transparent);
+  background: color-mix(in srgb, var(--dq-bg-base, #000) 55%, transparent);
   color: var(--dq-label-primary);
   font-size: var(--dq-font-size-body);
   outline: none;
 }
 
-.ask-user-block__input-row input:focus {
-  border-color: color-mix(in srgb, var(--dq-accent) 45%, transparent);
+.ask-user-block__combo input:focus,
+.ask-user-block__form-input:focus {
+  border-color: color-mix(in srgb, var(--dq-accent) 65%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 16%, transparent);
+}
+
+.ask-user-block__combo input:disabled,
+.ask-user-block__form-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .ask-user-block__form {
@@ -306,12 +426,20 @@ function pickOption(opt: string) {
 .ask-user-block__form-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
+}
+
+.ask-user-block__form-field--bool {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
 }
 
 .ask-user-block__form-label {
   font-size: var(--dq-font-size-footnote);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--dq-label-secondary);
 }
 
@@ -319,17 +447,9 @@ function pickOption(opt: string) {
   color: var(--dq-danger);
 }
 
-.ask-user-block__form-input {
-  padding: 7px 10px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 14%, transparent);
-  background: var(--dq-bg-base, transparent);
-  color: var(--dq-label-primary);
-  font-size: var(--dq-font-size-body);
-  outline: none;
-}
-
-.ask-user-block__form-input:focus {
-  border-color: color-mix(in srgb, var(--dq-accent) 45%, transparent);
+.ask-user-block__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 </style>

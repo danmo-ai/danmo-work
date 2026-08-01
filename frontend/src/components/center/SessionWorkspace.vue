@@ -1791,7 +1791,6 @@ function onTitleKeydown(e: KeyboardEvent) {
         :asks="composerAskItems"
         @decide="onPermissionDecide"
         @resolve="onAskUserResolve"
-        @jump-timeline="jumpToFirstPendingApproval"
       />
       <ComposerPendingQueue />
       <FloatingComposer ref="composerRef" @jump-pending="jumpToFirstPendingApproval" />
