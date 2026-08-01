@@ -117,6 +117,11 @@ function onNewSession(projectId?: string) {
   emit('newSession', projectId)
 }
 
+function onNewSessionInProject(projectId: string) {
+  expandProject(projectId)
+  onNewSession(projectId)
+}
+
 function selectSession(id: string) {
   emit('selectSession', id)
 }
@@ -145,8 +150,7 @@ async function deleteSession(id: string) {
 }
 
 function onProjectCommand(cmd: string, p: Project) {
-  if (cmd === 'new-session') onNewSession(p.id)
-  else if (cmd === 'rename') startRenameProject(p)
+  if (cmd === 'rename') startRenameProject(p)
   else if (cmd === 'delete') void removeProject(p)
 }
 
@@ -585,16 +589,26 @@ watch(() => projects.projects.length, (len) => {
                     />
                   </template>
                   <span v-else class="project-tree__name">{{ p.name }}</span>
-                  <span @click.stop>
+                  <span class="project-tree__actions" @click.stop>
+                    <button
+                      type="button"
+                      class="project-tree__add"
+                      :aria-label="$t('navigation.newSession')"
+                      :title="$t('navigation.newSession')"
+                      @click="onNewSessionInProject(p.id)"
+                    >
+                      <DqIcon :size="14"><Plus /></DqIcon>
+                    </button>
                     <DqDropdown class="project-tree__menu" @command="(cmd: string) => onProjectCommand(cmd, p)">
                       <DqIconButton aria-label="项目菜单" @click.stop>
                         <DqIcon :size="14"><MoreFilled /></DqIcon>
                       </DqIconButton>
                       <template #dropdown>
                         <DqDropdownMenu>
-                          <DqDropdownItem command="new-session">{{ $t('navigation.newSession') }}</DqDropdownItem>
                           <DqDropdownItem command="rename">{{ $t('navigation.rename') }}</DqDropdownItem>
-                          <DqDropdownItem command="delete">{{ $t('common.delete') }}</DqDropdownItem>
+                          <DqDropdownItem command="delete">
+                            <span style="color:var(--dq-danger)">{{ $t('common.delete') }}</span>
+                          </DqDropdownItem>
                         </DqDropdownMenu>
                       </template>
                     </DqDropdown>
@@ -1094,14 +1108,42 @@ watch(() => projects.projects.length, (len) => {
   min-width: 0;
 }
 
-.project-tree__menu {
+.project-tree__actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
   flex-shrink: 0;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
 
-.project-tree__row:hover .project-tree__menu {
+.project-tree__row:hover .project-tree__actions {
   opacity: 1;
+}
+
+.project-tree__add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dq-label-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.project-tree__add:hover {
+  background: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
+  color: var(--dq-label-primary);
+}
+
+.project-tree__menu {
+  flex-shrink: 0;
 }
 
 .project-tree__sessions {
