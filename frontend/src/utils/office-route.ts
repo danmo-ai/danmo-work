@@ -26,7 +26,10 @@ export function looksLikeSlidesMarkdown(content: string): boolean {
 
 /** Common source / config extensions opened in the lightweight Code Surface. */
 const CODE_EXT_RE =
-  /\.(go|rs|py|js|jsx|mjs|cjs|ts|tsx|mts|cts|vue|svelte|java|kt|kts|c|cc|cpp|cxx|h|hpp|hxx|cs|swift|rb|php|lua|r|jl|zig|scala|clj|ex|exs|hs|ml|mli|sh|bash|zsh|fish|ps1|bat|cmd|sql|graphql|gql|proto|thrift|toml|ya?ml|json|jsonc|json5|xml|svg|css|scss|less|sass|html?|xhtml|ini|cfg|conf|env|properties|gradle|cmake|makefile|mk|dockerfile|tf|hcl|nix|lock|txt|log|gitignore|gitattributes|editorconfig|eslintrc|prettierrc|babelrc)$/i
+  /\.(go|rs|py|js|jsx|mjs|cjs|ts|tsx|mts|cts|vue|svelte|java|kt|kts|c|cc|cpp|cxx|h|hpp|hxx|cs|swift|rb|php|lua|r|jl|zig|scala|clj|ex|exs|hs|ml|mli|sh|bash|zsh|fish|ps1|bat|cmd|sql|graphql|gql|proto|thrift|toml|ya?ml|json|jsonc|json5|xml|css|scss|less|sass|html?|xhtml|ini|cfg|conf|env|properties|gradle|cmake|makefile|mk|dockerfile|tf|hcl|nix|lock|txt|log|gitignore|gitattributes|editorconfig|eslintrc|prettierrc|babelrc)$/i
+
+/** Raster / vector images — Stage Preview (not Code Surface). */
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|svg|ico|bmp|avif)$/i
 
 const CODE_BASENAME_RE =
   /^(makefile|dockerfile|gemfile|rakefile|procfile|vagrantfile|jenkinsfile|\.gitignore|\.gitattributes|\.editorconfig|\.env|\.env\..+)$/i
@@ -98,6 +101,11 @@ export function routeOfficeFile(path: string, contentHint?: string): OfficeRoute
       return { kind: 'slides', path, mode: 'present' }
     }
     // Generic HTML stays preview (annotate/iframe); not Code Surface.
+    return { kind: 'preview', path, mode: 'view' }
+  }
+
+  // SVG (and other images): visual preview via <img>, not XML source in Code Surface.
+  if (IMAGE_EXT_RE.test(base)) {
     return { kind: 'preview', path, mode: 'view' }
   }
 

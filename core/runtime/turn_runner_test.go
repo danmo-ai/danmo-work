@@ -442,16 +442,34 @@ func validateToolMessagePairs(t *testing.T, msgs []Message, label string) {
 
 	toolByID := make(map[string]bool)
 	assistantIDs := make(map[string]int)
+	var pending map[string]bool
 
-	for _, m := range msgs {
+	for i, m := range msgs {
+		if pending != nil {
+			if m.Role != RoleTool || m.ToolCallID == "" || !pending[m.ToolCallID] {
+				t.Errorf("%s: msg[%d] expected tool result for %v, got role=%s toolID=%q", label, i, pending, m.Role, m.ToolCallID)
+				pending = nil
+			} else {
+				delete(pending, m.ToolCallID)
+				if len(pending) == 0 {
+					pending = nil
+				}
+			}
+		} else if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
+			pending = make(map[string]bool, len(m.ToolCalls))
+			for _, tc := range m.ToolCalls {
+				assistantIDs[tc.ID]++
+				pending[tc.ID] = true
+			}
+		} else if m.Role == RoleTool && m.ToolCallID != "" {
+			t.Errorf("%s: msg[%d] orphan tool message for call ID %q (not immediately after assistant)", label, i, m.ToolCallID)
+		}
 		if m.Role == RoleTool && m.ToolCallID != "" {
 			toolByID[m.ToolCallID] = true
 		}
-		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
-			for _, tc := range m.ToolCalls {
-				assistantIDs[tc.ID]++
-			}
-		}
+	}
+	if pending != nil {
+		t.Errorf("%s: trailing unpaired tool_calls %v", label, pending)
 	}
 
 	for id := range assistantIDs {
@@ -464,6 +482,31 @@ func validateToolMessagePairs(t *testing.T, msgs []Message, label string) {
 		if _, ok := assistantIDs[id]; !ok {
 			t.Errorf("%s: orphan tool message for call ID %q (no matching assistant tool_calls)", label, id)
 		}
+	}
+}
+
+func TestEnforceToolPairingReordersLateToolResults(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, nil, nil, nil)
+	msgs := []Message{
+		{Role: RoleUser, Content: "天气"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "http1", Name: "http_request"}}},
+		{Role: RoleTool, ToolCallID: "foreign", Name: "delegate_agent", Content: "leak"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "read1", Name: "read_file"}}},
+		{Role: RoleTool, ToolCallID: "read1", Name: "read_file", Content: "file"},
+		{Role: RoleAssistant, Content: "office done"},
+		{Role: RoleTool, ToolCallID: "http1", Name: "http_request", Content: "weather-json"},
+		{Role: RoleAssistant, Content: "预报"},
+	}
+	out := tr.enforceToolPairing(msgs)
+	validateToolMessagePairs(t, out, "reorder late tool results")
+	if len(out) != 7 {
+		t.Fatalf("want 7 msgs, got %d %+v", len(out), out)
+	}
+	if out[1].Role != RoleAssistant || len(out[1].ToolCalls) != 1 || out[1].ToolCalls[0].ID != "http1" {
+		t.Fatalf("expected http1 assistant, got %+v", out[1])
+	}
+	if out[2].Role != RoleTool || out[2].ToolCallID != "http1" {
+		t.Fatalf("expected immediate http1 result, got %+v", out[2])
 	}
 }
 

@@ -450,6 +450,55 @@ func TestLoadSessionMessagesHonorsRetainSkip(t *testing.T) {
 	}
 }
 
+func TestLoadSessionMessagesReordersLateToolResults(t *testing.T) {
+	root := t.TempDir()
+	s := NewTurnLogStore(testProjector(root))
+
+	// Mirrors a corrupted Weixin turn log: http_request result arrived after an
+	// intervening foreign tool pair (cross-session Log race).
+	_ = s.Create("turn-1", "sess-late", "proj-a", "a", "g")
+	s.Append("turn-1", "user", map[string]any{"content": "天气"})
+	s.Append("turn-1", "assistant", map[string]any{
+		"tool_calls": []any{
+			map[string]any{"id": "http1", "name": "http_request", "arguments": map[string]any{"url": "x"}},
+		},
+	})
+	s.Append("turn-1", "tool_result", map[string]any{"call_id": "foreign", "name": "delegate_agent", "output": "leak"})
+	s.Append("turn-1", "assistant", map[string]any{
+		"tool_calls": []any{
+			map[string]any{"id": "read1", "name": "read_file", "arguments": map[string]any{"path": "y"}},
+		},
+	})
+	s.Append("turn-1", "tool_result", map[string]any{"call_id": "read1", "name": "read_file", "output": "file"})
+	s.Append("turn-1", "assistant", map[string]any{"content": "office done"})
+	s.Append("turn-1", "tool_result", map[string]any{"call_id": "http1", "name": "http_request", "output": "weather-json"})
+	s.Append("turn-1", "assistant", map[string]any{"content": "预报"})
+	s.EndTurn("turn-1", domain.TurnCompleted)
+
+	msgs := s.LoadSessionMessages("sess-late", "", 0)
+	if len(msgs) != 7 {
+		t.Fatalf("want 7 msgs (orphan foreign dropped, http result reordered), got %d %+v", len(msgs), msgs)
+	}
+	if msgs[1].Role != "assistant" || len(msgs[1].ToolCalls) != 1 || msgs[1].ToolCalls[0].ID != "http1" {
+		t.Fatalf("msg1 assistant http1: %+v", msgs[1])
+	}
+	if msgs[2].Role != "tool" || msgs[2].ToolCallID != "http1" || msgs[2].Content != "weather-json" {
+		t.Fatalf("msg2 must be immediate http1 result, got %+v", msgs[2])
+	}
+	if msgs[3].Role != "assistant" || len(msgs[3].ToolCalls) != 1 || msgs[3].ToolCalls[0].ID != "read1" {
+		t.Fatalf("msg3 assistant read1: %+v", msgs[3])
+	}
+	if msgs[4].Role != "tool" || msgs[4].ToolCallID != "read1" {
+		t.Fatalf("msg4 read1 result: %+v", msgs[4])
+	}
+	if msgs[5].Role != "assistant" || msgs[5].Content != "office done" {
+		t.Fatalf("msg5 office: %+v", msgs[5])
+	}
+	if msgs[6].Role != "assistant" || msgs[6].Content != "预报" {
+		t.Fatalf("msg6 forecast: %+v", msgs[6])
+	}
+}
+
 func TestLoadSessionMessagesRepairsRetainSkipInsideToolPair(t *testing.T) {
 	root := t.TempDir()
 	s := NewTurnLogStore(testProjector(root))

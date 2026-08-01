@@ -1100,25 +1100,30 @@ func salvagePairedTurnDelta(delta []Message) []Message {
 	return keepCompleteToolPairs(delta)
 }
 
-// keepCompleteToolPairs returns an API-safe message sequence. In a batched
-// assistant response, each call is retained independently only when its result
-// exists. Text content survives even if all tool calls are removed.
+// keepCompleteToolPairs returns an API-safe message sequence. Each assistant
+// tool_call is kept only when its result exists, and results are re-emitted
+// immediately after their assistant (repairing interleaved/corrupt history).
+// Text content survives even if all tool calls are removed.
 func keepCompleteToolPairs(messages []Message) []Message {
 	if len(messages) == 0 {
 		return messages
 	}
-	haveResult := make(map[string]bool)
+	results := make(map[string]Message, len(messages))
 	for _, m := range messages {
 		if m.Role == RoleTool && m.ToolCallID != "" {
-			haveResult[m.ToolCallID] = true
+			if _, ok := results[m.ToolCallID]; !ok {
+				results[m.ToolCallID] = m
+			}
 		}
 	}
+	used := make(map[string]bool, len(results))
 	out := make([]Message, 0, len(messages))
 	for _, m := range messages {
-		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
+		switch {
+		case m.Role == RoleAssistant && len(m.ToolCalls) > 0:
 			kept := make([]ToolCall, 0, len(m.ToolCalls))
 			for _, tc := range m.ToolCalls {
-				if haveResult[tc.ID] {
+				if _, ok := results[tc.ID]; ok && !used[tc.ID] {
 					kept = append(kept, tc)
 				}
 			}
@@ -1133,26 +1138,17 @@ func keepCompleteToolPairs(messages []Message) []Message {
 			cp := m
 			cp.ToolCalls = kept
 			out = append(out, cp)
-			continue
-		}
-		out = append(out, m)
-	}
-	callIDs := make(map[string]bool)
-	for _, m := range out {
-		if m.Role == RoleAssistant {
-			for _, tc := range m.ToolCalls {
-				callIDs[tc.ID] = true
+			for _, tc := range kept {
+				out = append(out, results[tc.ID])
+				used[tc.ID] = true
 			}
-		}
-	}
-	final := make([]Message, 0, len(out))
-	for _, m := range out {
-		if m.Role == RoleTool && m.ToolCallID != "" && !callIDs[m.ToolCallID] {
+		case m.Role == RoleTool:
 			continue
+		default:
+			out = append(out, m)
 		}
-		final = append(final, m)
 	}
-	return final
+	return out
 }
 
 func (p *TurnRunner) snipHead(messages []Message, budget int) []Message {

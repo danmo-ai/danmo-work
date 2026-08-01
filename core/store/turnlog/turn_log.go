@@ -286,44 +286,55 @@ func (s *TurnLogStore) LoadSessionMessages(sessionID, retainFromTurnID string, r
 	return out
 }
 
+// keepCompleteChatToolPairs returns an API-safe chat history.
+// OpenAI-compatible providers require assistant(tool_calls) to be followed
+// immediately by matching tool messages. Corrupted turn logs (e.g. cross-session
+// Log races) may leave results later in the stream; this rebuilds each pair as a
+// contiguous block and drops orphan calls/results.
 func keepCompleteChatToolPairs(messages []port.ChatMessage) []port.ChatMessage {
-	haveResult := make(map[string]bool)
+	results := make(map[string]port.ChatMessage, len(messages))
 	for _, m := range messages {
 		if m.Role == "tool" && m.ToolCallID != "" {
-			haveResult[m.ToolCallID] = true
-		}
-	}
-
-	out := make([]port.ChatMessage, 0, len(messages))
-	keptCallIDs := make(map[string]bool)
-	for _, m := range messages {
-		if m.Role != "assistant" || len(m.ToolCalls) == 0 {
-			out = append(out, m)
-			continue
-		}
-		calls := make([]port.ChatToolCall, 0, len(m.ToolCalls))
-		for _, tc := range m.ToolCalls {
-			if haveResult[tc.ID] {
-				calls = append(calls, tc)
-				keptCallIDs[tc.ID] = true
+			if _, ok := results[m.ToolCallID]; !ok {
+				results[m.ToolCallID] = m
 			}
 		}
-		if len(calls) == 0 && m.Content == "" {
-			continue
-		}
-		cp := m
-		cp.ToolCalls = calls
-		out = append(out, cp)
 	}
 
-	final := make([]port.ChatMessage, 0, len(out))
-	for _, m := range out {
-		if m.Role == "tool" && m.ToolCallID != "" && !keptCallIDs[m.ToolCallID] {
+	used := make(map[string]bool, len(results))
+	out := make([]port.ChatMessage, 0, len(messages))
+	for _, m := range messages {
+		switch {
+		case m.Role == "assistant" && len(m.ToolCalls) > 0:
+			calls := make([]port.ChatToolCall, 0, len(m.ToolCalls))
+			for _, tc := range m.ToolCalls {
+				if _, ok := results[tc.ID]; ok && !used[tc.ID] {
+					calls = append(calls, tc)
+				}
+			}
+			if len(calls) == 0 {
+				if m.Content != "" {
+					cp := m
+					cp.ToolCalls = nil
+					out = append(out, cp)
+				}
+				continue
+			}
+			cp := m
+			cp.ToolCalls = calls
+			out = append(out, cp)
+			for _, tc := range calls {
+				out = append(out, results[tc.ID])
+				used[tc.ID] = true
+			}
+		case m.Role == "tool":
+			// Emitted with the owning assistant, or dropped as orphan.
 			continue
+		default:
+			out = append(out, m)
 		}
-		final = append(final, m)
 	}
-	return final
+	return out
 }
 
 func (s *TurnLogStore) LoadTurnMessages(turnID string) []port.ChatMessage {
