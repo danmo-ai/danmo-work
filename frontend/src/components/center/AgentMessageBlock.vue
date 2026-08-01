@@ -10,7 +10,7 @@ defineProps<{
 
 <style scoped>
 .agent-msg {
-  padding: 8px 0;
+  padding: 10px 0 14px;
   color: var(--dq-msg-agent-fg, var(--dq-label-primary));
   font-size: var(--dq-font-size-prose);
   line-height: var(--dq-line-height-prose, 1.65);

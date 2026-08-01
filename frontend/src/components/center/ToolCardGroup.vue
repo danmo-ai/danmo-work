@@ -128,7 +128,7 @@ const statusHint = computed(() => {
   align-items: center;
   gap: 7px;
   width: 100%;
-  min-height: 22px;
+  min-height: 24px;
   padding: 0;
   border: none;
   background: transparent;
@@ -171,8 +171,8 @@ const statusHint = computed(() => {
 .tool-group__title {
   flex-shrink: 0;
   font-size: var(--dq-font-size-body);
-  font-weight: 600;
-  color: var(--dq-label-primary);
+  font-weight: 500;
+  color: var(--dq-label-tertiary);
 }
 
 .tool-group__names {
@@ -180,16 +180,26 @@ const statusHint = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--dq-font-size-body);
-  color: var(--dq-label-secondary);
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-tertiary);
   font-family: var(--dq-font-mono, ui-monospace, monospace);
 }
 
 .tool-group__header:hover .tool-group__title,
-.tool-group.is-expanded .tool-group__title,
+.tool-group.is-expanded .tool-group__title {
+  color: var(--dq-label-secondary);
+}
+
 .tool-group.is-running .tool-group__title,
 .tool-group.is-error .tool-group__title {
+  font-weight: 600;
   color: var(--dq-label-primary);
+}
+
+.tool-group.is-running .tool-group__names,
+.tool-group.is-error .tool-group__names {
+  font-size: var(--dq-font-size-body);
+  color: var(--dq-label-secondary);
 }
 
 .tool-group__hint {

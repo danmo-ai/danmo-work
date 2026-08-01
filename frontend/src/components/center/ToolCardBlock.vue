@@ -65,8 +65,10 @@ const inputSummary = computed(() => {
   return props.card.description || ''
 })
 
+/** Collapsed completed tools stay quiet — no output preview wall. */
 const outputSummary = computed(() => {
   if (props.card.error) return truncateText(props.card.error, 100)
+  if (props.card.status === 'completed' && !props.expanded) return ''
   if (props.card.output) return truncateText(props.card.output, 100)
   return ''
 })

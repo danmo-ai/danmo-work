@@ -106,8 +106,8 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
 .turn-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding-bottom: 4px;
+  gap: var(--dq-chat-block-gap, 10px);
+  padding-bottom: 10px;
 }
 
 .turn-section__divider {
@@ -259,8 +259,8 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
   min-width: 0;
   display: flex;
   flex-direction: column;
-  /* Tighter than theme --dq-chat-block-gap so tool footnotes sit close */
-  gap: 4px;
+  /* Same as theme block gap — tools are footnotes, not a packed wall */
+  gap: var(--dq-chat-block-gap, 10px);
 }
 
 .turn-section__timeline :deep(.turn__event) {
@@ -271,5 +271,9 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
 .turn-section__timeline :deep(.turn__event > *) {
   flex: 1;
   min-width: 0;
+}
+
+.turn-section__timeline :deep(.agent-msg) {
+  margin-block: 6px;
 }
 </style>

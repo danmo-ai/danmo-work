@@ -52,7 +52,7 @@ const preview = computed(() => truncatePreview(props.text))
 
 <style scoped>
 .thinking-block {
-  margin: 2px 0;
+  margin: 0;
 }
 
 .thinking-block__header {
@@ -60,11 +60,11 @@ const preview = computed(() => truncatePreview(props.text))
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 5px 6px;
+  padding: 4px 0;
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--dq-label-secondary);
+  color: var(--dq-label-tertiary);
   cursor: pointer;
   text-align: left;
   font: inherit;
@@ -80,22 +80,22 @@ const preview = computed(() => truncatePreview(props.text))
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--dq-font-size-body);
-  color: var(--dq-label-secondary);
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-tertiary);
   font-style: normal;
 }
 
 .thinking-block__hint {
   flex: 1;
   min-width: 0;
-  font-size: var(--dq-font-size-body);
-  color: var(--dq-label-secondary);
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-tertiary);
 }
 
 .thinking-block__meta {
   flex-shrink: 0;
   font-size: var(--dq-font-size-caption);
-  color: var(--dq-label-secondary);
+  color: var(--dq-label-tertiary);
   font-variant-numeric: tabular-nums;
 }
 
