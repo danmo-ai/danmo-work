@@ -17,3 +17,10 @@ type TurnLog struct {
 	AgentID   string     `json:"agentId"`
 	Goal      string     `json:"goal"`
 }
+
+// TurnPathEntry is one frame on the root→current delegation path.
+// Lead turn is depth 0; each nested delegate_agent appends a frame.
+type TurnPathEntry struct {
+	TurnID  string `json:"turnId"`
+	AgentID string `json:"agentId"`
+}

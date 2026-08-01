@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"danmo-work/core/domain"
@@ -194,5 +195,57 @@ func TestBuildTurnMessages_MessageOrder(t *testing.T) {
 	}
 	if turn1UserIdx >= 0 && turn1UserIdx > lastUserIdx {
 		t.Error("turn 1's user message should appear BEFORE turn 2's user message")
+	}
+}
+
+func TestCheckDelegation_AllowsParallelSameAgent(t *testing.T) {
+	// Sibling fan-out shares the lead turn path; same agent_id is fine.
+	parent := []domain.TurnPathEntry{{TurnID: "turn-lead", AgentID: "team"}}
+	if err := checkDelegation(parent, "researcher", 3); err != nil {
+		t.Fatalf("first parallel delegate: %v", err)
+	}
+	if err := checkDelegation(parent, "researcher", 3); err != nil {
+		t.Fatalf("second parallel delegate should not look circular: %v", err)
+	}
+}
+
+func TestCheckDelegation_DetectsCycleOnPath(t *testing.T) {
+	path := []domain.TurnPathEntry{
+		{TurnID: "turn-lead", AgentID: "team"},
+		{TurnID: "turn-child", AgentID: "researcher"},
+	}
+	err := checkDelegation(path, "researcher", 3)
+	if err == nil || !strings.Contains(err.Error(), "circular delegation: researcher") {
+		t.Fatalf("expected circular delegation error, got %v", err)
+	}
+}
+
+func TestCheckDelegation_MaxDepth(t *testing.T) {
+	// Lead depth 0 + 3 workers ⇒ path len 4; next child would be depth 4.
+	path := []domain.TurnPathEntry{
+		{TurnID: "t0", AgentID: "lead"},
+		{TurnID: "t1", AgentID: "a"},
+		{TurnID: "t2", AgentID: "b"},
+		{TurnID: "t3", AgentID: "c"},
+	}
+	err := checkDelegation(path, "d", 3)
+	if err == nil || !strings.Contains(err.Error(), "max delegation depth") {
+		t.Fatalf("expected max depth error, got %v", err)
+	}
+	// At depth 2 (lead+a+b), next child depth 3 is still allowed.
+	shallow := path[:3]
+	if err := checkDelegation(shallow, "c", 3); err != nil {
+		t.Fatalf("depth 3 of max 3 should be allowed: %v", err)
+	}
+}
+
+func TestAppendTurnPath(t *testing.T) {
+	parent := []domain.TurnPathEntry{{TurnID: "t0", AgentID: "team"}}
+	child := appendTurnPath(parent, "t1", "researcher")
+	if len(child) != 2 || child[1].TurnID != "t1" || child[1].AgentID != "researcher" {
+		t.Fatalf("unexpected child path: %+v", child)
+	}
+	if len(parent) != 1 {
+		t.Fatalf("append must not mutate parent, got %+v", parent)
 	}
 }

@@ -65,7 +65,6 @@ type Engine struct {
 	askUserWait   map[string]chan string
 	cancel        map[string]context.CancelFunc
 	activeTurns   map[string]string // session ID -> in-flight turn ID
-	agentChain    []string
 	readSkill     *builtin.ReadSkill
 	// preTurnSnapshot runs before tools (AI review). Optional.
 	preTurnSnapshot func(ctx context.Context, projectID, sessionID, turnID, userInput string, extraPaths []string)
@@ -606,6 +605,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 		rep, _, err := e.turnRunner.Run(turnCtx, TurnContext{
 			SessionID: sessionID, TurnID: turnID, Agent: agentPtr,
 			Model: s.ModelID, MaxSteps: agentPtr.Steps, WorkDir: workDir, ProjectID: s.ProjectID, Messages: messages,
+			Path: []domain.TurnPathEntry{{TurnID: turnID, AgentID: agentPtr.ID}},
 		})
 
 		e.clearSessionTurnMessages(sessionID)
@@ -989,6 +989,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		WorkDir:   workDir,
 		ProjectID: projectID,
 		Messages:  messages,
+		Path:      []domain.TurnPathEntry{{TurnID: turnID, AgentID: agent.ID}},
 		ClaimSteers: func() []Message {
 			if e.sessions == nil {
 				return nil
@@ -1221,12 +1222,36 @@ func (e *Engine) mountBuiltinTools(reg *tool.Registry, bindings []domain.ToolBin
 	}
 }
 
+// checkDelegation enforces design constraints on the turn path:
+// cycle = agent already on this path; depth = next child depth (len(path))
+// against maxDelegationDepth (lead = 0). Parallel siblings share a parent
+// path, so the same agent_id may fan out concurrently.
+func checkDelegation(path []domain.TurnPathEntry, agentID string, maxDepth int) error {
+	for _, frame := range path {
+		if frame.AgentID == agentID {
+			return fmt.Errorf("circular delegation: %s", agentID)
+		}
+	}
+	// Lead is depth 0; len(path) is the depth of the next child turn.
+	if len(path) > maxDepth {
+		return fmt.Errorf("max delegation depth reached")
+	}
+	return nil
+}
+
+func appendTurnPath(path []domain.TurnPathEntry, turnID, agentID string) []domain.TurnPathEntry {
+	next := make([]domain.TurnPathEntry, len(path)+1)
+	copy(next, path)
+	next[len(path)] = domain.TurnPathEntry{TurnID: turnID, AgentID: agentID}
+	return next
+}
+
 func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 	cfg := e.loadRunCfg(context.Background())
 	delegator := &builtin.DelegateAgent{
 		Stream: e.stream, Agents: e.agents,
 		KnowledgeSearch: e.knowledge.Search,
-		RunSubTurn: func(ctx context.Context, sessionID, modelID, parentTurnID string, workerAgent domain.Agent, goal string) (domain.Report, error) {
+		RunSubTurn: func(ctx context.Context, sessionID, modelID, parentTurnID string, workerAgent domain.Agent, goal string, parentPath []domain.TurnPathEntry) (domain.Report, error) {
 			childTurnID := fmt.Sprintf("turn-%d", time.Now().UnixNano())
 			workDir := e.dataDir
 			projectID := ""
@@ -1234,38 +1259,18 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 				workDir = e.resolveWorkDir(ctx, s.ProjectID)
 				projectID = s.ProjectID
 			}
+			if err := checkDelegation(parentPath, workerAgent.ID, cfg.teamMaxDelegationDepth); err != nil {
+				return domain.Report{}, err
+			}
+			childPath := appendTurnPath(parentPath, childTurnID, workerAgent.ID)
 			childCtx := TurnContext{
 				SessionID: sessionID, TurnID: childTurnID,
 				Agent: workerAgent, Model: modelID, MaxSteps: workerAgent.Steps,
-				WorkDir: workDir, ProjectID: projectID,
+				WorkDir: workDir, ProjectID: projectID, Path: childPath,
 			}
 			e.stream.Publish(ctx, sessionID, parentTurnID, domain.EventDelegateStarted, domain.DelegateStartedPayload{
 				AgentID: workerAgent.ID, Goal: goal, ChildTurnID: childTurnID,
 			})
-
-			e.mu.Lock()
-			for _, id := range e.agentChain {
-				if id == workerAgent.ID {
-					e.mu.Unlock()
-					return domain.Report{}, fmt.Errorf("circular delegation: %s", workerAgent.ID)
-				}
-			}
-			if len(e.agentChain) >= cfg.teamMaxDelegationDepth {
-				e.mu.Unlock()
-				return domain.Report{}, fmt.Errorf("max delegation depth reached")
-			}
-			e.agentChain = append(e.agentChain, workerAgent.ID)
-			e.mu.Unlock()
-			defer func() {
-				e.mu.Lock()
-				for i := len(e.agentChain) - 1; i >= 0; i-- {
-					if e.agentChain[i] == workerAgent.ID {
-						e.agentChain = append(e.agentChain[:i], e.agentChain[i+1:]...)
-						break
-					}
-				}
-				e.mu.Unlock()
-			}()
 
 			// Isolated child runner so parallel delegate_agent calls do not
 			// mutate the parent's Registry / SkillList / Log mid-flight.

@@ -148,8 +148,11 @@ type TurnContext struct {
 	MaxSteps  int
 	WorkDir   string
 	ProjectID string
-	OnReport  func(domain.Report)
-	Messages  []Message
+	// Path is the root→current turn chain (lead first). Used for delegation
+	// depth and cycle checks; turn IDs alone do not encode ancestry.
+	Path     []domain.TurnPathEntry
+	OnReport func(domain.Report)
+	Messages []Message
 	// ClaimSteers loads durable soft-steer messages (status=steering) for this
 	// session. Called after parallel tools finish, before the next LLM call
 	// (and when the model stops so a steer can keep the turn alive).
@@ -765,6 +768,7 @@ func (p *TurnRunner) gateToolCall(
 	args["__work_dir"] = tctx.WorkDir
 	args["__call_id"] = call.ID
 	args["__file_tracker"] = p.FileTracker
+	args["__turn_path"] = effectiveTurnPath(tctx)
 	if allowNetworkForRun {
 		args["__sandbox_allow_network"] = true
 	}
@@ -1199,6 +1203,18 @@ func cloneMap(in map[string]any) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+// effectiveTurnPath returns the delegation path for tool injection. When Path
+// was omitted (e.g. tests), synthesize the current frame from TurnID/Agent.
+func effectiveTurnPath(tctx TurnContext) []domain.TurnPathEntry {
+	if len(tctx.Path) > 0 {
+		return tctx.Path
+	}
+	if tctx.TurnID == "" {
+		return nil
+	}
+	return []domain.TurnPathEntry{{TurnID: tctx.TurnID, AgentID: tctx.Agent.ID}}
 }
 
 func mergeSchemas(base, extra []domain.ToolSchema) []domain.ToolSchema {

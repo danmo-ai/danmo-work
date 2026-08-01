@@ -14,7 +14,7 @@ type DelegateAgent struct {
 	Stream          port.EventStream
 	Agents          *service.AgentManager
 	KnowledgeSearch func(kbIDs []string, query string, k int) []string
-	RunSubTurn      func(ctx context.Context, sessionID, modelID, parentTurnID string, agent domain.Agent, goal string) (domain.Report, error)
+	RunSubTurn      func(ctx context.Context, sessionID, modelID, parentTurnID string, agent domain.Agent, goal string, parentPath []domain.TurnPathEntry) (domain.Report, error)
 }
 
 func (h *DelegateAgent) Name() string                { return "delegate_agent" }
@@ -58,13 +58,14 @@ func (h *DelegateAgent) Execute(ctx context.Context, input map[string]any) (doma
 	sessionID, _ := input["__session_id"].(string)
 	modelID, _ := input["__model_id"].(string)
 	parentTurnID, _ := input["__turn_id"].(string)
+	parentPath := turnPathFromInput(input, parentTurnID)
 
 	agent, err := h.Agents.Get(ctx, agentID)
 	if err != nil {
 		return domain.ToolResult{}, fmt.Errorf("unknown agent %q", agentID)
 	}
 
-	report, err := h.RunSubTurn(ctx, sessionID, modelID, parentTurnID, *agent, goal)
+	report, err := h.RunSubTurn(ctx, sessionID, modelID, parentTurnID, *agent, goal, parentPath)
 	if err != nil {
 		return domain.ToolResult{}, err
 	}
@@ -74,6 +75,49 @@ func (h *DelegateAgent) Execute(ctx context.Context, input map[string]any) (doma
 
 	raw, _ := json.Marshal(report)
 	return domain.ToolResult{Content: formatSessionResult(report), Meta: map[string]any{"report": string(raw)}}, nil
+}
+
+func turnPathFromInput(input map[string]any, parentTurnID string) []domain.TurnPathEntry {
+	if path := coerceTurnPath(input["__turn_path"]); len(path) > 0 {
+		return path
+	}
+	agentID, _ := input["__agent_id"].(string)
+	if parentTurnID == "" && agentID == "" {
+		return nil
+	}
+	return []domain.TurnPathEntry{{TurnID: parentTurnID, AgentID: agentID}}
+}
+
+func coerceTurnPath(raw any) []domain.TurnPathEntry {
+	switch v := raw.(type) {
+	case []domain.TurnPathEntry:
+		out := make([]domain.TurnPathEntry, len(v))
+		copy(out, v)
+		return out
+	case []any:
+		out := make([]domain.TurnPathEntry, 0, len(v))
+		for _, item := range v {
+			switch e := item.(type) {
+			case domain.TurnPathEntry:
+				out = append(out, e)
+			case map[string]any:
+				turnID, _ := e["turnId"].(string)
+				if turnID == "" {
+					turnID, _ = e["TurnID"].(string)
+				}
+				agentID, _ := e["agentId"].(string)
+				if agentID == "" {
+					agentID, _ = e["AgentID"].(string)
+				}
+				if turnID != "" || agentID != "" {
+					out = append(out, domain.TurnPathEntry{TurnID: turnID, AgentID: agentID})
+				}
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func formatSessionResult(report domain.Report) string {
