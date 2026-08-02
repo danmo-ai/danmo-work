@@ -544,7 +544,8 @@ func TestRecoverRunningMidApprovalKeepsPriorPairs(t *testing.T) {
 	core1.TurnLogs.Append(zombieTurnID, "tool_result", map[string]any{
 		"call_id": "prior-1", "name": "read_file", "output": "content-a",
 	})
-	// Trailing unpaired call (e.g. ask_user mid-wait) must be dropped on resume.
+	// Trailing unpaired call (e.g. ask_user mid-wait): trim drops it until
+	// RecoverRunning closeIncompleteToolPairs materializes a failed tool_result.
 	core1.TurnLogs.Append(zombieTurnID, "tool_call", map[string]any{
 		"call_id": "ask-orphan", "name": "ask_user", "input": map[string]any{"question": "continue?"},
 	})
@@ -559,7 +560,7 @@ func TestRecoverRunningMidApprovalKeepsPriorPairs(t *testing.T) {
 		}
 		data, _ := e["data"].(map[string]any)
 		if id, _ := data["call_id"].(string); id == "ask-orphan" {
-			t.Fatal("LoadForRecovery should drop unpaired trailing ask_user tool_call")
+			t.Fatal("LoadForRecovery should drop unpaired trailing ask_user tool_call before close")
 		}
 	}
 
@@ -630,6 +631,9 @@ func TestRecoverRunningMidApprovalKeepsPriorPairs(t *testing.T) {
 	if !sawAskExpired {
 		t.Error("expected tool.error for orphan ask_user after recovery")
 	}
+	if left := core2.TurnLogs.ListIncompleteToolCalls(zombieTurnID); len(left) != 0 {
+		t.Fatalf("ask_user should be closed in JSONL after recovery, still open: %+v", left)
+	}
 
 	// Auto-resume should still run (AutoApprove).
 	deadline = time.Now().Add(llmTimeout)
@@ -643,6 +647,155 @@ func TestRecoverRunningMidApprovalKeepsPriorPairs(t *testing.T) {
 	}
 	zt, _ := core2.Store.Turns().Get(ctx, zombieTurnID)
 	t.Fatalf("timeout waiting for mid-approval auto-resume; status=%q", zt.Status)
+}
+
+// ---------- Test: mid-delegate crash — parent tool + child turn settle ----------
+
+func TestRecoverRunningClosesIncompleteDelegate(t *testing.T) {
+	_, dataDir := setupRecoveryEnv(t)
+	ctx := context.Background()
+
+	core1 := newCore(t, dataDir)
+	modelID := pickTestModel(t, core1)
+	r1 := newRouter(t, core1)
+
+	w := postJSON(t, r1, "/api/v1/sessions", domain.CreateSessionRequest{
+		Content: "简单回复: 委派恢复准备, 回答'准备完成'",
+		AgentID: agentDefault,
+		ModelID: modelID,
+	})
+	if w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	var s domain.Session
+	json.Unmarshal(w.Body.Bytes(), &s)
+
+	var since int64
+	waitForReport(t, r1, s.ID, &since)
+	time.Sleep(300 * time.Millisecond)
+
+	parentTurnID := "turn-dlg-parent-001"
+	childTurnID := "turn-dlg-child-001"
+	goal := "简单回复: 委派恢复测试, 回答'恢复完成'"
+	if err := core1.TurnLogs.Create(parentTurnID, s.ID, s.ProjectID, agentDefault, goal); err != nil {
+		t.Fatalf("create parent log: %v", err)
+	}
+	core1.TurnLogs.Append(parentTurnID, "user", map[string]any{"content": goal})
+	core1.TurnLogs.Append(parentTurnID, "assistant", map[string]any{
+		"content": "delegating",
+		"tool_calls": []any{
+			map[string]any{
+				"id": "dlg-call-1", "name": "delegate_agent",
+				"arguments": map[string]any{"agent_id": "researcher", "goal": "gather facts"},
+			},
+		},
+	})
+	if err := core1.TurnLogs.CreateNested(childTurnID, s.ID, s.ProjectID, "researcher", "gather facts"); err != nil {
+		t.Fatalf("create nested log: %v", err)
+	}
+	core1.TurnLogs.Append(childTurnID, "user", map[string]any{"content": "gather facts"})
+
+	if err := core1.Store.Turns().Create(ctx, domain.TurnLog{
+		ID: parentTurnID, SessionID: s.ID, AgentID: agentDefault,
+		Goal: goal, Status: domain.TurnRunning,
+	}); err != nil {
+		t.Fatalf("insert parent: %v", err)
+	}
+	if err := core1.Store.Turns().Create(ctx, domain.TurnLog{
+		ID: childTurnID, SessionID: s.ID, AgentID: "researcher",
+		Goal: "gather facts", Status: domain.TurnRunning,
+	}); err != nil {
+		t.Fatalf("insert child: %v", err)
+	}
+
+	maxSeq := core1.Store.StreamEvents().MaxSeq()
+	saveEv := func(turnID, typ string, payload any) {
+		t.Helper()
+		raw, _ := json.Marshal(payload)
+		maxSeq++
+		if err := core1.Store.StreamEvents().Save(ctx, domain.StreamEvent{
+			Seq: maxSeq, Type: typ, SessionID: s.ID, TurnID: turnID,
+			Payload: raw, CreatedAt: time.Now().UTC(),
+		}); err != nil {
+			t.Fatalf("save %s: %v", typ, err)
+		}
+	}
+	saveEv(parentTurnID, domain.EventToolRunning, domain.ToolPart{
+		CallID: "dlg-call-1", Name: "delegate_agent", Status: domain.ToolRunning,
+		Input: map[string]any{"agent_id": "researcher", "goal": "gather facts"},
+	})
+	saveEv(parentTurnID, domain.EventDelegateStarted, domain.DelegateStartedPayload{
+		AgentID: "researcher", Goal: "gather facts", ChildTurnID: childTurnID, CallID: "dlg-call-1",
+	})
+	saveEv(childTurnID, domain.EventTurnStarted, domain.TurnStartedPayload{
+		TurnID: childTurnID, AgentID: "researcher", Goal: "gather facts",
+	})
+
+	saved, _ := core1.Sessions.Get(ctx, s.ID)
+	saved.Status = domain.SessionStatusActive
+	saved.UpdatedAt = time.Now().UTC()
+	_ = core1.Sessions.UpdateSession(ctx, saved)
+
+	core2 := newCore(t, dataDir)
+	r2 := newRouter(t, core2)
+
+	child, err := core2.Store.Turns().Get(ctx, childTurnID)
+	if err != nil {
+		t.Fatalf("get child: %v", err)
+	}
+	if child.Status != domain.TurnFailed {
+		t.Fatalf("child status: want failed, got %q", child.Status)
+	}
+	if left := core2.TurnLogs.ListIncompleteToolCalls(parentTurnID); len(left) != 0 {
+		t.Fatalf("parent JSONL still incomplete: %+v", left)
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	var sawToolErr, sawDelegateDone, sawChildFailed bool
+	for time.Now().Before(deadline) && !(sawToolErr && sawDelegateDone && sawChildFailed) {
+		events := pollEvents(t, r2, s.ID, since)
+		for _, ev := range events {
+			since = ev.Seq
+			switch ev.Type {
+			case domain.EventToolError:
+				var tp domain.ToolPart
+				_ = json.Unmarshal(ev.Payload, &tp)
+				if ev.TurnID == parentTurnID && tp.CallID == "dlg-call-1" {
+					sawToolErr = true
+				}
+			case domain.EventDelegateCompleted:
+				var p domain.DelegateCompletedPayload
+				_ = json.Unmarshal(ev.Payload, &p)
+				if ev.TurnID == parentTurnID && p.CallID == "dlg-call-1" && p.Status == string(domain.TurnFailed) {
+					sawDelegateDone = true
+				}
+			case domain.EventTurnFailed:
+				if ev.TurnID == childTurnID {
+					sawChildFailed = true
+				}
+			}
+		}
+		if !(sawToolErr && sawDelegateDone && sawChildFailed) {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	if !sawToolErr || !sawDelegateDone || !sawChildFailed {
+		t.Fatalf("missing settle events: toolErr=%v delegateDone=%v childFailed=%v",
+			sawToolErr, sawDelegateDone, sawChildFailed)
+	}
+
+	// Parent should auto-resume and complete after the failed delegate is in history.
+	deadline = time.Now().Add(llmTimeout)
+	for time.Now().Before(deadline) {
+		pt, err := core2.Store.Turns().Get(ctx, parentTurnID)
+		if err == nil && pt.Status == domain.TurnCompleted {
+			t.Logf("delegate recovery completed parent %s", parentTurnID)
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	pt, _ := core2.Store.Turns().Get(ctx, parentTurnID)
+	t.Fatalf("timeout waiting for parent auto-resume; status=%q", pt.Status)
 }
 
 // ---------- Test: ListByStatus queries work correctly ----------
@@ -707,8 +860,6 @@ func TestListByStatusQueries(t *testing.T) {
 	t.Logf("ListByStatus: running=%d completed=%d cancelled=%d timeout=%d",
 		len(running), len(completed), len(cancelled), len(timeout))
 }
-
-
 
 // ---------- Test: session LLM history survives process restart via turn log ----------
 

@@ -565,6 +565,10 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 			cancel()
 		}()
 
+		// Close crash-orphaned tool pairs before rebuilding history so resume
+		// sees real failures (same contract as RecoverRunning).
+		e.closeIncompleteToolPairs(sessionID, turnID)
+
 		goal := ""
 		if g, entries := e.turnLog.LoadForRecovery(turnID); g != "" || len(entries) > 0 {
 			goal = g
@@ -719,24 +723,32 @@ func (e *Engine) RecoverRunning(ctx context.Context) {
 	}
 
 	// 2. Resume recoverable zombie turns from last complete tool pairs; fail the rest.
+	//    Lifecycle: close open tools (JSONL + stream) → then LoadForRecovery / ResumeTurn.
 	resumedSessions := make(map[string]bool)
 	if len(runningTurns) > 0 {
 		log.Printf("[RecoverRunning] found %d zombie running turn(s)", len(runningTurns))
 	}
 	for _, t := range runningTurns {
-		e.expireOrphanAskUsers(t.SessionID, t.ID)
-
 		// Nested tool-run turns (e.g. mid-flight delegate_agent) are not
-		// parent session turns — fail them like any unfinished tool.
+		// parent session turns — close their open tools, fail them, and let
+		// the parent closer emit tool.error / delegate.completed.
 		if e.turnLog.IsNestedToolRun(t.ID) {
 			log.Printf("[RecoverRunning] turn %s is nested tool run, marking as failed", t.ID)
+			e.closeIncompleteToolPairs(t.SessionID, t.ID)
 			if err := e.turns.UpdateStatus(ctx, t.ID, domain.TurnFailed); err != nil {
 				log.Printf("[RecoverRunning] update turn %s status: %v", t.ID, err)
 			}
 			_ = e.turnLog.CreateNested(t.ID, t.SessionID, "", t.AgentID, t.Goal)
 			e.turnLog.EndTurn(t.ID, domain.TurnFailed)
+			e.stream.Publish(context.Background(), t.SessionID, t.ID, domain.EventTurnFailed, domain.ErrorPayload{
+				Message: recoveryToolClosedReason, Kind: "turn",
+			})
 			continue
 		}
+
+		// Materialize crash-orphaned tool failures before trim/resume so the
+		// LLM and UI see the same failed pairs a live Execute error would produce.
+		e.closeIncompleteToolPairs(t.SessionID, t.ID)
 
 		// Recoverable only when JSONL exists (start goal and/or complete tool pairs).
 		// DB Goal alone is not enough — injected zombies without work must stay failed.
@@ -827,17 +839,68 @@ func (e *Engine) resolveApprovalTurnID(a domain.Approval, runningBySession map[s
 	return ""
 }
 
-// expireOrphanAskUsers publishes tool.error for ask_user calls left pending across restart.
-func (e *Engine) expireOrphanAskUsers(sessionID, turnID string) {
-	if sessionID == "" || turnID == "" || e.stream == nil {
-		return
+// recoveryToolClosedReason is written into synthetic tool_result / tool.error /
+// delegate.completed payloads when a crash leaves a tool pair unfinished.
+const recoveryToolClosedReason = "expired (process restarted)"
+
+type recoveryDelegateMeta struct {
+	agentID     string
+	childTurnID string
+}
+
+type recoveryTurnStreamState struct {
+	terminal          map[string]bool
+	names             map[string]string
+	inputs            map[string]map[string]any
+	openFromStream    map[string]bool
+	delegates         map[string]recoveryDelegateMeta
+	delegateCompleted map[string]bool
+	delegateChildDone map[string]bool // ChildTurnID — covers legacy completed without CallID
+	turnTerminal      bool
+}
+
+func (e *Engine) scanTurnStreamState(sessionID, turnID string) recoveryTurnStreamState {
+	st := recoveryTurnStreamState{
+		terminal:          make(map[string]bool),
+		names:             make(map[string]string),
+		inputs:            make(map[string]map[string]any),
+		openFromStream:    make(map[string]bool),
+		delegates:         make(map[string]recoveryDelegateMeta),
+		delegateCompleted: make(map[string]bool),
+		delegateChildDone: make(map[string]bool),
 	}
-	pending := make(map[string]bool)
+	if e.stream == nil || sessionID == "" || turnID == "" {
+		return st
+	}
 	for _, ev := range e.stream.ListSince(sessionID, 0) {
 		if ev.TurnID != turnID {
 			continue
 		}
 		switch ev.Type {
+		case domain.EventToolPending, domain.EventToolRunning:
+			var p domain.ToolPart
+			if json.Unmarshal(ev.Payload, &p) != nil || p.CallID == "" {
+				continue
+			}
+			if !st.terminal[p.CallID] {
+				st.openFromStream[p.CallID] = true
+			}
+			if p.Name != "" {
+				st.names[p.CallID] = p.Name
+			}
+			if p.Input != nil {
+				st.inputs[p.CallID] = p.Input
+			}
+		case domain.EventToolCompleted, domain.EventToolError:
+			var p domain.ToolPart
+			if json.Unmarshal(ev.Payload, &p) != nil || p.CallID == "" {
+				continue
+			}
+			st.terminal[p.CallID] = true
+			delete(st.openFromStream, p.CallID)
+			if p.Name != "" {
+				st.names[p.CallID] = p.Name
+			}
 		case domain.EventAskUserPending:
 			var p domain.AskUserPayload
 			if json.Unmarshal(ev.Payload, &p) != nil {
@@ -847,24 +910,201 @@ func (e *Engine) expireOrphanAskUsers(sessionID, turnID string) {
 			if callID == "" {
 				callID = p.AskID
 			}
-			if callID != "" {
-				pending[callID] = true
+			if callID == "" || st.terminal[callID] {
+				continue
 			}
-		case domain.EventToolCompleted, domain.EventToolError:
-			var p domain.ToolPart
+			st.openFromStream[callID] = true
+			st.names[callID] = "ask_user"
+		case domain.EventDelegateStarted:
+			var p domain.DelegateStartedPayload
+			if json.Unmarshal(ev.Payload, &p) != nil || p.CallID == "" {
+				continue
+			}
+			st.delegates[p.CallID] = recoveryDelegateMeta{
+				agentID: p.AgentID, childTurnID: p.ChildTurnID,
+			}
+			if st.names[p.CallID] == "" {
+				st.names[p.CallID] = "delegate_agent"
+			}
+		case domain.EventDelegateCompleted:
+			var p domain.DelegateCompletedPayload
 			if json.Unmarshal(ev.Payload, &p) != nil {
 				continue
 			}
 			if p.CallID != "" {
-				delete(pending, p.CallID)
+				st.delegateCompleted[p.CallID] = true
 			}
+			if p.ChildTurnID != "" {
+				st.delegateChildDone[p.ChildTurnID] = true
+			}
+		case domain.EventTurnFailed, domain.EventTurnEnded, domain.EventReport:
+			st.turnTerminal = true
 		}
 	}
-	for callID := range pending {
-		e.stream.Publish(context.Background(), sessionID, turnID, domain.EventToolError, domain.ToolPart{
-			CallID: callID, Name: "ask_user", Status: domain.ToolError,
-			Error: "expired (process restarted)",
-		})
+	return st
+}
+
+type recoveryPendingClose struct {
+	callID     string
+	name       string
+	input      map[string]any
+	needsJSONL bool
+}
+
+// closeIncompleteToolPairs finishes crash-orphaned tool calls the same way a
+// normal Execute failure would: append tool_result to JSONL, publish tool.error,
+// and for delegate_agent also settle the child turn + delegate.completed.
+// Idempotent across multiple recoveries / ResumeTurn calls.
+func (e *Engine) closeIncompleteToolPairs(sessionID, turnID string) {
+	if sessionID == "" || turnID == "" || e.stream == nil || e.turnLog == nil {
+		return
+	}
+	bg := context.Background()
+	fromJSONL := e.turnLog.ListIncompleteToolCalls(turnID)
+	st := e.scanTurnStreamState(sessionID, turnID)
+
+	order := make([]string, 0, len(fromJSONL)+len(st.openFromStream)+len(st.delegates))
+	byID := make(map[string]*recoveryPendingClose, len(fromJSONL)+len(st.openFromStream)+len(st.delegates))
+	add := func(callID, name string, input map[string]any, needsJSONL bool) {
+		if callID == "" {
+			return
+		}
+		if existing, ok := byID[callID]; ok {
+			if existing.name == "" && name != "" {
+				existing.name = name
+			}
+			if existing.input == nil && input != nil {
+				existing.input = input
+			}
+			existing.needsJSONL = existing.needsJSONL || needsJSONL
+			return
+		}
+		if name == "" {
+			name = st.names[callID]
+		}
+		if input == nil {
+			input = st.inputs[callID]
+		}
+		byID[callID] = &recoveryPendingClose{
+			callID: callID, name: name, input: input, needsJSONL: needsJSONL,
+		}
+		order = append(order, callID)
+	}
+
+	for _, c := range fromJSONL {
+		add(c.CallID, c.Name, c.Input, true)
+	}
+	for callID := range st.openFromStream {
+		add(callID, st.names[callID], st.inputs[callID], false)
+	}
+	for callID := range st.delegates {
+		if st.terminal[callID] && st.delegateCompleted[callID] {
+			continue
+		}
+		add(callID, "delegate_agent", st.inputs[callID], false)
+	}
+	if len(order) == 0 {
+		return
+	}
+
+	needsAppend := false
+	for _, id := range order {
+		if byID[id].needsJSONL {
+			needsAppend = true
+			break
+		}
+	}
+	if needsAppend {
+		_ = e.turnLog.Create(turnID, sessionID, "", "", "")
+	}
+
+	for _, callID := range order {
+		info := byID[callID]
+		name := info.name
+		if name == "" {
+			name = "tool"
+		}
+		if info.needsJSONL {
+			e.turnLog.Append(turnID, "tool_result", map[string]any{
+				"call_id": callID, "name": name, "output": recoveryToolClosedReason,
+			})
+		}
+		if !st.terminal[callID] {
+			e.stream.Publish(bg, sessionID, turnID, domain.EventToolError, domain.ToolPart{
+				CallID: callID, Name: name, Status: domain.ToolError,
+				Error: recoveryToolClosedReason, Input: info.input,
+			})
+			st.terminal[callID] = true
+		}
+
+		meta, isDelegate := st.delegates[callID]
+		if !isDelegate && name != "delegate_agent" {
+			continue
+		}
+		if meta.agentID == "" {
+			if agentID, _ := info.input["agent_id"].(string); agentID != "" {
+				meta.agentID = agentID
+			}
+		}
+		e.settleRecoveredDelegate(bg, sessionID, turnID, callID, meta, &st)
+	}
+}
+
+func (e *Engine) settleRecoveredDelegate(
+	ctx context.Context,
+	sessionID, parentTurnID, callID string,
+	meta recoveryDelegateMeta,
+	st *recoveryTurnStreamState,
+) {
+	childTurnID := meta.childTurnID
+	status := string(domain.TurnFailed)
+	if childTurnID != "" {
+		childDone := false
+		if t, err := e.turns.Get(ctx, childTurnID); err == nil {
+			switch t.Status {
+			case domain.TurnRunning, "":
+				_ = e.turns.UpdateStatus(ctx, childTurnID, domain.TurnFailed)
+			default:
+				// Already finished — keep its status; never rewrite a completed child
+				// into failed just because the parent tool pair was orphaned.
+				childDone = true
+				status = string(t.Status)
+			}
+		}
+		childState := e.scanTurnStreamState(sessionID, childTurnID)
+		if childState.turnTerminal {
+			childDone = true
+		}
+		if !childDone {
+			if e.turnLog.IsNestedToolRun(childTurnID) {
+				_ = e.turnLog.CreateNested(childTurnID, sessionID, "", meta.agentID, "")
+				e.turnLog.EndTurn(childTurnID, domain.TurnFailed)
+			}
+			e.stream.Publish(ctx, sessionID, childTurnID, domain.EventTurnFailed, domain.ErrorPayload{
+				Message: recoveryToolClosedReason, Kind: "turn",
+			})
+		}
+	}
+	if st.delegateCompleted[callID] {
+		return
+	}
+	// Legacy delegate.completed lacked CallID; ChildTurnID is enough to skip a
+	// duplicate completed event for the same nested run.
+	if childTurnID != "" && st.delegateChildDone[childTurnID] {
+		st.delegateCompleted[callID] = true
+		return
+	}
+	summary := recoveryToolClosedReason
+	if status != string(domain.TurnFailed) {
+		summary = ""
+	}
+	e.stream.Publish(ctx, sessionID, parentTurnID, domain.EventDelegateCompleted, domain.DelegateCompletedPayload{
+		AgentID: meta.agentID, Status: status, Summary: summary,
+		ChildTurnID: childTurnID, CallID: callID,
+	})
+	st.delegateCompleted[callID] = true
+	if childTurnID != "" {
+		st.delegateChildDone[childTurnID] = true
 	}
 }
 
@@ -1370,6 +1610,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			}
 			e.stream.Publish(bg, sessionID, parentTurnID, domain.EventDelegateCompleted, domain.DelegateCompletedPayload{
 				AgentID: workerAgent.ID, Status: status, Summary: rep.Summary,
+				ChildTurnID: childTurnID, CallID: callID,
 			})
 			return rep, err
 		},

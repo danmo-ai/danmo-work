@@ -252,7 +252,7 @@ StartSession / StartTurn
       5. afterTurn（可能触发 session 级压缩）
 
 ResumeTurn  — 从 Turn Log 回放 tool_call / tool_result 后继续
-RecoverRunning — 僵尸 Turn 标失败、过期审批清理、卡住 Session 修复
+RecoverRunning — 未完成 tool 收口、僵尸 Turn 标失败、过期审批清理、卡住 Session 修复
 ```
 
 ### 6.3 TurnRunner（`core/runtime/turn_runner.go`）
@@ -520,12 +520,17 @@ Tool:
 
 ```
 ResumeTurn:
-  从 JSONL 加载 tool_call / tool_result → 重建消息 → 继续 TurnRunner
+  closeIncompleteToolPairs（崩溃残留 tool 按正常失败收口）
+  → 从 JSONL 加载 tool_call / tool_result → 重建消息 → 继续 TurnRunner
 
 RecoverRunning:
-  运行中僵尸 Turn → failed
-  过期 Approval → 清理
-  卡住 Session → 状态修复
+  过期 Approval → permission.decided(false)
+  嵌套 tool_runs Turn → 收口未完成 tool → failed + turn.failed
+  父 Turn → closeIncompleteToolPairs
+      （JSONL 补 tool_result + stream tool.error；
+       delegate_agent 同步 child failed + delegate.completed）
+  → LoadForRecovery → ResumeTurn
+  卡住 Session（无 running Turn）→ 状态修复
 ```
 
 ---

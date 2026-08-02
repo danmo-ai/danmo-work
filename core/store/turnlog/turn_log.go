@@ -256,6 +256,63 @@ func (s *TurnLogStore) LoadForRecovery(turnID string) (goal string, entries []ma
 	return goal, entries
 }
 
+// ListIncompleteToolCalls returns tool invocations present in the raw JSONL
+// that do not yet have a matching tool_result. Recovery uses this as the
+// authoritative open set before writing synthetic failures and resuming.
+func (s *TurnLogStore) ListIncompleteToolCalls(turnID string) []port.IncompleteToolCall {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tf, ok := s.loadTurnFileLocked(turnID)
+	if !ok {
+		return nil
+	}
+	return listIncompleteToolCalls(s.readEntriesLocked(tf.filePath))
+}
+
+func listIncompleteToolCalls(all []map[string]any) []port.IncompleteToolCall {
+	haveResult := make(map[string]bool)
+	for _, e := range all {
+		if e["type"] != "tool_result" {
+			continue
+		}
+		data, _ := e["data"].(map[string]any)
+		if id := stringField(data, "call_id"); id != "" {
+			haveResult[id] = true
+		}
+	}
+
+	var out []port.IncompleteToolCall
+	seen := make(map[string]bool)
+	for _, e := range all {
+		typ, _ := e["type"].(string)
+		data, _ := e["data"].(map[string]any)
+		switch typ {
+		case "assistant":
+			for _, tc := range toolCallsFromData(data) {
+				if tc.ID == "" || haveResult[tc.ID] || seen[tc.ID] {
+					continue
+				}
+				seen[tc.ID] = true
+				out = append(out, port.IncompleteToolCall{
+					CallID: tc.ID, Name: tc.Name, Input: tc.Arguments,
+				})
+			}
+		case "tool_call":
+			id := stringField(data, "call_id")
+			if id == "" || haveResult[id] || seen[id] {
+				continue
+			}
+			seen[id] = true
+			input, _ := data["input"].(map[string]any)
+			out = append(out, port.IncompleteToolCall{
+				CallID: id, Name: stringField(data, "name"), Input: input,
+			})
+		}
+	}
+	return out
+}
+
 // LoadSessionMessages rebuilds full LLM chat history from session turn JSONL.
 // If retainFromTurnID is non-empty, only that turn and later turns are included
 // (compaction window). retainSkipMessages drops leading messages inside the

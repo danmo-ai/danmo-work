@@ -40,6 +40,68 @@ func countTypes(entries []map[string]any) (calls, results int) {
 	return calls, results
 }
 
+func TestListIncompleteToolCalls(t *testing.T) {
+	root := t.TempDir()
+	s := NewTurnLogStore(testProjector(root))
+
+	if err := s.Create("turn-inc", "sess-1", "proj-a", "agent-1", "do"); err != nil {
+		t.Fatal(err)
+	}
+	s.Append("turn-inc", "user", map[string]any{"content": "do"})
+	s.Append("turn-inc", "assistant", map[string]any{
+		"content": "delegating",
+		"tool_calls": []any{
+			map[string]any{"id": "d1", "name": "delegate_agent", "arguments": map[string]any{"agent_id": "researcher"}},
+			map[string]any{"id": "d2", "name": "delegate_agent", "arguments": map[string]any{"agent_id": "researcher"}},
+		},
+	})
+	s.Append("turn-inc", "tool_result", map[string]any{
+		"call_id": "d1", "name": "delegate_agent", "output": "ok",
+	})
+	// legacy unpaired call
+	s.Append("turn-inc", "tool_call", map[string]any{
+		"call_id": "ask-1", "name": "ask_user", "input": map[string]any{"question": "?"},
+	})
+
+	got := s.ListIncompleteToolCalls("turn-inc")
+	if len(got) != 2 {
+		t.Fatalf("want 2 incomplete, got %d %+v", len(got), got)
+	}
+	if got[0].CallID != "d2" || got[0].Name != "delegate_agent" {
+		t.Fatalf("first incomplete: %+v", got[0])
+	}
+	if got[1].CallID != "ask-1" || got[1].Name != "ask_user" {
+		t.Fatalf("second incomplete: %+v", got[1])
+	}
+
+	// After materializing results, open set is empty and LoadForRecovery keeps pairs.
+	s.Append("turn-inc", "tool_result", map[string]any{
+		"call_id": "d2", "name": "delegate_agent", "output": "expired (process restarted)",
+	})
+	s.Append("turn-inc", "tool_result", map[string]any{
+		"call_id": "ask-1", "name": "ask_user", "output": "expired (process restarted)",
+	})
+	if left := s.ListIncompleteToolCalls("turn-inc"); len(left) != 0 {
+		t.Fatalf("want empty after close, got %+v", left)
+	}
+	_, entries := s.LoadForRecovery("turn-inc")
+	toolIDs := map[string]bool{}
+	for _, e := range entries {
+		if e["type"] != "tool_result" {
+			continue
+		}
+		data, _ := e["data"].(map[string]any)
+		if id, _ := data["call_id"].(string); id != "" {
+			toolIDs[id] = true
+		}
+	}
+	for _, id := range []string{"d1", "d2", "ask-1"} {
+		if !toolIDs[id] {
+			t.Fatalf("LoadForRecovery missing tool_result %s in %+v", id, entries)
+		}
+	}
+}
+
 func TestLoadForRecoveryDropsUnpairedTrailingToolCall(t *testing.T) {
 	root := t.TempDir()
 	s := NewTurnLogStore(testProjector(root))

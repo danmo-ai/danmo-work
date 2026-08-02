@@ -254,7 +254,8 @@ type MCPServerRepo interface {
 //
 // LoadSessionMessages rebuilds full ChatMessages from the whitelist above
 // (user / assistant / tool_call / tool_result). Incomplete turns drop an
-// unpaired trailing assistant(tool_calls)/tool_call. Compaction uses
+// unpaired trailing assistant(tool_calls)/tool_call unless recovery has already
+// closed them via ListIncompleteToolCalls + tool_result. Compaction uses
 // retainFromTurnID + retainSkipMessages to bound the replay window.
 type TurnLogStore interface {
 	Create(turnID, sessionID, projectID, agentID, goal string) error
@@ -266,6 +267,9 @@ type TurnLogStore interface {
 	ListTurns(sessionID string) []domain.TurnLog
 	ListTurnIDs(sessionID string) []string
 	LoadForRecovery(turnID string) (goal string, entries []map[string]any)
+	// ListIncompleteToolCalls returns tool invocations in the raw JSONL that
+	// lack a matching tool_result (authoritative open set for recovery close).
+	ListIncompleteToolCalls(turnID string) []IncompleteToolCall
 	// LoadSessionMessages rebuilds full LLM chat history for a session.
 	// retainFromTurnID: if non-empty, only include that turn and later ones.
 	// retainSkipMessages: skip this many leading messages inside retainFromTurnID.
@@ -274,4 +278,12 @@ type TurnLogStore interface {
 	IsNestedToolRun(turnID string) bool
 	LoadRawLog(turnID string) ([]byte, error)
 	LoadTurnLogZip(turnID string, events []domain.StreamEvent) ([]byte, error)
+}
+
+// IncompleteToolCall is a tool invocation recorded in turn JSONL without a
+// matching tool_result. Used by recovery to close open pairs before resume.
+type IncompleteToolCall struct {
+	CallID string
+	Name   string
+	Input  map[string]any
 }

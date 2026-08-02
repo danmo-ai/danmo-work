@@ -2,7 +2,9 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -11,6 +13,7 @@ import (
 	"danmo-work/core/port"
 	"danmo-work/core/runtime/tool/builtin"
 	"danmo-work/core/service"
+	"danmo-work/core/store/turnlog"
 )
 
 func TestReserveSessionTurnPreventsConcurrentStartAndResume(t *testing.T) {
@@ -44,9 +47,9 @@ func TestBuildTurnMessages_IncludesPreviousTurnMessages(t *testing.T) {
 		turnMessages: make(map[string][]Message),
 	}
 	agent := domain.Agent{
-		ID:            "test-agent",
-		SystemPrompt:   "You are a test assistant.",
-		KnowledgeIDs:  []string{},
+		ID:           "test-agent",
+		SystemPrompt: "You are a test assistant.",
+		KnowledgeIDs: []string{},
 	}
 
 	sessionID := "session-1"
@@ -103,7 +106,7 @@ func TestBuildTurnMessages_EmptyPreviousMessages(t *testing.T) {
 
 	agent := domain.Agent{
 		ID:           "test-agent",
-		SystemPrompt:  "You are a test assistant.",
+		SystemPrompt: "You are a test assistant.",
 		KnowledgeIDs: []string{},
 	}
 
@@ -129,7 +132,7 @@ func TestBuildTurnMessages_CheckpointTextInSystemPrompt(t *testing.T) {
 
 	agent := domain.Agent{
 		ID:           "test-agent",
-		SystemPrompt:  "You are a test assistant.",
+		SystemPrompt: "You are a test assistant.",
 		KnowledgeIDs: []string{},
 	}
 
@@ -166,7 +169,7 @@ func TestBuildTurnMessages_MessageOrder(t *testing.T) {
 	sessionID := "session-1"
 	agent := domain.Agent{
 		ID:           "test-agent",
-		SystemPrompt:  "You are a test assistant.",
+		SystemPrompt: "You are a test assistant.",
 		KnowledgeIDs: []string{},
 	}
 
@@ -319,9 +322,168 @@ type noopStream struct{}
 func (noopStream) Publish(_ context.Context, sessionID, turnID, typ string, _ any) domain.StreamEvent {
 	return domain.StreamEvent{SessionID: sessionID, TurnID: turnID, Type: typ}
 }
-func (noopStream) Subscribe(string) chan domain.StreamEvent             { return nil }
-func (noopStream) Unsubscribe(string, chan domain.StreamEvent)          {}
-func (noopStream) ListSince(string, int64) []domain.StreamEvent         { return nil }
+func (noopStream) Subscribe(string) chan domain.StreamEvent     { return nil }
+func (noopStream) Unsubscribe(string, chan domain.StreamEvent)  {}
+func (noopStream) ListSince(string, int64) []domain.StreamEvent { return nil }
+
+type memStream struct {
+	mu     sync.Mutex
+	seq    int64
+	events []domain.StreamEvent
+}
+
+func (s *memStream) Publish(_ context.Context, sessionID, turnID, typ string, payload any) domain.StreamEvent {
+	raw, _ := json.Marshal(payload)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.seq++
+	ev := domain.StreamEvent{
+		Seq: s.seq, Type: typ, SessionID: sessionID, TurnID: turnID,
+		Payload: raw,
+	}
+	s.events = append(s.events, ev)
+	return ev
+}
+func (s *memStream) Subscribe(string) chan domain.StreamEvent    { return nil }
+func (s *memStream) Unsubscribe(string, chan domain.StreamEvent) {}
+func (s *memStream) ListSince(sessionID string, since int64) []domain.StreamEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []domain.StreamEvent
+	for _, ev := range s.events {
+		if ev.SessionID == sessionID && ev.Seq > since {
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
+func TestCloseIncompleteToolPairsSettlesDelegateAndAskUser(t *testing.T) {
+	root := t.TempDir()
+	tls := turnlog.NewTurnLogStore(func(projectID string) string {
+		if projectID == "" {
+			return root
+		}
+		return filepath.Join(root, projectID)
+	})
+	turnLogs := service.NewTurnLogManager(tls)
+	stream := &memStream{}
+	repo := &memTurnRepo{turns: map[string]domain.TurnLog{
+		"turn-parent": {
+			ID: "turn-parent", SessionID: "sess-1", AgentID: "team",
+			Status: domain.TurnRunning, Goal: "research",
+		},
+		"turn-child": {
+			ID: "turn-child", SessionID: "sess-1", AgentID: "researcher",
+			Status: domain.TurnRunning, Goal: "gather",
+		},
+	}}
+	engine := &Engine{
+		turns:   service.NewTurnManager(repo),
+		turnLog: turnLogs,
+		stream:  stream,
+	}
+
+	if err := turnLogs.Create("turn-parent", "sess-1", "proj-a", "team", "research"); err != nil {
+		t.Fatal(err)
+	}
+	turnLogs.Append("turn-parent", "assistant", map[string]any{
+		"tool_calls": []any{
+			map[string]any{
+				"id": "dlg-1", "name": "delegate_agent",
+				"arguments": map[string]any{"agent_id": "researcher", "goal": "gather"},
+			},
+			map[string]any{
+				"id": "ask-1", "name": "ask_user",
+				"arguments": map[string]any{"question": "continue?"},
+			},
+		},
+	})
+	if err := turnLogs.CreateNested("turn-child", "sess-1", "proj-a", "researcher", "gather"); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	stream.Publish(ctx, "sess-1", "turn-parent", domain.EventToolRunning, domain.ToolPart{
+		CallID: "dlg-1", Name: "delegate_agent", Status: domain.ToolRunning,
+		Input: map[string]any{"agent_id": "researcher", "goal": "gather"},
+	})
+	stream.Publish(ctx, "sess-1", "turn-parent", domain.EventDelegateStarted, domain.DelegateStartedPayload{
+		AgentID: "researcher", Goal: "gather", ChildTurnID: "turn-child", CallID: "dlg-1",
+	})
+	stream.Publish(ctx, "sess-1", "turn-parent", domain.EventToolRunning, domain.ToolPart{
+		CallID: "ask-1", Name: "ask_user", Status: domain.ToolRunning,
+	})
+	stream.Publish(ctx, "sess-1", "turn-parent", domain.EventAskUserPending, domain.AskUserPayload{
+		AskID: "ask-1", CallID: "ask-1", Question: "continue?",
+	})
+	stream.Publish(ctx, "sess-1", "turn-child", domain.EventTurnStarted, domain.TurnStartedPayload{
+		TurnID: "turn-child", AgentID: "researcher", Goal: "gather",
+	})
+
+	engine.closeIncompleteToolPairs("sess-1", "turn-parent")
+
+	if left := turnLogs.ListIncompleteToolCalls("turn-parent"); len(left) != 0 {
+		t.Fatalf("JSONL still incomplete: %+v", left)
+	}
+	_, entries := turnLogs.LoadForRecovery("turn-parent")
+	gotResults := map[string]string{}
+	for _, e := range entries {
+		if e["type"] != "tool_result" {
+			continue
+		}
+		data, _ := e["data"].(map[string]any)
+		gotResults[data["call_id"].(string)] = data["output"].(string)
+	}
+	if gotResults["dlg-1"] != recoveryToolClosedReason || gotResults["ask-1"] != recoveryToolClosedReason {
+		t.Fatalf("expected synthetic tool_results, got %+v", gotResults)
+	}
+
+	child, err := repo.Get(ctx, "turn-child")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if child.Status != domain.TurnFailed {
+		t.Fatalf("child status: want failed, got %s", child.Status)
+	}
+
+	var sawDlgErr, sawAskErr, sawDelegateDone, sawChildFailed bool
+	for _, ev := range stream.ListSince("sess-1", 0) {
+		switch ev.Type {
+		case domain.EventToolError:
+			var p domain.ToolPart
+			_ = json.Unmarshal(ev.Payload, &p)
+			if p.CallID == "dlg-1" {
+				sawDlgErr = true
+			}
+			if p.CallID == "ask-1" {
+				sawAskErr = true
+			}
+		case domain.EventDelegateCompleted:
+			var p domain.DelegateCompletedPayload
+			_ = json.Unmarshal(ev.Payload, &p)
+			if p.CallID == "dlg-1" && p.ChildTurnID == "turn-child" && p.Status == string(domain.TurnFailed) {
+				sawDelegateDone = true
+			}
+		case domain.EventTurnFailed:
+			if ev.TurnID == "turn-child" {
+				sawChildFailed = true
+			}
+		}
+	}
+	if !sawDlgErr || !sawAskErr || !sawDelegateDone || !sawChildFailed {
+		t.Fatalf("missing settle events: dlgErr=%v askErr=%v delegateDone=%v childFailed=%v",
+			sawDlgErr, sawAskErr, sawDelegateDone, sawChildFailed)
+	}
+
+	// Idempotent: second close must not duplicate terminal stream events.
+	before := len(stream.ListSince("sess-1", 0))
+	engine.closeIncompleteToolPairs("sess-1", "turn-parent")
+	after := len(stream.ListSince("sess-1", 0))
+	if after != before {
+		t.Fatalf("second close published %d extra events", after-before)
+	}
+}
 
 func TestCancelTurnEagerlyClearsRunningStatus(t *testing.T) {
 	repo := &memTurnRepo{turns: map[string]domain.TurnLog{

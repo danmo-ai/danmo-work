@@ -81,9 +81,11 @@ type DelegateStartedPayload struct {
 }
 
 type DelegateCompletedPayload struct {
-	AgentID string `json:"agentId"`
-	Status  string `json:"status"`
-	Summary string `json:"summary,omitempty"`
+	AgentID     string `json:"agentId"`
+	Status      string `json:"status"`
+	Summary     string `json:"summary,omitempty"`
+	ChildTurnID string `json:"childTurnId,omitempty"`
+	CallID      string `json:"callId,omitempty"`
 }
 
 type CapabilityActivatedPayload struct {

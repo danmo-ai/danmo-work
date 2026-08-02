@@ -48,6 +48,10 @@ func (m *TurnLogManager) LoadForRecovery(turnID string) (goal string, entries []
 	return m.store.LoadForRecovery(turnID)
 }
 
+func (m *TurnLogManager) ListIncompleteToolCalls(turnID string) []port.IncompleteToolCall {
+	return m.store.ListIncompleteToolCalls(turnID)
+}
+
 func (m *TurnLogManager) LoadSessionMessages(sessionID, retainFromTurnID string, retainSkipMessages int) []port.ChatMessage {
 	return m.store.LoadSessionMessages(sessionID, retainFromTurnID, retainSkipMessages)
 }
