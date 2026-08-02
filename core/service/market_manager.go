@@ -19,8 +19,10 @@ type MarketManager struct {
 	registry port.MarketRegistry
 	skills   *SkillManager
 	agents   *AgentManager
+	mcp      *MCPManager
 	skillImp *SkillImporter
 	agentImp *AgentImporter
+	connImp  *ConnectorImporter
 
 	mu            sync.Mutex
 	cache         []domain.MarketListing
@@ -36,14 +38,17 @@ func NewMarketManager(
 	registry port.MarketRegistry,
 	skills *SkillManager,
 	agents *AgentManager,
+	mcp *MCPManager,
 ) *MarketManager {
 	return &MarketManager{
 		config:   config,
 		registry: registry,
 		skills:   skills,
 		agents:   agents,
+		mcp:      mcp,
 		skillImp: NewSkillImporter(),
 		agentImp: NewAgentImporter(),
+		connImp:  NewConnectorImporter(),
 		cacheTTL: 6 * time.Hour,
 	}
 }
@@ -145,6 +150,13 @@ func (m *MarketManager) enrichInstalled(ctx context.Context, list []domain.Marke
 			if _, err := m.agents.Get(ctx, list[i].ID); err == nil {
 				list[i].Installed = true
 			}
+		case domain.MarketKindConnector:
+			if m.mcp == nil {
+				continue
+			}
+			if _, ok, err := m.mcp.FindByCatalogID(ctx, list[i].ID); err == nil && ok {
+				list[i].Installed = true
+			}
 		}
 	}
 }
@@ -207,6 +219,10 @@ func (m *MarketManager) Install(ctx context.Context, req domain.InstallMarketReq
 			}
 		}
 		if err := m.installExpert(ctx, market, *item, ref, req.Overwrite, result); err != nil {
+			return nil, err
+		}
+	case domain.MarketKindConnector:
+		if err := m.installConnector(ctx, market, *item, ref, req.Overwrite, result); err != nil {
 			return nil, err
 		}
 	default:
@@ -384,7 +400,69 @@ func (m *MarketManager) installExpert(
 	return nil
 }
 
-// Uninstall removes a market-installed skill or expert. Builtin items are refused.
+func (m *MarketManager) installConnector(
+	ctx context.Context,
+	market port.Market,
+	item domain.MarketItem,
+	ref string,
+	overwrite bool,
+	result *domain.InstallMarketResult,
+) error {
+	if m.mcp == nil {
+		return fmt.Errorf("connector market install is not configured")
+	}
+	existing, found, err := m.mcp.FindByCatalogID(ctx, item.ID)
+	if err != nil {
+		return err
+	}
+	if found && !overwrite {
+		result.Skipped = append(result.Skipped, existing.ID)
+		return nil
+	}
+	dir, cleanup, err := market.FetchPackage(ctx, item, ref)
+	if err != nil {
+		return err
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+	entry, err := m.connImp.Import(dir)
+	if err != nil {
+		return err
+	}
+	if item.ID != "" {
+		entry.ID = item.ID
+	}
+	if item.Name != "" {
+		entry.Name = item.Name
+	}
+	if item.Description != "" && entry.Description == "" {
+		entry.Description = item.Description
+	}
+	if item.Category != "" && entry.Category == "" {
+		entry.Category = item.Category
+	}
+	req := InstallCatalogEntry(*entry, entry.Name)
+	req.CatalogID = entry.ID
+	req.MarketSource = market.SourceID()
+	if found {
+		srv, uerr := m.mcp.Update(ctx, existing.ID, req)
+		if uerr != nil {
+			return uerr
+		}
+		result.Installed = append(result.Installed, srv.ID)
+		return nil
+	}
+	req.ID = entry.ID
+	srv, cerr := m.mcp.Create(ctx, req)
+	if cerr != nil {
+		return cerr
+	}
+	result.Installed = append(result.Installed, srv.ID)
+	return nil
+}
+
+// Uninstall removes a market-installed skill, expert, or connector. Builtin items are refused.
 func (m *MarketManager) Uninstall(ctx context.Context, req domain.UninstallMarketRequest) error {
 	if req.Kind == "" || req.ID == "" {
 		return fmt.Errorf("kind and id are required")
@@ -419,6 +497,23 @@ func (m *MarketManager) Uninstall(ctx context.Context, req domain.UninstallMarke
 			return fmt.Errorf("expert %q was not installed from the market", req.ID)
 		}
 		if err := m.agents.Delete(ctx, req.ID); err != nil {
+			return err
+		}
+	case domain.MarketKindConnector:
+		if m.mcp == nil {
+			return fmt.Errorf("connector market uninstall is not configured")
+		}
+		srv, ok, err := m.mcp.FindByCatalogID(ctx, req.ID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("connector %q not found", req.ID)
+		}
+		if srv.MarketSource == "" {
+			return fmt.Errorf("connector %q was not installed from the market", req.ID)
+		}
+		if err := m.mcp.Delete(ctx, srv.ID); err != nil {
 			return err
 		}
 	default:

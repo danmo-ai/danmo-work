@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,8 +48,12 @@ func (m *MCPManager) Create(ctx context.Context, req domain.UpsertMCPServerReque
 	if req.Name == "" {
 		return domain.MCPServer{}, fmt.Errorf("MCP server name is required")
 	}
+	id := strings.TrimSpace(req.ID)
+	if id == "" {
+		id = fmt.Sprintf("mcp-%d", time.Now().UnixNano())
+	}
 	s := domain.MCPServer{
-		ID:                 fmt.Sprintf("mcp-%d", time.Now().UnixNano()),
+		ID:                 id,
 		Name:               req.Name,
 		Description:        req.Description,
 		Transport:          req.Transport,
@@ -64,6 +69,7 @@ func (m *MCPManager) Create(ctx context.Context, req domain.UpsertMCPServerReque
 		OAuthTokenURL:      req.OAuthTokenURL,
 		OAuthScopes:        req.OAuthScopes,
 		CatalogID:          req.CatalogID,
+		MarketSource:       req.MarketSource,
 		EnabledTools:       req.EnabledTools,
 		ToolTimeout:        req.ToolTimeout,
 		Status:             "disconnected",
@@ -117,6 +123,9 @@ func (m *MCPManager) Update(ctx context.Context, id string, req domain.UpsertMCP
 	if req.CatalogID != "" {
 		existing.CatalogID = req.CatalogID
 	}
+	if req.MarketSource != "" {
+		existing.MarketSource = req.MarketSource
+	}
 	if len(req.EnabledTools) > 0 {
 		existing.EnabledTools = req.EnabledTools
 	}
@@ -151,6 +160,24 @@ func (m *MCPManager) Delete(ctx context.Context, id string) error {
 		m.syncer.RemoveMCPServer(id)
 	}
 	return m.repo.Delete(ctx, id)
+}
+
+// FindByCatalogID returns the first installed server matching catalog/market id.
+func (m *MCPManager) FindByCatalogID(ctx context.Context, catalogID string) (domain.MCPServer, bool, error) {
+	catalogID = strings.TrimSpace(catalogID)
+	if catalogID == "" {
+		return domain.MCPServer{}, false, nil
+	}
+	list, err := m.repo.List(ctx)
+	if err != nil {
+		return domain.MCPServer{}, false, err
+	}
+	for _, s := range list {
+		if s.ID == catalogID || s.CatalogID == catalogID {
+			return s, true, nil
+		}
+	}
+	return domain.MCPServer{}, false, nil
 }
 
 // RefreshTools connects to the MCP server and discovers available tools.

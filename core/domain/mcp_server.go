@@ -33,7 +33,9 @@ type MCPServer struct {
 	OAuthTokenURL     string `json:"oauthTokenUrl,omitempty"`
 	OAuthScopes       string `json:"oauthScopes,omitempty"`
 	OAuthStatus       string `json:"oauthStatus,omitempty"` // disconnected | pending | connected | error
-	CatalogID         string `json:"catalogId,omitempty"`   // preset from connector catalog
+	CatalogID         string `json:"catalogId,omitempty"`   // preset / market connector id
+	// MarketSource is the market source id when installed from the marketplace.
+	MarketSource      string       `json:"marketSource,omitempty"`
 	EnabledTools      []string     `json:"enabledTools"`    // tool names user enabled
 	DiscoveredTools   []MCPToolDef `json:"discoveredTools"` // tools discovered from server
 	ToolTimeout       int          `json:"toolTimeout"`     // seconds, default 300
@@ -65,6 +67,8 @@ type MCPToolBinding struct {
 
 // UpsertMCPServerRequest is the payload for creating / updating an MCP server.
 type UpsertMCPServerRequest struct {
+	// ID is optional on create; when set (e.g. market install), used as the server id.
+	ID                 string            `json:"id,omitempty"`
 	Name               string            `json:"name"`
 	Description        string            `json:"description"`
 	Transport          string            `json:"transport"`
@@ -80,6 +84,7 @@ type UpsertMCPServerRequest struct {
 	OAuthTokenURL      string            `json:"oauthTokenUrl,omitempty"`
 	OAuthScopes        string            `json:"oauthScopes,omitempty"`
 	CatalogID          string            `json:"catalogId,omitempty"`
+	MarketSource       string            `json:"marketSource,omitempty"`
 	EnabledTools       []string          `json:"enabledTools"`
 	ToolTimeout        int               `json:"toolTimeout"`
 	Status             string            `json:"status"`

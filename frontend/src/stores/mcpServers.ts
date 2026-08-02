@@ -1,35 +1,20 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { ConnectorCatalogEntry, MCPServer, MCPToolDef } from '@/types'
+import type { MCPServer, MCPToolDef } from '@/types'
 import { fetchJSON, asArray } from '@/api/client'
 
 export const useMcpServersStore = defineStore('mcpServers', () => {
   const items = ref<MCPServer[]>([])
-  const catalog = ref<ConnectorCatalogEntry[]>([])
 
   async function load() {
     const data = await fetchJSON<MCPServer[]>('/mcp/servers')
     items.value = asArray(data)
   }
 
-  async function loadCatalog() {
-    const data = await fetchJSON<ConnectorCatalogEntry[]>('/mcp/catalog')
-    catalog.value = asArray(data)
-  }
-
   async function create(payload: Omit<MCPServer, 'id' | 'status'> & { headerSecrets?: Record<string, string> }) {
     const server = await fetchJSON<MCPServer>('/mcp/servers', {
       method: 'POST',
       body: JSON.stringify(payload),
-    })
-    items.value.push(server)
-    return server
-  }
-
-  async function installCatalog(catalogId: string, name?: string) {
-    const server = await fetchJSON<MCPServer>(`/mcp/catalog/${encodeURIComponent(catalogId)}/install`, {
-      method: 'POST',
-      body: JSON.stringify({ name }),
     })
     items.value.push(server)
     return server
@@ -87,11 +72,8 @@ export const useMcpServersStore = defineStore('mcpServers', () => {
 
   return {
     items,
-    catalog,
     load,
-    loadCatalog,
     create,
-    installCatalog,
     update,
     remove,
     refreshTools,

@@ -98,7 +98,8 @@ func TestMarketManagerInstallLocal(t *testing.T) {
 	reg := &fakeRegistry{m: &fakeMarket{id: "local", root: abs}}
 	skills := NewSkillManager(newMemSkillRepo(), newMemSkillFileRepo())
 	agents := NewAgentManager(newMemAgentRepo())
-	mgr := NewMarketManager(configMgr, reg, skills, agents)
+	mcp := NewMCPManager(newMemMCPServerRepo())
+	mgr := NewMarketManager(configMgr, reg, skills, agents, mcp)
 
 	ctx := context.Background()
 	list, warnings, err := mgr.ListCatalog(ctx, true)
@@ -146,6 +147,39 @@ func TestMarketManagerInstallLocal(t *testing.T) {
 	if _, err := agents.Get(ctx, "meeting-facilitator"); err != nil {
 		t.Fatal("expert not installed")
 	}
+
+	res3, err := mgr.Install(ctx, domain.InstallMarketRequest{
+		SourceID: "local",
+		Kind:     "connector",
+		ID:       "github-mcp",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res3.Installed) != 1 || res3.Installed[0] != "github-mcp" {
+		t.Fatalf("unexpected connector install: %+v", res3)
+	}
+	srv, err := mcp.Get(ctx, "github-mcp")
+	if err != nil {
+		t.Fatal("connector not installed")
+	}
+	if srv.MarketSource != "local" || srv.CatalogID != "github-mcp" {
+		t.Fatalf("connector provenance: %+v", srv)
+	}
+	list2, _, err := mgr.ListCatalog(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundInstalled := false
+	for _, item := range list2 {
+		if item.Kind == domain.MarketKindConnector && item.ID == "github-mcp" && item.Installed {
+			foundInstalled = true
+			break
+		}
+	}
+	if !foundInstalled {
+		t.Fatal("expected github-mcp marked installed in catalog")
+	}
 }
 
 func TestMarketInstallNormalizesBodyWithCatalogID(t *testing.T) {
@@ -179,7 +213,7 @@ func TestMarketInstallNormalizesBodyWithCatalogID(t *testing.T) {
 	}}
 	skills := NewSkillManager(newMemSkillRepo(), newMemSkillFileRepo())
 	agents := NewAgentManager(newMemAgentRepo())
-	mgr := NewMarketManager(NewConfigManager(cfgStore), &fakeRegistry{m: &fakeMarket{id: "local", root: root}}, skills, agents)
+	mgr := NewMarketManager(NewConfigManager(cfgStore), &fakeRegistry{m: &fakeMarket{id: "local", root: root}}, skills, agents, nil)
 
 	res, err := mgr.Install(context.Background(), domain.InstallMarketRequest{
 		SourceID: "local", Kind: "skill", ID: "tlc__pr-review", Overwrite: true,
@@ -217,7 +251,7 @@ func TestMarketUninstallRestoresBuiltinSkill(t *testing.T) {
 		return nil, nil
 	})
 	agents := NewAgentManager(newMemAgentRepo())
-	mgr := NewMarketManager(configMgr, &fakeRegistry{}, skills, agents)
+	mgr := NewMarketManager(configMgr, &fakeRegistry{}, skills, agents, nil)
 
 	_ = skills.Upsert(ctx, domain.Skill{
 		ID: "debugging", Name: "debugging", Body: "market-body",
@@ -276,6 +310,40 @@ func (r *memAgentRepo) Upsert(ctx context.Context, a domain.Agent) error {
 }
 
 func (r *memAgentRepo) Delete(ctx context.Context, id string) error {
+	delete(r.byID, id)
+	return nil
+}
+
+type memMCPServerRepo struct {
+	byID map[string]domain.MCPServer
+}
+
+func newMemMCPServerRepo() *memMCPServerRepo {
+	return &memMCPServerRepo{byID: make(map[string]domain.MCPServer)}
+}
+
+func (r *memMCPServerRepo) List(ctx context.Context) ([]domain.MCPServer, error) {
+	var out []domain.MCPServer
+	for _, s := range r.byID {
+		out = append(out, s)
+	}
+	return out, nil
+}
+
+func (r *memMCPServerRepo) Get(ctx context.Context, id string) (domain.MCPServer, error) {
+	s, ok := r.byID[id]
+	if !ok {
+		return domain.MCPServer{}, os.ErrNotExist
+	}
+	return s, nil
+}
+
+func (r *memMCPServerRepo) Upsert(ctx context.Context, s domain.MCPServer) error {
+	r.byID[s.ID] = s
+	return nil
+}
+
+func (r *memMCPServerRepo) Delete(ctx context.Context, id string) error {
 	delete(r.byID, id)
 	return nil
 }

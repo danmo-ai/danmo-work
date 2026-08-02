@@ -6,7 +6,7 @@ import { confirm, toast } from '@/utils/feedback'
 import type { MarketListing } from '@/types'
 
 const props = defineProps<{
-  kind: 'skill' | 'expert'
+  kind: 'skill' | 'expert' | 'connector'
   selectedKey?: string | null
 }>()
 
@@ -73,6 +73,8 @@ async function installItem(item: MarketListing, overwrite = false) {
     const result = await store.install(item.sourceId, item.kind, item.id, overwrite)
     if (item.kind === 'expert') {
       toast.success(t('market.installSuccessExpert', { name: item.name }))
+    } else if (item.kind === 'connector') {
+      toast.success(t('market.installSuccessConnector', { name: item.name }))
     } else {
       toast.success(t('market.installSuccess', { name: item.name }))
     }
@@ -149,6 +151,9 @@ async function uninstallItem(item: MarketListing) {
       <p v-if="kind === 'expert' && selected.installed" class="market-card__next">
         {{ $t('market.installNextStepExpert') }}
       </p>
+      <p v-else-if="kind === 'connector' && selected.installed" class="market-card__next">
+        {{ $t('market.installNextStepConnector') }}
+      </p>
       <div class="market-card__actions">
         <template v-if="!selected.installed">
           <DqButton
@@ -161,11 +166,11 @@ async function uninstallItem(item: MarketListing) {
         </template>
         <template v-else>
           <DqButton
-            v-if="kind === 'expert'"
+            v-if="kind === 'expert' || kind === 'connector'"
             type="primary"
             @click="emit('viewInstalled', selected.id)"
           >
-            {{ $t('market.viewInstalled') }}
+            {{ kind === 'connector' ? $t('market.viewInstalledConnector') : $t('market.viewInstalled') }}
           </DqButton>
           <DqButton
             :loading="store.installing === `${selected.kind}:${selected.id}`"

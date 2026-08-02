@@ -174,6 +174,7 @@ export interface MCPServer {
   oauthScopes?: string
   oauthStatus?: string
   catalogId?: string
+  marketSource?: string
   enabledTools?: string[]
   discoveredTools?: MCPToolDef[]
   toolTimeout?: number
@@ -258,7 +259,7 @@ export interface MarketSource {
 }
 
 export interface MarketListing {
-  kind: 'skill' | 'expert' | 'bundle'
+  kind: 'skill' | 'expert' | 'connector' | 'bundle'
   id: string
   name: string
   description?: string

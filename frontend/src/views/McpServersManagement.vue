@@ -1,23 +1,33 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import WorkspaceShell from '@/components/common/WorkspaceShell.vue'
+import MarketBrowser from '@/components/market/MarketBrowser.vue'
+import MarketCatalogRail from '@/components/market/MarketCatalogRail.vue'
 import { useMcpServersStore } from '@/stores/mcpServers'
+import { useMarketStore } from '@/stores/market'
 import { confirm, toast } from '@/utils/feedback'
 import type { MCPAuthMode, MCPServer, MCPToolDef } from '@/types'
 
 type Transport = 'stdio' | 'sse' | 'streamable-http'
+type PageView = 'library' | 'market'
 
 const { t } = useI18n()
 const mcp = useMcpServersStore()
+const marketStore = useMarketStore()
 
+const pageView = ref<PageView>('library')
+const pageViewOptions = computed(() => [
+  { label: t('market.library'), value: 'library' as const },
+  { label: t('market.tab'), value: 'market' as const },
+])
 const selectedId = ref<string | null>(null)
+const marketSelectedKey = ref<string | null>(null)
 const isCreating = ref(false)
 const saving = ref(false)
 const refreshingTools = ref(false)
 const headerSecretsText = ref('')
 const accessToken = ref('')
-const installingCatalogId = ref<string | null>(null)
 
 const transportOptions: { value: Transport; label: string }[] = [
   { value: 'stdio', label: 'STDIO' },
@@ -89,16 +99,53 @@ const sortedServers = computed(() =>
   [...mcp.items].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
 )
 const selected = computed(() => mcp.items.find((s) => s.id === selectedId.value))
-const hasSelection = computed(() => isCreating.value || !!selectedId.value)
+const marketSelected = computed(() => {
+  if (!marketSelectedKey.value) return null
+  return (
+    marketStore.catalog.find(
+      (item) => item.kind === 'connector' && `${item.sourceId}:${item.id}` === marketSelectedKey.value,
+    ) ?? null
+  )
+})
+const hasSelection = computed(
+  () =>
+    (pageView.value === 'market' && !!marketSelectedKey.value) ||
+    isCreating.value ||
+    !!selectedId.value,
+)
 const headerTitle = computed(() => {
+  if (pageView.value === 'market') {
+    return marketSelected.value?.name || t('market.tab')
+  }
   if (isCreating.value) return form.value.name.trim() || t('connectors.newServer')
   return selected.value?.name.trim() || t('connectors.untitled')
 })
 
-onMounted(async () => {
-  await Promise.all([mcp.load(), mcp.loadCatalog()])
-  if (sortedServers.value.length && !selectedId.value) {
+async function refreshLibrary(preferSelectId?: string | null) {
+  await mcp.load()
+  const prefer = preferSelectId ? resolveServerId(preferSelectId) : null
+  if (prefer) {
+    selectServer(prefer)
+    return
+  }
+  if (selectedId.value && mcp.items.some((s) => s.id === selectedId.value)) {
+    selectServer(selectedId.value)
+    return
+  }
+  if (sortedServers.value.length) {
     selectServer(sortedServers.value[0].id)
+  } else {
+    selectedId.value = null
+  }
+}
+
+onMounted(() => {
+  void refreshLibrary()
+})
+
+watch(pageView, (view) => {
+  if (view === 'library') {
+    void refreshLibrary(selectedId.value)
   }
 })
 
@@ -109,7 +156,32 @@ function selectServer(id: string) {
   if (server) form.value = { ...server }
 }
 
+function resolveServerId(catalogOrServerId: string): string | null {
+  if (!catalogOrServerId) return null
+  if (mcp.items.some((s) => s.id === catalogOrServerId)) return catalogOrServerId
+  const byCatalog = mcp.items.find((s) => s.catalogId === catalogOrServerId)
+  return byCatalog?.id ?? null
+}
+
+async function onMarketInstalled(id: string) {
+  pageView.value = 'library'
+  await refreshLibrary(id)
+}
+
+async function viewInstalledConnector(id: string) {
+  pageView.value = 'library'
+  await refreshLibrary(id)
+}
+
+async function onMarketUninstalled() {
+  await mcp.load()
+  if (selectedId.value && !mcp.items.some((s) => s.id === selectedId.value)) {
+    selectedId.value = null
+  }
+}
+
 function openCreate() {
+  pageView.value = 'library'
   isCreating.value = true
   selectedId.value = null
   form.value = {
@@ -154,19 +226,6 @@ async function save() {
     toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
   } finally {
     saving.value = false
-  }
-}
-
-async function installFromCatalog(catalogId: string) {
-  installingCatalogId.value = catalogId
-  try {
-    const server = await mcp.installCatalog(catalogId)
-    toast.success(t('connectors.catalogInstalled'))
-    selectServer(server.id)
-  } catch (e) {
-    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
-  } finally {
-    installingCatalogId.value = null
   }
 }
 
@@ -231,6 +290,7 @@ function initial(name: string) {
 }
 
 function onKeydown(e: KeyboardEvent) {
+  if (pageView.value !== 'library') return
   if ((e.metaKey || e.ctrlKey) && e.key === 's') {
     e.preventDefault()
     save()
@@ -240,70 +300,64 @@ function onKeydown(e: KeyboardEvent) {
 
 <template>
   <WorkspaceShell
-    :title="$t('connectors.title')"
-    :count="sortedServers.length"
-    :count-label="$t('connectors.countLabel')"
-    :create-label="$t('connectors.newServer')"
+    custom-rail
     :has-selection="hasSelection"
     @create="openCreate"
     @keydown="onKeydown"
   >
     <template #rail>
-      <div v-if="mcp.catalog.length" class="mcp-catalog">
-        <div class="mcp-catalog__title">{{ $t('connectors.catalog') }}</div>
-        <nav class="mcp-catalog__list" :aria-label="$t('connectors.catalog')">
-          <button
-            v-for="entry in mcp.catalog"
-            :key="entry.id"
-            type="button"
-            class="resource-rail__row mcp-catalog__row"
-            :disabled="installingCatalogId === entry.id"
-            @click="installFromCatalog(entry.id)"
-          >
-            <span class="resource-rail__avatar">{{ initial(entry.name) }}</span>
-            <span class="resource-rail__meta">
-              <span class="resource-rail__name">{{ entry.name }}</span>
-              <span class="resource-rail__desc">{{ entry.description || entry.transport }}</span>
-            </span>
-            <span class="resource-rail__tag is-accent">{{ $t('connectors.installCatalog') }}</span>
-          </button>
-        </nav>
+      <div class="resource-rail__section">
+        <div class="resource-rail__section-head">
+          <DqSegmented v-model="pageView" block class="resource-rail__page-view" :options="pageViewOptions" />
+        </div>
+        <template v-if="pageView === 'library'">
+          <div class="resource-rail__section-head">
+            <span class="resource-rail__section-title">{{ $t('connectors.serverList') }}</span>
+            <DqIconButton :aria-label="$t('connectors.newServer')" @click="openCreate">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14" stroke-linecap="round" />
+              </svg>
+            </DqIconButton>
+          </div>
+          <DqEmpty v-if="!sortedServers.length" class="resource-rail__empty" :description="$t('connectors.noServers')" />
+          <nav v-else class="resource-rail__list" :aria-label="$t('connectors.serverList')">
+            <button
+              v-for="server in sortedServers"
+              :key="server.id"
+              type="button"
+              class="resource-rail__row"
+              :class="{ 'is-active': selectedId === server.id && !isCreating }"
+              @click="selectServer(server.id)"
+            >
+              <span class="resource-rail__avatar">{{ initial(server.name) }}</span>
+              <span class="resource-rail__meta">
+                <span class="resource-rail__name">{{ server.name }}</span>
+                <span class="resource-rail__desc">{{ server.transport }}</span>
+              </span>
+              <span
+                class="resource-rail__tag"
+                :class="server.status === 'connected' ? 'is-accent' : ''"
+              >
+                {{ server.status === 'connected' ? $t('connectors.connected') : $t('connectors.notConnected') }}
+              </span>
+            </button>
+          </nav>
+        </template>
+        <MarketCatalogRail v-else v-model:selected-key="marketSelectedKey" kind="connector" />
       </div>
-      <DqEmpty v-if="!sortedServers.length" class="resource-rail__empty" :description="$t('connectors.noServers')" />
-      <nav v-else class="resource-rail__list" :aria-label="$t('connectors.serverList')">
-        <button
-          v-for="server in sortedServers"
-          :key="server.id"
-          type="button"
-          class="resource-rail__row"
-          :class="{ 'is-active': selectedId === server.id && !isCreating }"
-          @click="selectServer(server.id)"
-        >
-          <span class="resource-rail__avatar">{{ initial(server.name) }}</span>
-          <span class="resource-rail__meta">
-            <span class="resource-rail__name">{{ server.name }}</span>
-            <span class="resource-rail__desc">{{ server.transport }}</span>
-          </span>
-          <span
-            class="resource-rail__tag"
-            :class="server.status === 'connected' ? 'is-accent' : ''"
-          >
-            {{ server.status === 'connected' ? $t('connectors.connected') : $t('connectors.notConnected') }}
-          </span>
-        </button>
-      </nav>
     </template>
 
     <template #empty>
       <DqEmpty :description="$t('connectors.emptySelection')">
         <p class="resource-workspace__hint">{{ $t('connectors.emptySelectionHint') }}</p>
+        <DqButton @click="pageView = 'market'">{{ $t('market.tab') }}</DqButton>
       </DqEmpty>
     </template>
 
     <template #header>
       <div class="resource-workspace__identity">
         <h1 class="resource-workspace__title">{{ headerTitle }}</h1>
-        <div v-if="!isCreating && selected" class="resource-workspace__badges">
+        <div v-if="pageView === 'library' && !isCreating && selected" class="resource-workspace__badges">
           <span class="resource-status" :class="`resource-status--${selected.status}`">
             <span class="resource-status__dot" />
             {{ selected.status === 'connected' ? $t('connectors.connected') : selected.status === 'error' ? $t('connectors.error') : $t('connectors.disconnected') }}
@@ -313,7 +367,15 @@ function onKeydown(e: KeyboardEvent) {
     </template>
 
     <template #body>
-      <section class="resource-section">
+      <MarketBrowser
+        v-if="pageView === 'market'"
+        kind="connector"
+        :selected-key="marketSelectedKey"
+        @installed="onMarketInstalled"
+        @uninstalled="onMarketUninstalled"
+        @view-installed="viewInstalledConnector"
+      />
+      <section v-else class="resource-section">
         <div class="resource-form-grid resource-form-grid--2">
           <label class="resource-field">
             <span class="resource-field__label">{{ $t('common.name') }}</span>
@@ -407,7 +469,7 @@ function onKeydown(e: KeyboardEvent) {
       </section>
     </template>
 
-    <template #footer>
+    <template v-if="pageView === 'library'" #footer>
       <span class="resource-workspace__hint">{{ $t('common.saveShortcut') }}</span>
       <div class="resource-workspace__footer-actions">
         <DqButton v-if="isCreating" @click="isCreating = false; selectedId = null">{{ $t('common.cancel') }}</DqButton>
@@ -424,37 +486,40 @@ function onKeydown(e: KeyboardEvent) {
 </template>
 
 <style scoped>
-.mcp-catalog {
-  padding: 4px 0 8px;
-  border-bottom: 1px solid var(--dq-separator-light);
-  margin-bottom: 6px;
+.resource-rail__page-view {
+  width: 100%;
 }
-
-.mcp-catalog__title {
-  padding: 8px 12px 4px;
-  font-size: var(--dq-font-size-caption);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--dq-label-tertiary);
-  line-height: 1.3;
+.resource-rail__section > .resource-rail__section-head:first-child {
+  padding-inline: 10px;
 }
-
-.mcp-catalog__list {
+.resource-rail__section {
   display: flex;
   flex-direction: column;
-}
-
-.mcp-catalog__row:disabled {
-  opacity: 0.55;
-  cursor: wait;
-}
-
-.mcp-catalog__row .resource-rail__desc {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  white-space: normal;
+  min-height: 0;
+  flex: 1;
   overflow: hidden;
+}
+.resource-rail__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 10px 6px 14px;
+  flex-shrink: 0;
+}
+.resource-rail__section-title {
+  font-size: var(--dq-font-size-caption);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dq-label-tertiary);
+}
+.resource-rail__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 6px 6px;
+}
+.resource-rail__empty {
+  padding: 20px 12px;
 }
 </style>

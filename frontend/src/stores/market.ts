@@ -46,6 +46,13 @@ export const useMarketStore = defineStore('market', () => {
     }
   }
 
+  function markInstalled(kind: string, id: string, installed: boolean) {
+    const i = catalog.value.findIndex((item) => item.kind === kind && item.id === id)
+    if (i >= 0) {
+      catalog.value[i] = { ...catalog.value[i], installed }
+    }
+  }
+
   async function install(sourceId: string, kind: string, id: string, overwrite = false) {
     installing.value = `${kind}:${id}`
     try {
@@ -54,7 +61,10 @@ export const useMarketStore = defineStore('market', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sourceId, kind, id, overwrite }),
       })
-      await loadCatalog(true)
+      // Optimistic update — don't block the install button on a full catalog refresh
+      // (GitHub/Gitee refresh can hang and leave the spinner stuck).
+      markInstalled(kind, id, true)
+      void loadCatalog(true)
       return result
     } finally {
       installing.value = null
@@ -69,7 +79,8 @@ export const useMarketStore = defineStore('market', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ kind, id }),
       })
-      await loadCatalog(true)
+      markInstalled(kind, id, false)
+      void loadCatalog(true)
     } finally {
       installing.value = null
     }

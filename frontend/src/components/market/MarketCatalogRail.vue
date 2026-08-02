@@ -4,7 +4,7 @@ import { useMarketStore } from '@/stores/market'
 import type { MarketListing } from '@/types'
 
 const props = defineProps<{
-  kind: 'skill' | 'expert'
+  kind: 'skill' | 'expert' | 'connector'
 }>()
 
 const selectedKey = defineModel<string | null>('selectedKey', { default: null })

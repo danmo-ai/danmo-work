@@ -357,6 +357,7 @@ type mcpServerModel struct {
 	OAuthScopes         string `gorm:"column:oauth_scopes"`
 	OAuthStatus         string `gorm:"column:oauth_status"`
 	CatalogID           string `gorm:"column:catalog_id"`
+	MarketSource        string `gorm:"column:market_source"`
 	EnabledToolsJSON    string `gorm:"column:enabled_tools"`
 	DiscoveredToolsJSON string `gorm:"column:discovered_tools"`
 	ToolTimeout         int    `gorm:"column:tool_timeout"`
@@ -411,6 +412,7 @@ func mcpServerToDomain(m mcpServerModel) domain.MCPServer {
 		OAuthScopes:        m.OAuthScopes,
 		OAuthStatus:        m.OAuthStatus,
 		CatalogID:          m.CatalogID,
+		MarketSource:       m.MarketSource,
 		EnabledTools:       enabledTools,
 		DiscoveredTools:    discovered,
 		ToolTimeout:        m.ToolTimeout,
@@ -471,6 +473,7 @@ func mcpServerFromDomain(s domain.MCPServer) mcpServerModel {
 		OAuthScopes:          s.OAuthScopes,
 		OAuthStatus:          s.OAuthStatus,
 		CatalogID:            s.CatalogID,
+		MarketSource:         s.MarketSource,
 		EnabledToolsJSON:     enabledToolsJSON,
 		DiscoveredToolsJSON:  discoveredJSON,
 		ToolTimeout:          timeout,

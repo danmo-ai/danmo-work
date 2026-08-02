@@ -5,6 +5,8 @@ import (
 )
 
 // DefaultConnectorCatalog returns built-in MCP connector presets.
+// Deprecated: prefer market.sources → dq-market kind=connector packages.
+// Kept for the legacy GET /mcp/catalog API.
 func DefaultConnectorCatalog() []domain.ConnectorCatalogEntry {
 	return []domain.ConnectorCatalogEntry{
 		{

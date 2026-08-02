@@ -202,7 +202,7 @@ func New(cfg Config) *Core {
 	ensureBuiltinSkills(skills)
 
 	marketReg := marketadapter.NewRegistry(appCfg.Market.Sources)
-	marketMgr := service.NewMarketManager(configManager, marketReg, skills, agents)
+	marketMgr := service.NewMarketManager(configManager, marketReg, skills, agents, mcpManager)
 
 	stream := dqruntime.NewStreamEventManager(st.StreamEvents())
 	checkpointStore := turnlog.NewCheckpointStore(pm.ProjectDir)

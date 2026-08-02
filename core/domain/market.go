@@ -1,6 +1,6 @@
 package domain
 
-// MarketSource is a configured content source for the expert/skill market.
+// MarketSource is a configured content source for the expert/skill/connector market.
 type MarketSource struct {
 	ID          string `json:"id" mapstructure:"id" yaml:"id"`
 	Name        string `json:"name" mapstructure:"name" yaml:"name"`
@@ -24,9 +24,10 @@ type ConfigMarketSection struct {
 type MarketItemKind string
 
 const (
-	MarketKindSkill  MarketItemKind = "skill"
-	MarketKindExpert MarketItemKind = "expert"
-	MarketKindBundle MarketItemKind = "bundle"
+	MarketKindSkill     MarketItemKind = "skill"
+	MarketKindExpert    MarketItemKind = "expert"
+	MarketKindConnector MarketItemKind = "connector"
+	MarketKindBundle    MarketItemKind = "bundle"
 )
 
 // MarketItem is one installable entry from a source catalog.
@@ -87,7 +88,7 @@ type InstallMarketResult struct {
 	Skipped    []string `json:"skipped,omitempty"`
 }
 
-// UninstallMarketRequest removes a market-installed skill or expert.
+// UninstallMarketRequest removes a market-installed skill, expert, or connector.
 type UninstallMarketRequest struct {
 	Kind string `json:"kind"`
 	ID   string `json:"id"`
