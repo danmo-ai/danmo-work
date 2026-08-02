@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# Publish Tauri updater latest.json to Gitee branch "updater" via Contents API
-# (small JSON only — no Release binary attachments).
+# Publish Tauri updater latest.json as a Gitee Release attachment on a rolling
+# tag "updater" (stable download URL). Do NOT use a git branch — Gitee Pull
+# mirror from GitHub deletes branches that do not exist upstream.
 #
-# Stable URL used by desktop/src-tauri/tauri.conf.json:
-#   https://gitee.com/<owner>/<repo>/raw/updater/latest.json
+# Stable URL (tauri.conf.json):
+#   https://gitee.com/<owner>/<repo>/releases/download/updater/latest.json
 #
-# Platform download URLs stay on GitHub Releases (real artifact host).
-# danmo.work is the marketing site (GitHub Pages), not a release CDN.
-# Optional UPDATE_MIRROR_BASE_URL may rewrite urls when a real object mirror exists.
+# Platform download URLs stay on GitHub Releases unless MIRROR_BASE_URL is set.
 #
 # Required env: GITEE_TOKEN, GH_TOKEN|GITHUB_TOKEN
 # Optional: TAG, GITEE_OWNER, GITEE_REPO, GITHUB_REPOSITORY, MIRROR_BASE_URL
@@ -18,8 +17,8 @@ GITEE_REPO="${GITEE_REPO:-danmo-work}"
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-danmo-ai/danmo-work}"
 GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
 TAG="${TAG:-}"
-# Empty by default — do not invent a dead host like releases.danmo.ai.
 MIRROR_BASE_URL="${MIRROR_BASE_URL:-}"
+UPDATER_TAG="${UPDATER_TAG:-updater}"
 
 if [[ -z "${GITEE_TOKEN:-}" ]]; then
   echo "ERROR: GITEE_TOKEN unset" >&2
@@ -32,7 +31,7 @@ fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-API_BASE="https://gitee.com/api/v5/repos/${GITEE_OWNER}/${GITEE_REPO}"
+API="https://gitee.com/api/v5/repos/${GITEE_OWNER}/${GITEE_REPO}"
 
 if [[ -z "$TAG" ]]; then
   TAG="$(curl -fsSL --connect-timeout 20 --max-time 60 \
@@ -42,7 +41,7 @@ if [[ -z "$TAG" ]]; then
     | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')"
 fi
 
-echo "Publishing updater latest.json for ${TAG} → gitee raw/updater/"
+echo "Publishing updater latest.json for app ${TAG} → Gitee release tag ${UPDATER_TAG}"
 
 curl -fsSL --connect-timeout 20 --max-time 60 \
   -H "Authorization: Bearer ${GH_TOKEN}" \
@@ -50,7 +49,7 @@ curl -fsSL --connect-timeout 20 --max-time 60 \
   -o "$TMP/latest.github.json" \
   "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/latest.json"
 
-python3 - "$TMP/latest.github.json" "$TMP/latest.gitee.json" "$MIRROR_BASE_URL" <<'PY'
+python3 - "$TMP/latest.github.json" "$TMP/latest.json" "$MIRROR_BASE_URL" <<'PY'
 import json, sys
 from urllib.parse import unquote, urlparse
 
@@ -67,76 +66,106 @@ if mirror:
 else:
     print("Keeping GitHub Release platform URLs")
 json.dump(data, open(dst, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+print("wrote", dst)
 PY
 
-CONTENT_B64="$(base64 <"$TMP/latest.gitee.json" | tr -d '\n')"
+DEFAULT_BRANCH="$(curl -fsSL --connect-timeout 20 --max-time 60 \
+  "${API}?access_token=${GITEE_TOKEN}" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin).get("default_branch") or "master")')"
 
-ensure_updater_branch() {
-  if curl -fsSL --connect-timeout 20 --max-time 60 \
-    "${API_BASE}/branches/updater?access_token=${GITEE_TOKEN}" >/dev/null 2>&1; then
-    return 0
-  fi
-  DEFAULT_BRANCH="$(curl -fsSL --connect-timeout 20 --max-time 60 \
-    "${API_BASE}?access_token=${GITEE_TOKEN}" \
-    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("default_branch") or "master")')"
-  echo "Creating branch updater from ${DEFAULT_BRANCH}"
-  curl -fsSL --connect-timeout 20 --max-time 60 -X POST "${API_BASE}/branches" \
-    -H "Content-Type: application/json" \
-    -d "{\"access_token\":\"${GITEE_TOKEN}\",\"branch_name\":\"updater\",\"refs\":\"${DEFAULT_BRANCH}\"}" \
-    >/dev/null
-}
-
-ensure_updater_branch
-
-FILE_META="$(curl -sS --connect-timeout 20 --max-time 60 \
-  "${API_BASE}/contents/latest.json?access_token=${GITEE_TOKEN}&ref=updater" || true)"
-FILE_SHA="$(python3 - "$FILE_META" <<'PY'
-import json, sys
-raw = sys.stdin.read().strip()
-if not raw:
-    raise SystemExit
+EXISTING="$(curl -sS --connect-timeout 20 --max-time 60 \
+  "${API}/releases/tags/${UPDATER_TAG}?access_token=${GITEE_TOKEN}" || true)"
+RELEASE_ID="$(python3 -c 'import json,sys
 try:
-    data = json.loads(raw)
-except json.JSONDecodeError:
-    raise SystemExit
-if isinstance(data, dict) and data.get("sha"):
-    print(data["sha"])
+  d=json.loads(sys.stdin.read() or "{}")
+  print(d.get("id") or "")
+except Exception:
+  print("")
+' <<<"$EXISTING")"
+
+BODY="Tauri updater manifest (auto-updated).
+App version reflected in this file: ${TAG}
+Do not delete this rolling release — desktop clients fetch:
+https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/releases/download/${UPDATER_TAG}/latest.json
+"
+
+if [[ -z "$RELEASE_ID" ]]; then
+  echo "Creating rolling Gitee release tag=${UPDATER_TAG}"
+  python3 - "$UPDATER_TAG" "$BODY" "$DEFAULT_BRANCH" <<'PY' >"$TMP/payload.json"
+import json, os, sys
+tag, body, branch = sys.argv[1:4]
+json.dump({
+  "access_token": os.environ["GITEE_TOKEN"],
+  "tag_name": tag,
+  "name": "Updater manifest",
+  "body": body,
+  "target_commitish": branch,
+}, open("/dev/stdout", "w", encoding="utf-8"))
+PY
+  RESP="$(curl -fsSL --connect-timeout 20 --max-time 60 -X POST "${API}/releases" \
+    -H "Content-Type: application/json" \
+    --data-binary @"$TMP/payload.json")"
+  RELEASE_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$RESP")"
+else
+  echo "Updating rolling Gitee release id=${RELEASE_ID}"
+  python3 - "$UPDATER_TAG" "$BODY" <<'PY' >"$TMP/payload.json"
+import json, os, sys
+tag, body = sys.argv[1:3]
+json.dump({
+  "access_token": os.environ["GITEE_TOKEN"],
+  "tag_name": tag,
+  "name": "Updater manifest",
+  "body": body,
+}, open("/dev/stdout", "w", encoding="utf-8"))
+PY
+  curl -fsSL --connect-timeout 20 --max-time 60 -X PATCH "${API}/releases/${RELEASE_ID}" \
+    -H "Content-Type: application/json" \
+    --data-binary @"$TMP/payload.json" >/dev/null
+fi
+
+curl -fsSL --connect-timeout 20 --max-time 60 \
+  "${API}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_TOKEN}&per_page=100" \
+  -o "$TMP/attach.json" || echo '[]' >"$TMP/attach.json"
+
+EXISTING_ID="$(python3 - "$TMP/attach.json" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+items = data if isinstance(data, list) else []
+for a in items:
+    if a.get("name") == "latest.json":
+        print(a.get("id") or "")
+        break
 PY
 )"
 
-MSG="chore(updater): publish latest.json for ${TAG}"
-if [[ -n "${FILE_SHA}" ]]; then
-  echo "Updating raw/updater/latest.json (sha=${FILE_SHA})"
-  python3 - "$CONTENT_B64" "$MSG" "$FILE_SHA" <<'PY' >"$TMP/contents.json"
-import json, os, sys
-content_b64, message, sha = sys.argv[1:4]
-json.dump({
-  "access_token": os.environ["GITEE_TOKEN"],
-  "content": content_b64,
-  "message": message,
-  "branch": "updater",
-  "sha": sha,
-}, open("/dev/stdout", "w", encoding="utf-8"))
-PY
-  curl -fsSL --connect-timeout 20 --max-time 60 -X PUT "${API_BASE}/contents/latest.json" \
-    -H "Content-Type: application/json" \
-    --data-binary @"$TMP/contents.json" >/dev/null
-else
-  echo "Creating raw/updater/latest.json"
-  python3 - "$CONTENT_B64" "$MSG" <<'PY' >"$TMP/contents.json"
-import json, os, sys
-content_b64, message = sys.argv[1:3]
-json.dump({
-  "access_token": os.environ["GITEE_TOKEN"],
-  "content": content_b64,
-  "message": message,
-  "branch": "updater",
-}, open("/dev/stdout", "w", encoding="utf-8"))
-PY
-  curl -fsSL --connect-timeout 20 --max-time 60 -X POST "${API_BASE}/contents/latest.json" \
-    -H "Content-Type: application/json" \
-    --data-binary @"$TMP/contents.json" >/dev/null
+if [[ -n "${EXISTING_ID}" ]]; then
+  echo "Removing previous latest.json attach id=${EXISTING_ID}"
+  curl -fsSL --connect-timeout 20 --max-time 60 -X DELETE \
+    "${API}/releases/${RELEASE_ID}/attach_files/${EXISTING_ID}?access_token=${GITEE_TOKEN}" \
+    >/dev/null || true
 fi
 
+echo "Uploading latest.json ($(wc -c <"$TMP/latest.json") bytes)"
+curl -fS --connect-timeout 20 --max-time 120 \
+  --speed-time 20 --speed-limit 100 \
+  -X POST \
+  "${API}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_TOKEN}" \
+  -F "access_token=${GITEE_TOKEN}" \
+  -F "file=@${TMP}/latest.json;filename=latest.json" \
+  -o "$TMP/upload.json" \
+  -w "http=%{http_code} time=%{time_total}\n"
+
+STABLE="https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/releases/download/${UPDATER_TAG}/latest.json"
 echo "Stable updater endpoint:"
-echo "  https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/raw/updater/latest.json"
+echo "  ${STABLE}"
+
+# Verify publicly fetchable
+code="$(curl -sS -o /tmp/verify.json -w "%{http_code}" -L --connect-timeout 20 --max-time 30 "$STABLE" || true)"
+echo "verify HTTP ${code}"
+if [[ "$code" != "200" ]]; then
+  echo "ERROR: stable URL not publicly fetchable yet (HTTP ${code})" >&2
+  head -c 300 /tmp/verify.json 2>/dev/null >&2 || true
+  echo >&2
+  exit 1
+fi
+python3 -c 'import json; json.load(open("/tmp/verify.json")); print("verify JSON ok")'

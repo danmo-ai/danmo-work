@@ -42,7 +42,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE3NjFEOUQ3RUQzQkNEOUUKUldTZXpUdnQxOWxocHdya3Y3OVhXTzRESUV3WVc3enZwcUsvTkNQZTRJaUppNmNkdjJrYTMvbksK",
       "endpoints": [
-        "https://gitee.com/danmo-ai/danmo-work/raw/updater/latest.json",
+        "https://gitee.com/danmo-ai/danmo-work/releases/download/updater/latest.json",
         "https://github.com/danmo-ai/danmo-work/releases/latest/download/latest.json"
       ]
     }

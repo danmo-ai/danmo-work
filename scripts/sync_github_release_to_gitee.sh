@@ -4,8 +4,9 @@
 # Why: GitHub-hosted runners hang when multipart-uploading installers to Gitee.
 # Instead we:
 #   1) create/update the Gitee Release with notes + GitHub download links
-#   2) publish a tiny latest.json via Contents API to branch "updater"
-#      (Tauri endpoint: https://gitee.com/.../raw/updater/latest.json)
+#   2) publish a tiny latest.json on rolling Gitee release tag "updater"
+#      (Tauri: .../releases/download/updater/latest.json)
+#      Do not use a git branch — Pull mirror deletes non-GitHub branches.
 #
 # Artifact host is GitHub Releases. danmo.work is the marketing site (Pages),
 # not a binary CDN. Optional MIRROR_BASE_URL rewrites links when a real mirror exists.
@@ -105,7 +106,7 @@ else:
 lines += [
     "",
     f"- GitHub Release: https://github.com/{gh_repo}/releases/tag/{tag}",
-    f"- 自动更新清单: https://gitee.com/{gitee_owner}/{gitee_repo}/raw/updater/latest.json",
+    f"- 自动更新清单: https://gitee.com/{gitee_owner}/{gitee_repo}/releases/download/updater/latest.json",
     f"- 官网: https://danmo.work",
     "",
 ]
@@ -171,4 +172,4 @@ export TAG MIRROR_BASE_URL
 
 echo "Done."
 echo "  Release: https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/releases/tag/${TAG}"
-echo "  Updater: https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/raw/updater/latest.json"
+echo "  Updater: https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/releases/download/updater/latest.json"

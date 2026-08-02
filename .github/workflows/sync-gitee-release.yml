@@ -1,7 +1,7 @@
 name: Sync Release to Gitee
 
 # Publish Gitee Release metadata + GitHub download links, and a tiny Tauri
-# latest.json on branch "updater". Does NOT upload installer binaries.
+# latest.json on rolling release tag "updater". Does NOT upload installers.
 # Artifact host remains GitHub Releases (danmo.work is Pages marketing site).
 # Optional secret UPDATE_MIRROR_BASE_URL rewrites links when a real mirror exists.
 # Requires repository secret GITEE_TOKEN.
