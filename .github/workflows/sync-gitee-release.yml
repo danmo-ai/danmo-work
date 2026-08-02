@@ -1,9 +1,10 @@
 name: Sync Release to Gitee
 
-# Sync one GitHub Release (assets + Gitee-rewritten latest.json) to
-# https://gitee.com/danmo-ai/danmo-work.
-# Prefer triggering after Build Release Artifacts finishes (see release.yml),
-# or run manually. Requires repository secret GITEE_TOKEN.
+# Publish Gitee Release metadata + download links, and a tiny Tauri latest.json
+# on branch "updater". Does NOT upload installer binaries (GH runners → Gitee
+# multipart upload is unreliable). Packages are linked to releases.danmo.ai /
+# GitHub instead.
+# Requires repository secret GITEE_TOKEN.
 
 on:
   workflow_dispatch:
@@ -24,13 +25,14 @@ permissions:
 
 jobs:
   sync:
-    name: Sync release assets to Gitee
+    name: Sync release metadata to Gitee
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Sync single release to Gitee
+      - name: Sync Gitee release + updater manifest
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_OWNER: danmo-ai
@@ -38,6 +40,7 @@ jobs:
           GITHUB_REPOSITORY: danmo-ai/danmo-work
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
+          MIRROR_BASE_URL: https://releases.danmo.ai/danmo-work
         run: |
           if [[ -z "${GITEE_TOKEN}" ]]; then
             echo "GITEE_TOKEN unset — skip Gitee sync"
