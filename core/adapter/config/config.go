@@ -209,7 +209,7 @@ func defaultMarketSources() []domain.MarketSource {
 			Name:        "Official (Gitee)",
 			Kind:        "git",
 			Platform:    "gitee",
-			Repo:        "danqing/dq-market",
+			Repo:        "https://gitee.com/danmo-ai/dq-market",
 			Ref:         "main",
 			CatalogPath: "catalog/index.json",
 			Enabled:     false,

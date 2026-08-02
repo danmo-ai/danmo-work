@@ -149,7 +149,7 @@ market:
       name: Official (Gitee)
       kind: git
       platform: gitee
-      repo: danqing/dq-market
+      repo: https://gitee.com/danmo-ai/dq-market
       ref: main
       catalog_path: catalog/index.json
       enabled: false
