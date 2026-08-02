@@ -41,6 +41,9 @@ type MCPServer struct {
 	ToolTimeout       int          `json:"toolTimeout"`     // seconds, default 300
 	Status            string       `json:"status"`          // connected | disconnected | error
 	Enabled           bool         `json:"enabled"`         // user toggle
+	// AmbientMount controls whether tools appear when an agent inherits ambient MCP.
+	// false = bound-only (only agents listing this server in mcpServers). Default true.
+	AmbientMount bool `json:"ambientMount"`
 	// Network controls stdio process egress: inherit (default) | deny | allow | allowlist.
 	// inherit follows runtime.sandbox.network; allowlist uses the sandbox allowlist proxy.
 	Network string `json:"network,omitempty"`
@@ -89,7 +92,9 @@ type UpsertMCPServerRequest struct {
 	ToolTimeout        int               `json:"toolTimeout"`
 	Status             string            `json:"status"`
 	Enabled            bool              `json:"enabled"`
-	Network            string            `json:"network,omitempty"`
+	// AmbientMount is optional on upsert; nil leaves existing / defaults to true on create.
+	AmbientMount *bool  `json:"ambientMount,omitempty"`
+	Network      string `json:"network,omitempty"`
 	// HeaderSecrets are plaintext header values to store encrypted (Phase 1).
 	HeaderSecrets map[string]string `json:"headerSecrets,omitempty"`
 }

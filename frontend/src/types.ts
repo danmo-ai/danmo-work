@@ -178,6 +178,8 @@ export interface MCPServer {
   enabledTools?: string[]
   discoveredTools?: MCPToolDef[]
   toolTimeout?: number
+  /** When false, tools are bound-only (not mounted for ambient agents). Default true. */
+  ambientMount?: boolean
   status: 'connected' | 'disconnected' | 'error'
   enabled: boolean
 }

@@ -225,6 +225,18 @@ fn prepare_coreutils(app: &AppHandle, home: &Path) -> Option<(PathBuf, PathBuf)>
     }
 }
 
+fn external_backend_requested() -> bool {
+    // `make dev-desktop` starts Go via scripts, then launches Tauri. Without this
+    // gate, setup() reclaim+spawn kills the script backend and races itself.
+    for key in ["WORK_EXTERNAL_BACKEND", "SKIP_BACKEND"] {
+        match std::env::var(key).as_deref() {
+            Ok("1") | Ok("true") | Ok("TRUE") | Ok("yes") | Ok("YES") => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
 fn spawn_backend(app: &AppHandle) -> Result<(), String> {
     let home = teams_home(app)?;
     fs::create_dir_all(&home).map_err(|e| format!("failed to create ~/.danmo-work: {e}"))?;
@@ -234,6 +246,23 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
     let config_path = home.join("config.yaml");
     let log_path = home.join("backend.log");
     let pid_path = home.join(BACKEND_PID_FILE);
+
+    if external_backend_requested() {
+        eprintln!(
+            "[sidecar] WORK_EXTERNAL_BACKEND/SKIP_BACKEND set — not reclaiming or spawning; expecting API on {BACKEND_ADDR}"
+        );
+        if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&log_path) {
+            let _ = writeln!(
+                f,
+                "\n--- external backend mode (skip sidecar spawn) {BACKEND_ADDR} ---"
+            );
+        }
+        // UI polls /api/v1/version; emit ready if already up so boot is instant.
+        if backend_version_ok(BACKEND_ADDR) {
+            let _ = app.emit("backend-ready", ());
+        }
+        return Ok(());
+    }
 
     // Stale listeners on :7801 (old sidecar / `make backend`) keep answering the UI
     // after upgrades — users still see WeChat QR 404 and SQLite DBMOVED (1032).

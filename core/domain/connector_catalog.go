@@ -18,4 +18,8 @@ type ConnectorCatalogEntry struct {
 	OAuthScopes       string `json:"oauthScopes,omitempty"`
 	Region            string `json:"region,omitempty"` // global | cn
 	Tags              []string `json:"tags,omitempty"`
+	// ToolTimeout seconds for CallTool (0 → InstallCatalogEntry default 300).
+	ToolTimeout int `json:"toolTimeout,omitempty"`
+	// AmbientMount: nil/true = mount for ambient agents; false = bound-only (expert mcp_servers).
+	AmbientMount *bool `json:"ambientMount,omitempty"`
 }

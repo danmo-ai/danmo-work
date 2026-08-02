@@ -367,7 +367,7 @@ func (e *Engine) SetMCPCaller(c port.MCPCaller) {
 }
 
 // ReplaceMCPServer implements port.MCPToolSync.
-func (e *Engine) ReplaceMCPServer(serverID string, tools []domain.MCPToolBinding) {
+func (e *Engine) ReplaceMCPServer(serverID string, tools []domain.MCPToolBinding, ambientMount bool) {
 	e.mu.Lock()
 	caller := e.mcpCaller
 	e.mu.Unlock()
@@ -380,7 +380,7 @@ func (e *Engine) ReplaceMCPServer(serverID string, tools []domain.MCPToolBinding
 			return caller.CallTool(ctx, sid, name, args)
 		}))
 	}
-	e.toolCatalog.ReplaceServer(serverID, handlers...)
+	e.toolCatalog.ReplaceServerAmbient(serverID, ambientMount, handlers...)
 }
 
 // RemoveMCPServer implements port.MCPToolSync.
@@ -1494,7 +1494,9 @@ func (e *Engine) mountAlwaysOnBuiltins(reg *tool.Registry) {
 
 func (e *Engine) mountBuiltinTools(reg *tool.Registry, bindings []domain.ToolBinding) {
 	for _, b := range bindings {
-		if b.ToolID == "" {
+		if b.ToolID == "" || domain.IsCoreTool(b.ToolID) {
+			// Core tools are wired in build*Registry; catalog stubs must not
+			// overwrite them (ask_user OnAsk, KB scope, memory store, …).
 			continue
 		}
 		if h, ok := e.toolCatalog.Get(b.ToolID); ok {

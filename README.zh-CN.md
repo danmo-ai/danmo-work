@@ -296,7 +296,8 @@ cp config.example.yaml ~/.danmo-work/config.yaml
 # 在界面或配置文件里填入 LLM API Key
 ```
 
-后端已经在跑时：`SKIP_BACKEND=1 make dev-desktop`。
+后端已经在跑时：`SKIP_BACKEND=1 make dev-desktop`（会设置 `WORK_EXTERNAL_BACKEND=1`，避免 Tauri 再抢 :7801）。
+默认 `make dev-desktop` 也由脚本起后端，Tauri 不再二次 spawn sidecar。
 
 ### 构建与打包
 

@@ -47,6 +47,7 @@ const form = ref<MCPServer>({
   auth: 'none',
   status: 'disconnected',
   enabled: true,
+  ambientMount: true,
 })
 
 const authOptions: { value: MCPAuthMode; label: string }[] = [
@@ -196,6 +197,7 @@ function openCreate() {
     auth: 'none',
     status: 'disconnected',
     enabled: true,
+    ambientMount: true,
   }
   headerSecretsText.value = ''
   accessToken.value = ''
@@ -456,13 +458,21 @@ function onKeydown(e: KeyboardEvent) {
             </label>
           </div>
         </div>
-        <div v-if="!isCreating" class="resource-form-grid resource-form-grid--2">
-          <label class="resource-field resource-field--toggle">
+        <div class="resource-form-grid resource-form-grid--2">
+          <label v-if="!isCreating" class="resource-field resource-field--toggle">
             <span class="resource-field__label">{{ $t('connectors.enabled') }}</span>
             <DqSwitch
               :model-value="form.enabled"
               size="sm"
               @update:model-value="(v: boolean) => form.enabled = v"
+            />
+          </label>
+          <label class="resource-field resource-field--toggle">
+            <span class="resource-field__label">{{ $t('connectors.ambientMount') }}</span>
+            <DqSwitch
+              :model-value="form.ambientMount !== false"
+              size="sm"
+              @update:model-value="(v: boolean) => form.ambientMount = v"
             />
           </label>
         </div>

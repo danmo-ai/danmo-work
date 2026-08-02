@@ -75,6 +75,10 @@ func (m *MCPManager) Create(ctx context.Context, req domain.UpsertMCPServerReque
 		Status:             "disconnected",
 		Enabled:            req.Enabled,
 		Network:            req.Network,
+		AmbientMount:       true,
+	}
+	if req.AmbientMount != nil {
+		s.AmbientMount = *req.AmbientMount
 	}
 	normalizeMCPServer(&s)
 	if err := m.storeHeaderSecrets(ctx, s.ID, req.HeaderSecrets, &s); err != nil {
@@ -137,6 +141,9 @@ func (m *MCPManager) Update(ctx context.Context, id string, req domain.UpsertMCP
 	}
 	if req.Network != "" {
 		existing.Network = req.Network
+	}
+	if req.AmbientMount != nil {
+		existing.AmbientMount = *req.AmbientMount
 	}
 	existing.Enabled = req.Enabled
 	normalizeMCPServer(&existing)
@@ -310,7 +317,7 @@ func (m *MCPManager) syncServer(ctx context.Context, srv domain.MCPServer) error
 		return nil
 	}
 	bindings := m.bindingsFor(srv)
-	m.syncer.ReplaceMCPServer(srv.ID, bindings)
+	m.syncer.ReplaceMCPServer(srv.ID, bindings, srv.AmbientMount)
 	return nil
 }
 

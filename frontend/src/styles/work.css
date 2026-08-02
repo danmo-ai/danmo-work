@@ -1590,8 +1590,36 @@ body.teams-is-resizing {
   width: 100%;
 }
 
+.resource-section--tools {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.resource-panel {
+  padding: 16px;
+  border: 1px solid var(--dq-border-subtle);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dq-bg-elevated) 35%, transparent);
+}
+
+.resource-panel .resource-section__head {
+  margin-bottom: 14px;
+}
+
+.resource-panel .resource-list-card {
+  margin-top: 4px;
+}
+
 .resource-section__head {
   margin-bottom: 16px;
+}
+
+.resource-list-card__name--mono {
+  font-family: var(--dq-font-mono);
+  font-size: var(--dq-font-size-footnote);
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 .resource-section__title {
@@ -1612,6 +1640,20 @@ body.teams-is-resizing {
   display: grid;
   gap: 14px 16px;
   margin-bottom: 14px;
+}
+
+.resource-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px 12px;
+  margin-bottom: 14px;
+  align-items: end;
+}
+
+@media (max-width: 900px) {
+  .resource-add-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .resource-form-grid--2 {

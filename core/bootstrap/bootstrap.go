@@ -200,6 +200,7 @@ func New(cfg Config) *Core {
 
 	ensureBuiltinAgents(agents)
 	ensureBuiltinSkills(skills)
+	ensureBuiltinConnectors(mcpManager)
 
 	marketReg := marketadapter.NewRegistry(appCfg.Market.Sources)
 	marketMgr := service.NewMarketManager(configManager, marketReg, skills, agents, mcpManager)
@@ -431,10 +432,111 @@ func ensureBuiltinAgents(agents *service.AgentManager) {
 		return
 	}
 	for _, tmpl := range templates {
-		if _, err := agents.Get(ctx, tmpl.Agent.ID); err == nil {
+		existing, err := agents.Get(ctx, tmpl.Agent.ID)
+		if err != nil {
+			if err := agents.Upsert(ctx, tmpl.Agent); err != nil {
+				log.Printf("[bootstrap] seed builtin agent %q: %v", tmpl.Agent.ID, err)
+			}
 			continue
 		}
-		_ = agents.Upsert(ctx, tmpl.Agent)
+		// Template-backed agents must not stay "custom": clear accidental marketSource
+		// and backfill empty skill/MCP bindings from the embedded template.
+		if existing.MarketSource != "" {
+			continue
+		}
+		changed := false
+		if len(existing.SkillIDs) == 0 && len(tmpl.Agent.SkillIDs) > 0 {
+			existing.SkillIDs = append([]string(nil), tmpl.Agent.SkillIDs...)
+			changed = true
+		}
+		if len(existing.MCPServers) == 0 && len(tmpl.Agent.MCPServers) > 0 {
+			existing.MCPServers = append([]string(nil), tmpl.Agent.MCPServers...)
+			changed = true
+		}
+		if existing.InheritAmbient == nil && tmpl.Agent.InheritAmbient != nil {
+			existing.InheritAmbient = tmpl.Agent.InheritAmbient
+			changed = true
+		}
+		if existing.Mode == "" && tmpl.Agent.Mode != "" {
+			existing.Mode = tmpl.Agent.Mode
+			changed = true
+		}
+		if changed {
+			if err := agents.Upsert(ctx, *existing); err != nil {
+				log.Printf("[bootstrap] backfill builtin agent %q: %v", tmpl.Agent.ID, err)
+			}
+		}
+	}
+}
+
+func ensureBuiltinConnectors(mcp *service.MCPManager) {
+	ctx := context.Background()
+	for _, id := range service.BuiltinConnectorIDs {
+		entry := service.CatalogEntryByID(id)
+		if entry == nil {
+			log.Printf("[bootstrap] missing catalog entry for builtin connector %q", id)
+			continue
+		}
+		if id == "danmo-make" {
+			entry.URL = service.ResolveDanmoMakeMCPURL()
+		}
+		if existing, err := mcp.Get(ctx, id); err == nil {
+			syncBuiltinConnector(ctx, mcp, existing, entry)
+			continue
+		}
+		if existing, ok, err := mcp.FindByCatalogID(ctx, id); err == nil && ok {
+			syncBuiltinConnector(ctx, mcp, existing, entry)
+			continue
+		}
+		req := service.InstallCatalogEntry(*entry, entry.Name)
+		req.ID = id
+		req.CatalogID = id
+		if _, err := mcp.Create(ctx, req); err != nil {
+			log.Printf("[bootstrap] seed builtin connector %q: %v", id, err)
+		}
+	}
+}
+
+func syncBuiltinConnector(ctx context.Context, mcp *service.MCPManager, existing domain.MCPServer, entry *domain.ConnectorCatalogEntry) {
+	wantURL := existing.URL
+	if entry.URL != "" {
+		loopback := strings.HasPrefix(existing.URL, "http://127.0.0.1:") ||
+			strings.HasPrefix(existing.URL, "http://localhost:")
+		if loopback || existing.URL == "" {
+			wantURL = entry.URL
+		}
+	}
+	wantAmbient := true
+	if entry.AmbientMount != nil {
+		wantAmbient = *entry.AmbientMount
+	}
+	wantTimeout := existing.ToolTimeout
+	if entry.ToolTimeout > 0 {
+		wantTimeout = entry.ToolTimeout
+	}
+	if existing.URL == wantURL && existing.AmbientMount == wantAmbient && existing.ToolTimeout == wantTimeout {
+		return
+	}
+	req := domain.UpsertMCPServerRequest{
+		Name:         existing.Name,
+		Description:  existing.Description,
+		Transport:    existing.Transport,
+		Command:      existing.Command,
+		Args:         existing.Args,
+		URL:          wantURL,
+		Env:          existing.Env,
+		Headers:      existing.Headers,
+		Auth:         existing.Auth,
+		CatalogID:    existing.CatalogID,
+		MarketSource: existing.MarketSource,
+		EnabledTools: existing.EnabledTools,
+		ToolTimeout:  wantTimeout,
+		Enabled:      existing.Enabled,
+		Network:      existing.Network,
+		AmbientMount: &wantAmbient,
+	}
+	if _, err := mcp.Update(ctx, existing.ID, req); err != nil {
+		log.Printf("[bootstrap] sync builtin connector %q: %v", existing.ID, err)
 	}
 }
 

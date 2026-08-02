@@ -13,19 +13,19 @@ import (
 // ---- Agent ----
 
 type agentModel struct {
-	ID              string `gorm:"primaryKey"`
-	Name            string
-	Description     string
-	Persona         string
-	Mode            string
-	SystemPrompt    string `gorm:"column:system_prompt"`
-	Steps           int
-	SkillIDsJSON    string `gorm:"column:skill_ids"`
-	ToolsJSON       string `gorm:"column:tools"`
-	MCPServersJSON  string `gorm:"column:mcp_servers"`
-	KnowledgeJSON   string `gorm:"column:knowledge_ids"`
-	CanDelegate     bool   `gorm:"column:can_delegate"`
-	InheritAmbient  *bool  `gorm:"column:inherit_ambient"`
+	ID             string `gorm:"primaryKey"`
+	Name           string
+	Description    string
+	Persona        string
+	Mode           string
+	SystemPrompt   string `gorm:"column:system_prompt"`
+	Steps          int
+	SkillIDsJSON   string `gorm:"column:skill_ids"`
+	ToolsJSON      string `gorm:"column:tools"`
+	MCPServersJSON string `gorm:"column:mcp_servers"`
+	KnowledgeJSON  string `gorm:"column:knowledge_ids"`
+	CanDelegate    bool   `gorm:"column:can_delegate"`
+	InheritAmbient *bool  `gorm:"column:inherit_ambient"`
 }
 
 func (agentModel) TableName() string { return "agents" }
@@ -51,7 +51,7 @@ func (m *agentModel) tools() []domain.ToolBinding {
 	}
 	return v
 }
-func (m *agentModel) mcpServers() []string { return unmarshalSlice[string](m.MCPServersJSON) }
+func (m *agentModel) mcpServers() []string   { return unmarshalSlice[string](m.MCPServersJSON) }
 func (m *agentModel) knowledgeIDs() []string { return unmarshalSlice[string](m.KnowledgeJSON) }
 
 func agentToDomain(m agentModel) domain.Agent {
@@ -60,7 +60,7 @@ func agentToDomain(m agentModel) domain.Agent {
 		Mode: domain.AgentMode(m.Mode), SystemPrompt: m.SystemPrompt, Steps: m.Steps,
 		SkillIDs: m.skillIDs(), Tools: m.tools(), MCPServers: m.mcpServers(),
 		KnowledgeIDs: m.knowledgeIDs(),
-		CanDelegate: m.CanDelegate, InheritAmbient: m.InheritAmbient,
+		CanDelegate:  m.CanDelegate, InheritAmbient: m.InheritAmbient,
 	}
 	domain.NormalizeAgentBindings(&a)
 	return a
@@ -104,9 +104,9 @@ func (m *skillModel) BeforeSave(_ *gorm.DB) error {
 	return nil
 }
 
-func (m *skillModel) keywords() []string             { return unmarshalSlice[string](m.KeywordsJSON) }
-func (m *skillModel) toolIDs() []string              { return unmarshalSlice[string](m.ToolIDsJSON) }
-func (m *skillModel) metadata() map[string]string    { return unmarshalMap(m.MetadataJSON) }
+func (m *skillModel) keywords() []string          { return unmarshalSlice[string](m.KeywordsJSON) }
+func (m *skillModel) toolIDs() []string           { return unmarshalSlice[string](m.ToolIDsJSON) }
+func (m *skillModel) metadata() map[string]string { return unmarshalMap(m.MetadataJSON) }
 
 func skillToDomain(m skillModel) domain.Skill {
 	meta := m.metadata()
@@ -248,16 +248,16 @@ func approvalFromDomain(a domain.Approval) approvalModel {
 // ---- PendingMessage ----
 
 type pendingMessageModel struct {
-	ID            string    `gorm:"primaryKey"`
-	SessionID     string    `gorm:"column:session_id;index"`
-	Content       string    `gorm:"column:content"`
-	AttachmentsJSON string  `gorm:"column:attachments_json"`
-	Position      int       `gorm:"column:position;index"`
-	Status        string    `gorm:"column:status;index"`
-	AgentID       string    `gorm:"column:agent_id"`
-	ModelID       string    `gorm:"column:model_id"`
-	CreatedAt     time.Time `gorm:"column:created_at"`
-	UpdatedAt     time.Time `gorm:"column:updated_at"`
+	ID              string    `gorm:"primaryKey"`
+	SessionID       string    `gorm:"column:session_id;index"`
+	Content         string    `gorm:"column:content"`
+	AttachmentsJSON string    `gorm:"column:attachments_json"`
+	Position        int       `gorm:"column:position;index"`
+	Status          string    `gorm:"column:status;index"`
+	AgentID         string    `gorm:"column:agent_id"`
+	ModelID         string    `gorm:"column:model_id"`
+	CreatedAt       time.Time `gorm:"column:created_at"`
+	UpdatedAt       time.Time `gorm:"column:updated_at"`
 }
 
 func (pendingMessageModel) TableName() string { return "pending_messages" }
@@ -293,10 +293,10 @@ func pendingMessageFromDomain(m domain.PendingMessage) pendingMessageModel {
 // ---- StreamEvent ----
 
 type streamEventModel struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement"`
-	SessionID string    `gorm:"column:session_id;index"`
-	TurnID    string    `gorm:"column:turn_id"`
-	Seq       int64     `gorm:"index"`
+	ID        uint   `gorm:"primaryKey;autoIncrement"`
+	SessionID string `gorm:"column:session_id;index"`
+	TurnID    string `gorm:"column:turn_id"`
+	Seq       int64  `gorm:"index"`
 	Type      string
 	Payload   string
 	CreatedAt time.Time `gorm:"column:created_at"`
@@ -340,30 +340,33 @@ func turnFromDomain(t domain.TurnLog) turnModel {
 // ---- MCPServer ----
 
 type mcpServerModel struct {
-	ID                  string `gorm:"primaryKey"`
-	Name                string
-	Description         string
-	Transport           string
-	Command             string
-	Args                string
-	URL                 string
-	Env                 string
-	HeadersJSON         string `gorm:"column:headers"`
-	Auth                string `gorm:"column:auth"`
+	ID                   string `gorm:"primaryKey"`
+	Name                 string
+	Description          string
+	Transport            string
+	Command              string
+	Args                 string
+	URL                  string
+	Env                  string
+	HeadersJSON          string `gorm:"column:headers"`
+	Auth                 string `gorm:"column:auth"`
 	SecretHeadersRefJSON string `gorm:"column:secret_headers_ref"`
-	OAuthClientID       string `gorm:"column:oauth_client_id"`
-	OAuthAuthorizeURL   string `gorm:"column:oauth_authorize_url"`
-	OAuthTokenURL       string `gorm:"column:oauth_token_url"`
-	OAuthScopes         string `gorm:"column:oauth_scopes"`
-	OAuthStatus         string `gorm:"column:oauth_status"`
-	CatalogID           string `gorm:"column:catalog_id"`
-	MarketSource        string `gorm:"column:market_source"`
-	EnabledToolsJSON    string `gorm:"column:enabled_tools"`
-	DiscoveredToolsJSON string `gorm:"column:discovered_tools"`
-	ToolTimeout         int    `gorm:"column:tool_timeout"`
-	Status              string
-	Enabled             bool
-	Network             string `gorm:"column:network"` // inherit | deny | allow | allowlist
+	OAuthClientID        string `gorm:"column:oauth_client_id"`
+	OAuthAuthorizeURL    string `gorm:"column:oauth_authorize_url"`
+	OAuthTokenURL        string `gorm:"column:oauth_token_url"`
+	OAuthScopes          string `gorm:"column:oauth_scopes"`
+	OAuthStatus          string `gorm:"column:oauth_status"`
+	CatalogID            string `gorm:"column:catalog_id"`
+	MarketSource         string `gorm:"column:market_source"`
+	EnabledToolsJSON     string `gorm:"column:enabled_tools"`
+	DiscoveredToolsJSON  string `gorm:"column:discovered_tools"`
+	ToolTimeout          int    `gorm:"column:tool_timeout"`
+	Status               string
+	Enabled              bool
+	// No DB default: GORM skips false zero-values when tag has default:true, which
+	// made bound-only connectors (ambient_mount=0) persist as ambient on.
+	AmbientMount bool   `gorm:"column:ambient_mount"`
+	Network      string `gorm:"column:network"` // inherit | deny | allow | allowlist
 }
 
 func (mcpServerModel) TableName() string { return "mcp_servers" }
@@ -395,30 +398,31 @@ func mcpServerToDomain(m mcpServerModel) domain.MCPServer {
 		auth = domain.MCPAuthNone
 	}
 	return domain.MCPServer{
-		ID:                 m.ID,
-		Name:               m.Name,
-		Description:        m.Description,
-		Transport:          m.Transport,
-		Command:            m.Command,
-		Args:               m.Args,
-		URL:                m.URL,
-		Env:                m.Env,
-		Headers:            headers,
-		Auth:               auth,
-		SecretHeadersRef:   secretRefs,
-		OAuthClientID:      m.OAuthClientID,
-		OAuthAuthorizeURL:  m.OAuthAuthorizeURL,
-		OAuthTokenURL:      m.OAuthTokenURL,
-		OAuthScopes:        m.OAuthScopes,
-		OAuthStatus:        m.OAuthStatus,
-		CatalogID:          m.CatalogID,
-		MarketSource:       m.MarketSource,
-		EnabledTools:       enabledTools,
-		DiscoveredTools:    discovered,
-		ToolTimeout:        m.ToolTimeout,
-		Status:             m.Status,
-		Enabled:            m.Enabled,
-		Network:            m.Network,
+		ID:                m.ID,
+		Name:              m.Name,
+		Description:       m.Description,
+		Transport:         m.Transport,
+		Command:           m.Command,
+		Args:              m.Args,
+		URL:               m.URL,
+		Env:               m.Env,
+		Headers:           headers,
+		Auth:              auth,
+		SecretHeadersRef:  secretRefs,
+		OAuthClientID:     m.OAuthClientID,
+		OAuthAuthorizeURL: m.OAuthAuthorizeURL,
+		OAuthTokenURL:     m.OAuthTokenURL,
+		OAuthScopes:       m.OAuthScopes,
+		OAuthStatus:       m.OAuthStatus,
+		CatalogID:         m.CatalogID,
+		MarketSource:      m.MarketSource,
+		EnabledTools:      enabledTools,
+		DiscoveredTools:   discovered,
+		ToolTimeout:       m.ToolTimeout,
+		Status:            m.Status,
+		Enabled:           m.Enabled,
+		AmbientMount:      m.AmbientMount,
+		Network:           m.Network,
 	}
 }
 
@@ -477,9 +481,10 @@ func mcpServerFromDomain(s domain.MCPServer) mcpServerModel {
 		EnabledToolsJSON:     enabledToolsJSON,
 		DiscoveredToolsJSON:  discoveredJSON,
 		ToolTimeout:          timeout,
-		Status:              status,
-		Enabled:             s.Enabled,
-		Network:             s.Network,
+		Status:               status,
+		Enabled:              s.Enabled,
+		AmbientMount:         s.AmbientMount,
+		Network:              s.Network,
 	}
 }
 
@@ -600,4 +605,3 @@ func channelBindingToDomain(m channelBindingModel) domain.ChannelBinding {
 		UpdatedAt:   m.UpdatedAt,
 	}
 }
-

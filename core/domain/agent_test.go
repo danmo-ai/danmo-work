@@ -43,3 +43,22 @@ func TestNormalizeAgentBindingsSplitsMCP(t *testing.T) {
 		t.Fatalf("tools: %+v", a.Tools)
 	}
 }
+
+func TestNormalizeAgentBindingsStripsCoreTools(t *testing.T) {
+	a := Agent{
+		Tools: []ToolBinding{
+			{ToolID: "ask_user", RiskLevel: RiskLow},
+			{ToolID: "read_skill", RiskLevel: RiskLow},
+			{ToolID: "search_kb", RiskLevel: RiskLow},
+			{ToolID: "read_file", RiskLevel: RiskLow},
+			{ToolID: "memory_read", RiskLevel: RiskLow},
+		},
+	}
+	NormalizeAgentBindings(&a)
+	if len(a.Tools) != 1 || a.Tools[0].ToolID != "read_file" {
+		t.Fatalf("expected only bound builtins, got %+v", a.Tools)
+	}
+	if !IsCoreTool("ask_user") || IsCoreTool("read_file") {
+		t.Fatal("IsCoreTool mismatch")
+	}
+}

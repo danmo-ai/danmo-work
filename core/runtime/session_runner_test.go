@@ -11,10 +11,38 @@ import (
 
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
+	"danmo-work/core/runtime/tool"
 	"danmo-work/core/runtime/tool/builtin"
 	"danmo-work/core/service"
 	"danmo-work/core/store/turnlog"
 )
+
+func TestMountBuiltinToolsSkipsCoreAskUser(t *testing.T) {
+	wired := &builtin.AskUser{
+		OnAsk: func(ctx context.Context, sessionID, turnID, callID, question string, options []string, defaultOpt string, formFields []domain.AskUserFormField) (string, error) {
+			return "ok", nil
+		},
+	}
+	catalog := tool.NewRegistry(&builtin.AskUser{}, &builtin.ReadFile{})
+	engine := &Engine{toolCatalog: catalog}
+	reg := tool.NewRegistry(wired)
+	engine.mountBuiltinTools(reg, []domain.ToolBinding{
+		{ToolID: "ask_user", RiskLevel: domain.RiskLow},
+		{ToolID: "read_file", RiskLevel: domain.RiskLow},
+	})
+
+	h, ok := reg.Get("ask_user")
+	if !ok {
+		t.Fatal("ask_user missing")
+	}
+	got, ok := h.(*builtin.AskUser)
+	if !ok || got.OnAsk == nil {
+		t.Fatal("catalog ask_user stub must not overwrite wired OnAsk")
+	}
+	if _, ok := reg.Get("read_file"); !ok {
+		t.Fatal("bound read_file should still mount")
+	}
+}
 
 func TestReserveSessionTurnPreventsConcurrentStartAndResume(t *testing.T) {
 	engine := &Engine{}

@@ -48,11 +48,11 @@ func (d *Dialer) Dial(ctx context.Context, srv domain.MCPServer) (port.MCPSessio
 // ---- stdio session ----
 
 type stdioSession struct {
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	reader *bufio.Reader
-	mu     sync.Mutex
-	nextID atomic.Int64
+	cmd     *exec.Cmd
+	stdin   io.WriteCloser
+	reader  *bufio.Reader
+	mu      sync.Mutex
+	nextID  atomic.Int64
 	pending map[int64]chan rpcResponse
 	closed  atomic.Bool
 }
@@ -275,9 +275,18 @@ func (d *Dialer) dialHTTP(ctx context.Context, srv domain.MCPServer) (port.MCPSe
 	if srv.URL == "" {
 		return nil, fmt.Errorf("URL is required for HTTP transport")
 	}
-	url := strings.TrimRight(srv.URL, "/")
-	if srv.Transport == "sse" {
+	url := strings.TrimSpace(srv.URL)
+	switch srv.Transport {
+	case "streamable-http":
+		// FastMCP-style mounts often require a trailing slash (/mcp → 405, /mcp/ → OK).
+		if !strings.HasSuffix(url, "/") {
+			url += "/"
+		}
+	case "sse":
+		url = strings.TrimRight(url, "/")
 		url = strings.TrimSuffix(url, "/sse")
+	default:
+		url = strings.TrimRight(url, "/")
 	}
 	headers := map[string]string{}
 	for k, v := range srv.Headers {
@@ -289,8 +298,8 @@ func (d *Dialer) dialHTTP(ctx context.Context, srv domain.MCPServer) (port.MCPSe
 		}
 	}
 	s := &httpSession{
-		url:    url,
-		client: &http.Client{Timeout: 60 * time.Second},
+		url:     url,
+		client:  &http.Client{Timeout: 60 * time.Second},
 		headers: headers,
 	}
 	s.nextID.Store(1)

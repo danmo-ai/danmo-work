@@ -41,27 +41,37 @@ if [[ "$TRIPLE" == *"-pc-windows-msvc" ]]; then
   SIDECAR_NAME="$SIDECAR_NAME.exe"
 fi
 SIDECAR_PATH="$DQ_ROOT/desktop/src-tauri/bin/$SIDECAR_NAME"
-if [[ ! -f "$SIDECAR_PATH" ]]; then
-  echo "==> Sidecar missing ($SIDECAR_NAME); building..."
-  "$SCRIPT_DIR/build_sidecar.sh"
+# Always rebuild the Go binary so go:embed (agents/skills) stays current.
+# A stale sidecar was why new experts (e.g. danmo-make) showed as "custom".
+DEV_BACKEND_BIN="$DQ_RUN_DIR/backend-bin"
+echo "==> Building dev backend -> $DEV_BACKEND_BIN"
+(cd "$DQ_ROOT" && go build -o "$DEV_BACKEND_BIN" ./server)
+mkdir -p "$(dirname "$SIDECAR_PATH")"
+cp -f "$DEV_BACKEND_BIN" "$SIDECAR_PATH"
+# Keep ~/.danmo-work/bin in sync when present (some launch paths use it).
+if [[ -d "$HOME/.danmo-work/bin" ]]; then
+  cp -f "$DEV_BACKEND_BIN" "$HOME/.danmo-work/bin/danmo-work-backend"
 fi
 echo "==> Sidecar binary: $SIDECAR_PATH"
 echo ""
 
+# Tauri always used to reclaim :7801 + spawn ~/.danmo-work/bin sidecar. That
+# fights the script-started backend below (one `make dev-desktop`, two owners).
+# Tell the Rust shell to leave :7801 alone whenever we already have / expect API.
+export WORK_EXTERNAL_BACKEND=1
+
 if [[ "${SKIP_BACKEND:-0}" == "1" ]]; then
   echo "==> SKIP_BACKEND=1: using external backend (e.g. GoLand on port ${BACKEND_PORT})"
+  echo "    WORK_EXTERNAL_BACKEND=1 (Tauri will not reclaim/spawn sidecar)"
   echo ""
 else
-  DEV_BACKEND_BIN="$DQ_RUN_DIR/backend-bin"
-  echo "==> Building dev backend -> $DEV_BACKEND_BIN"
-  (cd "$DQ_ROOT" && go build -o "$DEV_BACKEND_BIN" ./server)
-
   export DQ_DEV_ENV=$'WORK_AUTO_APPROVE='"${WORK_AUTO_APPROVE:-false}"$'\nWORK_ADDR=0.0.0.0:'"${BACKEND_PORT}"
   dq_dev_start backend "$DQ_ROOT" "$DEV_BACKEND_BIN"
   unset DQ_DEV_ENV
 
   echo "==> Backend PID: $(cat "$DQ_RUN_DIR/backend.pid")"
   echo "    Logs: $DQ_RUN_DIR/backend.log"
+  echo "    WORK_EXTERNAL_BACKEND=1 (Tauri will not reclaim/spawn sidecar)"
   echo ""
 fi
 

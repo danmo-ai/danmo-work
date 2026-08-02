@@ -192,24 +192,24 @@ type appMetaModel struct {
 
 func (appMetaModel) TableName() string { return "app_meta" }
 
-func (s *Store) Agents() port.AgentRepo             { return &agentRepo{s} }
-func (s *Store) Skills() port.SkillRepo             { return &skillRepo{s} }
-func (s *Store) SkillFiles() port.SkillFileRepo     { return &skillFileRepo{s} }
-func (s *Store) Sessions() port.SessionRepo         { return &sessionRepo{s} }
-func (s *Store) Projects() port.ProjectRepo         { return &projectRepo{s} }
-func (s *Store) LLMConfig() port.LLMConfigRepo      { return &llmConfigRepo{s} }
+func (s *Store) Agents() port.AgentRepo                   { return &agentRepo{s} }
+func (s *Store) Skills() port.SkillRepo                   { return &skillRepo{s} }
+func (s *Store) SkillFiles() port.SkillFileRepo           { return &skillFileRepo{s} }
+func (s *Store) Sessions() port.SessionRepo               { return &sessionRepo{s} }
+func (s *Store) Projects() port.ProjectRepo               { return &projectRepo{s} }
+func (s *Store) LLMConfig() port.LLMConfigRepo            { return &llmConfigRepo{s} }
 func (s *Store) Approvals() port.ApprovalRepo             { return &approvalRepo{s} }
 func (s *Store) PendingMessages() port.PendingMessageRepo { return &pendingMessageRepo{s} }
 func (s *Store) StreamEvents() port.StreamEventRepo       { return &streamEventRepo{s} }
-func (s *Store) Turns() port.TurnRepo               { return &turnRepo{s} }
-func (s *Store) MCPServers() port.MCPServerRepo     { return &mcpServerRepo{s} }
-func (s *Store) Secrets() port.SecretStore          { return newSecretStore(s.db) }
-func (s *Store) Automations() port.AutomationRepo   { return &automationRepo{s} }
-func (s *Store) Memories() port.MemoryRepo          { return &memoryRepo{s} }
-func (s *Store) WeixinAccounts() port.WeixinAccountRepo { return &weixinAccountRepo{s} }
-func (s *Store) WeixinBindings() port.WeixinBindingRepo { return &weixinBindingRepo{s} }
+func (s *Store) Turns() port.TurnRepo                     { return &turnRepo{s} }
+func (s *Store) MCPServers() port.MCPServerRepo           { return &mcpServerRepo{s} }
+func (s *Store) Secrets() port.SecretStore                { return newSecretStore(s.db) }
+func (s *Store) Automations() port.AutomationRepo         { return &automationRepo{s} }
+func (s *Store) Memories() port.MemoryRepo                { return &memoryRepo{s} }
+func (s *Store) WeixinAccounts() port.WeixinAccountRepo   { return &weixinAccountRepo{s} }
+func (s *Store) WeixinBindings() port.WeixinBindingRepo   { return &weixinBindingRepo{s} }
 func (s *Store) ChannelBindings() port.ChannelBindingRepo { return &channelBindingRepo{s} }
-func (s *Store) AppMeta() port.AppMetaRepo              { return &appMetaRepo{s} }
+func (s *Store) AppMeta() port.AppMetaRepo                { return &appMetaRepo{s} }
 
 // ---- AgentRepo ----
 
@@ -774,11 +774,19 @@ func (r *mcpServerRepo) Get(ctx context.Context, id string) (domain.MCPServer, e
 
 func (r *mcpServerRepo) Upsert(ctx context.Context, s domain.MCPServer) error {
 	m := mcpServerFromDomain(s)
+	cols := []string{
+		"Name", "Description", "Transport", "Command", "Args", "URL", "Env",
+		"HeadersJSON", "Auth", "SecretHeadersRefJSON",
+		"OAuthClientID", "OAuthAuthorizeURL", "OAuthTokenURL", "OAuthScopes", "OAuthStatus",
+		"CatalogID", "MarketSource", "EnabledToolsJSON", "DiscoveredToolsJSON",
+		"ToolTimeout", "Status", "Enabled", "AmbientMount", "Network",
+	}
 	var existing mcpServerModel
 	if err := r.s.db.WithContext(ctx).First(&existing, "id = ?", s.ID).Error; err != nil {
-		return r.s.db.WithContext(ctx).Create(&m).Error
+		// Select includes AmbientMount/Enabled so false is not dropped (GORM zero-value skip).
+		return r.s.db.WithContext(ctx).Select(append([]string{"ID"}, cols...)).Create(&m).Error
 	}
-	return r.s.db.WithContext(ctx).Model(&existing).Updates(&m).Error
+	return r.s.db.WithContext(ctx).Model(&existing).Select(cols).Updates(&m).Error
 }
 
 func (r *mcpServerRepo) Delete(ctx context.Context, id string) error {
@@ -1045,7 +1053,7 @@ func (r *weixinBindingRepo) Upsert(ctx context.Context, b domain.WeixinBinding) 
 	m := weixinBindingModel{
 		ID: b.ID, AccountID: b.AccountID, PeerUserID: b.PeerUserID,
 		SessionID: b.SessionID, ContextToken: b.ContextToken,
-		MetaJSON: string(metaJSON),
+		MetaJSON:  string(metaJSON),
 		CreatedAt: b.CreatedAt, UpdatedAt: b.UpdatedAt,
 	}
 	var existing weixinBindingModel
@@ -1138,4 +1146,3 @@ func (r *channelBindingRepo) DeleteByAccount(ctx context.Context, channelType, a
 		Where("channel_type = ? AND account_id = ?", channelType, accountID).
 		Delete(&channelBindingModel{}).Error
 }
-

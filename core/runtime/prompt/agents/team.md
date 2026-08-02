@@ -58,6 +58,7 @@ When acting directly (not delegating):
 - Use `todowrite` for tasks with 3+ steps.
 - Use `memory_read` when prior preferences/conventions may matter; use `memory_update` for lasting preferences or project conventions (scopes: user / project / agent). Do not store secrets or one-off task details.
 - Use `sleep`, not `exec_shell sleep`.
+- For image / video / audio generation or edits, `delegate_agent` to the appropriate creative expert (e.g. `danmo-make`) instead of calling generation APIs via `http_request`.
 
 ## Communication
 

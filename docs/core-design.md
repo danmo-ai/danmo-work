@@ -361,7 +361,7 @@ Agent 可用能力按三层合成；Skill 与连接器共用同一 Ambient 开�
 |----|------|----------|
 | **Core** | `ask_user`、`memory_*`、`table_*`、`read_skill`、`search_kb`（有 KB 时）；`delegate_agent`（`canDelegate`） | 始终（与绑定无关） |
 | **Bound** | Agent `skillIds`（DB 技能）+ `tools[]`（builtin）+ `mcpServers[]`（连接器 id） | 始终按 Agent 配置 |
-| **Ambient** | 磁盘技能目录 + **全部已启用连接器** | 仅当 `inheritAmbient`（默认：`primary=true`，`subagent=false`） |
+| **Ambient** | 磁盘技能目录 + **已启用且 `ambientMount!=false` 的连接器** | 仅当 `inheritAmbient`（默认：`primary=true`，`subagent=false`） |
 
 `inheritAmbient` 可在 Agent JSON / YAML（`inherit_ambient`）/ Teams UI 覆盖；`null` 表示按 Mode 默认。
 
@@ -385,7 +385,9 @@ Agent 可用能力按三层合成；Skill 与连接器共用同一 Ambient 开�
 - Agent 侧：`mcpServers: ["github", "notion"]`（YAML `mcp_servers`，字段名保留技术 id）；**不支持通配符**。
 - `tools[]` 只绑 builtin（`tool_id`）；旧版 `tools[].mcp_server` 读入时迁移到 `mcpServers`。
 - 单个动作的启用/禁用在连接器配置里（discover 后 persist），不绑到 Agent。
-- Ambient 开：`MountAllMCP`；Ambient 关：仅 `MountServers(agent.MCPServers)`。
+- Ambient 开：`MountAllMCP`（跳过 `ambientMount=false` 的连接器）；Ambient 关：仅 `MountServers(agent.MCPServers)`。
+- 连接器预设可声明 `ambientMount: false`（bound-only）与 `toolTimeout`；安装时写入实例，无按连接器 id 硬编码。
+- 产品内置连接器（如 `danmo-make`）由 bootstrap `ensureBuiltinConnectors` 以固定 server id 自动 seed；专家/技能走 embedded `prompt/agents` + `prompt/skills`（UI「内置」= 存在 template）。
 
 | Tool / 能力 | 条件 |
 |------|------|
@@ -395,7 +397,7 @@ Agent 可用能力按三层合成；Skill 与连接器共用同一 Ambient 开�
 | `ask_user` / `read_skill` | Core |
 | `delegate_agent` | Core + `canDelegate` |
 | 其它 builtin | Bound：`tools[].toolId` |
-| 连接器动作 | Ambient 全开，或 Bound：`mcpServers[]` |
+| 连接器动作 | Ambient（`ambientMount` 允许时），或 Bound：`mcpServers[]` |
 | 磁盘技能 | Ambient（`inheritAmbient`） |
 
 ### 7.1.1 外部 API 分层（避免 Tool 元数据膨胀）

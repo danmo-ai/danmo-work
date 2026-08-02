@@ -1,12 +1,19 @@
 package service
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"danmo-work/core/domain"
 )
 
 // DefaultConnectorCatalog returns built-in MCP connector presets.
 // Deprecated: prefer market.sources → dq-market kind=connector packages.
 // Kept for the legacy GET /mcp/catalog API.
+// Product builtins that must exist without market install are also listed in
+// BuiltinConnectorIDs and seeded by bootstrap.
 func DefaultConnectorCatalog() []domain.ConnectorCatalogEntry {
 	return []domain.ConnectorCatalogEntry{
 		{
@@ -95,13 +102,78 @@ func DefaultConnectorCatalog() []domain.ConnectorCatalogEntry {
 			Region:      "global",
 			Tags:        []string{"local", "files", "test"},
 		},
+		DanmoMakeCatalogEntry(),
 	}
+}
+
+// BuiltinConnectorIDs are product connectors auto-seeded on bootstrap (fixed server id).
+var BuiltinConnectorIDs = []string{"danmo-make"}
+
+// DanmoMakeCatalogEntry is the built-in local creative MCP preset.
+func DanmoMakeCatalogEntry() domain.ConnectorCatalogEntry {
+	return domain.ConnectorCatalogEntry{
+		ID:           "danmo-make",
+		Name:         "Danmo Make",
+		Description:  "Local image/video/audio generation via Danmo Make MCP (bound-only; use with danmo-make expert).",
+		Category:     "local",
+		Transport:    "streamable-http",
+		URL:          ResolveDanmoMakeMCPURL(),
+		Auth:         domain.MCPAuthNone,
+		DocsURL:      "https://github.com/danmo-ai/danmo-make",
+		Region:       "global",
+		Tags:         []string{"danmo-make", "image", "video", "audio", "generation", "local"},
+		ToolTimeout:  900,
+		AmbientMount: boolPtr(false),
+	}
+}
+
+// ResolveDanmoMakeMCPURL reads ~/.danmo-make/api.port when present, else :7800.
+// Trailing slash is required for FastMCP streamable-http mounts.
+func ResolveDanmoMakeMCPURL() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "http://127.0.0.1:7800/mcp/"
+	}
+	raw, err := os.ReadFile(filepath.Join(home, ".danmo-make", "api.port"))
+	if err != nil {
+		return "http://127.0.0.1:7800/mcp/"
+	}
+	port := strings.TrimSpace(string(raw))
+	if port == "" {
+		return "http://127.0.0.1:7800/mcp/"
+	}
+	return fmt.Sprintf("http://127.0.0.1:%s/mcp/", port)
+}
+
+func boolPtr(v bool) *bool { return &v }
+
+// CatalogEntryByID returns a DefaultConnectorCatalog entry or nil.
+func CatalogEntryByID(id string) *domain.ConnectorCatalogEntry {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil
+	}
+	for _, e := range DefaultConnectorCatalog() {
+		if e.ID == id {
+			cp := e
+			return &cp
+		}
+	}
+	return nil
 }
 
 // InstallCatalogEntry builds an UpsertMCPServerRequest from a catalog preset.
 func InstallCatalogEntry(entry domain.ConnectorCatalogEntry, name string) domain.UpsertMCPServerRequest {
 	if name == "" {
 		name = entry.Name
+	}
+	timeout := 300
+	if entry.ToolTimeout > 0 {
+		timeout = entry.ToolTimeout
+	}
+	ambient := true
+	if entry.AmbientMount != nil {
+		ambient = *entry.AmbientMount
 	}
 	return domain.UpsertMCPServerRequest{
 		Name:              name,
@@ -117,6 +189,7 @@ func InstallCatalogEntry(entry domain.ConnectorCatalogEntry, name string) domain
 		CatalogID:         entry.ID,
 		Enabled:           true,
 		EnabledTools:      []string{"*"},
-		ToolTimeout:       300,
+		ToolTimeout:       timeout,
+		AmbientMount:      &ambient,
 	}
 }

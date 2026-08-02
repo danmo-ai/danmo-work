@@ -597,62 +597,82 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
         </div>
       </section>
 
-      <section v-show="activeTab === 'tools'" class="resource-section">
-        <div class="resource-form-grid resource-form-grid--3">
-          <label class="resource-field">
-            <span class="resource-field__label">Tool ID</span>
-            <DqInput v-model="pendingTool.toolId" class="resource-input-mono" placeholder="read_file" @keydown.enter.prevent="addTool" />
-          </label>
-          <label class="resource-field">
-            <span class="resource-field__label">{{ $t('common.riskLevel') }}</span>
-            <DqSelect v-model="pendingTool.riskLevel" placeholder="Risk">
-              <DqOption value="low" label="Low" />
-              <DqOption value="medium" label="Medium" />
-              <DqOption value="high" label="High" />
-              <DqOption value="external" label="External" />
-            </DqSelect>
-          </label>
-          <div class="resource-field resource-field--action">
-            <DqButton @click="addTool">{{ $t('common.addTool') }}</DqButton>
+      <section v-show="activeTab === 'tools'" class="resource-section resource-section--tools">
+        <div class="resource-panel">
+          <div class="resource-section__head">
+            <h3 class="resource-section__title">{{ $t('teams.builtinToolsLabel') }}</h3>
+            <p class="resource-section__desc">{{ $t('teams.builtinToolsHint') }}</p>
           </div>
-        </div>
-        <div class="resource-list-card">
-          <div v-for="(tool, idx) in agentForm.tools" :key="idx" class="resource-list-card__item">
-            <div class="resource-list-card__meta">
-              <span class="resource-list-card__name">{{ tool.toolId }}</span>
-              <span class="resource-list-card__desc">{{ tool.riskLevel || 'low' }}</span>
-            </div>
-            <div class="resource-list-card__actions">
-              <DqSelect v-model="tool.riskLevel" class="resource-list-card__risk-select" size="sm">
-                <DqOption value="low" label="Low" />
-                <DqOption value="medium" label="Medium" />
-                <DqOption value="high" label="High" />
-                <DqOption value="external" label="External" />
+          <div class="resource-form-grid resource-form-grid--3">
+            <label class="resource-field">
+              <span class="resource-field__label">{{ $t('toolsPage.toolId') }}</span>
+              <DqInput
+                v-model="pendingTool.toolId"
+                class="resource-input-mono"
+                :placeholder="$t('teams.toolIdPlaceholder')"
+                @keydown.enter.prevent="addTool"
+              />
+            </label>
+            <label class="resource-field">
+              <span class="resource-field__label">{{ $t('common.riskLevel') }}</span>
+              <DqSelect v-model="pendingTool.riskLevel" :placeholder="$t('common.riskLevel')">
+                <DqOption value="low" :label="$t('common.riskLow')" />
+                <DqOption value="medium" :label="$t('common.riskMedium')" />
+                <DqOption value="high" :label="$t('common.riskHigh')" />
+                <DqOption value="external" :label="$t('common.riskExternal')" />
               </DqSelect>
-              <button type="button" class="resource-list-card__action resource-list-card__action--danger" @click="removeTool(idx)">{{ $t('common.delete') }}</button>
+            </label>
+            <div class="resource-field resource-field--action">
+              <DqButton type="primary" @click="addTool">{{ $t('common.addTool') }}</DqButton>
+            </div>
+          </div>
+          <DqEmpty v-if="!(agentForm.tools?.length)" :description="$t('teams.noTools')" />
+          <div v-else class="resource-list-card">
+            <div v-for="(tool, idx) in agentForm.tools" :key="`${tool.toolId}-${idx}`" class="resource-list-card__item">
+              <div class="resource-list-card__meta">
+                <span class="resource-list-card__name resource-list-card__name--mono">{{ tool.toolId }}</span>
+              </div>
+              <div class="resource-list-card__actions">
+                <DqSelect v-model="tool.riskLevel" class="resource-list-card__risk-select" size="sm">
+                  <DqOption value="low" :label="$t('common.riskLow')" />
+                  <DqOption value="medium" :label="$t('common.riskMedium')" />
+                  <DqOption value="high" :label="$t('common.riskHigh')" />
+                  <DqOption value="external" :label="$t('common.riskExternal')" />
+                </DqSelect>
+                <button type="button" class="resource-list-card__action resource-list-card__action--danger" @click="removeTool(idx)">{{ $t('common.delete') }}</button>
+              </div>
             </div>
           </div>
         </div>
 
-        <h3 class="resource-section__title">{{ $t('teams.mcpServersLabel') }}</h3>
-        <p class="resource-field__hint">{{ $t('teams.mcpServerHint') }}</p>
-        <div class="resource-form-grid resource-form-grid--3">
-          <label class="resource-field">
-            <span class="resource-field__label">{{ $t('teams.connectorIdLabel') }}</span>
-            <DqInput v-model="pendingMcpServer" class="resource-input-mono" :placeholder="$t('teams.mcpServerPlaceholder')" @keydown.enter.prevent="addMcpServer" />
-          </label>
-          <div class="resource-field resource-field--action">
-            <DqButton @click="addMcpServer">{{ $t('common.add') }}</DqButton>
+        <div class="resource-panel">
+          <div class="resource-section__head">
+            <h3 class="resource-section__title">{{ $t('teams.mcpServersLabel') }}</h3>
+            <p class="resource-section__desc">{{ $t('teams.mcpServerHint') }}</p>
           </div>
-        </div>
-        <DqEmpty v-if="!(agentForm.mcpServers?.length)" :description="$t('teams.noMcpServers')" />
-        <div v-else class="resource-list-card">
-          <div v-for="(sid, idx) in agentForm.mcpServers" :key="sid" class="resource-list-card__item">
-            <div class="resource-list-card__meta">
-              <span class="resource-list-card__name">{{ sid }}</span>
+          <div class="resource-add-row">
+            <label class="resource-field">
+              <span class="resource-field__label">{{ $t('teams.connectorIdLabel') }}</span>
+              <DqInput
+                v-model="pendingMcpServer"
+                class="resource-input-mono"
+                :placeholder="$t('teams.mcpServerPlaceholder')"
+                @keydown.enter.prevent="addMcpServer"
+              />
+            </label>
+            <div class="resource-field resource-field--action">
+              <DqButton type="primary" @click="addMcpServer">{{ $t('teams.addConnector') }}</DqButton>
             </div>
-            <div class="resource-list-card__actions">
-              <button type="button" class="resource-list-card__action resource-list-card__action--danger" @click="removeMcpServer(idx)">{{ $t('common.delete') }}</button>
+          </div>
+          <DqEmpty v-if="!(agentForm.mcpServers?.length)" :description="$t('teams.noMcpServers')" />
+          <div v-else class="resource-list-card">
+            <div v-for="(sid, idx) in agentForm.mcpServers" :key="sid" class="resource-list-card__item">
+              <div class="resource-list-card__meta">
+                <span class="resource-list-card__name resource-list-card__name--mono">{{ sid }}</span>
+              </div>
+              <div class="resource-list-card__actions">
+                <button type="button" class="resource-list-card__action resource-list-card__action--danger" @click="removeMcpServer(idx)">{{ $t('common.delete') }}</button>
+              </div>
             </div>
           </div>
         </div>

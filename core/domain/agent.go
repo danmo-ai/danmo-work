@@ -75,8 +75,25 @@ func (a Agent) InheritsAmbient() bool {
 	return a.Mode != AgentModeSubagent
 }
 
+// coreToolIDs are engine-mounted for every agent (Core layer). Binding them in
+// tools[] is redundant and harmful: mountBuiltinTools would replace the wired
+// handlers with catalog stubs (e.g. ask_user with OnAsk=nil).
+var coreToolIDs = map[string]struct{}{
+	"ask_user": {}, "read_skill": {}, "delegate_agent": {},
+	"memory_update": {}, "memory_read": {},
+	"search_kb": {}, "list_kb_docs": {}, "get_kb_doc": {},
+	"table_upsert": {}, "table_get": {}, "table_query": {}, "table_delete": {}, "table_list": {},
+}
+
+// IsCoreTool reports whether toolID is a Core-layer builtin (not Agent-bound).
+func IsCoreTool(toolID string) bool {
+	_, ok := coreToolIDs[strings.TrimSpace(toolID)]
+	return ok
+}
+
 // NormalizeAgentBindings moves legacy tools[].mcpServer entries into
-// MCPServers, drops wildcards/empties, and keeps tools[] as builtins only.
+// MCPServers, drops wildcards/empties/Core tools, and keeps tools[] as
+// Bound builtins only.
 func NormalizeAgentBindings(a *Agent) {
 	if a == nil {
 		return
@@ -104,7 +121,7 @@ func NormalizeAgentBindings(a *Agent) {
 			continue
 		}
 		tid := strings.TrimSpace(t.ToolID)
-		if tid == "" {
+		if tid == "" || IsCoreTool(tid) {
 			continue
 		}
 		outTools = append(outTools, ToolBinding{ToolID: tid, RiskLevel: t.RiskLevel})

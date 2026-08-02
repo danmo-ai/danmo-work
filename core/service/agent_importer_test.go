@@ -20,7 +20,9 @@ mcp_servers:
 skills:
   - meeting-notes
 tools:
-  - tool_id: read_skill
+  - tool_id: ask_user
+    risk_level: low
+  - tool_id: read_file
     risk_level: low
   - mcp_server: notion
     risk_level: external
@@ -46,8 +48,8 @@ You facilitate meetings.
 	if a.InheritAmbient == nil || *a.InheritAmbient {
 		t.Fatalf("inherit_ambient: %+v", a.InheritAmbient)
 	}
-	if len(a.Tools) != 1 || a.Tools[0].ToolID != "read_skill" {
-		t.Fatalf("tools: %+v", a.Tools)
+	if len(a.Tools) != 1 || a.Tools[0].ToolID != "read_file" {
+		t.Fatalf("tools (Core ask_user must be stripped): %+v", a.Tools)
 	}
 	if len(a.MCPServers) != 2 || a.MCPServers[0] != "github" || a.MCPServers[1] != "notion" {
 		t.Fatalf("mcpServers: %+v", a.MCPServers)

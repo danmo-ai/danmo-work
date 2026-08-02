@@ -33,6 +33,7 @@ type MCPCaller interface {
 // MCPToolSync receives rebuilt tool handlers when MCP servers change.
 // Implemented by the runtime Engine (wired in bootstrap).
 type MCPToolSync interface {
-	ReplaceMCPServer(serverID string, tools []domain.MCPToolBinding)
+	// ReplaceMCPServer syncs tools; ambientMount=false skips MountAllMCP (bound-only).
+	ReplaceMCPServer(serverID string, tools []domain.MCPToolBinding, ambientMount bool)
 	RemoveMCPServer(serverID string)
 }

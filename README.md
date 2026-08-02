@@ -295,7 +295,8 @@ cp config.example.yaml ~/.danmo-work/config.yaml
 # Add LLM API keys in the UI or config
 ```
 
-Desktop with an already-running backend: `SKIP_BACKEND=1 make dev-desktop`.
+Desktop with an already-running backend: `SKIP_BACKEND=1 make dev-desktop` (sets `WORK_EXTERNAL_BACKEND=1` so Tauri does not reclaim :7801).
+Default `make dev-desktop` also starts the API from the script; Tauri skips a second sidecar spawn.
 
 ### Build & pack
 

@@ -32,3 +32,24 @@ func TestMountServersExactIDs(t *testing.T) {
 		t.Fatal("notion should not be mounted")
 	}
 }
+
+func TestMountAllMCPSkipsBoundOnly(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterServerAmbient("github", true, &stubHandler{name: "mcp_github_list"})
+	r.RegisterServerAmbient("creative", false, &stubHandler{name: "mcp_creative_gen"})
+
+	r.MountAllMCP()
+	if _, ok := r.Get("mcp_github_list"); !ok {
+		t.Fatal("ambient connector should mount")
+	}
+	if _, ok := r.Get("mcp_creative_gen"); ok {
+		t.Fatal("bound-only connector must not mount via MountAllMCP")
+	}
+
+	r2 := NewRegistry()
+	r2.CopyMCPServersFrom(r)
+	r2.MountServers([]string{"creative"})
+	if _, ok := r2.Get("mcp_creative_gen"); !ok {
+		t.Fatal("bound-only connector must mount via MountServers")
+	}
+}

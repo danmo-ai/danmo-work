@@ -19,8 +19,6 @@ tools:
     risk_level: low
   - tool_id: http_request
     risk_level: medium
-  - tool_id: search_kb
-    risk_level: low
 knowledge: []
 ---
 
