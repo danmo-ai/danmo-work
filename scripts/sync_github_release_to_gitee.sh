@@ -99,28 +99,20 @@ PY
     --data-binary @"$TMP/patch-payload.json" >/dev/null
 fi
 
-echo "Downloading small desktop + updater assets"
+echo "Downloading small desktop + updater assets (by name allowlist)"
 mkdir -p "$TMP/assets"
-gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -D "$TMP/assets" \
-  --pattern '*.dmg' \
-  --pattern '*-setup.exe' \
-  --pattern '*-setup.exe.sig' \
-  --pattern '*.deb' \
-  --pattern '*.app.tar.gz' \
-  --pattern '*.app.tar.gz.sig' \
-  --pattern 'latest.json'
-
-# Keep only allowlisted names (drop accidental matches / large leftovers).
-python3 - "$TMP/assets" <<'PY'
-import sys
+gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" >"$TMP/gh-assets.json"
+python3 - "$TMP/gh-assets.json" "$TMP/assets" "$GH_TOKEN" <<'PY'
+import json, os, sys, urllib.request
 from pathlib import Path
-root = Path(sys.argv[1])
-keep = []
-for p in list(root.iterdir()):
-    if not p.is_file():
-        continue
-    n = p.name
-    ok = (
+
+rel = json.load(open(sys.argv[1], encoding="utf-8"))
+dest = Path(sys.argv[2])
+token = sys.argv[3]
+
+def allowed(name: str) -> bool:
+    n = name
+    return (
         n.endswith(".dmg")
         or n.endswith(".deb")
         or n.endswith("-setup.exe")
@@ -129,13 +121,34 @@ for p in list(root.iterdir()):
         or n.endswith(".app.tar.gz.sig")
         or n == "latest.json"
     )
-    if ok:
-        keep.append(p)
-    else:
-        print(f"drop {n}")
-        p.unlink()
-print(f"kept {len(keep)} assets")
-if not keep:
+
+kept = 0
+for a in rel.get("assets") or []:
+    name = a.get("name") or ""
+    url = a.get("url")  # API asset URL (needs Accept: octet-stream)
+    if not name or not url or not allowed(name):
+        if name:
+            print(f"skip {name}")
+        continue
+    out = dest / name
+    print(f"download {name}")
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/octet-stream",
+            "User-Agent": "danmo-work-gitee-sync",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=180) as resp, open(out, "wb") as fh:
+        while True:
+            chunk = resp.read(1024 * 1024)
+            if not chunk:
+                break
+            fh.write(chunk)
+    kept += 1
+print(f"kept {kept} assets")
+if kept == 0:
     raise SystemExit("no desktop/updater assets to sync")
 PY
 
