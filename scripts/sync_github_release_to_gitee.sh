@@ -98,9 +98,28 @@ PY
     --data-binary @"$TMP/patch-payload.json" >/dev/null
 fi
 
-echo "Downloading GitHub assets for ${TAG}"
+echo "Downloading desktop/updater GitHub assets for ${TAG}"
 mkdir -p "$TMP/assets"
-gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -D "$TMP/assets"
+# Avoid pulling multi-hundred-MB env tars that Gitee cannot host anyway.
+gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -D "$TMP/assets" \
+  --pattern '*.dmg' \
+  --pattern '*.exe' \
+  --pattern '*.deb' \
+  --pattern '*.AppImage' \
+  --pattern '*.AppImage.sig' \
+  --pattern '*.app.tar.gz' \
+  --pattern '*.app.tar.gz.sig' \
+  --pattern '*.sig' \
+  --pattern 'latest.json' \
+  || true
+# gh --pattern is OR across flags; still drop env tars if a broad pattern matched.
+rm -f "$TMP/assets"/danmo-work-env-*.tar
+ASSET_COUNT="$(find "$TMP/assets" -type f | wc -l | tr -d ' ')"
+if [[ "$ASSET_COUNT" -eq 0 ]]; then
+  echo "ERROR: no desktop assets downloaded for ${TAG}" >&2
+  exit 1
+fi
+echo "Downloaded ${ASSET_COUNT} assets"
 
 curl -fsSL "${API}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_TOKEN}&per_page=100" \
   -o "$TMP/gitee-attach.json" || echo '[]' >"$TMP/gitee-attach.json"
@@ -152,8 +171,11 @@ should_skip_name() {
 
 is_critical_name() {
   local name="$1"
+  # AppImage is often > Gitee attachment caps (~50–100MB); treat as best-effort.
   case "$name" in
-    *.dmg|*.exe|*.deb|*.AppImage|*.app.tar.gz|*.app.tar.gz.sig|*.AppImage.sig|*-setup.exe.sig|latest.json)
+    *.AppImage|*.AppImage.sig)
+      return 1 ;;
+    *.dmg|*.exe|*.deb|*.app.tar.gz|*.app.tar.gz.sig|*-setup.exe.sig|latest.json)
       return 0 ;;
     *)
       return 1 ;;
