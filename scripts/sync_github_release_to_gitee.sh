@@ -125,13 +125,14 @@ def allowed(name: str) -> bool:
 kept = 0
 for a in rel.get("assets") or []:
     name = a.get("name") or ""
-    url = a.get("url")  # API asset URL (needs Accept: octet-stream)
+    # Public browser URL is more reliable than the API asset endpoint here.
+    url = a.get("browser_download_url") or a.get("url")
     if not name or not url or not allowed(name):
         if name:
-            print(f"skip {name}")
+            print(f"skip {name}", flush=True)
         continue
     out = dest / name
-    print(f"download {name}")
+    print(f"download {name}", flush=True)
     req = urllib.request.Request(
         url,
         headers={
@@ -140,14 +141,15 @@ for a in rel.get("assets") or []:
             "User-Agent": "danmo-work-gitee-sync",
         },
     )
-    with urllib.request.urlopen(req, timeout=180) as resp, open(out, "wb") as fh:
+    with urllib.request.urlopen(req, timeout=120) as resp, open(out, "wb") as fh:
         while True:
             chunk = resp.read(1024 * 1024)
             if not chunk:
                 break
             fh.write(chunk)
+    print(f"saved {name} ({out.stat().st_size} bytes)", flush=True)
     kept += 1
-print(f"kept {kept} assets")
+print(f"kept {kept} assets", flush=True)
 if kept == 0:
     raise SystemExit("no desktop/updater assets to sync")
 PY
@@ -208,19 +210,28 @@ PY
       >/dev/null || true
   fi
 
-  echo "Uploading ${name} (${size_mb}MB)"
-  if curl -fS --retry 2 --retry-delay 2 --max-time 300 -X POST \
-    "${API}/releases/${RELEASE_ID}/attach_files" \
+  echo "Uploading ${name} (${size_mb}MB) at $(date -u +%H:%M:%S)"
+  # Token in query + form; abort stalled uploads (GH runners → Gitee can hang).
+  if curl -fS \
+    --connect-timeout 30 \
+    --speed-time 30 \
+    --speed-limit 1000 \
+    --max-time 180 \
+    -X POST \
+    "${API}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_TOKEN}" \
     -F "access_token=${GITEE_TOKEN}" \
     -F "file=@${f};filename=${name}" \
-    -o "$TMP/upload-resp.json"; then
+    -o "$TMP/upload-resp.json" \
+    -w "http=%{http_code} bytes=%{size_upload} time=%{time_total}\n"; then
     echo "OK ${name}"
     UPLOAD_OK=$((UPLOAD_OK + 1))
     curl -fsSL --max-time 60 \
       "${API}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_TOKEN}&per_page=100" \
       -o "$TMP/gitee-attach.json" || true
   else
-    echo "FAIL ${name}" >&2
+    echo "FAIL ${name} (curl exit $?) — response:" >&2
+    head -c 500 "$TMP/upload-resp.json" 2>/dev/null >&2 || true
+    echo >&2
     UPLOAD_FAIL=$((UPLOAD_FAIL + 1))
   fi
 done <"$TMP/upload-list.txt"
