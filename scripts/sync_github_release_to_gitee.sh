@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 # Publish a Gitee Release for one GitHub tag WITHOUT uploading binary attachments.
 #
-# Why: GitHub-hosted runners (overseas) hang / fail when multipart-uploading
-# installers to gitee.com. Instead we:
-#   1) create/update the Gitee Release with notes + download links
+# Why: GitHub-hosted runners hang when multipart-uploading installers to Gitee.
+# Instead we:
+#   1) create/update the Gitee Release with notes + GitHub download links
 #   2) publish a tiny latest.json via Contents API to branch "updater"
 #      (Tauri endpoint: https://gitee.com/.../raw/updater/latest.json)
 #
-# Download links prefer the China object mirror (flat):
-#   https://releases.danmo.ai/danmo-work/<filename>
-# and always include GitHub Release URLs as fallback.
+# Artifact host is GitHub Releases. danmo.work is the marketing site (Pages),
+# not a binary CDN. Optional MIRROR_BASE_URL rewrites links when a real mirror exists.
 #
 # Required env: GITEE_TOKEN, GH_TOKEN|GITHUB_TOKEN
 # Optional: TAG, GITEE_OWNER, GITEE_REPO, GITHUB_REPOSITORY, MIRROR_BASE_URL
@@ -21,7 +20,7 @@ GITEE_REPO="${GITEE_REPO:-danmo-work}"
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-danmo-ai/danmo-work}"
 export GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
 TAG="${TAG:-}"
-MIRROR_BASE_URL="${MIRROR_BASE_URL:-https://releases.danmo.ai/danmo-work}"
+MIRROR_BASE_URL="${MIRROR_BASE_URL:-}"
 
 if [[ -z "${GITEE_TOKEN:-}" ]]; then
   echo "ERROR: GITEE_TOKEN unset" >&2
@@ -54,7 +53,7 @@ from pathlib import Path
 
 rel = json.load(open(sys.argv[1], encoding="utf-8"))
 out = Path(sys.argv[2])
-mirror = sys.argv[3].rstrip("/")
+mirror = (sys.argv[3] or "").rstrip("/")
 gh_repo = sys.argv[4]
 gitee_owner, gitee_repo = sys.argv[5:7]
 tag = rel["tag_name"]
@@ -80,21 +79,34 @@ lines = [
     "",
     "## 下载 / Downloads",
     "",
-    "安装包不放在 Gitee 附件（海外 CI → Gitee 上传不稳定）。请用镜像或 GitHub：",
+    "安装包托管在 GitHub Releases（Gitee 不存放附件）。官网 https://danmo.work 为产品站，不是下载 CDN。",
     "",
-    "| 文件 | 国内镜像 | GitHub |",
-    "| --- | --- | --- |",
 ]
-for a in assets:
-    n = a["name"]
-    gh = a.get("browser_download_url") or f"https://github.com/{gh_repo}/releases/download/{tag}/{n}"
-    cn = f"{mirror}/{n}"
-    lines.append(f"| `{n}` | [镜像]({cn}) | [GitHub]({gh}) |")
+
+if mirror:
+    lines += [
+        "| 文件 | 镜像 | GitHub |",
+        "| --- | --- | --- |",
+    ]
+    for a in assets:
+        n = a["name"]
+        gh = a.get("browser_download_url") or f"https://github.com/{gh_repo}/releases/download/{tag}/{n}"
+        lines.append(f"| `{n}` | [镜像]({mirror}/{n}) | [GitHub]({gh}) |")
+else:
+    lines += [
+        "| 文件 | GitHub |",
+        "| --- | --- |",
+    ]
+    for a in assets:
+        n = a["name"]
+        gh = a.get("browser_download_url") or f"https://github.com/{gh_repo}/releases/download/{tag}/{n}"
+        lines.append(f"| `{n}` | [下载]({gh}) |")
 
 lines += [
     "",
     f"- GitHub Release: https://github.com/{gh_repo}/releases/tag/{tag}",
     f"- 自动更新清单: https://gitee.com/{gitee_owner}/{gitee_repo}/raw/updater/latest.json",
+    f"- 官网: https://danmo.work",
     "",
 ]
 (out / "name").write_text(name, encoding="utf-8")

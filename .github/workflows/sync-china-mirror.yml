@@ -1,7 +1,7 @@
 name: Sync China Mirror
 
 # Backfill / re-sync GitHub Release assets (incl. .dmg for Homebrew) to
-# https://releases.danmo.ai/danmo-work when UPDATE_MIRROR_* secrets are set.
+# object-store mirror from UPDATE_MIRROR_BASE_URL when UPDATE_MIRROR_* secrets are set.
 
 on:
   workflow_dispatch:

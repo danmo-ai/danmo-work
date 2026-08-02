@@ -3,7 +3,7 @@
 # China-reachable object store.
 #
 # Requires:
-#   UPDATE_MIRROR_BASE_URL  e.g. https://releases.danmo.ai/danmo-work
+#   UPDATE_MIRROR_BASE_URL  e.g. https://<your-cdn>/danmo-work
 #   And one of:
 #     - aws CLI + AWS_* credentials (S3-compatible, including OSS/COS with S3 API)
 #     - rclone remote configured via UPDATE_MIRROR_RCLONE_REMOTE

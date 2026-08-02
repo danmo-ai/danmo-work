@@ -128,7 +128,9 @@ GitHub Releases `.dmg`). Short tap: `brew tap danmo-ai/tap` via repo
 `danmo-ai/homebrew-tap` + secret `HOMEBREW_TAP_TOKEN` (workflow
 **Publish Homebrew Tap**). Fine-grained PAT for `danmo-ai` must have
 **Expiration ≤ 366 days** (org policy). Fallback: tap this repo with
-full URL. Optional China mirror `releases.danmo.ai` via `UPDATE_MIRROR_*`.
+full URL. Optional release object mirror via `UPDATE_MIRROR_*`
+(set `UPDATE_MIRROR_BASE_URL` only when a real CDN/bucket exists;
+`danmo.work` is the marketing site on GitHub Pages, not a binary host).
 
 ```bash
 brew tap danmo-ai/tap

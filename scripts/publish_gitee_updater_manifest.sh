@@ -5,9 +5,9 @@
 # Stable URL used by desktop/src-tauri/tauri.conf.json:
 #   https://gitee.com/<owner>/<repo>/raw/updater/latest.json
 #
-# Platform download URLs prefer China mirror flat layout:
-#   https://releases.danmo.ai/danmo-work/<filename>
-# and fall back to the original GitHub Release URL when mirror rewrite is skipped.
+# Platform download URLs stay on GitHub Releases (real artifact host).
+# danmo.work is the marketing site (GitHub Pages), not a release CDN.
+# Optional UPDATE_MIRROR_BASE_URL may rewrite urls when a real object mirror exists.
 #
 # Required env: GITEE_TOKEN, GH_TOKEN|GITHUB_TOKEN
 # Optional: TAG, GITEE_OWNER, GITEE_REPO, GITHUB_REPOSITORY, MIRROR_BASE_URL
@@ -18,7 +18,8 @@ GITEE_REPO="${GITEE_REPO:-danmo-work}"
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-danmo-ai/danmo-work}"
 GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
 TAG="${TAG:-}"
-MIRROR_BASE_URL="${MIRROR_BASE_URL:-https://releases.danmo.ai/danmo-work}"
+# Empty by default — do not invent a dead host like releases.danmo.ai.
+MIRROR_BASE_URL="${MIRROR_BASE_URL:-}"
 
 if [[ -z "${GITEE_TOKEN:-}" ]]; then
   echo "ERROR: GITEE_TOKEN unset" >&2
@@ -54,17 +55,18 @@ import json, sys
 from urllib.parse import unquote, urlparse
 
 src, dst, mirror = sys.argv[1:4]
-mirror = mirror.rstrip("/")
+mirror = (mirror or "").rstrip("/")
 data = json.load(open(src, encoding="utf-8"))
-for plat in data.get("platforms", {}).values():
-    url = plat.get("url") or ""
-    name = unquote(urlparse(url).path.rsplit("/", 1)[-1])
-    if not name:
-        continue
-    # Prefer China object-store mirror (same flat layout as sync_updater_mirror.sh).
-    plat["url"] = f"{mirror}/{name}"
+if mirror:
+    for plat in data.get("platforms", {}).values():
+        url = plat.get("url") or ""
+        name = unquote(urlparse(url).path.rsplit("/", 1)[-1])
+        if name:
+            plat["url"] = f"{mirror}/{name}"
+    print("Rewrote platform URLs →", mirror)
+else:
+    print("Keeping GitHub Release platform URLs")
 json.dump(data, open(dst, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
-print("Rewrote platform URLs →", mirror)
 PY
 
 CONTENT_B64="$(base64 <"$TMP/latest.gitee.json" | tr -d '\n')"
@@ -103,7 +105,6 @@ PY
 )"
 
 MSG="chore(updater): publish latest.json for ${TAG}"
-# Prefer writing JSON body from a file to avoid shell-escaping issues.
 if [[ -n "${FILE_SHA}" ]]; then
   echo "Updating raw/updater/latest.json (sha=${FILE_SHA})"
   python3 - "$CONTENT_B64" "$MSG" "$FILE_SHA" <<'PY' >"$TMP/contents.json"

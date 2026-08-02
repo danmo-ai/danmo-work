@@ -1,9 +1,9 @@
 name: Sync Release to Gitee
 
-# Publish Gitee Release metadata + download links, and a tiny Tauri latest.json
-# on branch "updater". Does NOT upload installer binaries (GH runners → Gitee
-# multipart upload is unreliable). Packages are linked to releases.danmo.ai /
-# GitHub instead.
+# Publish Gitee Release metadata + GitHub download links, and a tiny Tauri
+# latest.json on branch "updater". Does NOT upload installer binaries.
+# Artifact host remains GitHub Releases (danmo.work is Pages marketing site).
+# Optional secret UPDATE_MIRROR_BASE_URL rewrites links when a real mirror exists.
 # Requires repository secret GITEE_TOKEN.
 
 on:
@@ -40,7 +40,7 @@ jobs:
           GITHUB_REPOSITORY: danmo-ai/danmo-work
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
-          MIRROR_BASE_URL: https://releases.danmo.ai/danmo-work
+          MIRROR_BASE_URL: ${{ secrets.UPDATE_MIRROR_BASE_URL }}
         run: |
           if [[ -z "${GITEE_TOKEN}" ]]; then
             echo "GITEE_TOKEN unset — skip Gitee sync"
