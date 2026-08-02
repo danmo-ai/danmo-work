@@ -1,18 +1,22 @@
 name: Sync Release to Gitee
 
-# Sync GitHub Release metadata + assets to https://gitee.com/danmo-ai/danmo-work,
-# then publish a Gitee-rewritten Tauri updater manifest at
-#   https://gitee.com/danmo-ai/danmo-work/raw/updater/latest.json
-# Requires repository secret GITEE_TOKEN (Gitee personal access token).
+# Sync one GitHub Release (assets + Gitee-rewritten latest.json) to
+# https://gitee.com/danmo-ai/danmo-work.
+# Prefer triggering after Build Release Artifacts finishes (see release.yml),
+# or run manually. Requires repository secret GITEE_TOKEN.
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag (e.g. v0.9.17). Empty = latest GitHub release.
+        description: Release tag (e.g. v0.9.18). Empty = latest GitHub release.
         required: false
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to sync
+        required: true
         type: string
 
 permissions:
@@ -26,25 +30,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Sync GitHub Release to Gitee
-        uses: trustedinster/sync-release-gitee@v1.3
-        with:
-          gitee_owner: danmo-ai
-          gitee_repo: danmo-work
-          gitee_token: ${{ secrets.GITEE_TOKEN }}
-          github_owner: danmo-ai
-          github_repo: danmo-work
-          gitee_upload_retry_times: 3
-          debug: false
-
-      - name: Publish Gitee updater latest.json
+      - name: Sync single release to Gitee
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_OWNER: danmo-ai
           GITEE_REPO: danmo-work
           GITHUB_REPOSITORY: danmo-ai/danmo-work
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+          TAG: ${{ inputs.tag }}
         run: |
-          chmod +x scripts/publish_gitee_updater_manifest.sh
-          ./scripts/publish_gitee_updater_manifest.sh
+          if [[ -z "${GITEE_TOKEN}" ]]; then
+            echo "GITEE_TOKEN unset — skip Gitee sync"
+            exit 0
+          fi
+          chmod +x scripts/sync_github_release_to_gitee.sh scripts/publish_gitee_updater_manifest.sh
+          ./scripts/sync_github_release_to_gitee.sh

@@ -559,9 +559,19 @@ jobs:
           fi
 
       - name: Publish Homebrew tap repo (optional)
+        continue-on-error: true
         working-directory: ${{ env.REPO_DIR }}
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           chmod +x scripts/publish_homebrew_tap.sh
           ./scripts/publish_homebrew_tap.sh
+
+  sync-gitee:
+    name: Sync Release to Gitee
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [publish-release]
+    uses: ./.github/workflows/sync-gitee-release.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit
