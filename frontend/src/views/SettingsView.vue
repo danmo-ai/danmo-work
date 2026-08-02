@@ -3,7 +3,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Setting, Cpu, Search, Brush, Monitor } from '@danqing/dq-shell'
 import { useLLMStore } from '@/stores/llm'
-import { useSearchConfigStore } from '@/stores/searchConfig'
+import { useSearchConfigStore, getSearchProviderMeta } from '@/stores/searchConfig'
 import { useRuntimeConfigStore } from '@/stores/runtimeConfig'
 import { useMarketConfigStore } from '@/stores/marketConfig'
 import { useModelConfigStore } from '@/stores/modelLimits'
@@ -156,6 +156,8 @@ const searchForm = ref({
   userAgent: '',
   htmlFallback: true,
 })
+const searchAdvancedOpen = ref(false)
+const searchProviderMeta = computed(() => getSearchProviderMeta(searchForm.value.provider))
 
 const marketForm = ref<ConfigMarketSection>({
   cacheTtlHours: 6,
@@ -980,6 +982,15 @@ async function handleToggleModel(modelName: string, enabled: boolean) {
 }
 
 async function handleSaveSearch() {
+  const meta = getSearchProviderMeta(searchForm.value.provider)
+  if (meta.needsApiKey && !searchForm.value.apiKey.trim()) {
+    toast.error(t('settings.searchApiKeyRequired'))
+    return
+  }
+  if (meta.needsBaseUrl && !searchForm.value.baseUrl.trim()) {
+    toast.error(t('settings.searchBaseUrlRequired'))
+    return
+  }
   const payload = {
     provider: searchForm.value.provider,
     baseUrl: searchForm.value.baseUrl.trim() || undefined,
@@ -2093,54 +2104,93 @@ const hasFooterActions = computed(() => {
               />
             </DqSelect>
           </label>
-
-          <label class="settings-field">
-            <span class="settings-field__label">{{ $t('settings.baseUrl') }}</span>
-            <DqInput v-model="searchForm.baseUrl" :placeholder="$t('settings.searchPlaceholder')" />
-          </label>
-
-          <label class="settings-field">
-            <span class="settings-field__label">{{ $t('settings.apiKey') }}</span>
-            <DqInput v-model="searchForm.apiKey" type="password" :placeholder="$t('settings.apiKeyOptional')" />
-          </label>
-
-          <label class="settings-field">
-            <span class="settings-field__label">{{ $t('settings.searchProxy') }}</span>
-            <DqInput v-model="searchForm.proxy" :placeholder="$t('settings.searchProxyPlaceholder')" />
-          </label>
-
-          <label class="settings-field">
-            <span class="settings-field__label">{{ $t('settings.searchUserAgent') }}</span>
-            <DqInput v-model="searchForm.userAgent" :placeholder="$t('settings.searchUserAgentPlaceholder')" />
-          </label>
-
-          <div class="settings-form-row">
-            <div class="settings-field settings-field--half">
-              <span class="settings-field__label">{{ $t('settings.timeout') }}</span>
-              <div class="slider-row">
-                <DqSlider v-model="searchForm.timeoutMs" :min="1000" :max="60000" :step="1000" />
-                <span class="slider-row__value">{{ searchForm.timeoutMs }}ms</span>
-              </div>
-            </div>
-            <div class="settings-field settings-field--half">
-              <span class="settings-field__label">{{ $t('settings.maxResults') }}</span>
-              <div class="slider-row">
-                <DqSlider v-model="searchForm.maxResults" :min="1" :max="10" :step="1" />
-                <span class="slider-row__value">{{ searchForm.maxResults }}</span>
-              </div>
-            </div>
+          <div class="search-provider-meta">
+            <p class="settings-form-group__desc">{{ $t(`settings.${searchProviderMeta.hintKey}`) }}</p>
+            <a
+              v-if="searchProviderMeta.signupUrl"
+              class="settings-link"
+              :href="searchProviderMeta.signupUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {{ searchProviderMeta.needsBaseUrl ? $t('settings.searchDocs') : $t('settings.getApiKey') }}
+            </a>
           </div>
 
-          <label class="settings-field settings-field--switch">
-            <span class="settings-field__label">{{ $t('settings.htmlFallback') }}</span>
-            <DqSwitch
-              :model-value="searchForm.htmlFallback"
-              size="sm"
-              @update:model-value="(v: boolean) => searchForm.htmlFallback = v"
+          <label v-if="searchProviderMeta.needsApiKey" class="settings-field">
+            <span class="settings-field__label">{{ $t('settings.apiKey') }}</span>
+            <DqInput
+              v-model="searchForm.apiKey"
+              type="password"
+              :placeholder="$t('settings.searchApiKeyRequired')"
             />
           </label>
-          <p class="settings-form-group__desc">{{ $t('settings.htmlFallbackDesc') }}</p>
 
+          <label v-if="searchProviderMeta.needsBaseUrl" class="settings-field">
+            <span class="settings-field__label">{{ $t('settings.baseUrl') }}</span>
+            <DqInput
+              v-model="searchForm.baseUrl"
+              :placeholder="$t('settings.searchBaseUrlPlaceholder')"
+            />
+            <p class="settings-form-group__desc">{{ $t('settings.searchBaseUrlRequired') }}</p>
+          </label>
+
+          <button
+            type="button"
+            class="search-advanced-toggle"
+            :aria-expanded="searchAdvancedOpen"
+            @click="searchAdvancedOpen = !searchAdvancedOpen"
+          >
+            <span>{{ $t('settings.searchAdvanced') }}</span>
+            <span class="search-advanced-toggle__chevron" :class="{ 'is-open': searchAdvancedOpen }">›</span>
+          </button>
+
+          <div v-if="searchAdvancedOpen" class="search-advanced">
+            <label v-if="searchProviderMeta.optionalBaseUrl" class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.searchOptionalBaseUrl') }}</span>
+              <DqInput
+                v-model="searchForm.baseUrl"
+                :placeholder="$t('settings.searchOptionalBaseUrlPlaceholder')"
+              />
+            </label>
+
+            <label class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.searchProxy') }}</span>
+              <DqInput v-model="searchForm.proxy" :placeholder="$t('settings.searchProxyPlaceholder')" />
+            </label>
+
+            <label class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.searchUserAgent') }}</span>
+              <DqInput v-model="searchForm.userAgent" :placeholder="$t('settings.searchUserAgentPlaceholder')" />
+            </label>
+
+            <div class="settings-form-row">
+              <div class="settings-field settings-field--half">
+                <span class="settings-field__label">{{ $t('settings.timeout') }}</span>
+                <div class="slider-row">
+                  <DqSlider v-model="searchForm.timeoutMs" :min="1000" :max="60000" :step="1000" />
+                  <span class="slider-row__value">{{ searchForm.timeoutMs }}ms</span>
+                </div>
+              </div>
+              <div class="settings-field settings-field--half">
+                <span class="settings-field__label">{{ $t('settings.maxResults') }}</span>
+                <div class="slider-row">
+                  <DqSlider v-model="searchForm.maxResults" :min="1" :max="10" :step="1" />
+                  <span class="slider-row__value">{{ searchForm.maxResults }}</span>
+                </div>
+              </div>
+            </div>
+
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.htmlFallback') }}</span>
+              <DqSwitch
+                :model-value="searchForm.htmlFallback"
+                size="sm"
+                @update:model-value="(v: boolean) => searchForm.htmlFallback = v"
+              />
+            </label>
+            <p class="settings-form-group__desc">{{ $t('settings.htmlFallbackDesc') }}</p>
+          </div>
         </div>
       </div>
 
@@ -3693,5 +3743,68 @@ const hasFooterActions = computed(() => {
   width: 200px;
   height: 200px;
   object-fit: contain;
+}
+
+.search-provider-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+  margin: -4px 0 4px;
+}
+
+.search-provider-meta .settings-form-group__desc {
+  margin: 0;
+}
+
+.settings-link {
+  font-size: var(--dq-font-size-footnote);
+  color: var(--dq-accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.settings-link:hover {
+  text-decoration: underline;
+}
+
+.search-advanced-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 0;
+  border: none;
+  border-top: 1px solid var(--dq-shell-divider);
+  background: transparent;
+  color: var(--dq-label-secondary);
+  font-size: var(--dq-font-size-body);
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+
+.search-advanced-toggle:hover {
+  color: var(--dq-label-primary);
+}
+
+.search-advanced-toggle__chevron {
+  display: inline-block;
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+  transform: rotate(0deg);
+}
+
+.search-advanced-toggle__chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.search-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 4px;
 }
 </style>
