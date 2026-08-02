@@ -1594,7 +1594,6 @@ function onTitleKeydown(e: KeyboardEvent) {
             class="session-workspace__tool"
             :class="{
               'is-active': rightDrawerOpen && rightTab === item.value,
-              'has-badge': item.badge != null && item.badge !== '',
             }"
             :aria-label="item.badge != null && item.badge !== '' ? `${item.label} ${item.badge}` : item.label"
             :title="item.badge != null && item.badge !== '' ? `${item.label} · ${item.badge}` : item.label"
@@ -1602,6 +1601,7 @@ function onTitleKeydown(e: KeyboardEvent) {
             @click="onRightIconClick(item.value)"
           >
             <component :is="item.icon" class="session-workspace__tool-icon" :size="16" :stroke-width="2" aria-hidden="true" />
+            <span class="session-workspace__tool-label">{{ item.label }}</span>
             <span
               v-if="item.badge != null && item.badge !== ''"
               class="session-workspace__tool-badge"
@@ -1924,9 +1924,8 @@ function onTitleKeydown(e: KeyboardEvent) {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  width: 30px;
   height: 28px;
-  padding: 0;
+  padding: 0 8px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -1935,14 +1934,15 @@ function onTitleKeydown(e: KeyboardEvent) {
   transition: background 0.15s ease, color 0.15s ease;
 }
 
-.session-workspace__tool.has-badge {
-  width: auto;
-  min-width: 30px;
-  padding: 0 7px 0 6px;
-}
-
 .session-workspace__tool-icon {
   flex-shrink: 0;
+}
+
+.session-workspace__tool-label {
+  font-size: var(--dq-font-size-secondary, 12px);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .session-workspace__tool:hover {
