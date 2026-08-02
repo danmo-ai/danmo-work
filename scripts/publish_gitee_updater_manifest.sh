@@ -54,14 +54,36 @@ GITEE_PREFIX="https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/releases/download/$
 
 python3 - "$TMP/latest.github.json" "$TMP/latest.gitee.json" "$GH_PREFIX" "$GITEE_PREFIX" <<'PY'
 import json, sys
+from urllib.parse import unquote, urlparse
 src, dst, gh_prefix, gitee_prefix = sys.argv[1:5]
 data = json.load(open(src, encoding="utf-8"))
+
+def hosted_on_gitee(name: str) -> bool:
+    # Mirror only small desktop/updater payloads; keep GitHub URLs for AppImage etc.
+    n = name.lower()
+    if n.endswith(".appimage") or n.endswith(".appimage.sig"):
+        return False
+    if n.startswith("danmo-work-env-"):
+        return False
+    return (
+        n.endswith(".dmg")
+        or n.endswith(".deb")
+        or n.endswith("-setup.exe")
+        or n.endswith("-setup.exe.sig")
+        or n.endswith(".app.tar.gz")
+        or n.endswith(".app.tar.gz.sig")
+        or n.endswith(".nsis.zip")
+        or n.endswith(".nsis.zip.sig")
+    )
+
 for plat in data.get("platforms", {}).values():
     url = plat.get("url", "")
+    name = unquote(urlparse(url).path.rsplit("/", 1)[-1])
+    if not hosted_on_gitee(name):
+        continue
     if url.startswith(gh_prefix):
         plat["url"] = gitee_prefix + url[len(gh_prefix):]
     elif "github.com" in url and "/releases/download/" in url:
-        # Fallback: swap host + owner/repo only when path shape matches.
         plat["url"] = url.replace("https://github.com/", "https://gitee.com/", 1)
 json.dump(data, open(dst, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
 print("Wrote", dst)

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Sync a single GitHub Release (metadata + assets) to Gitee, then publish the
-# Gitee-rewritten Tauri updater manifest (see publish_gitee_updater_manifest.sh).
+# Sync small desktop installers + Tauri updater payloads from one GitHub Release
+# to Gitee, then publish a Gitee-rewritten latest.json.
 #
-# Required env:
-#   GITEE_TOKEN
-#   GH_TOKEN or GITHUB_TOKEN
-# Optional env:
-#   TAG (default: latest GitHub release)
-#   GITEE_OWNER / GITEE_REPO / GITHUB_REPOSITORY
+# Included (~15–20MB each):
+#   *.dmg  *.exe  *.deb  *.app.tar.gz  matching *.sig  latest.json
+# Excluded (too large for Gitee attachments):
+#   *.AppImage  danmo-work-env-*.tar
+#
+# Required env: GITEE_TOKEN, GH_TOKEN|GITHUB_TOKEN
+# Optional: TAG, GITEE_OWNER, GITEE_REPO, GITHUB_REPOSITORY
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -38,7 +39,7 @@ if [[ -z "$TAG" ]]; then
   TAG="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)"
 fi
 
-echo "==> Syncing GitHub release ${TAG} → gitee.com/${GITEE_OWNER}/${GITEE_REPO}"
+echo "==> Syncing desktop/updater assets for ${TAG} → gitee.com/${GITEE_OWNER}/${GITEE_REPO}"
 
 gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json name,body,tagName \
   >"$TMP/gh-release.json"
@@ -98,105 +99,79 @@ PY
     --data-binary @"$TMP/patch-payload.json" >/dev/null
 fi
 
-echo "Downloading desktop/updater GitHub assets for ${TAG}"
+echo "Downloading small desktop + updater assets"
 mkdir -p "$TMP/assets"
-# Avoid pulling multi-hundred-MB env tars that Gitee cannot host anyway.
 gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -D "$TMP/assets" \
   --pattern '*.dmg' \
-  --pattern '*.exe' \
+  --pattern '*-setup.exe' \
+  --pattern '*-setup.exe.sig' \
   --pattern '*.deb' \
-  --pattern '*.AppImage' \
-  --pattern '*.AppImage.sig' \
   --pattern '*.app.tar.gz' \
   --pattern '*.app.tar.gz.sig' \
-  --pattern '*.sig' \
-  --pattern 'latest.json' \
-  || true
-# gh --pattern is OR across flags; still drop env tars if a broad pattern matched.
-rm -f "$TMP/assets"/danmo-work-env-*.tar
-ASSET_COUNT="$(find "$TMP/assets" -type f | wc -l | tr -d ' ')"
-if [[ "$ASSET_COUNT" -eq 0 ]]; then
-  echo "ERROR: no desktop assets downloaded for ${TAG}" >&2
-  exit 1
-fi
-echo "Downloaded ${ASSET_COUNT} assets"
+  --pattern 'latest.json'
+
+# Keep only allowlisted names (drop accidental matches / large leftovers).
+python3 - "$TMP/assets" <<'PY'
+import sys
+from pathlib import Path
+root = Path(sys.argv[1])
+keep = []
+for p in list(root.iterdir()):
+    if not p.is_file():
+        continue
+    n = p.name
+    ok = (
+        n.endswith(".dmg")
+        or n.endswith(".deb")
+        or n.endswith("-setup.exe")
+        or n.endswith("-setup.exe.sig")
+        or n.endswith(".app.tar.gz")
+        or n.endswith(".app.tar.gz.sig")
+        or n == "latest.json"
+    )
+    if ok:
+        keep.append(p)
+    else:
+        print(f"drop {n}")
+        p.unlink()
+print(f"kept {len(keep)} assets")
+if not keep:
+    raise SystemExit("no desktop/updater assets to sync")
+PY
 
 curl -fsSL "${API}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_TOKEN}&per_page=100" \
   -o "$TMP/gitee-attach.json" || echo '[]' >"$TMP/gitee-attach.json"
 
-# Gitee release attachments are typically capped (~50–100MB on community plans).
-# Prefer desktop installers; skip huge env tars and anything over MAX_UPLOAD_MB.
-MAX_UPLOAD_MB="${MAX_UPLOAD_MB:-100}"
-SKIP_GLOBS="${SKIP_GLOBS:-danmo-work-env-*.tar}"
-
-# Upload order: installers users click first, then updater payloads, then rest.
 python3 - "$TMP/assets" "$TMP/upload-list.txt" <<'PY'
-import os, sys
 from pathlib import Path
+import sys
 root = Path(sys.argv[1])
 out = Path(sys.argv[2])
-files = [p for p in root.iterdir() if p.is_file()]
-
-def rank(p: Path) -> tuple:
+files = sorted(p for p in root.iterdir() if p.is_file())
+# Installers first, then updater archive/sigs, then latest.json
+def rank(p: Path):
     n = p.name.lower()
-    if n.endswith((".dmg", ".exe", ".deb")): return (0, n)
-    if n.endswith(".appimage") or n.endswith(".appimage.sig"): return (1, n)
-    if ".app.tar.gz" in n: return (2, n)
-    if n.endswith(".sig"): return (3, n)
-    if n == "latest.json": return (4, n)
-    if n.startswith("danmo-work-env-"): return (9, n)
-    return (5, n)
-
+    if n.endswith((".dmg", ".exe", ".deb")):
+        return (0, n)
+    if ".app.tar.gz" in n:
+        return (1, n)
+    if n.endswith(".sig"):
+        return (2, n)
+    if n == "latest.json":
+        return (3, n)
+    return (4, n)
 files.sort(key=rank)
 out.write_text("\n".join(str(p) for p in files) + ("\n" if files else ""), encoding="utf-8")
-print(f"queued {len(files)} assets")
+print(f"queued {len(files)}")
 PY
 
 UPLOAD_OK=0
-UPLOAD_SKIP=0
 UPLOAD_FAIL=0
-CRITICAL_FAIL=0
-
-should_skip_name() {
-  local name="$1"
-  local g
-  for g in $SKIP_GLOBS; do
-    # shellcheck disable=SC2254
-    case "$name" in
-      $g) return 0 ;;
-    esac
-  done
-  return 1
-}
-
-is_critical_name() {
-  local name="$1"
-  # AppImage is often > Gitee attachment caps (~50–100MB); treat as best-effort.
-  case "$name" in
-    *.AppImage|*.AppImage.sig)
-      return 1 ;;
-    *.dmg|*.exe|*.deb|*.app.tar.gz|*.app.tar.gz.sig|*-setup.exe.sig|latest.json)
-      return 0 ;;
-    *)
-      return 1 ;;
-  esac
-}
 
 while IFS= read -r f; do
   [[ -z "$f" || ! -f "$f" ]] && continue
   name="$(basename "$f")"
-  size_mb="$(python3 -c 'import os,sys; print(os.path.getsize(sys.argv[1]) / (1024*1024))' "$f")"
-
-  if should_skip_name "$name"; then
-    echo "SKIP ${name} (matched SKIP_GLOBS)"
-    UPLOAD_SKIP=$((UPLOAD_SKIP + 1))
-    continue
-  fi
-  if python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) > float(sys.argv[2]) else 1)' "$size_mb" "$MAX_UPLOAD_MB"; then
-    echo "SKIP ${name} (${size_mb%.*}MB > MAX_UPLOAD_MB=${MAX_UPLOAD_MB})"
-    UPLOAD_SKIP=$((UPLOAD_SKIP + 1))
-    continue
-  fi
+  size_mb="$(python3 -c 'import os,sys; print(f"{os.path.getsize(sys.argv[1])/(1024*1024):.1f}")' "$f")"
 
   ATT_ID="$(python3 - "$TMP/gitee-attach.json" "$name" <<'PY'
 import json, sys
@@ -209,43 +184,37 @@ for a in items:
         break
 PY
 )"
-  # Skip re-upload when already present (except latest.json, rewritten later).
   if [[ -n "$ATT_ID" && "$name" != "latest.json" ]]; then
-    echo "EXISTS ${name} (id=${ATT_ID}) — skip"
+    echo "EXISTS ${name} — skip"
     UPLOAD_OK=$((UPLOAD_OK + 1))
     continue
   fi
   if [[ -n "$ATT_ID" && "$name" == "latest.json" ]]; then
-    echo "Removing existing Gitee asset ${name} (id=${ATT_ID})"
     curl -fsSL --max-time 60 -X DELETE \
       "${API}/releases/${RELEASE_ID}/attach_files/${ATT_ID}?access_token=${GITEE_TOKEN}" \
       >/dev/null || true
   fi
 
   echo "Uploading ${name} (${size_mb}MB)"
-  if curl -fS --retry 2 --retry-delay 3 --max-time 600 -X POST \
+  if curl -fS --retry 2 --retry-delay 2 --max-time 300 -X POST \
     "${API}/releases/${RELEASE_ID}/attach_files" \
     -F "access_token=${GITEE_TOKEN}" \
     -F "file=@${f};filename=${name}" \
     -o "$TMP/upload-resp.json"; then
     echo "OK ${name}"
     UPLOAD_OK=$((UPLOAD_OK + 1))
-    # Refresh attach list so later EXISTS checks see new ids.
     curl -fsSL --max-time 60 \
       "${API}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_TOKEN}&per_page=100" \
       -o "$TMP/gitee-attach.json" || true
   else
-    echo "FAIL ${name} (see curl exit; Gitee may reject oversized attachments)" >&2
+    echo "FAIL ${name}" >&2
     UPLOAD_FAIL=$((UPLOAD_FAIL + 1))
-    if is_critical_name "$name"; then
-      CRITICAL_FAIL=$((CRITICAL_FAIL + 1))
-    fi
   fi
 done <"$TMP/upload-list.txt"
 
-echo "Upload summary: ok=${UPLOAD_OK} skip=${UPLOAD_SKIP} fail=${UPLOAD_FAIL} critical_fail=${CRITICAL_FAIL}"
-if [[ "$CRITICAL_FAIL" -gt 0 ]]; then
-  echo "ERROR: one or more desktop/updater assets failed to upload" >&2
+echo "Upload summary: ok=${UPLOAD_OK} fail=${UPLOAD_FAIL}"
+if [[ "$UPLOAD_FAIL" -gt 0 || "$UPLOAD_OK" -eq 0 ]]; then
+  echo "ERROR: desktop/updater sync incomplete" >&2
   exit 1
 fi
 
