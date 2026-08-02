@@ -260,8 +260,8 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
   min-width: 0;
   display: flex;
   flex-direction: column;
-  /* Footnotes (thinking / tools) — denser than turn-level gap */
-  gap: var(--dq-chat-block-gap, 4px);
+  /* Footnotes (thinking / tools) — room between quiet tools and thinking */
+  gap: 10px;
 }
 
 .turn-section__timeline :deep(.turn__event) {
@@ -272,6 +272,14 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
 .turn-section__timeline :deep(.turn__event > *) {
   flex: 1;
   min-width: 0;
+}
+
+/* Extra breath between tool aggregates and thinking blocks */
+.turn-section__timeline :deep(.turn__event:has(.tool-group) + .turn__event:has(.thinking-block)),
+.turn-section__timeline :deep(.turn__event:has(.thinking-block) + .turn__event:has(.tool-group)),
+.turn-section__timeline :deep(.turn__event:has(.dq-tool-card) + .turn__event:has(.thinking-block)),
+.turn-section__timeline :deep(.turn__event:has(.thinking-block) + .turn__event:has(.dq-tool-card)) {
+  margin-top: 6px;
 }
 
 .turn-section__timeline :deep(.agent-msg) {

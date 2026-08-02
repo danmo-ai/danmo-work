@@ -175,7 +175,7 @@ const statusHint = computed(() => {
   flex-shrink: 0;
   font-size: var(--dq-font-size-body);
   font-weight: 500;
-  color: var(--dq-label-tertiary);
+  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
 }
 
 .tool-group__names {
@@ -185,30 +185,30 @@ const statusHint = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--dq-font-size-body);
-  color: var(--dq-label-tertiary);
+  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
   font-family: var(--dq-font-mono, ui-monospace, monospace);
 }
 
 .tool-group__header:hover .tool-group__title,
 .tool-group.is-expanded .tool-group__title {
-  color: var(--dq-label-secondary);
+  color: var(--dq-label-tertiary);
 }
 
 .tool-group.is-running .tool-group__title,
 .tool-group.is-error .tool-group__title {
   font-weight: 600;
-  color: var(--dq-label-primary);
+  color: var(--dq-label-tertiary);
 }
 
 .tool-group.is-running .tool-group__names,
 .tool-group.is-error .tool-group__names {
-  color: var(--dq-label-secondary);
+  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
 }
 
 .tool-group__hint {
   flex-shrink: 0;
   font-size: var(--dq-font-size-caption);
-  color: var(--dq-label-secondary);
+  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
   font-weight: 500;
 }
 
@@ -265,7 +265,7 @@ const statusHint = computed(() => {
 
 .tool-group__body :deep(.dq-tool-card__name) {
   font-weight: 500;
-  color: var(--dq-label-tertiary);
+  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
 }
 
 .tool-group__body :deep(.dq-tool-card__body) {

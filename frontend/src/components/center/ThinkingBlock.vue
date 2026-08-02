@@ -64,7 +64,7 @@ const preview = computed(() => props.text.replace(/\s+/g, ' ').trim())
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--dq-label-tertiary);
+  color: var(--dq-label-primary);
   cursor: pointer;
   text-align: left;
   font: inherit;
@@ -84,14 +84,14 @@ const preview = computed(() => props.text.replace(/\s+/g, ' ').trim())
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--dq-font-size-body);
-  color: var(--dq-label-tertiary);
+  color: var(--dq-label-primary);
 }
 
 .thinking-block__hint {
   flex: 0 1 auto;
   min-width: 0;
   font-size: var(--dq-font-size-body);
-  color: var(--dq-label-tertiary);
+  color: var(--dq-label-primary);
 }
 
 .thinking-block__trail {
@@ -126,7 +126,7 @@ const preview = computed(() => props.text.replace(/\s+/g, ' ').trim())
   background: color-mix(in srgb, var(--dq-label-primary) 3%, transparent);
   font-size: var(--dq-font-size-body);
   line-height: 1.45;
-  color: var(--dq-label-secondary);
+  color: var(--dq-label-primary);
   white-space: pre-wrap;
   word-break: break-word;
 }
