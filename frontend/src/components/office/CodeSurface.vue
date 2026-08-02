@@ -21,7 +21,6 @@ import {
   type CodeMirrorHost,
 } from '@/utils/codemirror-setup'
 import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
-import ElementAnnotatePopover from '@/components/center/ElementAnnotatePopover.vue'
 
 const props = defineProps<{
   projectId: string
@@ -45,15 +44,22 @@ const loading = ref(false)
 const saving = ref(false)
 const content = ref('')
 const dirty = ref(false)
+const rootRef = ref<HTMLElement | null>(null)
 const hostEl = ref<HTMLElement | null>(null)
 const selStart = ref(0)
 const selEnd = ref(0)
-const annotateOpen = ref(false)
+const floatPos = ref<{ top: number; left: number } | null>(null)
+const aiAnnotateOpen = ref(false)
+const aiInstruction = ref('')
+const aiInputRef = ref<HTMLTextAreaElement | null>(null)
+const capturedText = ref('')
+const capturedRange = ref<{ startLine: number; endLine: number } | null>(null)
 let host: CodeMirrorHost | null = null
 let suppressDocEvent = false
 
 const language = computed(() => languageFromPath(props.path))
 const readOnly = computed(() => props.mode !== 'edit' || !!props.turnRunning)
+const selectionAiEnabled = computed(() => !props.turnRunning && props.mode !== 'present')
 const isDark = computed(() => {
   const opt = THEME_OPTIONS.find((o) => o.id === currentTheme.value)
   return !!opt?.dark
@@ -64,13 +70,6 @@ const selectionRange = computed(() =>
 )
 
 const hasSelection = computed(() => selEnd.value > selStart.value)
-
-const annotateSummary = computed(() => {
-  const { startLine, endLine } = selectionRange.value
-  const base = props.path.replace(/\\/g, '/').split('/').pop() || props.path
-  if (startLine === endLine) return `${base}:${startLine}`
-  return `${base}:${startLine}–${endLine}`
-})
 
 async function ensureEditor() {
   if (host || !hostEl.value) return
@@ -92,6 +91,7 @@ async function ensureEditor() {
     onSelectionChanged: (from, to) => {
       selStart.value = from
       selEnd.value = to
+      syncFloat()
     },
   })
 }
@@ -109,6 +109,8 @@ async function load() {
     emit('dirty', false)
     selStart.value = 0
     selEnd.value = 0
+    floatPos.value = null
+    closeAiAnnotate()
     await nextTick()
     await ensureEditor()
     if (host) {
@@ -146,45 +148,128 @@ async function save(opts?: { quiet?: boolean }) {
   }
 }
 
-function openAnnotate() {
+function updateFloatFromCoords(startTop: number, startLeft: number, endRight: number, endTop: number) {
+  const root = rootRef.value
+  if (!root) {
+    floatPos.value = null
+    return
+  }
+  const rootRect = root.getBoundingClientRect()
+  const midX = (startLeft + endRight) / 2
+  const top = Math.min(startTop, endTop) - rootRect.top - 40
+  floatPos.value = {
+    top: Math.max(4, top),
+    left: Math.max(8, Math.min(midX - rootRect.left, rootRect.width - 8)),
+  }
+}
+
+function syncFloat() {
+  if (!selectionAiEnabled.value || aiAnnotateOpen.value) {
+    if (!aiAnnotateOpen.value) floatPos.value = null
+    return
+  }
+  if (!host || !hasSelection.value) {
+    floatPos.value = null
+    return
+  }
+  const { from, to } = host.view.state.selection.main
+  if (from === to) {
+    floatPos.value = null
+    return
+  }
+  const start = host.view.coordsAtPos(from)
+  const end = host.view.coordsAtPos(to)
+  if (!start || !end) {
+    floatPos.value = null
+    return
+  }
+  updateFloatFromCoords(start.top, start.left, end.right, end.top)
+}
+
+function captureSelection(): { text: string; startLine: number; endLine: number } | null {
   if (host) {
     const sel = getCodeMirrorSelection(host)
     selStart.value = sel.from
     selEnd.value = sel.to
+    if (sel.from === sel.to || !sel.text.trim()) return null
+    const range = selectionLineRange(content.value, sel.from, sel.to)
+    capturedText.value = sel.text
+    capturedRange.value = range
+    return { text: sel.text, ...range }
   }
-  if (!hasSelection.value) {
-    toast.warning(t('office.codeNeedSelection'))
-    return
-  }
-  annotateOpen.value = true
+  if (!hasSelection.value) return null
+  const text = content.value.slice(selStart.value, selEnd.value)
+  if (!text.trim()) return null
+  const range = selectionRange.value
+  capturedText.value = text
+  capturedRange.value = range
+  return { text, ...range }
 }
 
-function onAnnotateConfirm(annotation: string) {
-  annotateOpen.value = false
-  const { startLine, endLine } = selectionRange.value
-  const text = host
-    ? getCodeMirrorSelection(host).text
-    : content.value.slice(selStart.value, selEnd.value)
+function closeAiAnnotate(opts?: { restoreFloat?: boolean }) {
+  aiAnnotateOpen.value = false
+  aiInstruction.value = ''
+  if (opts?.restoreFloat) void nextTick(syncFloat)
+}
+
+function emitAttachment(annotation: string) {
+  const text = capturedText.value
+  const range = capturedRange.value
+  if (!text.trim() || !range) return
   const att = createCodeSelectionAttachment({
     path: props.path,
     language: language.value,
-    startLine,
-    endLine,
+    startLine: range.startLine,
+    endLine: range.endLine,
     text,
     annotation,
   })
   emit('attachCodeSelection', att)
   toast.success(t('office.codeAttached'))
+  floatPos.value = null
+  closeAiAnnotate()
 }
 
-function onAnnotateCancel() {
-  annotateOpen.value = false
+function requestAiWithDefaultNote(action: 'polish' | 'continue') {
+  if (!captureSelection()) return
+  const note =
+    action === 'polish' ? t('office.defaultPolishNote') : t('office.defaultExpandNote')
+  emitAttachment(note)
+}
+
+function openAiAnnotate() {
+  if (!captureSelection()) return
+  aiAnnotateOpen.value = true
+  aiInstruction.value = ''
+  floatPos.value = null
+  void nextTick(() => aiInputRef.value?.focus())
+}
+
+function confirmAiModify() {
+  const note = aiInstruction.value.trim()
+  if (!capturedText.value.trim()) {
+    closeAiAnnotate()
+    return
+  }
+  emitAttachment(note)
+}
+
+function onAiAnnotateKeydown(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault()
+    confirmAiModify()
+    return
+  }
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    closeAiAnnotate({ restoreFloat: true })
+  }
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && hasSelection.value) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && hasSelection.value && selectionAiEnabled.value) {
     e.preventDefault()
-    openAnnotate()
+    openAiAnnotate()
   }
 }
 
@@ -211,6 +296,15 @@ watch(
   },
 )
 
+watch(selectionAiEnabled, (enabled) => {
+  if (!enabled) {
+    closeAiAnnotate()
+    floatPos.value = null
+  } else {
+    void nextTick(syncFloat)
+  }
+})
+
 onBeforeUnmount(() => {
   host?.view.destroy()
   host = null
@@ -220,7 +314,7 @@ defineExpose({ save })
 </script>
 
 <template>
-  <div class="code-surface" @keydown="onKeydown">
+  <div ref="rootRef" class="code-surface" @keydown="onKeydown">
     <div class="code-surface__toolbar">
       <span class="code-surface__lang">{{ language }}</span>
       <span v-if="hasSelection" class="code-surface__sel">
@@ -229,15 +323,6 @@ defineExpose({ save })
           >–{{ selectionRange.endLine }}</template
         >
       </span>
-      <span class="code-surface__hint">{{ t('office.codeAnnotateHint') }}</span>
-      <button
-        type="button"
-        class="code-surface__btn"
-        :disabled="!hasSelection"
-        @click="openAnnotate"
-      >
-        {{ t('office.codeAnnotate') }}
-      </button>
     </div>
 
     <div v-if="loading" class="code-surface__status">{{ t('office.loading') }}</div>
@@ -248,18 +333,83 @@ defineExpose({ save })
       :class="{ 'is-readonly': readOnly }"
     />
 
-    <ElementAnnotatePopover
-      :open="annotateOpen"
-      :payload="null"
-      :summary="annotateSummary"
-      @confirm="onAnnotateConfirm"
-      @cancel="onAnnotateCancel"
-    />
+    <!-- Floating selection AI — same pattern as MarkdownRichEditor / Doc -->
+    <div
+      v-if="selectionAiEnabled && hasSelection && floatPos && !aiAnnotateOpen"
+      class="code-surface__ai-float"
+      :style="{ top: `${floatPos.top}px`, left: `${floatPos.left}px` }"
+      @mousedown.prevent
+    >
+      <button
+        type="button"
+        class="code-surface__ai-btn"
+        :title="t('office.bubbleAiPolish')"
+        @mousedown.prevent="requestAiWithDefaultNote('polish')"
+      >
+        {{ t('office.bubbleAiPolish') }}
+      </button>
+      <button
+        type="button"
+        class="code-surface__ai-btn"
+        :title="t('office.bubbleAiExpand')"
+        @mousedown.prevent="requestAiWithDefaultNote('continue')"
+      >
+        {{ t('office.bubbleAiExpand') }}
+      </button>
+      <button
+        type="button"
+        class="code-surface__ai-btn"
+        :title="t('office.bubbleAiModify')"
+        @mousedown.prevent="openAiAnnotate"
+      >
+        {{ t('office.bubbleAiModify') }}
+      </button>
+    </div>
+
+    <div
+      v-if="selectionAiEnabled && aiAnnotateOpen"
+      class="code-surface__ai-dialog"
+      role="dialog"
+      @keydown="onAiAnnotateKeydown"
+    >
+      <div
+        class="code-surface__ai-dialog-backdrop"
+        @click="closeAiAnnotate({ restoreFloat: true })"
+      />
+      <div class="code-surface__ai-annotate">
+        <div class="code-surface__ai-annotate-title">{{ t('office.selectionAnnotateTitle') }}</div>
+        <textarea
+          ref="aiInputRef"
+          v-model="aiInstruction"
+          class="code-surface__ai-annotate-input"
+          rows="3"
+          :placeholder="t('office.selectionAnnotatePlaceholder')"
+        />
+        <div class="code-surface__ai-annotate-actions">
+          <button
+            type="button"
+            class="code-surface__ai-btn"
+            @click="closeAiAnnotate({ restoreFloat: true })"
+          >
+            {{ t('common.cancel') }}
+          </button>
+          <button
+            type="button"
+            class="code-surface__ai-btn code-surface__ai-btn--primary"
+            @click="confirmAiModify"
+          >
+            {{ t('office.selectionAnnotateConfirm') }}
+          </button>
+        </div>
+        <div class="code-surface__ai-annotate-hint">{{ t('office.selectionAnnotateHint') }}</div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .code-surface {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -287,33 +437,6 @@ defineExpose({ save })
   font-variant-numeric: tabular-nums;
   color: var(--dq-accent);
 }
-.code-surface__hint {
-  flex: 1;
-  font-size: var(--dq-font-size-caption);
-  color: var(--dq-label-tertiary);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.code-surface__btn {
-  height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--dq-border);
-  border-radius: 6px;
-  background: var(--dq-fill-tertiary);
-  color: var(--dq-label-primary);
-  font-size: var(--dq-font-size-caption);
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.code-surface__btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--dq-label-primary) 8%, var(--dq-fill-tertiary));
-}
-.code-surface__btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
 .code-surface__status {
   padding: 24px;
   color: var(--dq-label-tertiary);
@@ -333,5 +456,103 @@ defineExpose({ save })
 }
 .code-surface__editor.is-readonly :deep(.cm-content) {
   caret-color: transparent;
+}
+.code-surface__ai-float {
+  position: absolute;
+  z-index: 20;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--dq-border);
+  background: var(--dq-bg-elevated);
+  box-shadow: 0 6px 20px color-mix(in srgb, #000 18%, transparent);
+  white-space: nowrap;
+}
+.code-surface__ai-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--dq-label-secondary);
+  font: inherit;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.code-surface__ai-btn:hover {
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  color: var(--dq-label-primary);
+}
+.code-surface__ai-btn--primary {
+  background: var(--dq-accent);
+  color: var(--dq-on-accent);
+  font-weight: 600;
+}
+.code-surface__ai-btn--primary:hover {
+  background: var(--dq-accent-hover);
+  color: var(--dq-on-accent);
+}
+.code-surface__ai-dialog {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.code-surface__ai-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, #000 35%, transparent);
+}
+.code-surface__ai-annotate {
+  position: relative;
+  z-index: 1;
+  width: min(360px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--dq-border);
+  background: var(--dq-bg-elevated);
+  box-shadow: 0 12px 40px color-mix(in srgb, #000 28%, transparent);
+}
+.code-surface__ai-annotate-title {
+  font-size: var(--dq-font-size-caption);
+  font-weight: 600;
+  color: var(--dq-label-primary);
+}
+.code-surface__ai-annotate-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 64px;
+  padding: 8px 10px;
+  border: 1px solid var(--dq-border);
+  border-radius: 6px;
+  background: var(--dq-bg-base);
+  color: var(--dq-label-primary);
+  font-size: var(--dq-font-size-caption);
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.code-surface__ai-annotate-input:focus {
+  outline: none;
+  border-color: var(--dq-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 12%, transparent);
+}
+.code-surface__ai-annotate-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.code-surface__ai-annotate-hint {
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-quaternary);
 }
 </style>
