@@ -10,13 +10,13 @@ defineProps<{
 
 <style scoped>
 .agent-msg {
-  padding: 10px 0 14px;
+  padding: 4px 0 6px;
   color: var(--dq-msg-agent-fg, var(--dq-label-primary));
-  font-size: var(--dq-font-size-prose);
-  line-height: var(--dq-line-height-prose, 1.65);
-  font-weight: 500;
-  -webkit-font-smoothing: auto;
-  -moz-osx-font-smoothing: auto;
+  font-size: var(--dq-font-size-body);
+  line-height: var(--dq-line-height-prose, 1.5);
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* v-html children must inherit — do not let tertiary/muted bleed in */

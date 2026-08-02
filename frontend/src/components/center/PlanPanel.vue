@@ -79,12 +79,8 @@ function priorityColor(priority: TodoItem['priority']): string {
 
 <template>
   <aside class="plan-panel">
-    <div class="plan-panel__head">
-      <span v-if="todos.length" class="plan-panel__title">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-        计划
-      </span>
-      <div v-if="todos.length" class="plan-panel__stats-row">
+    <div v-if="todos.length" class="plan-panel__head">
+      <div class="plan-panel__stats-row">
         <span class="plan-panel__stat plan-panel__stat--progress" v-if="stats.inProgress > 0">⏳ {{ stats.inProgress }}</span>
         <span class="plan-panel__stat plan-panel__stat--pending" v-if="stats.pending > 0">○ {{ stats.pending }}</span>
         <span class="plan-panel__stat plan-panel__stat--done" v-if="stats.completed > 0">✓ {{ stats.completed }}</span>
@@ -146,7 +142,8 @@ function priorityColor(priority: TodoItem['priority']): string {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--dq-shell-sidebar-bg);
+  /* Drawer owns the glass fill — keep panel clear to avoid stacked frost */
+  background: transparent;
   font-size: var(--dq-font-size-body);
 }
 
@@ -154,7 +151,7 @@ function priorityColor(priority: TodoItem['priority']): string {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
   padding: 10px 12px 6px;
   border-bottom: 1px solid var(--dq-separator-light);

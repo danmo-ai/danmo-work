@@ -1043,82 +1043,82 @@ defineExpose({
           </button>
         </div>
       </div>
-    </div>
 
-    <!-- Lower tray: project + agent + git branch + context usage -->
-    <div
-      v-if="showTray"
-      class="composer-float__tray"
-    >
-      <div class="composer-float__tray-leading">
-        <div
-          v-if="sessions.composingNew"
-          class="composer-select composer-select--project"
-        >
-          <DqSelect
-            v-model="sessions.selectedProjectId"
-            size="sm"
-            variant="ghost"
-            :aria-label="t('composer.selectProject')"
-            :placeholder="t('composer.selectProject')"
-          >
-            <DqOption
-              v-for="p in projects.sortedProjects"
-              :key="p.id"
-              :value="p.id"
-              :label="p.name"
-            />
-          </DqSelect>
-        </div>
-
-        <div
-          v-if="showAgentSelect"
-          class="composer-agent-picker"
-        >
-          <DqSegmented
-            v-if="useAgentSegmented"
-            v-model="selectedAgentModel"
-            size="sm"
-            class="composer-agent-seg composer-agent-seg--compact"
-            :options="agentOptions"
-            :aria-label="t('composer.selectAgent')"
-            :title="selectedLeadHint"
-          />
+      <!-- Meta strip inside the same glass capsule (no second plate) -->
+      <div
+        v-if="showTray"
+        class="composer-float__tray"
+      >
+        <div class="composer-float__tray-leading">
           <div
-            v-else
-            class="composer-select composer-select--agent"
+            v-if="sessions.composingNew"
+            class="composer-select composer-select--project"
           >
             <DqSelect
-              v-model="selectedAgentModel"
+              v-model="sessions.selectedProjectId"
               size="sm"
               variant="ghost"
-              :aria-label="t('composer.selectAgent')"
-              :title="selectedLeadHint"
+              :aria-label="t('composer.selectProject')"
+              :placeholder="t('composer.selectProject')"
             >
               <DqOption
-                v-for="a in primaryAgents"
-                :key="a.id"
-                :value="a.id"
-                :label="a.name"
+                v-for="p in projects.sortedProjects"
+                :key="p.id"
+                :value="p.id"
+                :label="p.name"
               />
             </DqSelect>
           </div>
+
+          <div
+            v-if="showAgentSelect"
+            class="composer-agent-picker"
+          >
+            <DqSegmented
+              v-if="useAgentSegmented"
+              v-model="selectedAgentModel"
+              size="sm"
+              class="composer-agent-seg composer-agent-seg--compact"
+              :options="agentOptions"
+              :aria-label="t('composer.selectAgent')"
+              :title="selectedLeadHint"
+            />
+            <div
+              v-else
+              class="composer-select composer-select--agent"
+            >
+              <DqSelect
+                v-model="selectedAgentModel"
+                size="sm"
+                variant="ghost"
+                :aria-label="t('composer.selectAgent')"
+                :title="selectedLeadHint"
+              >
+                <DqOption
+                  v-for="a in primaryAgents"
+                  :key="a.id"
+                  :value="a.id"
+                  :label="a.name"
+                />
+              </DqSelect>
+            </div>
+          </div>
+
+          <span
+            v-if="gitDisplay"
+            class="composer-git-branch"
+            :class="{ 'is-error': Boolean(gitError) }"
+            :title="gitDisplay"
+            :aria-label="gitError ? gitError : `${t('composer.gitBranch')}: ${gitBranch}`"
+          >
+            <span class="composer-git-branch__icon" aria-hidden="true">⎇</span>
+            <span class="composer-git-branch__name">{{ gitDisplay }}</span>
+          </span>
         </div>
 
-        <span
-          v-if="gitDisplay"
-          class="composer-git-branch"
-          :class="{ 'is-error': Boolean(gitError) }"
-          :title="gitDisplay"
-          :aria-label="gitError ? gitError : `${t('composer.gitBranch')}: ${gitBranch}`"
-        >
-          <span class="composer-git-branch__icon" aria-hidden="true">⎇</span>
-          <span class="composer-git-branch__name">{{ gitDisplay }}</span>
-        </span>
-      </div>
-
-      <div class="composer-float__tray-trailing">
-        <ContextUsageBar />
+        <div class="composer-float__tray-trailing">
+          <ContextUsageBar compact />
+        </div>
       </div>
     </div>
   </div>
@@ -1144,8 +1144,14 @@ defineExpose({
 }
 
 .composer-float__card {
+  /* Single glass capsule — tray is an inner strip, not a second plate */
   position: relative;
   z-index: 2;
+  isolation: isolate;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .composer-float__banner-text {
@@ -1255,7 +1261,7 @@ defineExpose({
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 4px 10px 8px;
+  padding: 8px 14px 10px;
   min-width: 0;
 }
 
@@ -1277,33 +1283,33 @@ defineExpose({
 }
 
 .composer-float__tray {
-  position: relative;
-  /* Above card overlap so tray controls (esp. last agent segment) stay clickable */
-  z-index: 3;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: -10px;
-  padding: 14px 10px 6px;
+  column-gap: 12px;
+  width: 100%;
+  margin: 0;
+  /* Symmetric inset — keep meta inside the capsule curve (overflow:hidden) */
+  padding: 6px 18px;
   min-width: 0;
-  border-radius: 0 0 var(--dq-composer-radius) var(--dq-composer-radius);
-  background: color-mix(in srgb, var(--dq-glass-popover-bg) 92%, var(--dq-bg-base));
-  border: 1px solid var(--dq-glass-border-strong);
-  border-top: none;
-  box-shadow:
-    0 8px 24px color-mix(in srgb, var(--dq-mask) 18%, transparent);
-  backdrop-filter: var(--dq-glass-blur-heavy);
-  -webkit-backdrop-filter: var(--dq-glass-blur-heavy);
+  min-height: 40px;
+  box-sizing: border-box;
+  /* Hairline only — inherits capsule glass, no fill/shadow/blur of its own */
+  background: transparent;
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .composer-float__tray-leading {
   display: flex;
-  flex: 1 1 auto;
   flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  height: 28px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -1313,12 +1319,27 @@ defineExpose({
 }
 
 .composer-float__tray-trailing {
-  flex-shrink: 0;
-  margin-left: auto;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  min-width: 0;
+  height: 28px;
+  flex: 0 0 auto;
+}
+
+.composer-float__tray :deep(.context-usage),
+.composer-float__tray :deep(.context-usage__main) {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.composer-float__tray :deep(.context-usage__label),
+.composer-float__tray :deep(.context-usage__icon) {
+  color: var(--dq-label-secondary);
+}
+
+.composer-float__tray :deep(.context-usage__pct) {
+  color: var(--dq-label-tertiary);
 }
 
 .composer-git-branch {
@@ -1380,15 +1401,6 @@ defineExpose({
   color: var(--dq-label-primary);
   background: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
   box-shadow: none;
-}
-
-.composer-float__tray :deep(.context-usage__label),
-.composer-float__tray :deep(.context-usage__icon) {
-  color: var(--dq-label-secondary);
-}
-
-.composer-float__tray :deep(.context-usage__pct) {
-  color: var(--dq-label-tertiary);
 }
 
 .composer-meta-chip {

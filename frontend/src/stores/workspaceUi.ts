@@ -20,7 +20,9 @@ export interface OfficeStageState {
 }
 
 const LEFT_RAIL_COLLAPSED_KEY = 'app-left-collapsed'
-const RIGHT_PANEL_COLLAPSED_KEY = 'app-right-collapsed'
+const RIGHT_DRAWER_OPEN_KEY = 'app-right-drawer-open'
+/** Legacy docked-panel key — migrated once into drawer-open semantics. */
+const LEGACY_RIGHT_PANEL_COLLAPSED_KEY = 'app-right-collapsed'
 
 function readPersistedLeftRailCollapsed(): boolean {
   try {
@@ -38,17 +40,24 @@ function writePersistedLeftRailCollapsed(collapsed: boolean) {
   }
 }
 
-function readPersistedRightPanelCollapsed(): boolean {
+function readPersistedRightDrawerOpen(): boolean {
   try {
-    return localStorage.getItem(RIGHT_PANEL_COLLAPSED_KEY) === '1'
+    const raw = localStorage.getItem(RIGHT_DRAWER_OPEN_KEY)
+    if (raw === '1' || raw === '0') return raw === '1'
+    // Migrate: old collapsed=true → drawer closed; otherwise default closed (new UX).
+    const legacy = localStorage.getItem(LEGACY_RIGHT_PANEL_COLLAPSED_KEY)
+    if (legacy != null) {
+      localStorage.removeItem(LEGACY_RIGHT_PANEL_COLLAPSED_KEY)
+    }
+    return false
   } catch {
     return false
   }
 }
 
-function writePersistedRightPanelCollapsed(collapsed: boolean) {
+function writePersistedRightDrawerOpen(open: boolean) {
   try {
-    localStorage.setItem(RIGHT_PANEL_COLLAPSED_KEY, collapsed ? '1' : '0')
+    localStorage.setItem(RIGHT_DRAWER_OPEN_KEY, open ? '1' : '0')
   } catch {
     /* ignore quota / private mode */
   }
@@ -57,6 +66,7 @@ function writePersistedRightPanelCollapsed(collapsed: boolean) {
 export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   const rightTab = ref<RightWorkspaceTab>('plan')
   const changesCount = ref(0)
+  const memoryCount = ref(0)
   const pendingApprovals = ref(0)
   const paletteOpen = ref(false)
   const layoutMode = ref<LayoutMode>('chat')
@@ -74,12 +84,11 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
    * null = no pending restore (user toggled during Stage, or Stage never auto-collapsed).
    */
   const leftRailCollapsedBeforeStage = ref<boolean | null>(null)
-  const rightPanelCollapsed = ref(readPersistedRightPanelCollapsed())
-  /**
-   * Snapshot of right-panel collapsed before Stage auto-collapse.
-   * null = no pending restore (user toggled during Stage, or Stage never auto-collapsed).
-   */
-  const rightPanelCollapsedBeforeStage = ref<boolean | null>(null)
+
+  /** Right workspace glass drawer (floats over stream). */
+  const rightDrawerOpen = ref(readPersistedRightDrawerOpen())
+  /** Snapshot before Stage auto-close; null = no pending restore. */
+  const rightDrawerOpenBeforeStage = ref<boolean | null>(null)
 
   function setRightTab(tab: RightWorkspaceTab) {
     rightTab.value = tab
@@ -92,15 +101,29 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     leftRailCollapsedBeforeStage.value = null
   }
 
-  /** User (or UI) toggles the right panel; persists preference and cancels Stage restore. */
-  function setRightPanelCollapsed(collapsed: boolean) {
-    rightPanelCollapsed.value = collapsed
-    writePersistedRightPanelCollapsed(collapsed)
-    rightPanelCollapsedBeforeStage.value = null
+  function setRightDrawerOpen(open: boolean) {
+    rightDrawerOpen.value = open
+    writePersistedRightDrawerOpen(open)
+    rightDrawerOpenBeforeStage.value = null
   }
 
-  function toggleRightPanelCollapsed() {
-    setRightPanelCollapsed(!rightPanelCollapsed.value)
+  function openRightDrawer(tab?: RightWorkspaceTab) {
+    if (tab) rightTab.value = tab
+    setRightDrawerOpen(true)
+  }
+
+  function closeRightDrawer() {
+    setRightDrawerOpen(false)
+  }
+
+  /** Same tab while open → close; otherwise open (and switch tab). */
+  function toggleRightDrawer(tab?: RightWorkspaceTab) {
+    if (tab && rightDrawerOpen.value && rightTab.value === tab) {
+      closeRightDrawer()
+      return
+    }
+    if (tab) rightTab.value = tab
+    setRightDrawerOpen(true)
   }
 
   function collapseLeftRailForStage() {
@@ -120,33 +143,33 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     // Persisted preference was never overwritten by temp collapse.
   }
 
-  function collapseRightPanelForStage() {
-    if (rightPanelCollapsed.value) return
-    if (rightPanelCollapsedBeforeStage.value == null) {
-      rightPanelCollapsedBeforeStage.value = false
+  function closeRightDrawerForStage() {
+    if (!rightDrawerOpen.value) return
+    if (rightDrawerOpenBeforeStage.value == null) {
+      rightDrawerOpenBeforeStage.value = true
     }
-    rightPanelCollapsed.value = true
+    rightDrawerOpen.value = false
     // Do not write localStorage — temporary for Stage focus.
   }
 
-  function restoreRightPanelAfterStage() {
-    if (rightPanelCollapsedBeforeStage.value == null) return
-    rightPanelCollapsed.value = rightPanelCollapsedBeforeStage.value
-    rightPanelCollapsedBeforeStage.value = null
+  function restoreRightDrawerAfterStage() {
+    if (rightDrawerOpenBeforeStage.value == null) return
+    rightDrawerOpen.value = rightDrawerOpenBeforeStage.value
+    rightDrawerOpenBeforeStage.value = null
   }
 
   function openStage(next: OfficeStageState) {
     stage.value = { ...next }
     layoutMode.value = next.mode === 'present' ? 'immersive' : 'stage'
     collapseLeftRailForStage()
-    collapseRightPanelForStage()
+    closeRightDrawerForStage()
   }
 
   function closeStage() {
     stage.value = null
     layoutMode.value = 'chat'
     restoreLeftRailAfterStage()
-    restoreRightPanelAfterStage()
+    restoreRightDrawerAfterStage()
   }
 
   function setStageMode(mode: OfficeMode) {
@@ -206,6 +229,7 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   return {
     rightTab,
     changesCount,
+    memoryCount,
     pendingApprovals,
     paletteOpen,
     layoutMode,
@@ -215,12 +239,14 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     composerPrefillToken,
     leftRailCollapsed,
     leftRailCollapsedBeforeStage,
-    rightPanelCollapsed,
-    rightPanelCollapsedBeforeStage,
+    rightDrawerOpen,
+    rightDrawerOpenBeforeStage,
     setRightTab,
     setLeftRailCollapsed,
-    setRightPanelCollapsed,
-    toggleRightPanelCollapsed,
+    setRightDrawerOpen,
+    openRightDrawer,
+    closeRightDrawer,
+    toggleRightDrawer,
     openStage,
     closeStage,
     setStageMode,

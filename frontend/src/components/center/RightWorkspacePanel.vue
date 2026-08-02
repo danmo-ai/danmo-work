@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  DqPillTabs,
   Document,
   FolderChecked,
   MagicStick,
@@ -17,8 +16,10 @@ import TablesPanel from '@/components/center/TablesPanel.vue'
 import ChangesPanel from '@/components/center/ChangesPanel.vue'
 import TerminalPanel from '@/components/center/TerminalPanel.vue'
 import type { StreamEvent } from '@/types/mission'
+import type { RightWorkspaceTab } from '@/stores/workspaceUi'
+import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 
-export type RightTab = 'plan' | 'files' | 'memory' | 'tables' | 'changes' | 'terminal'
+export type RightTab = RightWorkspaceTab
 
 const props = defineProps<{
   streamEvents: StreamEvent[]
@@ -32,49 +33,62 @@ const rightTab = defineModel<RightTab>('tab', { required: true })
 
 const emit = defineEmits<{
   openInOffice: [path: string]
-  collapse: []
 }>()
 
 const { t } = useI18n()
-const terminalOpened = ref(false)
+const workspaceUi = useWorkspaceUiStore()
 const fileTreeRef = ref<InstanceType<typeof FileTree> | null>(null)
 const changesPanelRef = ref<InstanceType<typeof ChangesPanel> | null>(null)
 const memoryPanelRef = ref<InstanceType<typeof MemoryPanel> | null>(null)
 const tablesPanelRef = ref<InstanceType<typeof TablesPanel> | null>(null)
-const memoryCount = ref(0)
+const terminalPanelRef = ref<InstanceType<typeof TerminalPanel> | null>(null)
 
-watch(rightTab, (tab) => {
-  if (tab === 'terminal') terminalOpened.value = true
+watch(rightTab, async (tab) => {
+  if (tab === 'terminal') {
+    await nextTick()
+    requestAnimationFrame(() => terminalPanelRef.value?.refit?.())
+  }
   if (tab === 'changes') changesPanelRef.value?.refresh?.()
   if (tab === 'memory') memoryPanelRef.value?.refresh?.()
   if (tab === 'tables') tablesPanelRef.value?.refresh?.()
 })
 
-const pillItems = computed(() => [
-  { value: 'plan', label: t('sessions.tabPlan'), icon: MagicStick },
-  { value: 'files', label: t('sessions.tabFiles'), icon: Document },
+const tabTitle = computed(() => {
+  const map: Record<RightTab, string> = {
+    plan: t('sessions.tabPlan'),
+    files: t('sessions.tabFiles'),
+    memory: t('sessions.tabMemory'),
+    tables: t('sessions.tabTables'),
+    changes: t('sessions.tabChanges'),
+    terminal: t('sessions.tabTerminal'),
+  }
+  return map[rightTab.value]
+})
+
+/** Shared icon defs for session header toolbar. */
+const iconItems = computed(() => [
+  { value: 'plan' as const, label: t('sessions.tabPlan'), icon: MagicStick },
+  { value: 'files' as const, label: t('sessions.tabFiles'), icon: Document },
   {
-    value: 'memory',
+    value: 'memory' as const,
     label: t('sessions.tabMemory'),
     icon: Library,
-    badge: memoryCount.value > 0 ? memoryCount.value : undefined,
+    badge: workspaceUi.memoryCount > 0 ? workspaceUi.memoryCount : undefined,
   },
+  { value: 'tables' as const, label: t('sessions.tabTables'), icon: Grid },
   {
-    value: 'tables',
-    label: t('sessions.tabTables'),
-    icon: Grid,
-  },
-  {
-    value: 'changes',
+    value: 'changes' as const,
     label: t('sessions.tabChanges'),
     icon: FolderChecked,
     badge: props.changesCount && props.changesCount > 0 ? props.changesCount : undefined,
   },
-  { value: 'terminal', label: t('sessions.tabTerminal'), icon: Terminal },
+  { value: 'terminal' as const, label: t('sessions.tabTerminal'), icon: Terminal },
 ])
 
 defineExpose({
   changesPanelRef,
+  tabTitle,
+  iconItems,
   refreshChanges: () => changesPanelRef.value?.refresh?.(),
   refreshMemory: () => memoryPanelRef.value?.refresh?.(),
   refreshTables: () => tablesPanelRef.value?.refresh?.(),
@@ -83,20 +97,6 @@ defineExpose({
 
 <template>
   <div class="right-workspace">
-    <div class="right-workspace__tabs">
-      <DqPillTabs v-model="rightTab" size="sm" :items="pillItems" />
-      <DqIconButton
-        class="right-workspace__collapse"
-        :aria-label="t('navigation.collapseRightPanel')"
-        :title="t('navigation.collapseRightPanel')"
-        @click="emit('collapse')"
-      >
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </DqIconButton>
-    </div>
-
     <div class="right-workspace__body">
       <PlanPanel v-if="rightTab === 'plan'" :stream-events="streamEvents" :plan-turn-id="planTurnId" />
 
@@ -119,25 +119,26 @@ defineExpose({
         :agent-id="agentId ?? null"
       />
 
-      <template v-else-if="rightTab === 'terminal'">
-        <div v-if="!projectId" class="right-workspace__empty">{{ t('sessions.noProjectLinked') }}</div>
-      </template>
-
       <MemoryPanel
-        v-show="rightTab === 'memory'"
+        v-else-if="rightTab === 'memory'"
         ref="memoryPanelRef"
         :project-id="projectId"
         :agent-id="agentId ?? null"
         :stream-events="streamEvents"
-        @loaded="memoryCount = $event"
+        @loaded="workspaceUi.memoryCount = $event"
       />
 
-      <TerminalPanel
-        v-if="terminalOpened && projectId"
-        v-show="rightTab === 'terminal'"
-        :key="projectId"
-        :project-id="projectId"
-      />
+      <template v-else-if="rightTab === 'terminal'">
+        <div v-if="!projectId" class="right-workspace__empty">{{ t('sessions.noProjectLinked') }}</div>
+        <TerminalPanel
+          v-else
+          ref="terminalPanelRef"
+          class="right-workspace__terminal"
+          :key="projectId"
+          :project-id="projectId"
+          :active="true"
+        />
+      </template>
     </div>
   </div>
 </template>
@@ -148,30 +149,13 @@ defineExpose({
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  flex: 1;
   height: 100%;
   background: transparent;
 }
 
-.right-workspace__tabs {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 6px 6px 8px;
-  border-bottom: 1px solid var(--dq-shell-divider);
-  min-width: 0;
-}
-
-.right-workspace__tabs :deep(.dq-pill-tabs) {
-  flex: 1;
-  min-width: 0;
-}
-
-.right-workspace__collapse {
-  flex-shrink: 0;
-}
-
 .right-workspace__body {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;

@@ -1,11 +1,12 @@
 /* Danmo Work — layout & glass surfaces (tokens from @danqing/dq-tokens)
 
-   Type scale — 4 steps only:
-     caption 12  badges / timestamps / kbd
-     body    14  UI default (sidebar, tools, forms, plan, tables)
-     prose   16  chat & long-form
-     title   20  session / page titles
-   Never hardcode 10/11px. Prefer body over caption for readable text.
+   Type scale (macOS-dense, theme-invariant):
+     caption 12  badges / timestamps / kbd / hints
+     body    13  UI + chat (sidebar, tools, forms, plan, stream)
+     prose   13  alias of body
+     title   15  one page/session title per view
+   Hierarchy inside a page: prefer weight/color over extra sizes.
+   Never hardcode 10/11px.
 */
 
 /* Hide number input spinner arrows */
@@ -68,8 +69,12 @@ html.dark body {
 /* Chat reading column — product guarantee */
 .agent-msg.dq-prose {
   color: var(--dq-msg-agent-fg, var(--dq-label-primary));
-  font-size: var(--dq-font-size-prose);
-  font-weight: 500;
+  font-size: var(--dq-font-size-body);
+  font-weight: 400;
+}
+
+.agent-msg.dq-prose :deep(table) {
+  font-size: inherit;
 }
 
 /* ── Scrollbar ── */
@@ -131,11 +136,11 @@ html.dark body {
   margin: 0;
 }
 
-/* Resource / panel surface — flush shell */
+/* Resource / panel surface — flush shell (transparent stream shows page glow) */
 .float-island {
   border-radius: 0;
   border: none;
-  background: var(--dq-shell-stream-bg);
+  background: var(--dq-shell-stream-bg, transparent);
   min-height: 0;
   overflow: hidden;
 }
@@ -155,6 +160,7 @@ html.dark body {
   background: var(--dq-shell-sidebar-bg);
   -webkit-backdrop-filter: var(--dq-shell-sidebar-blur);
   backdrop-filter: var(--dq-shell-sidebar-blur);
+  box-shadow: 1px 0 0 var(--dq-glass-highlight) inset;
 }
 
 .teams-app .agent-sidebar__panel {
@@ -172,8 +178,11 @@ html.dark body {
 
 .teams-app .teams-right-rail {
   height: 100%;
-  border-left: 1px solid var(--dq-shell-divider);
-  background: var(--dq-shell-sidebar-bg);
+  border-left: 1px solid var(--dq-shell-panel-border, var(--dq-shell-divider));
+  background: var(--dq-shell-panel-bg, var(--dq-shell-sidebar-bg));
+  -webkit-backdrop-filter: var(--dq-shell-panel-blur, var(--dq-shell-sidebar-blur));
+  backdrop-filter: var(--dq-shell-panel-blur, var(--dq-shell-sidebar-blur));
+  box-shadow: -1px 0 0 var(--dq-glass-highlight) inset;
 }
 
 .teams-app .agent-inspector__panel,
@@ -663,7 +672,7 @@ body.teams-is-resizing {
   left: 50%;
   bottom: 16px;
   z-index: 20;
-  width: min(720px, calc(100% - 40px));
+  width: min(var(--dq-chat-column-max, 920px), calc(100% - 40px));
   transform: translateX(-50%);
   pointer-events: none;
 }
@@ -672,26 +681,23 @@ body.teams-is-resizing {
   pointer-events: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: stretch;
+  gap: 0;
   background: transparent;
   border: none;
   box-shadow: none;
 }
 
 .composer-float__card {
+  /* Material lives on .dq-glass--composer — avoid a second fill/gradient here */
+  position: relative;
+  z-index: 2;
   overflow: hidden;
-  border-radius: var(--dq-composer-radius);
-  background: var(--dq-glass-floating-bar-bg, var(--dq-bg-elevated));
-  border: 1px solid var(--dq-composer-border);
-  box-shadow: var(--dq-composer-shadow);
-  backdrop-filter: var(--dq-glass-blur-heavy);
-  -webkit-backdrop-filter: var(--dq-glass-blur-heavy);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .composer-float:focus-within .composer-float__card {
   border-color: color-mix(in srgb, var(--dq-label-primary) 22%, transparent);
-  box-shadow: var(--dq-composer-shadow);
 }
 
 .composer-float.is-compose .composer-float__card {
@@ -704,12 +710,11 @@ body.teams-is-resizing {
 
 .composer-float.is-locked .composer-float__card {
   border-color: var(--dq-border-subtle);
-  box-shadow: 0 0 0 1px var(--dq-fill-on-glass-subtle) inset;
+  opacity: 0.92;
 }
 
 .composer-float.is-locked:focus-within .composer-float__card {
   border-color: var(--dq-border-subtle);
-  box-shadow: 0 0 0 1px var(--dq-fill-on-glass-subtle) inset;
 }
 
 .composer-float__hint--muted {
@@ -734,7 +739,7 @@ body.teams-is-resizing {
   justify-content: space-between;
   gap: 12px;
   margin-top: 8px;
-  padding: 0 2px;
+  padding: 0 2px 4px;
   font-size: var(--dq-font-size-caption);
   line-height: 1.3;
   color: var(--dq-label-tertiary);
@@ -1223,7 +1228,7 @@ body.teams-is-resizing {
 
 .agent-members__name {
   margin: 0;
-  font-size: var(--dq-font-size-title);
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
   color: var(--dq-label-primary);
 }
@@ -1284,7 +1289,7 @@ body.teams-is-resizing {
 
 .workspace-card__title {
   margin: 0;
-  font-size: var(--dq-font-size-title);
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
   flex: 1;
   min-width: 0;
@@ -1328,8 +1333,11 @@ body.teams-is-resizing {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-right: 1px solid var(--dq-shell-divider);
+  border-right: 1px solid var(--dq-shell-sidebar-border, var(--dq-shell-divider));
   background: var(--dq-shell-sidebar-bg);
+  -webkit-backdrop-filter: var(--dq-shell-sidebar-blur);
+  backdrop-filter: var(--dq-shell-sidebar-blur);
+  box-shadow: 1px 0 0 var(--dq-glass-highlight) inset;
 }
 
 .resource-rail__head {
@@ -1404,7 +1412,7 @@ body.teams-is-resizing {
 .resource-rail__avatar--new {
   background: var(--dq-accent-tint);
   color: var(--dq-accent);
-  font-size: var(--dq-font-size-title);
+  font-size: var(--dq-font-size-body);
   font-weight: 400;
 }
 
@@ -1454,7 +1462,9 @@ body.teams-is-resizing {
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  background: color-mix(in srgb, var(--dq-bg-elevated) 30%, transparent);
+  background: var(--dq-shell-panel-bg, color-mix(in srgb, var(--dq-bg-elevated) 30%, transparent));
+  -webkit-backdrop-filter: var(--dq-shell-panel-blur);
+  backdrop-filter: var(--dq-shell-panel-blur);
 }
 
 .resource-workspace__empty {
@@ -1478,9 +1488,9 @@ body.teams-is-resizing {
 
 .resource-workspace__title {
   margin: 0;
-  font-size: var(--dq-font-size-display);
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: var(--dq-font-size-title);
+  font-weight: 650;
+  letter-spacing: -0.01em;
   color: var(--dq-label-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1557,8 +1567,10 @@ body.teams-is-resizing {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 24px;
-  border-top: 1px solid var(--dq-separator-light);
-  background: color-mix(in srgb, var(--dq-bg-elevated) 50%, transparent);
+  border-top: 1px solid var(--dq-glass-border, var(--dq-separator-light));
+  background: var(--dq-glass-bar-bg, color-mix(in srgb, var(--dq-bg-elevated) 50%, transparent));
+  -webkit-backdrop-filter: var(--dq-glass-blur-light);
+  backdrop-filter: var(--dq-glass-blur-light);
   flex-shrink: 0;
 }
 
@@ -1584,16 +1596,16 @@ body.teams-is-resizing {
 
 .resource-section__title {
   margin: 0;
-  font-size: var(--dq-font-size-title);
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
   color: var(--dq-label-primary);
 }
 
 .resource-section__desc {
   margin: 4px 0 0;
-  font-size: var(--dq-font-size-secondary);
+  font-size: var(--dq-font-size-caption);
   line-height: 1.45;
-  color: var(--dq-label-quaternary);
+  color: var(--dq-label-tertiary);
 }
 
 .resource-form-grid {
@@ -1640,7 +1652,7 @@ body.teams-is-resizing {
 }
 
 .resource-field__label {
-  font-size: var(--dq-font-size-footnote);
+  font-size: var(--dq-font-size-body);
   font-weight: 500;
   color: var(--dq-label-secondary);
 }
@@ -2136,5 +2148,42 @@ select:focus:not(:focus-visible) {
   html {
     transition: none !important;
   }
+}
+
+/*
+ * Session right drawer is teleported to <body>, so SessionWorkspace scoped
+ * :deep() rules never match. Keep layout here (global).
+ */
+.session-workspace__drawer.dq-drawer-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-height: 100vh;
+}
+
+.session-workspace__drawer .dq-drawer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.session-workspace__drawer .right-workspace,
+.session-workspace__drawer .right-workspace__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.session-workspace__drawer .right-workspace__terminal,
+.session-workspace__drawer .terminal-panel {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
 }
 

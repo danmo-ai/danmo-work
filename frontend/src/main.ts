@@ -7,26 +7,20 @@ import { installDanQingUi } from './plugins/dq-ui'
 import { i18n } from './i18n'
 import { useThemeStore } from './stores/theme'
 import '@danqing/dq-tokens/dq-mac.css'
-import '@danqing/dq-tokens/dq-linear-dark.css'
-import '@danqing/dq-tokens/dq-china-red-dark.css'
-import '@danqing/dq-tokens/dq-shadcn-dark.css'
-import '@danqing/dq-tokens/dq-shadcn-light.css'
-import '@danqing/dq-tokens/dq-catppuccin.css'
+import '@danqing/dq-tokens/dq-mac-light.css'
 import '@danqing/dq-tokens/dq-tokyo-night.css'
-import '@danqing/dq-tokens/dq-minimal-light.css'
-import '@danqing/dq-tokens/dq-dracula.css'
 import '@danqing/dq-tokens/dq-nord-dark.css'
-import '@danqing/dq-tokens/dq-catppuccin-latte.css'
-import '@danqing/dq-tokens/dq-nord-light.css'
-import '@danqing/dq-tokens/dq-github-light.css'
+import '@danqing/dq-tokens/dq-minimal-light.css'
+import '@danqing/dq-tokens/dq-recipe-dark.css'
+import '@danqing/dq-tokens/dq-recipe-light.css'
 import '@danqing/dq-tokens/dq-glass.css'
 import '@danqing/dq-tokens/dq-agent.css'
 import '@danqing/dq-ui/style.css'
 import '@danqing/dq-shell/style.css'
 import '@/styles/work.css'
 
-// Theme class is managed by theme store; default flash before init is Tokyo Night
-document.documentElement.classList.add('dq-tokyo-night', 'dark')
+// Theme class is managed by theme store; default flash before init is macOS
+document.documentElement.classList.add('dq-mac', 'dark')
 
 function isRecoverableRuntimeError(err: unknown): boolean {
   if (!err) return false

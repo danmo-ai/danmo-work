@@ -141,7 +141,10 @@ watch(() => llm.models, (newModels, oldModels) => {
   gap: 0;
   padding: 0;
   box-sizing: border-box;
-  background: var(--dq-shell-stream-bg);
+  /* Continuous page canvas so shell glass blur has something to sample */
+  background-color: var(--dq-bg-page);
+  background-image: var(--dq-bg-page-glow);
+  background-repeat: no-repeat;
 }
 
 .app-workspace {

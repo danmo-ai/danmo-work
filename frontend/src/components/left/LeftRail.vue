@@ -411,9 +411,10 @@ watch(() => projects.projects.length, (len) => {
       <DqIconButton :aria-label="$t('navigation.newSession')" @click="onNewSession()">
         <DqIcon :size="18"><Plus /></DqIcon>
       </DqIconButton>
-      <DqIconButton :aria-label="$t('navigation.expandSidebar')" @click="expandLeftRail">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+      <DqIconButton type="text" :aria-label="$t('navigation.expandSidebar')" @click="expandLeftRail">
+        <svg class="module-sidebar__rail-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M9 4v16" stroke-linecap="round" />
         </svg>
       </DqIconButton>
       <div class="module-sidebar__strip-spacer" />
@@ -428,20 +429,31 @@ watch(() => projects.projects.length, (len) => {
     <template v-else>
       <aside class="module-sidebar__panel">
         <div class="module-sidebar__top">
-          <div class="module-sidebar__new-row">
-            <DqButton type="primary" class="module-sidebar__new-session" @click="onNewSession()">
+          <!-- Row1: 新会话 | 折叠；Row2: 搜索通栏（左右对齐整行外框） -->
+          <div class="module-sidebar__controls">
+            <button
+              type="button"
+              class="module-sidebar__new-session"
+              @click="onNewSession()"
+            >
               <DqIcon :size="16"><Plus /></DqIcon>
-              {{ $t('navigation.newSession') }}
-            </DqButton>
-            <DqIconButton class="module-sidebar__collapse" :aria-label="$t('navigation.collapseSidebar')" @click="collapseLeftRail">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M15 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round" />
+              <span>{{ $t('navigation.newSession') }}</span>
+            </button>
+            <DqIconButton
+              type="text"
+              class="module-sidebar__collapse"
+              :aria-label="$t('navigation.collapseSidebar')"
+              :title="$t('navigation.collapseSidebar')"
+              @click="collapseLeftRail"
+            >
+              <svg class="module-sidebar__rail-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <path d="M9 4v16" stroke-linecap="round" />
               </svg>
             </DqIconButton>
-          </div>
-
-          <div class="module-sidebar__search">
-            <DqInput v-model="sidebarSearch" size="sm" :placeholder="$t('navigation.searchPlaceholder')" />
+            <div class="module-sidebar__search">
+              <DqInput v-model="sidebarSearch" :placeholder="$t('navigation.searchPlaceholder')" />
+            </div>
           </div>
 
           <div class="module-sidebar__section">
@@ -779,23 +791,55 @@ watch(() => projects.projects.length, (len) => {
   background: var(--dq-shell-sidebar-bg);
   -webkit-backdrop-filter: var(--dq-shell-sidebar-blur);
   backdrop-filter: var(--dq-shell-sidebar-blur);
-  box-shadow: none;
+  box-shadow: 1px 0 0 var(--dq-glass-highlight) inset;
   overflow: hidden;
 }
 
-.module-sidebar__new-row {
-  display: flex;
-  align-items: center;
-  gap: var(--dq-space-xs);
-}
-
-.module-sidebar__new-row .module-sidebar__new-session {
-  flex: 1;
-  min-width: 0;
+.module-sidebar__controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  grid-template-rows: 32px 32px;
+  column-gap: 4px;
+  row-gap: 8px;
+  align-items: stretch;
+  width: 100%;
 }
 
 .module-sidebar__collapse {
-  flex-shrink: 0;
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  align-self: center;
+  /* Class lands on .dq-icon-btn root — square to match ghost pills */
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--dq-label-tertiary);
+}
+
+.module-sidebar__collapse:hover {
+  color: var(--dq-label-primary);
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+}
+
+.module-sidebar__strip :deep(.dq-icon-btn) {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.module-sidebar__search {
+  /* Full controls width — left aligns with 新会话, right with collapse */
+  grid-column: 1 / -1;
+  grid-row: 2;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.module-sidebar__rail-icon {
+  display: block;
 }
 
 .module-sidebar.is-collapsed {
@@ -863,9 +907,40 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .module-sidebar__new-session {
-  width: auto;
-  justify-content: center;
-  gap: 6px;
+  grid-column: 1;
+  grid-row: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
+  color: var(--dq-label-primary);
+  font: inherit;
+  font-size: var(--dq-font-size-body);
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.module-sidebar__new-session:hover {
+  background: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
+}
+
+.module-sidebar__new-session:active {
+  background: color-mix(in srgb, var(--dq-label-primary) 14%, transparent);
+}
+
+.module-sidebar__new-session:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--dq-accent) 55%, transparent);
+  outline-offset: 1px;
 }
 
 .module-sidebar__section {
@@ -879,7 +954,7 @@ watch(() => projects.projects.length, (len) => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 4px;
+  padding: 0;
 }
 
 .module-sidebar__section-title {
@@ -1048,7 +1123,7 @@ watch(() => projects.projects.length, (len) => {
   gap: 6px;
   height: 32px;
   border-radius: 8px;
-  padding: 0 8px 0 4px;
+  padding: 0 8px 0 2px;
   transition: background 0.12s ease, color 0.12s ease;
   cursor: pointer;
   color: var(--dq-label-primary);
@@ -1386,8 +1461,33 @@ watch(() => projects.projects.length, (len) => {
   background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
 }
 
-.module-sidebar__search {
-  padding: 0 10px 8px;
+.module-sidebar__search :deep(.dq-input) {
+  display: block;
+  width: 100%;
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  margin: 0;
+  font-size: var(--dq-font-size-body);
+  line-height: 30px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  /* Same ghost material / metrics as 新会话 */
+  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
+}
+
+.module-sidebar__search :deep(.dq-input:hover:not(:disabled):not(:focus):not(:focus-visible)) {
+  background: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
+  border-color: transparent;
+}
+
+.module-sidebar__search :deep(.dq-input:focus),
+.module-sidebar__search :deep(.dq-input:focus-visible) {
+  background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  border-color: color-mix(in srgb, var(--dq-accent) 45%, transparent);
+  box-shadow: none;
 }
 
 .module-sidebar__divider {
@@ -1406,9 +1506,10 @@ watch(() => projects.projects.length, (len) => {
 .module-sidebar__nav {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  padding: 9px 10px;
+  height: 32px;
+  padding: 0 10px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -1434,7 +1535,7 @@ watch(() => projects.projects.length, (len) => {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 8px 6px 8px;
+  padding: 8px 10px;
   border-top: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
   margin-top: auto;
 }

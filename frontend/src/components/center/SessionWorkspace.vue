@@ -22,6 +22,16 @@ import AskUserBlock, { type AskUserFormField } from '@/components/center/AskUser
 import { groupConsecutiveToolCards, useTurnCollapse, type StreamTurn, type ToolCard, type UserImageAttachment } from '@/composables/useStreamTurns'
 import RightWorkspacePanel from '@/components/center/RightWorkspacePanel.vue'
 import DocumentStage from '@/components/office/DocumentStage.vue'
+import {
+  DqDrawer,
+  Document,
+  FolderChecked,
+  MagicStick,
+  Terminal,
+  Library,
+  Grid,
+} from '@danqing/dq-shell'
+import type { RightWorkspaceTab } from '@/stores/workspaceUi'
 import { renderMarkdown } from '@/utils/markdown-render'
 import { toast } from '@/utils/feedback'
 import { apiBaseUrl, saveBlobAs } from '@/utils/desktop'
@@ -39,69 +49,67 @@ const { t } = useI18n()
 const sessions = useSessionsStore()
 const workspaceUi = useWorkspaceUiStore()
 const sessionActivity = useSessionActivityStore()
-const { rightTab, stage, layoutMode, rightPanelCollapsed } = storeToRefs(workspaceUi)
+const { rightTab, rightDrawerOpen, stage, layoutMode, changesCount, memoryCount } = storeToRefs(workspaceUi)
 const rightPanelRef = ref<InstanceType<typeof RightWorkspacePanel> | null>(null)
 const { tokensForTurn } = useSessionContextUsage()
 const isEditingTitle = ref(false)
 const editingTitle = ref('')
 const composerRef = ref<InstanceType<typeof FloatingComposer> | null>(null)
 
-// ── Split mode: stream-heavy default ──
 const bodyRef = ref<HTMLElement | null>(null)
-const SPLIT_STORAGE_KEY = 'session-split-percent-v1'
-const splitPercent = ref(68)
-const RIGHT_STRIP_PX = 40
 
-const isChatLayout = computed(() => layoutMode.value === 'chat' || !stage.value)
 const isStageLayout = computed(() => layoutMode.value === 'stage' && !!stage.value)
 
 /** Grid columns for chat / stage; immersive leaves layout to CSS. */
 const bodyGridStyle = computed(() => {
   if (layoutMode.value === 'immersive' && stage.value) return undefined
   if (isStageLayout.value) {
-    return {
-      gridTemplateColumns: rightPanelCollapsed.value
-        ? `minmax(200px, 26%) minmax(0, 1fr) ${RIGHT_STRIP_PX}px`
-        : 'minmax(200px, 26%) minmax(0, 1fr) minmax(200px, 24%)',
-    }
+    return { gridTemplateColumns: 'minmax(200px, 32%) minmax(0, 1fr)' }
   }
-  // Chat (or stage closed): stream | split | right
-  return rightPanelCollapsed.value
-    ? { gridTemplateColumns: `minmax(0, 1fr) ${RIGHT_STRIP_PX}px` }
-    : { gridTemplateColumns: `${splitPercent.value}% 8px minmax(0, 1fr)` }
+  return { gridTemplateColumns: 'minmax(0, 1fr)' }
 })
 
-onMounted(() => {
-  const saved = Number(localStorage.getItem(SPLIT_STORAGE_KEY))
-  if (!Number.isNaN(saved) && saved >= 25 && saved <= 80) {
-    splitPercent.value = saved
+const rightDrawerTitle = computed(() => {
+  const map: Record<RightWorkspaceTab, string> = {
+    plan: t('sessions.tabPlan'),
+    files: t('sessions.tabFiles'),
+    memory: t('sessions.tabMemory'),
+    tables: t('sessions.tabTables'),
+    changes: t('sessions.tabChanges'),
+    terminal: t('sessions.tabTerminal'),
   }
+  return map[rightTab.value]
 })
 
-function onSplitResizePointerDown(event: PointerEvent) {
-  event.preventDefault()
-  const bodyEl = bodyRef.value
-  if (!bodyEl) return
-  const startX = event.clientX
-  const totalWidth = bodyEl.getBoundingClientRect().width
-  const startPercent = splitPercent.value
+const rightIconItems = computed(() => {
+  const plan = planProgress.value
+  return [
+    {
+      value: 'plan' as const,
+      label: t('sessions.tabPlan'),
+      icon: MagicStick,
+      badge: plan.total > 0 ? `${plan.completed}/${plan.total}` : undefined,
+    },
+    { value: 'files' as const, label: t('sessions.tabFiles'), icon: Document },
+    {
+      value: 'memory' as const,
+      label: t('sessions.tabMemory'),
+      icon: Library,
+      badge: memoryCount.value > 0 ? memoryCount.value : undefined,
+    },
+    { value: 'tables' as const, label: t('sessions.tabTables'), icon: Grid },
+    {
+      value: 'changes' as const,
+      label: t('sessions.tabChanges'),
+      icon: FolderChecked,
+      badge: changesCount.value > 0 ? changesCount.value : undefined,
+    },
+    { value: 'terminal' as const, label: t('sessions.tabTerminal'), icon: Terminal },
+  ]
+})
 
-  const onMove = (e: PointerEvent) => {
-    const delta = e.clientX - startX
-    const next = startPercent + (delta / totalWidth) * 100
-    splitPercent.value = Math.min(80, Math.max(25, next))
-  }
-
-  const onUp = () => {
-    localStorage.setItem(SPLIT_STORAGE_KEY, String(Math.round(splitPercent.value)))
-    window.removeEventListener('pointermove', onMove)
-    window.removeEventListener('pointerup', onUp)
-    document.body.classList.remove('app-is-resizing')
-  }
-
-  document.body.classList.add('app-is-resizing')
-  window.addEventListener('pointermove', onMove)
-  window.addEventListener('pointerup', onUp)
+function onRightIconClick(tab: RightWorkspaceTab) {
+  workspaceUi.toggleRightDrawer(tab)
 }
 
 async function openFileInOffice(filePath: string) {
@@ -239,7 +247,7 @@ let composerResizeObs: ResizeObserver | null = null
 function chatColumnMaxPx(): number {
   const raw = getComputedStyle(document.documentElement).getPropertyValue('--dq-chat-column-max').trim()
   const n = Number.parseFloat(raw)
-  return Number.isFinite(n) && n > 0 ? n : 720
+  return Number.isFinite(n) && n > 0 ? n : 920
 }
 
 function updateComposerPosition() {
@@ -266,9 +274,8 @@ function syncComposerLayout() {
   updateComposerOverlayHeight()
 }
 
-watch(splitPercent, () => { nextTick(syncComposerLayout) })
-watch(rightPanelCollapsed, () => { nextTick(syncComposerLayout) })
 watch(layoutMode, () => { nextTick(syncComposerLayout) })
+watch(rightDrawerOpen, () => { nextTick(syncComposerLayout) })
 watch(
   () => workspaceUi.pendingApprovals,
   () => { nextTick(syncComposerLayout) },
@@ -586,6 +593,28 @@ const planTurnId = computed(() => {
     if (!roots[i].status) return roots[i].id
   }
   return roots[roots.length - 1].id
+})
+
+/** Latest todowrite snapshot for the plan turn — badge shows completed/total. */
+const planProgress = computed(() => {
+  const turnId = planTurnId.value
+  const events = sessions.streamEvents
+  for (let i = events.length - 1; i >= 0; i--) {
+    const ev = events[i]
+    if (turnId && ev.turnId !== turnId) continue
+    if (ev.type !== 'tool.running') continue
+    const p = ev.payload as Record<string, unknown> | null
+    if (p?.name !== 'todowrite') continue
+    const input = p?.input as Record<string, unknown> | null
+    const items = input?.todos
+    if (!Array.isArray(items) || items.length === 0) continue
+    const total = items.length
+    const completed = items.filter(
+      (item) => String((item as { status?: string })?.status ?? '') === 'completed',
+    ).length
+    return { completed, total }
+  }
+  return { completed: 0, total: 0 }
 })
 
 const visibleTurns = computed(() => {
@@ -1385,14 +1414,13 @@ async function cancelRunning() {
   }
 }
 
-async function copyLink() {
+async function copySessionId() {
   if (!sessions.currentSession) return
-  const url = `${window.location.origin}/app/sessions/${sessions.currentSession.id}`
   try {
-    await navigator.clipboard.writeText(url)
-    toast.success('链接已复制')
+    await navigator.clipboard.writeText(sessions.currentSession.id)
+    toast.success(t('sessions.copySessionIdDone'))
   } catch {
-    toast.error('复制失败')
+    toast.error(t('sessions.copySessionIdFailed'))
   }
 }
 
@@ -1465,9 +1493,12 @@ watch(
     }
     if (last.type === 'turn.ended' || last.type === 'report') {
       void refreshChangesCount().then(() => {
-        if (workspaceUi.changesCount > 0 && rightTab.value !== 'changes') {
-          // Badge already updated; soft-switch only when user is on plan tab
-          if (rightTab.value === 'plan') workspaceUi.setRightTab('changes')
+        if (
+          workspaceUi.changesCount > 0 &&
+          rightDrawerOpen.value &&
+          rightTab.value === 'plan'
+        ) {
+          workspaceUi.setRightTab('changes')
         }
       })
     }
@@ -1527,10 +1558,24 @@ function onTitleKeydown(e: KeyboardEvent) {
             {{ sessions.currentSession.title || sessions.currentSession.content }}
           </h2>
         </template>
-        <DqTag
-          :type="statusType"
-          :effect="sessions.currentSession?.status === 'active' ? 'dark' : 'light'"
-        >{{ statusLabel }}</DqTag>
+        <div class="session-workspace__status-id">
+          <DqTag
+            :type="statusType"
+            :effect="sessions.currentSession?.status === 'active' ? 'dark' : 'light'"
+          >{{ statusLabel }}</DqTag>
+          <button
+            type="button"
+            class="session-workspace__copy-btn"
+            :title="t('sessions.copySessionId')"
+            :aria-label="t('sessions.copySessionId')"
+            @click="copySessionId"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+          </button>
+        </div>
         <ActiveSessionsBar
           class="session-workspace__active"
           @select="(id) => { sessions.selectSession(id); router.push({ name: 'sessions', params: { id } }) }"
@@ -1541,12 +1586,28 @@ function onTitleKeydown(e: KeyboardEvent) {
         <DqButton v-if="sessions.runningTurnId" type="warning" size="sm" @click="cancelRunning">
           {{ t('sessions.cancelRunning') }}
         </DqButton>
-        <button class="session-workspace__copy-btn" :title="t('sessions.copyLink')" @click="copyLink">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-          </svg>
-        </button>
+        <div class="session-workspace__tools" role="toolbar" :aria-label="t('sessions.rightWorkspace')">
+          <button
+            v-for="item in rightIconItems"
+            :key="item.value"
+            type="button"
+            class="session-workspace__tool"
+            :class="{
+              'is-active': rightDrawerOpen && rightTab === item.value,
+              'has-badge': item.badge != null && item.badge !== '',
+            }"
+            :aria-label="item.badge != null && item.badge !== '' ? `${item.label} ${item.badge}` : item.label"
+            :title="item.badge != null && item.badge !== '' ? `${item.label} · ${item.badge}` : item.label"
+            :aria-pressed="rightDrawerOpen && rightTab === item.value"
+            @click="onRightIconClick(item.value)"
+          >
+            <component :is="item.icon" class="session-workspace__tool-icon" :size="16" :stroke-width="2" aria-hidden="true" />
+            <span
+              v-if="item.badge != null && item.badge !== ''"
+              class="session-workspace__tool-badge"
+            >{{ item.badge }}</span>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -1562,7 +1623,6 @@ function onTitleKeydown(e: KeyboardEvent) {
       <div
         v-show="layoutMode !== 'immersive'"
         class="session-workspace__stream"
-        :style="rightPanelCollapsed && isChatLayout ? { gridColumn: '1' } : undefined"
       >
       <div
         ref="scrollAreaRef"
@@ -1732,12 +1792,6 @@ function onTitleKeydown(e: KeyboardEvent) {
       
       </div>
 
-      <div
-        v-show="isChatLayout && !rightPanelCollapsed"
-        class="session-workspace__split"
-        @pointerdown="onSplitResizePointerDown"
-      />
-
       <DocumentStage
         v-if="stage && sessions.selectedProjectId"
         class="session-workspace__stage"
@@ -1746,44 +1800,27 @@ function onTitleKeydown(e: KeyboardEvent) {
         @attach-code-selection="onStageAttachCodeSelection"
         @attach-office-edit="onStageAttachOfficeEdit"
       />
-
-      <div
-        v-show="isStageLayout"
-        class="session-workspace__split session-workspace__split--static"
-      />
-
-      <div
-        v-show="layoutMode !== 'immersive'"
-        class="session-workspace__right"
-        :class="{ 'is-collapsed': rightPanelCollapsed }"
-        :style="rightPanelCollapsed && isChatLayout ? { gridColumn: '2' } : undefined"
-      >
-        <button
-          v-if="rightPanelCollapsed"
-          type="button"
-          class="session-workspace__right-strip"
-          :aria-label="t('navigation.expandRightPanel')"
-          :title="t('navigation.expandRightPanel')"
-          @click="workspaceUi.setRightPanelCollapsed(false)"
-        >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M15 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </button>
-        <RightWorkspacePanel
-          v-else
-          ref="rightPanelRef"
-          v-model:tab="rightTab"
-          :stream-events="sessions.streamEvents"
-          :plan-turn-id="planTurnId"
-          :project-id="sessions.selectedProjectId"
-          :changes-count="workspaceUi.changesCount"
-          :agent-id="sessions.selectedAgentId"
-          @open-in-office="openFileInOffice"
-          @collapse="workspaceUi.setRightPanelCollapsed(true)"
-        />
-      </div>
     </div>
+
+    <DqDrawer
+      :open="rightDrawerOpen"
+      class="session-workspace__drawer"
+      direction="rtl"
+      size="min(380px, 92vw)"
+      :title="rightDrawerTitle"
+      @update:open="workspaceUi.setRightDrawerOpen"
+    >
+      <RightWorkspacePanel
+        ref="rightPanelRef"
+        v-model:tab="rightTab"
+        :stream-events="sessions.streamEvents"
+        :plan-turn-id="planTurnId"
+        :project-id="sessions.selectedProjectId"
+        :changes-count="workspaceUi.changesCount"
+        :agent-id="sessions.selectedAgentId"
+        @open-in-office="openFileInOffice"
+      />
+    </DqDrawer>
 
     <div ref="composerWrapRef" class="session-workspace__composer" :style="composerStyle">
       <ComposerPendingDecisions
@@ -1822,38 +1859,6 @@ function onTitleKeydown(e: KeyboardEvent) {
   background: transparent;
 }
 
-.session-workspace__right.is-collapsed {
-  margin: 0;
-  border: none;
-  border-left: 1px solid var(--dq-shell-divider);
-  background: var(--dq-shell-sidebar-bg);
-  border-radius: 0;
-  overflow: hidden;
-  z-index: 6;
-}
-
-.session-workspace__right-strip {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  width: 100%;
-  min-width: 40px;
-  height: 100%;
-  padding: 14px 0 0;
-  border: none;
-  background: transparent;
-  color: var(--dq-label-secondary);
-  cursor: pointer;
-  z-index: 6;
-}
-
-.session-workspace__right-strip:hover {
-  color: var(--dq-accent);
-  background: color-mix(in srgb, var(--dq-accent) 8%, transparent);
-}
-
 .session-workspace__identity {
   display: flex;
   align-items: center;
@@ -1868,8 +1873,9 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .session-workspace__title {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: min(100%, 42ch);
   margin: 0;
   font-size: var(--dq-font-size-title);
   font-weight: 600;
@@ -1878,6 +1884,12 @@ function onTitleKeydown(e: KeyboardEvent) {
   text-overflow: ellipsis;
   color: var(--dq-label-primary);
   cursor: pointer;
+}
+
+.session-workspace__title-input {
+  flex: 0 1 auto;
+  min-width: 160px;
+  max-width: min(100%, 42ch);
 }
 
 .session-workspace__title:hover {
@@ -1891,6 +1903,74 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .session-workspace__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.session-workspace__tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+}
+
+.session-workspace__tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dq-label-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.session-workspace__tool.has-badge {
+  width: auto;
+  min-width: 30px;
+  padding: 0 7px 0 6px;
+}
+
+.session-workspace__tool-icon {
+  flex-shrink: 0;
+}
+
+.session-workspace__tool:hover {
+  color: var(--dq-label-primary);
+  background: var(--dq-fill-on-glass);
+}
+
+.session-workspace__tool.is-active {
+  color: var(--dq-accent);
+  background: color-mix(in srgb, var(--dq-accent) 14%, transparent);
+}
+
+.session-workspace__tool-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: inherit;
+  opacity: 0.85;
+}
+
+.session-workspace__tool.is-active .session-workspace__tool-badge {
+  opacity: 1;
+}
+
+.session-workspace__status-id {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1925,9 +2005,10 @@ function onTitleKeydown(e: KeyboardEvent) {
 }
 
 .session-workspace__body--stage {
-  /* Columns set via bodyGridStyle so collapse can shrink the right strip. */
-  grid-template-columns: minmax(200px, 26%) minmax(0, 1fr) minmax(200px, 24%);
+  grid-template-columns: minmax(200px, 32%) minmax(0, 1fr);
 }
+
+/* Drawer layout lives in work.css — panel is teleported outside this scope. */
 
 .session-workspace__body--immersive {
   grid-template-columns: 1fr;
@@ -1937,10 +2018,6 @@ function onTitleKeydown(e: KeyboardEvent) {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-}
-
-.session-workspace__split--static {
-  display: none;
 }
 
 .session-workspace__stream {
@@ -2084,7 +2161,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   flex-direction: column;
   gap: var(--dq-chat-turn-gap, 12px);
   width: 100%;
-  max-width: var(--dq-chat-column-max, 720px);
+  max-width: var(--dq-chat-column-max, 920px);
 }
 
 .turn-breadcrumbs {
@@ -2195,7 +2272,7 @@ function onTitleKeydown(e: KeyboardEvent) {
   width: 100%;
   border-collapse: collapse;
   margin: 8px 0;
-  font-size: var(--dq-font-size-body);
+  font-size: inherit;
   border: 1px solid color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
   border-radius: 8px;
   overflow: hidden;
@@ -2235,14 +2312,14 @@ function onTitleKeydown(e: KeyboardEvent) {
 .turn__report-meta-summary :deep(h3),
 .turn__report-meta-summary :deep(h4) {
   margin: 14px 0 6px;
-  font-weight: 650;
   color: var(--dq-label-primary);
   line-height: 1.35;
+  font-size: inherit;
 }
-.turn__report-meta-summary :deep(h1) { font-size: var(--dq-font-size-heading); }
-.turn__report-meta-summary :deep(h2) { font-size: var(--dq-font-size-title); }
+.turn__report-meta-summary :deep(h1) { font-weight: 650; }
+.turn__report-meta-summary :deep(h2),
 .turn__report-meta-summary :deep(h3),
-.turn__report-meta-summary :deep(h4) { font-size: var(--dq-font-size-callout); font-weight: 600; }
+.turn__report-meta-summary :deep(h4) { font-weight: 600; }
 .turn__report-meta-summary :deep(h1:first-child),
 .turn__report-meta-summary :deep(h2:first-child),
 .turn__report-meta-summary :deep(h3:first-child) {
@@ -2459,139 +2536,6 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 
 
-
-.session-workspace__split {
-  cursor: col-resize;
-  position: relative;
-  z-index: 5;
-  background: transparent;
-  transition: background 0.15s ease;
-}
-
-.session-workspace__split::after {
-  content: '';
-  position: absolute;
-  top: 12%;
-  bottom: 12%;
-  left: 50%;
-  width: 2px;
-  transform: translateX(-50%);
-  border-radius: 1px;
-  background: transparent;
-  transition: background 0.15s ease;
-}
-
-.session-workspace__split:hover::after,
-.app-is-resizing .session-workspace__split::after {
-  background: color-mix(in srgb, var(--dq-accent) 45%, transparent);
-}
-
-.session-workspace__right {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
-  overflow: hidden;
-  margin: 0;
-  border: none;
-  border-left: 1px solid var(--dq-shell-divider);
-  background: var(--dq-shell-panel-bg);
-  -webkit-backdrop-filter: var(--dq-shell-panel-blur);
-  backdrop-filter: var(--dq-shell-panel-blur);
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.session-workspace__right > :deep(.right-workspace) {
-  flex: 1;
-  min-height: 0;
-  height: 100%;
-}
-
-.session-workspace__right-tabs {
-  display: flex;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--dq-separator-light);
-  padding: 0 4px;
-}
-
-.session-workspace__right-tab {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 12px;
-  color: var(--dq-label-secondary);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.session-workspace__right-tab:hover::after {
-  content: attr(title);
-  position: absolute;
-  bottom: -22px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 2px 8px;
-  border-radius: var(--dq-radius-button);
-  background: var(--dq-glass-tooltip-bg);
-  color: var(--dq-color-white);
-  font-size: var(--dq-font-size-caption);
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: 100;
-}
-
-.session-workspace__right-tab.is-active {
-  color: var(--dq-accent);
-  border-bottom-color: var(--dq-accent);
-}
-
-.session-workspace__right-tab:hover:not(.is-active) {
-  color: var(--dq-label-primary);
-}
-
-.session-workspace__right-tab :deep(svg) {
-  pointer-events: none;
-}
-
-.session-workspace__right > :deep(.plan-panel) {
-  flex: 1;
-  min-height: 0;
-  width: auto;
-  border-left: none;
-}
-
-.session-workspace__right > :deep(.file-tree),
-.session-workspace__right > :deep(.file-viewer) {
-  flex: 1;
-  min-height: 0;
-}
-
-.session-workspace__right > :deep(.memory-panel),
-.session-workspace__right > :deep(.changes-panel) {
-  flex: 1;
-  min-height: 0;
-}
-
-.session-workspace__right-empty {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--dq-font-size-footnote);
-  color: var(--dq-label-tertiary);
-}
-
-.session-workspace__right-empty {
-  padding: 24px 16px;
-  text-align: center;
-  font-size: var(--dq-font-size-body);
-  color: var(--dq-label-tertiary);
-}
 
 .session-workspace__composer {
   position: fixed;

@@ -261,7 +261,8 @@ defineExpose({ refresh, totalCount })
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--dq-shell-sidebar-bg);
+  /* Drawer owns the glass fill — keep panel clear to avoid stacked frost */
+  background: transparent;
   font-size: var(--dq-font-size-body);
 }
 

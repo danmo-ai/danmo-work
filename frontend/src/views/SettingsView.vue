@@ -2766,7 +2766,7 @@ const hasFooterActions = computed(() => {
   min-height: 0;
   overflow: auto;
   padding: 28px 36px 20px;
-  background: color-mix(in srgb, var(--dq-bg-elevated) 30%, transparent);
+  background: transparent;
 }
 
 .settings-panel__footer {
@@ -2844,14 +2844,14 @@ const hasFooterActions = computed(() => {
 
 .settings-section__head h2 {
   margin: 0 0 6px;
-  font-size: var(--dq-font-size-heading);
+  font-size: var(--dq-font-size-title);
   font-weight: 600;
   color: var(--dq-label-primary);
 }
 
 .settings-section__head p {
   margin: 0;
-  font-size: var(--dq-font-size-body);
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
 }
 
@@ -2882,14 +2882,14 @@ const hasFooterActions = computed(() => {
 
 .settings-form-group__title {
   margin: 0 0 4px;
-  font-size: var(--dq-font-size-secondary);
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
   color: var(--dq-label-primary);
 }
 
 .settings-form-group__desc {
   margin: 0 0 16px;
-  font-size: var(--dq-font-size-footnote);
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
   line-height: 1.5;
 }
@@ -3393,15 +3393,16 @@ const hasFooterActions = computed(() => {
 
 .settings-subsection__title {
   margin: 0 0 4px;
-  font-size: var(--dq-font-size-title);
+  font-size: var(--dq-font-size-body);
   font-weight: 600;
   color: var(--dq-label-primary);
 }
 
 .settings-subsection__desc {
   margin: 0;
-  font-size: var(--dq-font-size-body);
-  color: var(--dq-label-secondary);
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-tertiary);
+  line-height: 1.45;
 }
 
 /* Model limits list */

@@ -106,8 +106,8 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
 .turn-section {
   display: flex;
   flex-direction: column;
-  gap: var(--dq-chat-block-gap, 10px);
-  padding-bottom: 10px;
+  gap: var(--dq-chat-block-gap, 4px);
+  padding-bottom: 6px;
 }
 
 .turn-section__divider {
@@ -206,7 +206,7 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: var(--dq-font-size-caption);
+  font-size: var(--dq-font-size-body);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   color: var(--dq-label-secondary);
@@ -247,11 +247,12 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
 .turn-section__body {
   display: flex;
   flex-direction: column;
-  gap: var(--dq-chat-block-gap, 10px);
+  gap: var(--dq-chat-block-gap, 4px);
 }
 
 .turn-section__agent {
   display: flex;
+  margin-block: 4px 2px;
 }
 
 .turn-section__timeline {
@@ -259,8 +260,8 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
   min-width: 0;
   display: flex;
   flex-direction: column;
-  /* Same as theme block gap — tools are footnotes, not a packed wall */
-  gap: var(--dq-chat-block-gap, 10px);
+  /* Footnotes (thinking / tools) — denser than turn-level gap */
+  gap: var(--dq-chat-block-gap, 4px);
 }
 
 .turn-section__timeline :deep(.turn__event) {
@@ -274,6 +275,6 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
 }
 
 .turn-section__timeline :deep(.agent-msg) {
-  margin-block: 6px;
+  margin-block: 2px;
 }
 </style>

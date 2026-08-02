@@ -11,18 +11,14 @@ const emit = defineEmits<{
   toggle: [seq: number]
 }>()
 
-function truncatePreview(s: string, max = 80): string {
-  if (s.length <= max) return s
-  return s.slice(0, max) + '…'
-}
-
 function formatLen(s: string): string {
   const n = s.length
   if (n < 1000) return String(n)
   return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
 }
 
-const preview = computed(() => truncatePreview(props.text))
+/** Full text for CSS ellipsis — fills the row to the trailing meta. */
+const preview = computed(() => props.text.replace(/\s+/g, ' ').trim())
 </script>
 
 <template>
@@ -30,21 +26,24 @@ const preview = computed(() => truncatePreview(props.text))
     <button type="button" class="thinking-block__header" @click="emit('toggle', seq)">
       <span v-if="!expanded" class="thinking-block__preview">{{ preview }}</span>
       <span v-else class="thinking-block__hint">思考过程</span>
-      <span class="thinking-block__meta">{{ formatLen(text) }}</span>
-      <svg
-        class="thinking-block__chevron"
-        :class="{ 'is-open': expanded }"
-        viewBox="0 0 24 24"
-        width="14"
-        height="14"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <polyline points="6 9 12 15 18 9" />
-      </svg>
+      <span class="thinking-block__trail">
+        <span class="thinking-block__meta">{{ formatLen(text) }}</span>
+        <svg
+          class="thinking-block__chevron"
+          :class="{ 'is-open': expanded }"
+          viewBox="0 0 24 24"
+          width="12"
+          height="12"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </span>
     </button>
     <div v-if="expanded" class="thinking-block__body">{{ text }}</div>
   </div>
@@ -58,16 +57,18 @@ const preview = computed(() => truncatePreview(props.text))
 .thinking-block__header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  padding: 4px 0;
+  min-height: 22px;
+  padding: 1px 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   color: var(--dq-label-tertiary);
   cursor: pointer;
   text-align: left;
   font: inherit;
+  line-height: 1.35;
 }
 
 .thinking-block__header:hover {
@@ -75,33 +76,40 @@ const preview = computed(() => truncatePreview(props.text))
 }
 
 .thinking-block__preview {
-  flex: 1;
+  /* Grow with text, shrink with ellipsis — trail stays glued after text (no far-right gap) */
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: calc(100% - 52px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--dq-font-size-caption);
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-tertiary);
-  font-style: normal;
 }
 
 .thinking-block__hint {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
-  font-size: var(--dq-font-size-caption);
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-tertiary);
+}
+
+.thinking-block__trail {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .thinking-block__meta {
-  flex-shrink: 0;
   font-size: var(--dq-font-size-caption);
-  color: var(--dq-label-tertiary);
+  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
   font-variant-numeric: tabular-nums;
+  opacity: 0.85;
 }
 
 .thinking-block__chevron {
-  flex-shrink: 0;
-  opacity: 0.45;
+  opacity: 0.4;
   transition: transform 0.15s ease;
 }
 
@@ -110,14 +118,14 @@ const preview = computed(() => truncatePreview(props.text))
 }
 
 .thinking-block__body {
-  max-height: 240px;
+  max-height: 280px;
   overflow-y: auto;
-  margin: 0 6px 4px;
-  padding: 8px 10px;
+  margin: 2px 0 4px;
+  padding: 6px 8px;
   border-radius: 6px;
   background: color-mix(in srgb, var(--dq-label-primary) 3%, transparent);
   font-size: var(--dq-font-size-body);
-  line-height: 1.5;
+  line-height: 1.45;
   color: var(--dq-label-secondary);
   white-space: pre-wrap;
   word-break: break-word;

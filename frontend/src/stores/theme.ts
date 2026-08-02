@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import {
   THEME_OPTIONS as DQ_THEME_OPTIONS,
   applyDqTheme,
-  isDqThemeSlug,
+  resolveDqThemeSlug,
   type DqThemeSlug,
 } from '@danqing/dq-tokens'
 
@@ -37,13 +37,15 @@ function applyTheme(id: ThemeId) {
 function getStoredTheme(): ThemeId {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored && isDqThemeSlug(stored)) {
-      return stored
+    const resolved = resolveDqThemeSlug(stored)
+    if (stored && stored !== resolved) {
+      localStorage.setItem(STORAGE_KEY, resolved)
     }
+    return resolved
   } catch {
     // ignore
   }
-  return 'tokyo-night'
+  return 'mac'
 }
 
 export const useThemeStore = defineStore('theme', () => {

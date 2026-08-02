@@ -81,21 +81,23 @@ const statusHint = computed(() => {
         <span v-if="!expanded && nameSummary" class="tool-group__names">{{ nameSummary }}</span>
         <span v-if="statusHint" class="tool-group__hint">{{ statusHint }}</span>
       </span>
-      <svg
-        class="tool-group__chevron"
-        :class="{ 'is-open': expanded }"
-        viewBox="0 0 24 24"
-        width="12"
-        height="12"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <polyline points="6 9 12 15 18 9" />
-      </svg>
+      <span class="tool-group__trail">
+        <svg
+          class="tool-group__chevron"
+          :class="{ 'is-open': expanded }"
+          viewBox="0 0 24 24"
+          width="12"
+          height="12"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </span>
     </button>
 
     <div v-show="expanded" class="tool-group__body">
@@ -126,9 +128,9 @@ const statusHint = computed(() => {
 .tool-group__header {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   width: 100%;
-  min-height: 24px;
+  min-height: 22px;
   padding: 0;
   border: none;
   background: transparent;
@@ -163,9 +165,10 @@ const statusHint = computed(() => {
 .tool-group__label {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
-  flex: 1;
+  flex: 0 1 auto;
+  max-width: calc(100% - 20px);
 }
 
 .tool-group__title {
@@ -176,11 +179,12 @@ const statusHint = computed(() => {
 }
 
 .tool-group__names {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--dq-font-size-caption);
+  font-size: var(--dq-font-size-body);
   color: var(--dq-label-tertiary);
   font-family: var(--dq-font-mono, ui-monospace, monospace);
 }
@@ -198,7 +202,6 @@ const statusHint = computed(() => {
 
 .tool-group.is-running .tool-group__names,
 .tool-group.is-error .tool-group__names {
-  font-size: var(--dq-font-size-body);
   color: var(--dq-label-secondary);
 }
 
@@ -217,8 +220,13 @@ const statusHint = computed(() => {
   color: var(--dq-danger);
 }
 
-.tool-group__chevron {
+.tool-group__trail {
+  display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
+}
+
+.tool-group__chevron {
   color: var(--dq-label-quaternary);
   transition: transform 0.15s ease;
 }
@@ -230,9 +238,9 @@ const statusHint = computed(() => {
 .tool-group__body {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin: 4px 0 8px;
-  padding: 4px 0 4px 13px;
+  gap: 1px;
+  margin: 2px 0 4px;
+  padding: 2px 0 2px 12px;
   border-left: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
 }
 

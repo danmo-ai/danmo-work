@@ -91,7 +91,7 @@ function rowAsk(part: UserMessagePart): string {
   max-width: min(85%, 420px);
   padding: 10px 14px;
   border-radius: var(--dq-msg-user-radius);
-  font-size: var(--dq-font-size-prose, var(--dq-font-size-secondary));
+  font-size: var(--dq-font-size-body);
   line-height: var(--dq-line-height-prose, 1.55);
   color: var(--dq-msg-user-fg);
   background: var(--dq-msg-user-bg);

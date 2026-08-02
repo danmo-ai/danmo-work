@@ -42,7 +42,7 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     trigger: 'tables',
     labelKey: 'composer.slash.tables',
     descriptionKey: 'composer.slash.tablesDesc',
-    keywords: ['table', 'store', '表格'],
+    keywords: ['table', 'store', '表格', '表存储', '数据表'],
   },
   {
     id: 'terminal',

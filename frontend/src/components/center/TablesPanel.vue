@@ -213,18 +213,17 @@ defineExpose({ refresh })
 <template>
   <div class="tables-panel">
     <div class="tables-panel__header">
-      <span class="tables-panel__title">{{ t('tables.title') }}</span>
-      <button type="button" class="tables-panel__btn" :disabled="loading" @click="refresh">
+      <DqInput
+        v-model="filter"
+        class="tables-panel__filter"
+        size="sm"
+        type="search"
+        :placeholder="t('tables.filterPlaceholder')"
+      />
+      <DqButton size="sm" plain :disabled="loading" @click="refresh">
         {{ t('tables.refresh') }}
-      </button>
+      </DqButton>
     </div>
-
-    <input
-      v-model="filter"
-      class="tables-panel__filter"
-      type="search"
-      :placeholder="t('tables.filterPlaceholder')"
-    />
 
     <div v-if="loading" class="tables-panel__status">{{ t('tables.loading') }}</div>
     <DqEmpty
@@ -297,48 +296,38 @@ defineExpose({ refresh })
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  padding: 8px;
+  padding: 10px 12px;
   gap: 8px;
+  background: transparent;
 }
 .tables-panel__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+  flex-shrink: 0;
 }
-.tables-panel__title {
-  font-size: var(--dq-font-size-body);
-  font-weight: 600;
-  color: var(--dq-label-primary);
+.tables-panel__filter {
+  flex: 1;
+  min-width: 0;
 }
 .tables-panel__btn {
   height: 26px;
   padding: 0 8px;
   border: 1px solid var(--dq-border);
   border-radius: 5px;
-  background: var(--dq-fill-tertiary);
+  background: var(--dq-fill-on-glass);
   color: var(--dq-label-primary);
   font-size: var(--dq-font-size-body);
   cursor: pointer;
 }
 .tables-panel__btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--dq-label-primary) 8%, var(--dq-fill-tertiary));
+  background: var(--dq-fill-on-glass-hover);
 }
 .tables-panel__btn:disabled {
   opacity: 0.5;
 }
 .tables-panel__btn--danger {
   color: var(--dq-danger, #c0392b);
-}
-.tables-panel__filter {
-  height: 30px;
-  border: 1px solid var(--dq-border);
-  border-radius: 6px;
-  padding: 0 8px;
-  background: var(--dq-bg-base);
-  color: var(--dq-label-primary);
-  font-size: var(--dq-font-size-body);
-  outline: none;
 }
 .tables-panel__status,
 .tables-panel__hint {
