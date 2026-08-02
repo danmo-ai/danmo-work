@@ -105,10 +105,77 @@ gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -D "$TMP/assets"
 curl -fsSL "${API}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_TOKEN}&per_page=100" \
   -o "$TMP/gitee-attach.json" || echo '[]' >"$TMP/gitee-attach.json"
 
-shopt -s nullglob
-for f in "$TMP/assets"/*; do
-  [[ -f "$f" ]] || continue
+# Gitee release attachments are typically capped (~50–100MB on community plans).
+# Prefer desktop installers; skip huge env tars and anything over MAX_UPLOAD_MB.
+MAX_UPLOAD_MB="${MAX_UPLOAD_MB:-100}"
+SKIP_GLOBS="${SKIP_GLOBS:-danmo-work-env-*.tar}"
+
+# Upload order: installers users click first, then updater payloads, then rest.
+python3 - "$TMP/assets" "$TMP/upload-list.txt" <<'PY'
+import os, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+out = Path(sys.argv[2])
+files = [p for p in root.iterdir() if p.is_file()]
+
+def rank(p: Path) -> tuple:
+    n = p.name.lower()
+    if n.endswith((".dmg", ".exe", ".deb")): return (0, n)
+    if n.endswith(".appimage") or n.endswith(".appimage.sig"): return (1, n)
+    if ".app.tar.gz" in n: return (2, n)
+    if n.endswith(".sig"): return (3, n)
+    if n == "latest.json": return (4, n)
+    if n.startswith("danmo-work-env-"): return (9, n)
+    return (5, n)
+
+files.sort(key=rank)
+out.write_text("\n".join(str(p) for p in files) + ("\n" if files else ""), encoding="utf-8")
+print(f"queued {len(files)} assets")
+PY
+
+UPLOAD_OK=0
+UPLOAD_SKIP=0
+UPLOAD_FAIL=0
+CRITICAL_FAIL=0
+
+should_skip_name() {
+  local name="$1"
+  local g
+  for g in $SKIP_GLOBS; do
+    # shellcheck disable=SC2254
+    case "$name" in
+      $g) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+is_critical_name() {
+  local name="$1"
+  case "$name" in
+    *.dmg|*.exe|*.deb|*.AppImage|*.app.tar.gz|*.app.tar.gz.sig|*.AppImage.sig|*-setup.exe.sig|latest.json)
+      return 0 ;;
+    *)
+      return 1 ;;
+  esac
+}
+
+while IFS= read -r f; do
+  [[ -z "$f" || ! -f "$f" ]] && continue
   name="$(basename "$f")"
+  size_mb="$(python3 -c 'import os,sys; print(os.path.getsize(sys.argv[1]) / (1024*1024))' "$f")"
+
+  if should_skip_name "$name"; then
+    echo "SKIP ${name} (matched SKIP_GLOBS)"
+    UPLOAD_SKIP=$((UPLOAD_SKIP + 1))
+    continue
+  fi
+  if python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) > float(sys.argv[2]) else 1)' "$size_mb" "$MAX_UPLOAD_MB"; then
+    echo "SKIP ${name} (${size_mb%.*}MB > MAX_UPLOAD_MB=${MAX_UPLOAD_MB})"
+    UPLOAD_SKIP=$((UPLOAD_SKIP + 1))
+    continue
+  fi
+
   ATT_ID="$(python3 - "$TMP/gitee-attach.json" "$name" <<'PY'
 import json, sys
 name = sys.argv[2]
@@ -120,20 +187,47 @@ for a in items:
         break
 PY
 )"
-  if [[ -n "$ATT_ID" ]]; then
+  # Skip re-upload when already present (except latest.json, rewritten later).
+  if [[ -n "$ATT_ID" && "$name" != "latest.json" ]]; then
+    echo "EXISTS ${name} (id=${ATT_ID}) — skip"
+    UPLOAD_OK=$((UPLOAD_OK + 1))
+    continue
+  fi
+  if [[ -n "$ATT_ID" && "$name" == "latest.json" ]]; then
     echo "Removing existing Gitee asset ${name} (id=${ATT_ID})"
-    curl -fsSL -X DELETE \
+    curl -fsSL --max-time 60 -X DELETE \
       "${API}/releases/${RELEASE_ID}/attach_files/${ATT_ID}?access_token=${GITEE_TOKEN}" \
       >/dev/null || true
   fi
-  echo "Uploading ${name}"
-  curl -fsSL -X POST "${API}/releases/${RELEASE_ID}/attach_files" \
+
+  echo "Uploading ${name} (${size_mb}MB)"
+  if curl -fS --retry 2 --retry-delay 3 --max-time 600 -X POST \
+    "${API}/releases/${RELEASE_ID}/attach_files" \
     -F "access_token=${GITEE_TOKEN}" \
     -F "file=@${f};filename=${name}" \
-    >/dev/null
-done
+    -o "$TMP/upload-resp.json"; then
+    echo "OK ${name}"
+    UPLOAD_OK=$((UPLOAD_OK + 1))
+    # Refresh attach list so later EXISTS checks see new ids.
+    curl -fsSL --max-time 60 \
+      "${API}/releases/${RELEASE_ID}/attach_files?access_token=${GITEE_TOKEN}&per_page=100" \
+      -o "$TMP/gitee-attach.json" || true
+  else
+    echo "FAIL ${name} (see curl exit; Gitee may reject oversized attachments)" >&2
+    UPLOAD_FAIL=$((UPLOAD_FAIL + 1))
+    if is_critical_name "$name"; then
+      CRITICAL_FAIL=$((CRITICAL_FAIL + 1))
+    fi
+  fi
+done <"$TMP/upload-list.txt"
+
+echo "Upload summary: ok=${UPLOAD_OK} skip=${UPLOAD_SKIP} fail=${UPLOAD_FAIL} critical_fail=${CRITICAL_FAIL}"
+if [[ "$CRITICAL_FAIL" -gt 0 ]]; then
+  echo "ERROR: one or more desktop/updater assets failed to upload" >&2
+  exit 1
+fi
 
 export TAG
 "${SCRIPT_DIR}/publish_gitee_updater_manifest.sh"
 
-echo "Done. Gitee release: https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/releases/${TAG}"
+echo "Done. Gitee release: https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}/releases/tag/${TAG}"
