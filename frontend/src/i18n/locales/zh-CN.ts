@@ -859,6 +859,7 @@ export default {
     toolsCompleted: '{n} 完成',
     thinking: '思考',
     thinkingChunks: '{n} 段',
+    processFolded: '中间过程已折叠',
     tabPlan: '计划',
     tabFiles: '文件',
     tabMemory: '记忆',
