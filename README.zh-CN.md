@@ -83,6 +83,7 @@ make dev-web   # → http://localhost:5801/app/
 | 对照回合前快照：保留、回滚、按块接受 | AI 直接覆盖文件，改完难撤回 |
 | 可查看、可编辑的 Memory + 无固定 Schema 的 Table Store | 黑盒产品记忆，或另接一套向量库 |
 | MCP 连接器 + cron / webhook 自动化 | 循环外再拼一堆脚本 |
+| 内置 **CodeGraph** 专家（符号 / 调用 / 影响面） | 结构问题每次全仓 grep |
 | 微信 · 飞书 · 企微 · QQ 共用同一 Loop | 先搭公网回调才能接 IM |
 | 可恢复、可回放，也能改 Tool 结果再继续 | 出问题只能重开对话碰运气 |
 
@@ -157,7 +158,7 @@ Danmo Work 是：**模型在同一条链上编排**；你提供能力（Tool / S
 
 ### 专家、技能与连接器
 
-在界面里配置的是**能力积木**（提示词、Skill、沙箱、委派），不是工作流图。Composer 里用 `@` 即可召唤技能。
+在界面里配置的是**能力积木**（提示词、Skill、沙箱、委派），不是工作流图。Composer 里用 `@` 即可召唤技能；Team 模式下用 `delegate_agent` 召唤内置或市场专家。
 
 | 专家提示词 | 技能库 | 运行时 |
 |-----------|--------|--------|
@@ -165,11 +166,20 @@ Danmo Work 是：**模型在同一条链上编排**；你提供能力（Tool / S
 
 - **专家** — 本地与市场 Agent：提示词、技能、工具、知识库
 - **技能** — Agentskills（`SKILL.md`），内置与自定义均可
-- **MCP** — 连接器目录映射为 `mcp_<server>_<tool>`；密钥加密存储，高风险操作走权限门禁
+- **MCP / 连接器** — 目录映射为 `mcp_<server>_<tool>`；密钥加密存储，高风险操作走权限门禁
 - **自动化** — cron / webhook 真正发起 session turn，可用 Turn Log 回放
 - **记忆** — `memory_*`（user / project / agent），界面有独立记忆页
 - **Table Store** — 无固定 Schema 的 `table_*`，独立落在 `store.db`
 - **运行时** — Turn 上限、Tool 输出上限、委派深度、沙箱与网络策略
+
+#### 内置专家包
+
+产品启动时自动 seed：专家 + 配套技能 + **绑定型**连接器（`AmbientMount=false`）。主 Agent 通过 `delegate_agent` 召唤；不会 ambient 挂到每个会话。
+
+| 专家 | 作用 |
+|------|------|
+| **CodeGraph** | 本地代码智能（跳定义、找调用、影响面），内置 [CodeGraph](https://github.com/colbymchenry/codegraph) CLI。全局共享一条 MCP 连接器；每个项目各自 `.codegraph/` 索引。**首次** `delegate_agent` → `codegraph` 时异步 `codegraph init`；索引未就绪或缺二进制时，专家**降级**用 `read_file` / `grep` 仍可作答。普通无代码工作项目在未委派前不会建图。可用 `scripts/fetch_codegraph.sh` 安装/更新 CLI（桌面打包脚本也会拉取）。 |
+| **Danmo Make** | 本地图文音视频生成（独立应用；URL 读 `~/.danmo-make/api.port`）。 |
 
 ---
 
@@ -199,7 +209,7 @@ Danmo Work 是：**模型在同一条链上编排**；你提供能力（Tool / S
   → 完成
 ```
 
-专家团协作就是同一套循环开 **Team** 模式：你把目标和要求写清楚；主 Agent 自行决定委派谁、用清晰的 `delegate_agent` 说明（goal + context），子 Agent 回报后再继续。
+专家团协作就是同一套循环开 **Team** 模式：你把目标和要求写清楚；主 Agent 自行决定委派谁、用清晰的 `delegate_agent` 说明（goal + context），子 Agent 回报后再继续。结构类代码问题（谁调用了 X、改动影响面）优先 `delegate_agent` → `codegraph`；本地创意生成优先 `danmo-make`。
 
 | 意图清晰（Team） | LLM 自主委派 |
 |------------------|--------------|
