@@ -104,6 +104,9 @@ func (m *StreamEventManager) Unsubscribe(sessionID string, ch chan domain.Stream
 }
 
 func (m *StreamEventManager) ListSince(sessionID string, since int64) []domain.StreamEvent {
+	if m.store == nil {
+		return nil
+	}
 	events, err := m.store.ListBySession(context.Background(), sessionID, since)
 	if err != nil {
 		return nil

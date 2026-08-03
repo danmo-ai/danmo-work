@@ -44,6 +44,47 @@ func testCompactionConfig(enabled bool, turnInterval, subInterval, maxTokens, cu
 	}
 }
 
+// runtime.compaction.model overrides the session model for summaries.
+func TestCompactionSummarizeUsesConfiguredModel(t *testing.T) {
+	mock := llm.NewMock().Finish("summary text")
+	stream := NewStreamEventManager(nil)
+	tmpDir := t.TempDir()
+	cpStore := turnlog.NewCheckpointStore(func(pid string) string { return filepath.Join(tmpDir, pid) })
+	store := &testConfigStore{
+		cfg: &domain.ConfigFile{
+			Runtime: domain.ConfigRuntimeSection{
+				Compaction: domain.ConfigCompactionSection{
+					Enabled: true, Model: "summary-model",
+					CutTokens: 100, TriggerRatio: 0.85, ToolTruncate: 2000,
+				},
+			},
+		},
+	}
+	mgr := NewCompactionManager(mock, stream, store, cpStore, nil)
+
+	old := []Message{{Role: RoleUser, Content: "please do the thing"}}
+	if !mgr.CompactToRetain(context.Background(), "s-model", "turn-1", old, old, 1, "session-model", "turn-1", 1, 100) {
+		t.Fatal("CompactToRetain should succeed")
+	}
+	if len(mock.Requests) == 0 {
+		t.Fatal("summarize should have called the LLM")
+	}
+	if got := mock.Requests[len(mock.Requests)-1].Model; got != "summary-model" {
+		t.Fatalf("summarize model: want summary-model, got %q", got)
+	}
+}
+
+func TestEstimateMessageTokensCountsImageParts(t *testing.T) {
+	plain := estimateMessageTokens(Message{Role: RoleUser, Content: "hi"})
+	withImage := estimateMessageTokens(Message{
+		Role: RoleUser, Content: "hi",
+		Parts: []ContentPart{{Type: "image", MimeType: "image/png", Data: "base64data"}},
+	})
+	if withImage-plain != imagePartTokenEstimate {
+		t.Fatalf("image part should add %d tokens, got %d", imagePartTokenEstimate, withImage-plain)
+	}
+}
+
 func TestCompactionShouldCompact(t *testing.T) {
 	mock := llm.NewMock().Finish("done")
 	stream := NewStreamEventManager(nil)

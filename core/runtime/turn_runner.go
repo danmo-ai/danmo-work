@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"runtime/debug"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -596,7 +598,19 @@ func (p *TurnRunner) runToolCallBatch(
 	return msgs, doomSummary, nil
 }
 
-func (p *TurnRunner) executeToolSlot(ctx context.Context, cfg turnRunCfg, slot *toolCallSlot) error {
+func (p *TurnRunner) executeToolSlot(ctx context.Context, cfg turnRunCfg, slot *toolCallSlot) (err error) {
+	// A panicking tool handler must degrade to a normal tool failure instead of
+	// killing the process — parallel Execute goroutines would otherwise crash
+	// the whole server and force the RecoverRunning restart path.
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[tool] %s panicked: %v\n%s", slot.call.Name, r, debug.Stack())
+			slot.content = limitToolOutput(fmt.Sprintf("tool panicked: %v", r)+toolErrorHint, cfg.maxToolOutputChars)
+			slot.errLabel = fmt.Sprintf("panic: %v", r)
+			slot.done = true
+			err = nil
+		}
+	}()
 	result, execErr := slot.handler.Execute(ctx, slot.args)
 	if execErr != nil {
 		errContent := limitToolOutput(execErr.Error()+toolErrorHint, cfg.maxToolOutputChars)
@@ -1238,6 +1252,11 @@ func turnEstimateMessageTokens(m Message) int {
 	n += len(m.Content) / turnTokenEstimateDivisor
 	n += len(m.Name) / turnTokenEstimateDivisor
 	n += len(m.ToolCallID) / turnTokenEstimateDivisor
+	for _, p := range m.Parts {
+		if p.Type == "image" && p.Data != "" {
+			n += imagePartTokenEstimate
+		}
+	}
 	for _, tc := range m.ToolCalls {
 		n += len(tc.ID) / turnTokenEstimateDivisor
 		n += len(tc.Name) / turnTokenEstimateDivisor

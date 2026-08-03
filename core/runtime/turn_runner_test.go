@@ -576,6 +576,53 @@ func TestEnforceToolPairingStripsPartialAssistantBatch(t *testing.T) {
 	validateToolMessagePairs(t, out, "enforceToolPairing partial batch")
 }
 
+type panicToolHandler struct{}
+
+func (h *panicToolHandler) Name() string                      { return "boom" }
+func (h *panicToolHandler) RiskLevel() domain.RiskLevel       { return domain.RiskLow }
+func (h *panicToolHandler) Describe(map[string]any) string    { return "boom" }
+func (h *panicToolHandler) Schema() domain.ToolSchema {
+	return domain.ToolSchema{Name: "boom", Parameters: map[string]any{"type": "object"}}
+}
+func (h *panicToolHandler) Execute(context.Context, map[string]any) (domain.ToolResult, error) {
+	panic("kaboom")
+}
+
+// A panicking tool handler must degrade to a tool error, not crash the process.
+func TestExecuteToolSlotRecoversPanic(t *testing.T) {
+	p := NewTurnRunner(nil, NewStreamEventManager(nil), nil, tool.NewRegistry(), nil)
+	slot := &toolCallSlot{
+		call:    port.ChatToolCall{ID: "c1", Name: "boom"},
+		handler: &panicToolHandler{},
+		args:    map[string]any{},
+		exec:    true,
+	}
+	err := p.executeToolSlot(context.Background(), turnRunCfg{maxToolOutputChars: 1000}, slot)
+	if err != nil {
+		t.Fatalf("panic must not surface as turn error, got %v", err)
+	}
+	if !slot.done {
+		t.Fatal("slot must be marked done after panic recovery")
+	}
+	if !strings.HasPrefix(slot.errLabel, "panic:") {
+		t.Fatalf("errLabel should record the panic, got %q", slot.errLabel)
+	}
+	if !strings.Contains(slot.content, "kaboom") {
+		t.Fatalf("tool content should describe the panic, got %q", slot.content)
+	}
+}
+
+func TestTurnEstimateMessageTokensCountsImageParts(t *testing.T) {
+	plain := turnEstimateMessageTokens(Message{Role: RoleUser, Content: "hi"})
+	withImage := turnEstimateMessageTokens(Message{
+		Role: RoleUser, Content: "hi",
+		Parts: []ContentPart{{Type: "image", MimeType: "image/png", Data: "base64data"}},
+	})
+	if withImage-plain != imagePartTokenEstimate {
+		t.Fatalf("image part should add %d tokens, got %d", imagePartTokenEstimate, withImage-plain)
+	}
+}
+
 func TestSnipHeadPreservesLastUserMessage(t *testing.T) {
 	tr := NewTurnRunner(nil, nil, nil, nil, nil)
 	// Very small budget — should remove history but NOT the last user message.

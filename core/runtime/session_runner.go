@@ -389,7 +389,7 @@ func (e *Engine) RemoveMCPServer(serverID string) {
 }
 
 func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments []domain.UserAttachment) {
-	turnID := fmt.Sprintf("turn-%d", time.Now().UnixNano())
+	turnID := newRuntimeID("turn")
 	atts := append([]domain.UserAttachment(nil), attachments...)
 	if err := e.reserveSessionTurn(s.ID, turnID); err != nil {
 		e.stream.Publish(ctx, s.ID, turnID, domain.EventTurnFailed, domain.ErrorPayload{
@@ -424,7 +424,7 @@ func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments
 }
 
 func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, modelID string, attachments []domain.UserAttachment) (string, error) {
-	turnID := fmt.Sprintf("turn-%d", time.Now().UnixNano())
+	turnID := newRuntimeID("turn")
 	if err := e.reserveSessionTurn(sessionID, turnID); err != nil {
 		return "", err
 	}
@@ -618,7 +618,11 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 		// Full session history from disk, including this turn's complete tool prefix.
 		history := e.loadRetainedHistory(sessionID, checkpoint)
 		messages = append(messages, history...)
-		if !historyHasUserGoal(history, goal) {
+		// Deduplicate against THIS turn's JSONL only. Scanning the whole
+		// session history would false-positive when the goal text matches an
+		// earlier turn's user message and skip appending this turn's goal.
+		thisTurn := chatMessagesToRuntime(e.turnLog.LoadTurnMessages(turnID))
+		if !historyHasUserGoal(thisTurn, goal) {
 			e.turnLog.Append(turnID, "user", map[string]any{"content": goal})
 			messages = append(messages, Message{Role: RoleUser, Content: goal})
 		}
@@ -1361,6 +1365,17 @@ func (e *Engine) resolveWorkDir(ctx context.Context, projectID string) string {
 }
 
 func (e *Engine) afterTurn(sessionID, turnID, agentID string, rep domain.Report, err error, messages []Message, model string) {
+	// Evaluate compaction on every turn end, including failed/cancelled turns.
+	// Sessions dominated by cancels would otherwise never advance the retain
+	// cursor while their JSONL history keeps growing unbounded.
+	defer func() {
+		if e.compactionMgr == nil || e.turnLog == nil || e.turns == nil {
+			return
+		}
+		turns, _ := e.turns.ListBySession(context.Background(), sessionID)
+		e.maybeCompact(context.Background(), sessionID, turnID, len(turns), model, rep.MaxPromptTokens)
+	}()
+
 	// CancelTurn persists "cancelled" immediately for UI responsiveness. Do not
 	// let a late-finishing goroutine resurrect the turn as completed/failed.
 	if cur, getErr := e.turns.Get(context.Background(), turnID); getErr == nil && cur.Status == domain.TurnCancelled {
@@ -1391,8 +1406,6 @@ func (e *Engine) afterTurn(sessionID, turnID, agentID string, rep domain.Report,
 	e.stream.Publish(context.Background(), sessionID, turnID, domain.EventSessionCompleted, domain.SessionCompletedPayload{
 		Summary: rep.Summary, Status: string(rep.Status),
 	})
-	turns, _ := e.turns.ListBySession(context.Background(), sessionID)
-	e.maybeCompact(context.Background(), sessionID, turnID, len(turns), model, rep.MaxPromptTokens)
 }
 
 func (e *Engine) updateSessionStatus(sessionID string, status domain.SessionStatus) {
@@ -1535,7 +1548,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 		Stream: e.stream, Agents: e.agents,
 		KnowledgeSearch: e.knowledge.Search,
 		RunSubTurn: func(ctx context.Context, sessionID, modelID, parentTurnID, callID string, workerAgent domain.Agent, goal string, parentPath []domain.TurnPathEntry) (domain.Report, error) {
-			childTurnID := fmt.Sprintf("turn-%d", time.Now().UnixNano())
+			childTurnID := newRuntimeID("turn")
 			workDir := e.dataDir
 			projectID := ""
 			if s, err := e.sessions.Get(ctx, sessionID); err == nil {
@@ -1756,6 +1769,7 @@ func (e *Engine) WaitApproval(ctx context.Context, id string) (ApprovalOutcome, 
 	meta := e.approvalMeta[id]
 	e.mu.Unlock()
 	if e.isAutoApprove() && permission.AutoApprovable(meta.Reason) {
+		e.settleAbandonedApproval(id, "approved", true)
 		return ApprovalOutcome{Approved: true, Scope: "once", Reason: meta.Reason}, nil
 	}
 	if ch == nil {
@@ -1765,11 +1779,40 @@ func (e *Engine) WaitApproval(ctx context.Context, id string) (ApprovalOutcome, 
 	case out := <-ch:
 		return out, nil
 	case <-ctx.Done():
+		// Turn cancelled while waiting: without cleanup the waiter maps leak
+		// and the DB row stays "pending" until the next process restart.
+		e.settleAbandonedApproval(id, "expired", false)
 		return ApprovalOutcome{}, ctx.Err()
 	}
 }
+
+// settleAbandonedApproval finalizes an approval whose wait ended without a
+// user decision (turn cancelled, or auto-approve resolved it): clears the
+// in-memory waiter maps and, when the DB row is still pending, persists the
+// terminal status and publishes permission.decided so reloads hide the buttons.
+// Safe to race with ResolveApproval/DecideApproval — both sides are idempotent.
+func (e *Engine) settleAbandonedApproval(id, status string, approved bool) {
+	e.mu.Lock()
+	delete(e.approvalWait, id)
+	delete(e.approvalMeta, id)
+	e.mu.Unlock()
+	if e.approvals == nil {
+		return
+	}
+	bg := context.Background()
+	a, err := e.approvals.Get(bg, id)
+	if err != nil || (a.Status != "" && a.Status != "pending") {
+		return
+	}
+	a.Status = status
+	if err := e.approvals.Update(bg, a); err != nil {
+		log.Printf("[approval] settle abandoned %s as %s: %v", id, status, err)
+		return
+	}
+	e.PublishPermissionDecided(a.SessionID, a.TurnID, id, approved, "once")
+}
 func (e *Engine) CreateApproval(sessionID, turnID, toolName, description, reason, hostDomain string) string {
-	id := fmt.Sprintf("appr-%d", time.Now().UnixNano())
+	id := newRuntimeID("appr")
 	ch := make(chan ApprovalOutcome, 1)
 	e.mu.Lock()
 	e.approvalWait[id] = ch
