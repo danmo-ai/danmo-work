@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"danmo-work/core/port"
 )
@@ -20,6 +21,7 @@ type callStep struct {
 	ToolCalls []mockToolCall
 	Text      string
 	Reasoning string
+	Delay     time.Duration
 }
 
 // ParallelCall is one tool_call inside a parallel batch step.
@@ -85,22 +87,44 @@ func (p *MockProvider) Finish(summary string) *MockProvider {
 	return p.AddText(summary)
 }
 
-func (p *MockProvider) Chat(_ context.Context, req port.LLMChatRequest) (port.LLMChatResponse, error) {
+// AddTextWithDelay queues a text step that waits for d (or context
+// cancellation) before returning. Useful to keep a turn "in flight" so tests
+// can cancel it deterministically.
+func (p *MockProvider) AddTextWithDelay(content string, d time.Duration) *MockProvider {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.steps = append(p.steps, callStep{Text: content, Delay: d})
+	return p
+}
+
+func (p *MockProvider) Chat(ctx context.Context, req port.LLMChatRequest) (port.LLMChatResponse, error) {
+	p.mu.Lock()
 
 	p.Requests = append(p.Requests, req)
 
 	if len(req.Messages) > 0 && req.Messages[0].Role == "system" &&
 		strings.Contains(req.Messages[0].Content, "You are a session title generator") {
+		p.mu.Unlock()
 		return port.LLMChatResponse{Content: "Generated Title", Done: true}, nil
 	}
 
 	if p.cursor >= len(p.steps) {
+		p.mu.Unlock()
 		return port.LLMChatResponse{Content: "done", Done: true}, nil
 	}
 	step := p.steps[p.cursor]
 	p.cursor++
+	p.mu.Unlock()
+
+	if step.Delay > 0 {
+		// Sleep outside the lock so concurrent Chat calls (e.g. title
+		// generation) are not blocked by a delayed step.
+		select {
+		case <-time.After(step.Delay):
+		case <-ctx.Done():
+			return port.LLMChatResponse{}, ctx.Err()
+		}
+	}
 
 	if step.Text != "" {
 		return port.LLMChatResponse{Content: step.Text, ReasoningContent: step.Reasoning, Done: true}, nil
