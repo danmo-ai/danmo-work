@@ -86,7 +86,8 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
       </div>
     </div>
 
-    <div v-show="!collapsed" class="turn-section__body">
+    <!-- Always keep user message + final answer visible; collapse only folds mid-turn process. -->
+    <div class="turn-section__body">
       <UserMessageBlock
         v-if="turn.userText || turn.userImages?.length"
         :text="turn.userText"

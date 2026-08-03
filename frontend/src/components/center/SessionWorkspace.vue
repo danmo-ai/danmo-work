@@ -19,7 +19,7 @@ import AgentMessageBlock from '@/components/center/AgentMessageBlock.vue'
 import ThinkingBlock from '@/components/center/ThinkingBlock.vue'
 import PermissionAskBlock from '@/components/center/PermissionAskBlock.vue'
 import AskUserBlock, { type AskUserFormField } from '@/components/center/AskUserBlock.vue'
-import { groupConsecutiveToolCards, useTurnCollapse, type StreamTurn, type ToolCard, type UserImageAttachment } from '@/composables/useStreamTurns'
+import { filterCollapsedTimelineEvents, groupConsecutiveToolCards, hasFoldableProcess, useTurnCollapse, type StreamTurn, type ToolCard, type UserImageAttachment } from '@/composables/useStreamTurns'
 import RightWorkspacePanel from '@/components/center/RightWorkspacePanel.vue'
 import DocumentStage from '@/components/office/DocumentStage.vue'
 import {
@@ -832,7 +832,7 @@ async function jumpToApprovalAnchor(a: ApprovalAnchor) {
     } else if (currentTurnId.value && currentTurnId.value !== a.turnId) {
       currentTurnId.value = null
     }
-    // Older turns default to collapsed — expand so the card is actually visible.
+    // Settled turns fold mid-process by default — expand so surrounding context is visible.
     ensureTurnExpanded(a.turnId)
   }
   userScrolledUp.value = true
@@ -949,8 +949,13 @@ function isTimelineEventVisible(ev: StreamEvent): boolean {
   }
 }
 
-function timelineEvents(turn: StreamTurn): StreamEvent[] {
-  return turn.events.filter(isTimelineEventVisible)
+function timelineEvents(turn: StreamTurn, collapsed = false): StreamEvent[] {
+  const visible = turn.events.filter(isTimelineEventVisible)
+  return collapsed ? filterCollapsedTimelineEvents(visible) : visible
+}
+
+function turnHasFoldableProcess(turn: StreamTurn): boolean {
+  return hasFoldableProcess(turn.events.filter(isTimelineEventVisible))
 }
 
 function toolName(ev: StreamEvent): string {
@@ -1673,7 +1678,21 @@ function onTitleKeydown(e: KeyboardEvent) {
             @download="downloadTurnLog(turn.id)"
           >
             <template #timeline>
-              <div v-for="ev in timelineEvents(turn)" :key="ev.seq" class="turn__event">
+              <button
+                v-if="isTurnCollapsed(turn.id) && turnHasFoldableProcess(turn)"
+                type="button"
+                class="turn__process-folded"
+                @click="toggleTurnCollapse(turn.id)"
+              >
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+                <span>{{ t('sessions.processFolded') }}</span>
+                <span v-if="turnSummary(turn).toolCount > 0" class="turn__process-folded-meta">
+                  {{ turnSummary(turn).toolCount }} tools
+                </span>
+              </button>
+              <div v-for="ev in timelineEvents(turn, isTurnCollapsed(turn.id))" :key="ev.seq" class="turn__event">
                 <template v-if="ev.type === '__tool_group__'">
                   <ToolCardGroup
                     :cards="toolGroupCards(ev)"
@@ -2510,6 +2529,42 @@ function onTitleKeydown(e: KeyboardEvent) {
 .turn__compaction-detail {
   color: var(--dq-label-secondary);
   word-break: break-word;
+}
+
+.turn__process-folded {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 0;
+  padding: 2px 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dq-label-tertiary);
+  font: inherit;
+  font-size: var(--dq-font-size-body);
+  line-height: 1.35;
+  cursor: pointer;
+  text-align: left;
+}
+
+.turn__process-folded:hover {
+  color: var(--dq-label-secondary);
+  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
+}
+
+.turn__process-folded svg {
+  flex-shrink: 0;
+  opacity: 0.55;
+  transform: rotate(-90deg);
+}
+
+.turn__process-folded-meta {
+  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
+  font-size: var(--dq-font-size-caption);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.9;
 }
 
 .turn__error {

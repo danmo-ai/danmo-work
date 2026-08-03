@@ -860,6 +860,7 @@ export default {
     toolsCompleted: '{n} done',
     thinking: 'Thinking',
     thinkingChunks: '{n} parts',
+    processFolded: 'Process folded',
     tabPlan: 'Plan',
     tabFiles: 'Files',
     tabMemory: 'Memory',
