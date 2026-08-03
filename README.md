@@ -170,6 +170,16 @@ Capability units — not a workflow graph. Summon skills via `@` in Composer.
 - **Table Store** — schema-free `table_*` on `store.db`
 - **Runtime** — turn limits, tool output cap, delegation depth, sandbox / network
 
+#### Builtin expert packs
+
+Product-seeded experts ship with a matching skill (and a bound-only connector when the pack needs MCP — `AmbientMount=false`). The lead agent summons them with `delegate_agent` — they are not ambient for every session.
+
+| Expert | What it does |
+|--------|----------------|
+| **CodeGraph** | Local code intelligence (definitions, callers, impact / blast radius) via a bundled [CodeGraph](https://github.com/colbymchenry/codegraph) CLI. One shared MCP connector; each project keeps its own `.codegraph/` index. **First** `delegate_agent` → `codegraph` starts async `codegraph init`; while indexing (or if the binary is missing), the expert **degrades** to `read_file` / `grep` and still answers. Install/refresh with `scripts/fetch_codegraph.sh`. |
+| **GitHub** | GitHub platform ops (issues, PRs, Actions, releases) via the local [GitHub CLI](https://cli.github.com/) (`gh`) — **skill + `exec_shell`**, no MCP. Requires `gh` on `PATH` (or `WORK_GH_BIN`) and `gh auth login`. First `delegate_agent` → `github` prepends a `[github-gh: …]` readiness hint; if `gh` is missing the expert reports the blocker instead of inventing API results. Optional remote GitHub MCP remains in the connector catalog. |
+| **Danmo Make** | Local image / video / audio generation via the Danmo Make MCP (separate app; URL from `~/.danmo-make/api.port`). |
+
 ---
 
 ## Design
@@ -198,7 +208,7 @@ User input → [LLM] plans Tool Call DAG → execute
   → done
 ```
 
-Expert team collaboration is the same loop in **Team** mode: you state a clear goal; the lead model decides whom to summon, writes a precise `delegate_agent` brief (goal + context), and continues when children Report back.
+Expert team collaboration is the same loop in **Team** mode: you state a clear goal; the lead model decides whom to summon, writes a precise `delegate_agent` brief (goal + context), and continues when children Report back. For structural code questions, prefer `delegate_agent` → `codegraph`; for GitHub hosting tasks (issues / PRs / Actions), prefer `github`; for local creative generation, prefer `danmo-make`.
 
 | Clear intent (Team) | LLM-driven delegation |
 |---------------------|------------------------|

@@ -43,14 +43,14 @@ func DefaultConnectorCatalog() []domain.ConnectorCatalogEntry {
 		{
 			ID:          "github-mcp",
 			Name:        "GitHub MCP",
-			Description: "Official GitHub remote MCP (issues, PRs, repos). Use OAuth or PAT header.",
+			Description: "Optional official GitHub remote MCP. Prefer the builtin github expert (local gh CLI) unless you need hosted MCP/OAuth.",
 			Category:    "saas",
 			Transport:   "streamable-http",
 			URL:         "https://api.githubcopilot.com/mcp/",
 			Auth:        domain.MCPAuthHeaders,
 			DocsURL:     "https://github.com/github/github-mcp-server",
 			Region:      "global",
-			Tags:        []string{"github", "code"},
+			Tags:        []string{"github", "code", "optional"},
 		},
 		{
 			ID:          "notion-mcp",

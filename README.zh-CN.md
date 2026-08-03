@@ -171,6 +171,16 @@ Danmo Work 是：**模型在同一条链上编排**；你提供能力（Tool / S
 - **Table Store** — 无固定 Schema 的 `table_*`，独立落在 `store.db`
 - **运行时** — Turn 上限、Tool 输出上限、委派深度、沙箱与网络策略
 
+#### 内置专家包
+
+产品启动时自动 seed：专家 + 配套技能（需要 MCP 时再加 **绑定型**连接器，`AmbientMount=false`）。主 Agent 通过 `delegate_agent` 召唤；不会 ambient 挂到每个会话。
+
+| 专家 | 作用 |
+|------|------|
+| **CodeGraph** | 本地代码智能（跳定义、找调用、影响面），内置 [CodeGraph](https://github.com/colbymchenry/codegraph) CLI。全局共享一条 MCP 连接器；每个项目各自 `.codegraph/` 索引。**首次** `delegate_agent` → `codegraph` 时异步 `codegraph init`；索引未就绪或缺二进制时，专家**降级**用 `read_file` / `grep` 仍可作答。可用 `scripts/fetch_codegraph.sh` 安装/更新。 |
+| **GitHub** | GitHub 平台操作（Issue / PR / Actions / Release），走本机 [GitHub CLI](https://cli.github.com/)（`gh`）——**技能 + `exec_shell`**，不装 MCP。需 `gh` 在 `PATH`（或 `WORK_GH_BIN`）且已 `gh auth login`。首次 `delegate_agent` → `github` 会注入 `[github-gh: …]` 就绪提示；缺 `gh` 时直接汇报阻塞，不编造 API 结果。目录里仍保留可选的远程 GitHub MCP 连接器。 |
+| **Danmo Make** | 本地图文音视频生成（独立应用；URL 读 `~/.danmo-make/api.port`）。 |
+
 ---
 
 ## 设计
@@ -199,7 +209,7 @@ Danmo Work 是：**模型在同一条链上编排**；你提供能力（Tool / S
   → 完成
 ```
 
-专家团协作就是同一套循环开 **Team** 模式：你把目标和要求写清楚；主 Agent 自行决定委派谁、用清晰的 `delegate_agent` 说明（goal + context），子 Agent 回报后再继续。
+专家团协作就是同一套循环开 **Team** 模式：你把目标和要求写清楚；主 Agent 自行决定委派谁、用清晰的 `delegate_agent` 说明（goal + context），子 Agent 回报后再继续。结构类代码问题优先 `delegate_agent` → `codegraph`；GitHub 托管操作（Issue / PR / Actions）优先 `github`；本地创意生成优先 `danmo-make`。
 
 | 意图清晰（Team） | LLM 自主委派 |
 |------------------|--------------|

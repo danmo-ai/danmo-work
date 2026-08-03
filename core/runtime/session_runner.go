@@ -1562,6 +1562,9 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 				st := service.EnsureCodeGraphIndex(workDir)
 				goal = service.CodeGraphIndexHint(st, workDir) + "\n\n" + goal
 			}
+			if workerAgent.ID == service.GitHubExpertID {
+				goal = service.GitHubGhHint(service.ResolveGhBin()) + "\n\n" + goal
+			}
 			childPath := appendTurnPath(parentPath, childTurnID, workerAgent.ID)
 			childCtx := TurnContext{
 				SessionID: sessionID, TurnID: childTurnID,

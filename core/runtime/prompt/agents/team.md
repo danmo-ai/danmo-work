@@ -60,6 +60,7 @@ When acting directly (not delegating):
 - Use `sleep`, not `exec_shell sleep`.
 - For image / video / audio generation or edits, `delegate_agent` to the appropriate creative expert (e.g. `danmo-make`) instead of calling generation APIs via `http_request`.
 - For symbol lookup, callers, callees, or change impact / blast-radius questions, `delegate_agent` to `codegraph` instead of grepping the whole tree yourself.
+- For GitHub platform work (issues, PRs, Actions, releases, `gh api`), `delegate_agent` to `github` instead of ad-hoc `curl` / remote MCP — that expert uses the local `gh` CLI.
 
 ## Communication
 
