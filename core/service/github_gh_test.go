@@ -45,16 +45,36 @@ func TestResolveGhBinHomeDir(t *testing.T) {
 	}
 }
 
+func TestResolveGitBinEnvOverride(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "git")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
+	if err := os.WriteFile(bin, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("WORK_GIT_BIN", bin)
+	got := ResolveGitBin()
+	if got != bin {
+		t.Fatalf("ResolveGitBin=%q want %q", got, bin)
+	}
+}
+
 func TestGitHubAccessHintPriority(t *testing.T) {
-	mcp := GitHubAccessHint(true, "/usr/bin/gh")
+	mcp := GitHubAccessHint(true, "/usr/bin/gh", "/usr/bin/git")
 	if !strings.Contains(mcp, "github-access: mcp") || !strings.Contains(mcp, "mcp_github_") {
 		t.Fatalf("mcp hint: %s", mcp)
 	}
-	gh := GitHubAccessHint(false, "/usr/bin/gh")
+	gh := GitHubAccessHint(false, "/usr/bin/gh", "/usr/bin/git")
 	if !strings.Contains(gh, "github-access: gh") {
 		t.Fatalf("gh hint: %s", gh)
 	}
-	none := GitHubAccessHint(false, "")
+	git := GitHubAccessHint(false, "", "/usr/bin/git")
+	if !strings.Contains(git, "github-access: git") || !strings.Contains(git, "git") {
+		t.Fatalf("git hint: %s", git)
+	}
+	none := GitHubAccessHint(false, "", "")
 	if !strings.Contains(none, "github-access: none") {
 		t.Fatalf("none hint: %s", none)
 	}

@@ -1571,7 +1571,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			}
 			if workerAgent.ID == service.GitHubExpertID {
 				mcpReady := e.githubMCPReady != nil && e.githubMCPReady(ctx)
-				goal = service.GitHubAccessHint(mcpReady, service.ResolveGhBin()) + "\n\n" + goal
+				goal = service.GitHubAccessHint(mcpReady, service.ResolveGhBin(), service.ResolveGitBin()) + "\n\n" + goal
 			}
 			childPath := appendTurnPath(parentPath, childTurnID, workerAgent.ID)
 			childCtx := TurnContext{

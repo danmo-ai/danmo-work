@@ -17,6 +17,7 @@ const (
 	// GitHubLegacyMarketConnectorID is the former dq-market connector id (removed; superseded by builtin).
 	GitHubLegacyMarketConnectorID = "github-mcp"
 	ghBinName                     = "gh"
+	gitBinName                    = "git"
 )
 
 var ghHomeBinDir = userHomeDanmoBin
@@ -44,6 +45,19 @@ func ghExecutableName() string {
 		return ghBinName + ".exe"
 	}
 	return ghBinName
+}
+
+// ResolveGitBin returns the path to the local git CLI (PATH / WORK_GIT_BIN).
+func ResolveGitBin() string {
+	if p := strings.TrimSpace(os.Getenv("WORK_GIT_BIN")); p != "" {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p
+		}
+	}
+	if p, err := exec.LookPath(gitBinName); err == nil {
+		return p
+	}
+	return ""
 }
 
 // GitHubMCPReady reports whether the builtin github connector has usable auth configured.
@@ -110,26 +124,36 @@ func IsProductBuiltinConnector(id string) bool {
 }
 
 // GitHubAccessHint prepends path-selection context for the github expert child turn.
-// Prefer bound MCP when auth is configured; otherwise fall back to local gh.
-func GitHubAccessHint(mcpReady bool, ghBin string) string {
+// Prefer bound MCP when auth is configured; else gh; else plain git (limited).
+func GitHubAccessHint(mcpReady bool, ghBin, gitBin string) string {
 	ghBin = strings.TrimSpace(ghBin)
+	gitBin = strings.TrimSpace(gitBin)
 	switch {
 	case mcpReady:
 		msg := "[github-access: mcp] bound github MCP auth is configured — prefer mcp_github_* tools."
-		if ghBin != "" {
-			msg += " gh fallback bin=" + ghBin + "."
-		} else {
-			msg += " gh CLI not on PATH (MCP only)."
+		switch {
+		case ghBin != "":
+			msg += " fallbacks: gh bin=" + ghBin
+			if gitBin != "" {
+				msg += ", git bin=" + gitBin
+			}
+			msg += "."
+		case gitBin != "":
+			msg += " fallbacks: git bin=" + gitBin + " (no gh)."
+		default:
+			msg += " no gh/git fallback on PATH."
 		}
 		return msg
 	case ghBin != "":
 		return "[github-access: gh] MCP not configured — use exec_shell → gh (bin=" + ghBin + "); verify with gh auth status before mutating. Configure the builtin github connector (PAT/OAuth) to enable MCP."
+	case gitBin != "":
+		return "[github-access: git] MCP and gh unavailable — degrade to exec_shell → git (bin=" + gitBin + ") for remotes/fetch/push/branch only. Issues/PRs/Actions/releases need MCP or gh; report those as blockers. Do not invent GitHub API results."
 	default:
-		return "[github-access: none] Neither github MCP auth nor gh CLI is available. Configure the builtin github connector and/or install gh + gh auth login. Do not invent GitHub results."
+		return "[github-access: none] Neither github MCP auth, gh, nor git is available. Configure the builtin github connector and/or install gh/git. Do not invent GitHub results."
 	}
 }
 
 // GitHubGhHint is kept for tests/compat; prefer GitHubAccessHint.
 func GitHubGhHint(binPath string) string {
-	return GitHubAccessHint(false, binPath)
+	return GitHubAccessHint(false, binPath, ResolveGitBin())
 }
