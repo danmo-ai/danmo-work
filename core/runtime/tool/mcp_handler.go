@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"danmo-work/core/domain"
+	"danmo-work/core/service"
 )
 
 // MCPCallFunc invokes an MCP tool by server id and original tool name.
@@ -69,6 +70,9 @@ func (h *MCPHandler) Describe(args map[string]any) string {
 	}
 	keys := make([]string, 0, len(args))
 	for k := range args {
+		if strings.HasPrefix(k, "__") {
+			continue
+		}
 		keys = append(keys, k)
 	}
 	if len(keys) > 4 {
@@ -81,7 +85,9 @@ func (h *MCPHandler) Execute(ctx context.Context, input map[string]any) (domain.
 	if h.Call == nil {
 		return domain.ToolResult{}, fmt.Errorf("mcp caller not configured")
 	}
-	out, err := h.Call(ctx, h.ServerID, h.ToolName, input)
+	args := sanitizeMCPArgs(input)
+	injectCodeGraphProjectPath(h.ServerID, args, input)
+	out, err := h.Call(ctx, h.ServerID, h.ToolName, args)
 	if err != nil {
 		return domain.ToolResult{}, err
 	}
@@ -94,3 +100,29 @@ func (h *MCPHandler) Execute(ctx context.Context, input map[string]any) (domain.
 	}, nil
 }
 
+// sanitizeMCPArgs drops runtime-injected __* keys before calling the remote server.
+func sanitizeMCPArgs(input map[string]any) map[string]any {
+	out := make(map[string]any, len(input))
+	for k, v := range input {
+		if strings.HasPrefix(k, "__") {
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+func injectCodeGraphProjectPath(serverID string, args, rawInput map[string]any) {
+	if serverID != service.CodeGraphServerID {
+		return
+	}
+	if p, _ := args["projectPath"].(string); strings.TrimSpace(p) != "" {
+		return
+	}
+	workDir, _ := rawInput["__work_dir"].(string)
+	workDir = strings.TrimSpace(workDir)
+	if workDir == "" {
+		return
+	}
+	args["projectPath"] = workDir
+}

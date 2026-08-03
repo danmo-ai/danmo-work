@@ -45,6 +45,10 @@ has_tauri_signing_key() {
 echo "==> Building backend sidecar..."
 "$SCRIPT_DIR/build_sidecar.sh"
 
+echo "==> Fetching bundled CodeGraph CLI..."
+"$SCRIPT_DIR/fetch_codegraph.sh" "$HOME/.danmo-work/bin"
+"$SCRIPT_DIR/fetch_codegraph.sh" "$DQ_ROOT/desktop/src-tauri/resources/codegraph" || true
+
 echo "==> Tauri build ($APP_NAME) -> $CARGO_TARGET_DIR"
 # Build .app (+ updater artifacts when signing key is present)
 if has_tauri_signing_key; then
