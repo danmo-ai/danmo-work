@@ -52,3 +52,29 @@ func TestGitHubGhHint(t *testing.T) {
 		t.Fatalf("ready hint: %s", ready)
 	}
 }
+
+func TestGitHubCatalogEntryBoundOnlyBuiltin(t *testing.T) {
+	entry := GitHubCatalogEntry()
+	if entry.ID != GitHubExpertID {
+		t.Fatalf("id=%q want %q", entry.ID, GitHubExpertID)
+	}
+	if entry.AmbientMount == nil || *entry.AmbientMount {
+		t.Fatal("github connector must be bound-only (AmbientMount=false)")
+	}
+	if entry.URL == "" || entry.Transport != "streamable-http" {
+		t.Fatalf("unexpected transport/url: %+v", entry)
+	}
+	found := false
+	for _, id := range BuiltinConnectorIDs {
+		if id == GitHubExpertID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("BuiltinConnectorIDs missing %q: %v", GitHubExpertID, BuiltinConnectorIDs)
+	}
+	if CatalogEntryByID(GitHubExpertID) == nil {
+		t.Fatal("CatalogEntryByID(github) nil")
+	}
+}

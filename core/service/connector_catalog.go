@@ -41,18 +41,6 @@ func DefaultConnectorCatalog() []domain.ConnectorCatalogEntry {
 			Tags:        []string{"gateway", "self-hosted"},
 		},
 		{
-			ID:          "github-mcp",
-			Name:        "GitHub MCP",
-			Description: "Optional official GitHub remote MCP. Prefer the builtin github expert (local gh CLI) unless you need hosted MCP/OAuth.",
-			Category:    "saas",
-			Transport:   "streamable-http",
-			URL:         "https://api.githubcopilot.com/mcp/",
-			Auth:        domain.MCPAuthHeaders,
-			DocsURL:     "https://github.com/github/github-mcp-server",
-			Region:      "global",
-			Tags:        []string{"github", "code", "optional"},
-		},
-		{
 			ID:          "notion-mcp",
 			Name:        "Notion MCP",
 			Description: "Notion workspace via remote MCP (OAuth).",
@@ -104,11 +92,12 @@ func DefaultConnectorCatalog() []domain.ConnectorCatalogEntry {
 		},
 		DanmoMakeCatalogEntry(),
 		CodeGraphCatalogEntry(),
+		GitHubCatalogEntry(),
 	}
 }
 
 // BuiltinConnectorIDs are product connectors auto-seeded on bootstrap (fixed server id).
-var BuiltinConnectorIDs = []string{"danmo-make", "codegraph"}
+var BuiltinConnectorIDs = []string{"danmo-make", "codegraph", GitHubExpertID}
 
 // DanmoMakeCatalogEntry is the built-in local creative MCP preset.
 func DanmoMakeCatalogEntry() domain.ConnectorCatalogEntry {
@@ -146,6 +135,25 @@ func CodeGraphCatalogEntry() domain.ConnectorCatalogEntry {
 		DocsURL:      "https://colbymchenry.github.io/codegraph/",
 		Region:       "global",
 		Tags:         []string{"codegraph", "code", "symbols", "impact", "local"},
+		ToolTimeout:  120,
+		AmbientMount: boolPtr(false),
+	}
+}
+
+// GitHubCatalogEntry is the built-in GitHub remote MCP (bound-only; github expert).
+// Primary workflow remains local `gh`; this connector is the hosted MCP fallback / OAuth path.
+func GitHubCatalogEntry() domain.ConnectorCatalogEntry {
+	return domain.ConnectorCatalogEntry{
+		ID:           GitHubExpertID,
+		Name:         "GitHub",
+		Description:  "Official GitHub remote MCP (bound-only; use with github expert + local gh CLI).",
+		Category:     "saas",
+		Transport:    "streamable-http",
+		URL:          "https://api.githubcopilot.com/mcp/",
+		Auth:         domain.MCPAuthHeaders,
+		DocsURL:      "https://github.com/github/github-mcp-server",
+		Region:       "global",
+		Tags:         []string{"github", "code", "mcp", "bound"},
 		ToolTimeout:  120,
 		AmbientMount: boolPtr(false),
 	}

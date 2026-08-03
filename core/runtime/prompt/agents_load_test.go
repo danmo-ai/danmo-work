@@ -23,7 +23,7 @@ func TestBuiltinAgentsDoNotBindCoreTools(t *testing.T) {
 	}
 }
 
-func TestBuiltinGitHubExpertIsSkillPlusGh(t *testing.T) {
+func TestBuiltinGitHubExpertOwnsConnectorAndGh(t *testing.T) {
 	templates, err := LoadTemplates()
 	if err != nil {
 		t.Fatalf("LoadTemplates: %v", err)
@@ -38,8 +38,8 @@ func TestBuiltinGitHubExpertIsSkillPlusGh(t *testing.T) {
 	if github == nil {
 		t.Fatal("missing builtin github agent template")
 	}
-	if len(github.Agent.MCPServers) != 0 {
-		t.Fatalf("github expert must not bind MCP, got %v", github.Agent.MCPServers)
+	if len(github.Agent.MCPServers) != 1 || github.Agent.MCPServers[0] != "github" {
+		t.Fatalf("github expert must bind mcp_servers=[github], got %v", github.Agent.MCPServers)
 	}
 	hasSkill, hasShell := false, false
 	for _, id := range github.Agent.SkillIDs {

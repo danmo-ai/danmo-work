@@ -1,69 +1,69 @@
 ---
 name: github
 description: >-
-  Operate GitHub via the local gh CLI (issues, PRs, Actions, releases, API).
-  Use when the user or parent agent needs GitHub platform work without a remote MCP.
+  Operate GitHub via the local gh CLI and/or the bound GitHub MCP connector
+  (issues, PRs, Actions, releases, API). Use for GitHub platform work.
 license: MIT
-compatibility: Requires GitHub CLI (gh) installed and authenticated (gh auth login)
+compatibility: >-
+  Prefer GitHub CLI (gh) on PATH / WORK_GH_BIN with gh auth login;
+  bound github MCP (mcp_github_*) as fallback when authorized.
 metadata:
   author: danmo
-  version: "0.1.0"
+  version: "0.2.0"
   category: coding
 ---
 
-# GitHub (`gh` CLI)
+# GitHub (gh + bound MCP)
 
-Drive GitHub through `exec_shell` → `gh …`. There is **no** GitHub MCP in this
-expert pack. The parent turn may prepend a `[github-gh: …]` hint — trust it.
+This expert owns GitHub access: local `gh` **and** the bound-only `github`
+MCP connector (`mcp_github_*`). Do not reach for ambient/other GitHub MCPs
+or raw `curl` to `api.github.com`.
 
-## Preconditions
+The parent turn may prepend a `[github-gh: …]` hint — trust it.
 
-1. If the hint says `missing`: stop. Tell the user to install
-   [GitHub CLI](https://cli.github.com/) and ensure `gh` is on `PATH`
-   (or set `WORK_GH_BIN`). Do not brew/apt install yourself.
-2. Otherwise run once:
+## Path selection
 
-   ```bash
-   gh auth status
-   ```
+| Situation | What to use |
+|-----------|-------------|
+| `[github-gh: ready]` | Prefer `exec_shell` → `gh …` |
+| `gh` missing / not authenticated, MCP tools listed | Use `mcp_github_*` |
+| MCP auth errors (401/403) but `gh` ready | Fall back to `gh` |
+| Both unavailable | Stop; report install/`gh auth login` and/or connector PAT/OAuth setup |
 
-   If not logged in: stop and ask for `gh auth login` (or Enterprise host setup).
-   Do not invent tokens or scrape credentials.
+## `gh` workflow
 
-## Command style
-
-- Prefer JSON: `gh <cmd> --json field1,field2` then reason over stdout.
-- Repo scope: default is the git remotes of the working directory.
-  Use `-R owner/repo` when the goal names another repository.
-- Never pass secrets on the command line; use existing `gh` auth only.
-- Avoid interactive prompts (`--confirm` / flags that skip TTY questions when safe).
-- Cap list output (`--limit`) unless the goal asks for a full dump.
-
-## Common workflows
+1. If hint is not `missing`, run once: `gh auth status`.
+2. Prefer JSON: `gh <cmd> --json field1,field2`.
+3. Repo scope: cwd remotes by default; `-R owner/repo` when the goal names another repo.
+4. Never pass secrets on the CLI; use existing `gh` auth only.
+5. Cap lists with `--limit` unless asked for a full dump.
 
 | Intent | Starting point |
 |--------|----------------|
-| List / inspect issues | `gh issue list`, `gh issue view <n>` |
-| Create issue | `gh issue create --title … --body …` |
-| List / inspect PRs | `gh pr list`, `gh pr view <n>`, `gh pr diff` |
-| Open PR | `gh pr create` (branch must be pushed; title/body from goal) |
+| Issues | `gh issue list` / `gh issue view` / `gh issue create` |
+| PRs | `gh pr list` / `gh pr view` / `gh pr diff` / `gh pr create` |
 | Checks / CI | `gh pr checks`, `gh run list`, `gh run view <id> --log-failed` |
-| Release | `gh release list`, `gh release view`, `gh release create` (confirm) |
-| Search | `gh search issues …`, `gh search prs …` |
-| Raw API | `gh api <path>` when no first-class subcommand fits |
+| Release | `gh release list` / `view` / `create` (confirm) |
+| Search | `gh search issues` / `gh search prs` |
+| Raw API | `gh api <path>` when no subcommand fits |
+
+## MCP workflow
+
+1. Call tools with full names from the tool list (`mcp_github_<tool>`).
+2. Prefer read/list tools first when the goal is ambiguous.
+3. On auth failure: report that the bound **GitHub** connector needs a PAT/OAuth header — do not invent tokens.
 
 ## Safety
 
 - **ask_user** before: merge, close, delete, release publish, secret changes,
-  admin/org mutations, or any force / `--delete` style flag — unless the goal
-  already names that exact action.
-- Prefer read-only investigation first when the goal is ambiguous.
-- Do not `git push --force` to default branches; do not rewrite history via `gh`.
+  admin/org mutations, or force/`--delete` — unless the goal already names that exact action.
+- Prefer read-only investigation first when ambiguous.
+- Do not `git push --force` to default branches.
 
 ## Anti-patterns
 
-- Calling remote GitHub MCP or `http_request` / `curl` to `api.github.com`
-- Claiming issue/PR state without `gh` output
+- Using a different GitHub MCP server id or `http_request` / `curl` to GitHub APIs
+- Claiming issue/PR state without `gh` or MCP evidence
 - Installing or upgrading `gh` inside the session
-- Using `git` for GitHub hosting tasks this skill covers (`gh` first)
-- Dumping unbounded `gh api` pages without `--paginate` awareness / limits
+- Using `git` for hosting tasks this skill covers (`gh` / MCP first)
+- Dumping unbounded `gh api` pages without limits

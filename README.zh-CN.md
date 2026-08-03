@@ -178,7 +178,7 @@ Danmo Work 是：**模型在同一条链上编排**；你提供能力（Tool / S
 | 专家 | 作用 |
 |------|------|
 | **CodeGraph** | 本地代码智能（跳定义、找调用、影响面），内置 [CodeGraph](https://github.com/colbymchenry/codegraph) CLI。全局共享一条 MCP 连接器；每个项目各自 `.codegraph/` 索引。**首次** `delegate_agent` → `codegraph` 时异步 `codegraph init`；索引未就绪或缺二进制时，专家**降级**用 `read_file` / `grep` 仍可作答。可用 `scripts/fetch_codegraph.sh` 安装/更新。 |
-| **GitHub** | GitHub 平台操作（Issue / PR / Actions / Release），走本机 [GitHub CLI](https://cli.github.com/)（`gh`）——**技能 + `exec_shell`**，不装 MCP。需 `gh` 在 `PATH`（或 `WORK_GH_BIN`）且已 `gh auth login`。首次 `delegate_agent` → `github` 会注入 `[github-gh: …]` 就绪提示；缺 `gh` 时直接汇报阻塞，不编造 API 结果。目录里仍保留可选的远程 GitHub MCP 连接器。 |
+| **GitHub** | GitHub 平台操作（Issue / PR / Actions / Release）。专家包 = **技能 + 本机 [`gh`](https://cli.github.com/) + 绑定型 GitHub MCP**（连接器 id 同为 `github`，`AmbientMount=false`）。优先 `gh`（`PATH` / `WORK_GH_BIN` + 已登录）；连接器配好 PAT/OAuth 时可用 `mcp_github_*` 兜底。首次 `delegate_agent` → `github` 注入 `[github-gh: …]`。 |
 | **Danmo Make** | 本地图文音视频生成（独立应用；URL 读 `~/.danmo-make/api.port`）。 |
 
 ---
