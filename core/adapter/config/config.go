@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	_ "embed"
 	"os"
 	"path/filepath"
 	"sync"
@@ -13,6 +14,9 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
+
+//go:embed default_models.yaml
+var defaultModelsYAML []byte
 
 var _ port.SearchConfigStore = (*Loader)(nil)
 var _ port.ConfigStore = (*Loader)(nil)
@@ -172,6 +176,16 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 	if len(cfg.LLM.Providers) == 0 {
 		cfg.LLM.Providers = defaultLLMPresets()
 	}
+	// Migrate legacy llm.model_limits → llm.models (renamed in 0.9.x).
+	// Without this, Load returns an empty catalog and the next Save rewrites
+	// the llm section, permanently wiping the old key.
+	if len(cfg.LLM.Models) == 0 {
+		if migrated := migrateLegacyModelLimits(l.v); len(migrated) > 0 {
+			cfg.LLM.Models = migrated
+		} else {
+			cfg.LLM.Models = defaultModelConfigs()
+		}
+	}
 	if cfg.Market.CacheTTLHours <= 0 {
 		cfg.Market.CacheTTLHours = 6
 	}
@@ -187,6 +201,44 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 		}
 	}
 	return &cfg, nil
+}
+
+// migrateLegacyModelLimits reads pre-rename llm.model_limits entries.
+func migrateLegacyModelLimits(v *viper.Viper) []domain.ModelConfig {
+	if v == nil || !v.IsSet("llm.model_limits") {
+		return nil
+	}
+	raw := v.Get("llm.model_limits")
+	if raw == nil {
+		return nil
+	}
+	b, err := yaml.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var models []domain.ModelConfig
+	if err := yaml.Unmarshal(b, &models); err != nil {
+		return nil
+	}
+	out := make([]domain.ModelConfig, 0, len(models))
+	for _, m := range models {
+		if m.Model == "" {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// defaultModelConfigs returns the built-in per-model parameter catalog.
+// Pattern-based fallbacks were removed; this YAML (kept in sync with
+// config.example.yaml) is the source of truth when the user has no models.
+func defaultModelConfigs() []domain.ModelConfig {
+	var models []domain.ModelConfig
+	if err := yaml.Unmarshal(defaultModelsYAML, &models); err != nil {
+		return nil
+	}
+	return models
 }
 
 // defaultMarketSources returns built-in official Git market sources.
