@@ -6,6 +6,7 @@ import UserMessageBlock from '@/components/center/UserMessageBlock.vue'
 const props = defineProps<{
   turn: StreamTurn
   turnIndex: number
+  /** Whole-turn body folded (user + timeline). Separate from mid-process event fold. */
   collapsed: boolean
   summary: {
     toolCount: number
@@ -26,14 +27,21 @@ function turnStatusLabel(status?: string) {
   const map: Record<string, string> = {
     running: '运行中',
     completed: '已完成',
+    done: '已完成',
     failed: '失败',
     cancelled: '已取消',
     timeout: '超时',
+    blocked: '已阻塞',
   }
   return status ? (map[status] ?? status) : ''
 }
 
 const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
+
+const showStatus = () => {
+  const s = props.turn.status
+  return Boolean(s && s !== 'completed' && s !== 'done')
+}
 </script>
 
 <template>
@@ -53,6 +61,8 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
           type="button"
           class="turn-section__collapse-btn"
           :class="{ 'is-collapsed': collapsed }"
+          :aria-label="collapsed ? '展开 Turn' : '折叠 Turn'"
+          :title="collapsed ? '展开 Turn' : '折叠 Turn'"
           @click.stop="emit('toggle-collapse')"
         >
           <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -61,7 +71,7 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
         </button>
         <span class="turn-section__number">Turn {{ turnIndex + 1 }}</span>
         <span
-          v-if="turn.status && turn.status !== 'completed'"
+          v-if="showStatus()"
           class="turn-section__status"
         >{{ turnStatusLabel(turn.status) }}</span>
         <span v-if="summary.runningTools > 0" class="turn-section__live-dot" />
@@ -86,8 +96,8 @@ const userImages = () => props.turn.userImages?.map((img) => img.dataUrl) ?? []
       </div>
     </div>
 
-    <!-- Always keep user message + final answer visible; collapse only folds mid-turn process. -->
-    <div class="turn-section__body">
+    <!-- Whole-turn fold hides user + timeline; mid-process event fold lives in the timeline slot. -->
+    <div v-show="!collapsed" class="turn-section__body">
       <UserMessageBlock
         v-if="turn.userText || turn.userImages?.length"
         :text="turn.userText"

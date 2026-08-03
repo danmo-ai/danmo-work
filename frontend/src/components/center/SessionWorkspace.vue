@@ -19,7 +19,7 @@ import AgentMessageBlock from '@/components/center/AgentMessageBlock.vue'
 import ThinkingBlock from '@/components/center/ThinkingBlock.vue'
 import PermissionAskBlock from '@/components/center/PermissionAskBlock.vue'
 import AskUserBlock, { type AskUserFormField } from '@/components/center/AskUserBlock.vue'
-import { filterCollapsedTimelineEvents, groupConsecutiveToolCards, hasFoldableProcess, useTurnCollapse, type StreamTurn, type ToolCard, type UserImageAttachment } from '@/composables/useStreamTurns'
+import { countFoldableProcessEvents, filterCollapsedTimelineEvents, groupConsecutiveToolCards, hasFoldableProcess, useTurnCollapse, type StreamTurn, type ToolCard, type UserImageAttachment } from '@/composables/useStreamTurns'
 import RightWorkspacePanel from '@/components/center/RightWorkspacePanel.vue'
 import DocumentStage from '@/components/office/DocumentStage.vue'
 import {
@@ -623,7 +623,14 @@ const visibleTurns = computed(() => {
   return turn ? [turn] : []
 })
 
-const { isTurnCollapsed, toggleTurnCollapse, ensureTurnExpanded, clearCollapseOverrides } = useTurnCollapse(() => visibleTurns.value)
+const {
+  isProcessCollapsed,
+  toggleProcessCollapse,
+  ensureProcessExpanded,
+  isTurnBodyCollapsed,
+  toggleTurnBodyCollapse,
+  clearCollapseOverrides,
+} = useTurnCollapse(() => visibleTurns.value)
 
 const breadcrumbs = computed(() => {
   const path: { id: string | null; label: string }[] = [{ id: null, label: '全部 Turn' }]
@@ -833,7 +840,7 @@ async function jumpToApprovalAnchor(a: ApprovalAnchor) {
       currentTurnId.value = null
     }
     // Settled turns fold mid-process by default — expand so surrounding context is visible.
-    ensureTurnExpanded(a.turnId)
+    ensureProcessExpanded(a.turnId)
   }
   userScrolledUp.value = true
   await nextTick()
@@ -956,6 +963,10 @@ function timelineEvents(turn: StreamTurn, collapsed = false): StreamEvent[] {
 
 function turnHasFoldableProcess(turn: StreamTurn): boolean {
   return hasFoldableProcess(turn.events.filter(isTimelineEventVisible))
+}
+
+function foldableProcessCount(turn: StreamTurn): number {
+  return countFoldableProcessEvents(turn.events.filter(isTimelineEventVisible))
 }
 
 function toolName(ev: StreamEvent): string {
@@ -1671,28 +1682,26 @@ function onTitleKeydown(e: KeyboardEvent) {
             :key="turn.id"
             :turn="turn"
             :turn-index="turnIndex"
-            :collapsed="isTurnCollapsed(turn.id)"
+            :collapsed="isTurnBodyCollapsed(turn.id)"
             :summary="turnSummary(turn)"
             :show-divider="turnIndex > 0"
-            @toggle-collapse="toggleTurnCollapse(turn.id)"
+            @toggle-collapse="toggleTurnBodyCollapse(turn.id)"
             @download="downloadTurnLog(turn.id)"
           >
             <template #timeline>
               <button
-                v-if="isTurnCollapsed(turn.id) && turnHasFoldableProcess(turn)"
+                v-if="turnHasFoldableProcess(turn)"
                 type="button"
-                class="turn__process-folded"
-                @click="toggleTurnCollapse(turn.id)"
+                class="turn__process-fold"
+                :class="{ 'is-collapsed': isProcessCollapsed(turn.id) }"
+                @click="toggleProcessCollapse(turn.id)"
               >
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
-                <span>{{ t('sessions.processFolded') }}</span>
-                <span v-if="turnSummary(turn).toolCount > 0" class="turn__process-folded-meta">
-                  {{ turnSummary(turn).toolCount }} tools
-                </span>
+                <span>{{ t('sessions.foldEvents', { n: foldableProcessCount(turn) }) }}</span>
               </button>
-              <div v-for="ev in timelineEvents(turn, isTurnCollapsed(turn.id))" :key="ev.seq" class="turn__event">
+              <div v-for="ev in timelineEvents(turn, isProcessCollapsed(turn.id))" :key="ev.seq" class="turn__event">
                 <template v-if="ev.type === '__tool_group__'">
                   <ToolCardGroup
                     :cards="toolGroupCards(ev)"
@@ -2531,13 +2540,14 @@ function onTitleKeydown(e: KeyboardEvent) {
   word-break: break-word;
 }
 
-.turn__process-folded {
+.turn__process-fold {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  align-self: flex-start;
   max-width: 100%;
   margin: 0;
-  padding: 2px 0;
+  padding: 2px 4px 2px 0;
   border: none;
   border-radius: 4px;
   background: transparent;
@@ -2549,22 +2559,19 @@ function onTitleKeydown(e: KeyboardEvent) {
   text-align: left;
 }
 
-.turn__process-folded:hover {
+.turn__process-fold:hover {
   color: var(--dq-label-secondary);
   background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
 }
 
-.turn__process-folded svg {
+.turn__process-fold svg {
   flex-shrink: 0;
   opacity: 0.55;
-  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
 }
 
-.turn__process-folded-meta {
-  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
-  font-size: var(--dq-font-size-caption);
-  font-variant-numeric: tabular-nums;
-  opacity: 0.9;
+.turn__process-fold.is-collapsed svg {
+  transform: rotate(-90deg);
 }
 
 .turn__error {

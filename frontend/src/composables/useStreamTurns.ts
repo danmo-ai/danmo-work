@@ -60,18 +60,21 @@ export function groupConsecutiveToolCards(events: StreamEvent[]): StreamEvent[] 
   return out
 }
 
-/** Timeline event types treated as mid-turn process (folded when turn collapses). */
+/** Timeline event types treated as mid-turn process (folded when process collapses). */
 const PROCESS_EVENT_TYPES = new Set([
   '__tool_group__',
   '__tool_card__',
   'agent.thinking',
   'capability.activated',
   'context.compacted',
+  // Resolved/settled interactive rows — expand to review; keep timeline clean when folded.
+  'ask_user.pending',
+  'permission.ask',
 ])
 
 /**
- * When a turn is process-collapsed, hide tools/thinking/etc. and intermediate
- * agent.message chunks — keep the last LLM output plus interactive/error rows.
+ * When process is collapsed, hide tools/thinking/asks/etc. and intermediate
+ * agent.message chunks — keep the last LLM output plus errors/report meta.
  */
 export function filterCollapsedTimelineEvents(events: StreamEvent[]): StreamEvent[] {
   let lastMessageIdx = -1
@@ -91,68 +94,82 @@ export function filterCollapsedTimelineEvents(events: StreamEvent[]): StreamEven
 
 /** True when collapsing would hide mid-turn process (tools, thinking, or earlier messages). */
 export function hasFoldableProcess(events: StreamEvent[]): boolean {
-  let messageCount = 0
-  for (const ev of events) {
-    if (PROCESS_EVENT_TYPES.has(ev.type)) return true
-    if (ev.type === 'agent.message') {
-      messageCount++
-      if (messageCount > 1) return true
-    }
-  }
-  return false
+  return countFoldableProcessEvents(events) > 0
 }
 
-/** True when the turn has finished (or failed) — process should fold by default. */
+/** How many timeline events would be hidden when process is folded. */
+export function countFoldableProcessEvents(events: StreamEvent[]): number {
+  if (events.length === 0) return 0
+  return events.length - filterCollapsedTimelineEvents(events).length
+}
+
+/** True when the turn has finished — process should fold by default. */
 export function isTurnSettled(turn: Pick<StreamTurn, 'status'>): boolean {
   const s = turn.status
-  return s === 'completed' || s === 'failed' || s === 'cancelled' || s === 'timeout'
+  // turn.ended copies report status: successful turns emit "done" (not "completed").
+  return s === 'completed' || s === 'done' || s === 'failed' || s === 'cancelled' || s === 'timeout'
 }
 
-/** User toggles override default collapse; unset = fold process after turn settles. */
+/**
+ * Two independent folds:
+ * - process: mid-turn tools/thinking/etc. (default on after turn settles)
+ * - body: entire turn (user + timeline); header toggle only; default expanded
+ */
 export function useTurnCollapse(getTurns: () => StreamTurn[]) {
-  const collapseOverrides = ref(new Map<string, boolean>())
+  const processCollapseOverrides = ref(new Map<string, boolean>())
+  const bodyCollapseOverrides = ref(new Map<string, boolean>())
 
   function clearCollapseOverrides() {
-    collapseOverrides.value = new Map()
+    processCollapseOverrides.value = new Map()
+    bodyCollapseOverrides.value = new Map()
   }
 
-  function defaultCollapsed(turn: StreamTurn, _turnIndex: number, _turns: StreamTurn[]): boolean {
+  function defaultProcessCollapsed(turn: StreamTurn): boolean {
     // While running (or status unknown), keep the full process open.
-    // After the turn ends, fold intermediate process — not the whole turn
-    // (final LLM output stays visible via timeline filtering).
+    // After the turn ends, fold intermediate process — final answer stays visible.
     return isTurnSettled(turn)
   }
 
-  function isTurnCollapsed(turnId: string): boolean {
-    const override = collapseOverrides.value.get(turnId)
+  function isProcessCollapsed(turnId: string): boolean {
+    const override = processCollapseOverrides.value.get(turnId)
     if (override !== undefined) return override
 
     const turns = getTurns()
     const idx = turns.findIndex((t) => t.id === turnId)
     if (idx === -1) return false
-    return defaultCollapsed(turns[idx], idx, turns)
+    return defaultProcessCollapsed(turns[idx])
   }
 
-  function toggleTurnCollapse(turnId: string) {
-    const next = !isTurnCollapsed(turnId)
-    collapseOverrides.value.set(turnId, next)
-    collapseOverrides.value = new Map(collapseOverrides.value)
+  function toggleProcessCollapse(turnId: string) {
+    const next = !isProcessCollapsed(turnId)
+    processCollapseOverrides.value.set(turnId, next)
+    processCollapseOverrides.value = new Map(processCollapseOverrides.value)
   }
 
   /** Force process expanded so pending ask/approval cards keep surrounding context. */
-  function ensureTurnExpanded(turnId: string) {
-    if (!turnId || !isTurnCollapsed(turnId)) return
-    collapseOverrides.value.set(turnId, false)
-    collapseOverrides.value = new Map(collapseOverrides.value)
+  function ensureProcessExpanded(turnId: string) {
+    if (!turnId || !isProcessCollapsed(turnId)) return
+    processCollapseOverrides.value.set(turnId, false)
+    processCollapseOverrides.value = new Map(processCollapseOverrides.value)
+  }
+
+  function isTurnBodyCollapsed(turnId: string): boolean {
+    return bodyCollapseOverrides.value.get(turnId) === true
+  }
+
+  function toggleTurnBodyCollapse(turnId: string) {
+    const next = !isTurnBodyCollapsed(turnId)
+    bodyCollapseOverrides.value.set(turnId, next)
+    bodyCollapseOverrides.value = new Map(bodyCollapseOverrides.value)
   }
 
   return {
-    collapseOverrides,
     clearCollapseOverrides,
-    isTurnCollapsed,
-    toggleTurnCollapse,
-    ensureTurnExpanded,
-    defaultCollapsed,
+    isProcessCollapsed,
+    toggleProcessCollapse,
+    ensureProcessExpanded,
+    isTurnBodyCollapsed,
+    toggleTurnBodyCollapse,
   }
 }
 
