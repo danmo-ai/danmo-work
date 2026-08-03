@@ -177,7 +177,7 @@ Product-seeded experts ship with a matching skill (and a bound-only connector wh
 | Expert | What it does |
 |--------|----------------|
 | **CodeGraph** | Local code intelligence (definitions, callers, impact / blast radius) via a bundled [CodeGraph](https://github.com/colbymchenry/codegraph) CLI. One shared MCP connector; each project keeps its own `.codegraph/` index. **First** `delegate_agent` → `codegraph` starts async `codegraph init`; while indexing (or if the binary is missing), the expert **degrades** to `read_file` / `grep` and still answers. Install/refresh with `scripts/fetch_codegraph.sh`. |
-| **GitHub** | GitHub platform ops (issues, PRs, Actions, releases). Pack = **skill + local [`gh`](https://cli.github.com/) + bound-only GitHub MCP** (same server id `github`, `AmbientMount=false`). Prefer `gh` when on `PATH` / `WORK_GH_BIN` and authenticated; fall back to `mcp_github_*` when the connector has PAT/OAuth. First `delegate_agent` → `github` prepends `[github-gh: …]`. |
+| **GitHub** | GitHub platform ops (issues, PRs, Actions, releases). Pack = **skill + bound-only official remote GitHub MCP** (server id `github`, auto-seeded, not in the market) **+ local [`gh`](https://cli.github.com/) fallback**. First `delegate_agent` → `github` prepends `[github-access: mcp\|gh\|none]`: use `mcp_github_*` when the connector has PAT/OAuth configured; otherwise `exec_shell` → `gh`. |
 | **Danmo Make** | Local image / video / audio generation via the Danmo Make MCP (separate app; URL from `~/.danmo-make/api.port`). |
 
 ---

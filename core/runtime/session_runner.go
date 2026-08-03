@@ -56,6 +56,8 @@ type Engine struct {
 	modelLimits   *ModelConfigRegistry
 	configStore   port.ConfigStore
 	mcpCaller     port.MCPCaller
+	// githubMCPReady reports whether the builtin github connector has usable auth.
+	githubMCPReady func(ctx context.Context) bool
 	dataDir       string
 	turnMessages  map[string][]Message
 	mu            sync.Mutex
@@ -357,6 +359,11 @@ func (e *Engine) RegisterTool(h tool.Handler) {
 		e.readSkill = rs
 	}
 	e.toolCatalog.Register(h)
+}
+
+// SetGitHubMCPReady wires readiness checks for the builtin github expert pack.
+func (e *Engine) SetGitHubMCPReady(fn func(ctx context.Context) bool) {
+	e.githubMCPReady = fn
 }
 
 // SetMCPCaller wires the MCP tool executor used by catalog handlers.
@@ -1563,7 +1570,8 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 				goal = service.CodeGraphIndexHint(st, workDir) + "\n\n" + goal
 			}
 			if workerAgent.ID == service.GitHubExpertID {
-				goal = service.GitHubGhHint(service.ResolveGhBin()) + "\n\n" + goal
+				mcpReady := e.githubMCPReady != nil && e.githubMCPReady(ctx)
+				goal = service.GitHubAccessHint(mcpReady, service.ResolveGhBin()) + "\n\n" + goal
 			}
 			childPath := appendTurnPath(parentPath, childTurnID, workerAgent.ID)
 			childCtx := TurnContext{

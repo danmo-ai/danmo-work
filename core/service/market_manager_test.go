@@ -151,19 +151,19 @@ func TestMarketManagerInstallLocal(t *testing.T) {
 	res3, err := mgr.Install(ctx, domain.InstallMarketRequest{
 		SourceID: "local",
 		Kind:     "connector",
-		ID:       "github-mcp",
+		ID:       "notion-mcp",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res3.Installed) != 1 || res3.Installed[0] != "github-mcp" {
+	if len(res3.Installed) != 1 || res3.Installed[0] != "notion-mcp" {
 		t.Fatalf("unexpected connector install: %+v", res3)
 	}
-	srv, err := mcp.Get(ctx, "github-mcp")
+	srv, err := mcp.Get(ctx, "notion-mcp")
 	if err != nil {
 		t.Fatal("connector not installed")
 	}
-	if srv.MarketSource != "local" || srv.CatalogID != "github-mcp" {
+	if srv.MarketSource != "local" || srv.CatalogID != "notion-mcp" {
 		t.Fatalf("connector provenance: %+v", srv)
 	}
 	list2, _, err := mgr.ListCatalog(ctx, true)
@@ -172,13 +172,21 @@ func TestMarketManagerInstallLocal(t *testing.T) {
 	}
 	foundInstalled := false
 	for _, item := range list2 {
-		if item.Kind == domain.MarketKindConnector && item.ID == "github-mcp" && item.Installed {
+		if item.Kind == domain.MarketKindConnector && item.ID == "notion-mcp" && item.Installed {
 			foundInstalled = true
 			break
 		}
 	}
 	if !foundInstalled {
-		t.Fatal("expected github-mcp marked installed in catalog")
+		t.Fatal("expected notion-mcp marked installed in catalog")
+	}
+	// Legacy/builtin GitHub connector must not install from market (filtered or rejected).
+	if _, err := mgr.Install(ctx, domain.InstallMarketRequest{
+		SourceID: "local",
+		Kind:     "connector",
+		ID:       "github-mcp",
+	}); err == nil {
+		t.Fatal("expected github-mcp market install to fail")
 	}
 }
 

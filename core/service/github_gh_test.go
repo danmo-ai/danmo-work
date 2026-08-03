@@ -1,11 +1,14 @@
 package service
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"danmo-work/core/domain"
 )
 
 func TestResolveGhBinEnvOverride(t *testing.T) {
@@ -42,14 +45,18 @@ func TestResolveGhBinHomeDir(t *testing.T) {
 	}
 }
 
-func TestGitHubGhHint(t *testing.T) {
-	missing := GitHubGhHint("")
-	if !strings.Contains(missing, "missing") || !strings.Contains(missing, "gh") {
-		t.Fatalf("missing hint: %s", missing)
+func TestGitHubAccessHintPriority(t *testing.T) {
+	mcp := GitHubAccessHint(true, "/usr/bin/gh")
+	if !strings.Contains(mcp, "github-access: mcp") || !strings.Contains(mcp, "mcp_github_") {
+		t.Fatalf("mcp hint: %s", mcp)
 	}
-	ready := GitHubGhHint("/usr/bin/gh")
-	if !strings.Contains(ready, "ready") || !strings.Contains(ready, "/usr/bin/gh") {
-		t.Fatalf("ready hint: %s", ready)
+	gh := GitHubAccessHint(false, "/usr/bin/gh")
+	if !strings.Contains(gh, "github-access: gh") {
+		t.Fatalf("gh hint: %s", gh)
+	}
+	none := GitHubAccessHint(false, "")
+	if !strings.Contains(none, "github-access: none") {
+		t.Fatalf("none hint: %s", none)
 	}
 }
 
@@ -61,20 +68,44 @@ func TestGitHubCatalogEntryBoundOnlyBuiltin(t *testing.T) {
 	if entry.AmbientMount == nil || *entry.AmbientMount {
 		t.Fatal("github connector must be bound-only (AmbientMount=false)")
 	}
-	if entry.URL == "" || entry.Transport != "streamable-http" {
-		t.Fatalf("unexpected transport/url: %+v", entry)
-	}
-	found := false
-	for _, id := range BuiltinConnectorIDs {
-		if id == GitHubExpertID {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("BuiltinConnectorIDs missing %q: %v", GitHubExpertID, BuiltinConnectorIDs)
+	if !IsProductBuiltinConnector(GitHubExpertID) || !IsProductBuiltinConnector(GitHubLegacyMarketConnectorID) {
+		t.Fatal("builtin / legacy market ids should be filtered")
 	}
 	if CatalogEntryByID(GitHubExpertID) == nil {
 		t.Fatal("CatalogEntryByID(github) nil")
+	}
+}
+
+func TestGitHubMCPReadyRequiresAuth(t *testing.T) {
+	ctx := context.Background()
+	mcp := NewMCPManager(newMemMCPServerRepo())
+	if mcp.GitHubMCPReady(ctx) {
+		t.Fatal("missing server should not be ready")
+	}
+	if _, err := mcp.Create(ctx, domain.UpsertMCPServerRequest{
+		ID:        GitHubExpertID,
+		Name:      "GitHub",
+		Transport: "streamable-http",
+		URL:       "https://api.githubcopilot.com/mcp/",
+		Auth:      domain.MCPAuthHeaders,
+		Enabled:   true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if mcp.GitHubMCPReady(ctx) {
+		t.Fatal("unconfigured auth should not be ready")
+	}
+	if _, err := mcp.Update(ctx, GitHubExpertID, domain.UpsertMCPServerRequest{
+		Name:      "GitHub",
+		Transport: "streamable-http",
+		URL:       "https://api.githubcopilot.com/mcp/",
+		Auth:      domain.MCPAuthHeaders,
+		Enabled:   true,
+		Headers:   map[string]string{"Authorization": "Bearer ghp_test"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !mcp.GitHubMCPReady(ctx) {
+		t.Fatal("expected ready after Authorization header")
 	}
 }

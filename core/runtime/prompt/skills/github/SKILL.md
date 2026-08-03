@@ -1,69 +1,70 @@
 ---
 name: github
 description: >-
-  Operate GitHub via the local gh CLI and/or the bound GitHub MCP connector
-  (issues, PRs, Actions, releases, API). Use for GitHub platform work.
+  Operate GitHub via the bound GitHub MCP connector when configured, otherwise
+  the local gh CLI (issues, PRs, Actions, releases, API).
 license: MIT
 compatibility: >-
-  Prefer GitHub CLI (gh) on PATH / WORK_GH_BIN with gh auth login;
-  bound github MCP (mcp_github_*) as fallback when authorized.
+  Builtin github MCP (mcp_github_*) when PAT/OAuth is configured;
+  otherwise GitHub CLI (gh) on PATH / WORK_GH_BIN with gh auth login.
 metadata:
   author: danmo
-  version: "0.2.0"
+  version: "0.3.0"
   category: coding
 ---
 
-# GitHub (gh + bound MCP)
+# GitHub (MCP first, gh fallback)
 
-This expert owns GitHub access: local `gh` **and** the bound-only `github`
-MCP connector (`mcp_github_*`). Do not reach for ambient/other GitHub MCPs
-or raw `curl` to `api.github.com`.
+This expert owns GitHub access: the **bound-only** `github` MCP connector and
+local `gh`. Do not install market GitHub connectors, ambient MCPs, or raw
+`curl` to `api.github.com`.
 
-The parent turn may prepend a `[github-gh: …]` hint — trust it.
+The parent turn prepends `[github-access: mcp|gh|none]` — **trust it**.
 
 ## Path selection
 
-| Situation | What to use |
-|-----------|-------------|
-| `[github-gh: ready]` | Prefer `exec_shell` → `gh …` |
-| `gh` missing / not authenticated, MCP tools listed | Use `mcp_github_*` |
-| MCP auth errors (401/403) but `gh` ready | Fall back to `gh` |
-| Both unavailable | Stop; report install/`gh auth login` and/or connector PAT/OAuth setup |
+| Hint | What to use |
+|------|-------------|
+| `github-access: mcp` | Prefer `mcp_github_*`. On MCP auth/transport failure, fall back to `gh` if the hint mentioned a gh bin |
+| `github-access: gh` | MCP not configured — use `exec_shell` → `gh …` only |
+| `github-access: none` | Stop; report configure builtin **GitHub** connector (PAT/OAuth) and/or install `gh` + `gh auth login` |
 
-## `gh` workflow
+Do not invent issue/PR state without tool evidence.
 
-1. If hint is not `missing`, run once: `gh auth status`.
+## MCP workflow (when `mcp`)
+
+1. Call tools with full names from the tool list (`mcp_github_<tool>`).
+2. Prefer read/list tools first when the goal is ambiguous.
+3. On 401/403 or clear auth errors: if gh fallback is available, switch to `gh`;
+   otherwise report that the builtin connector needs PAT/OAuth — do not invent tokens.
+
+## `gh` workflow (when `gh`, or MCP failed)
+
+1. Run once: `gh auth status` (unless already confirmed this turn).
 2. Prefer JSON: `gh <cmd> --json field1,field2`.
 3. Repo scope: cwd remotes by default; `-R owner/repo` when the goal names another repo.
 4. Never pass secrets on the CLI; use existing `gh` auth only.
 5. Cap lists with `--limit` unless asked for a full dump.
 
-| Intent | Starting point |
-|--------|----------------|
-| Issues | `gh issue list` / `gh issue view` / `gh issue create` |
-| PRs | `gh pr list` / `gh pr view` / `gh pr diff` / `gh pr create` |
+| Intent | `gh` starting point |
+|--------|---------------------|
+| Issues | `gh issue list` / `view` / `create` |
+| PRs | `gh pr list` / `view` / `diff` / `create` |
 | Checks / CI | `gh pr checks`, `gh run list`, `gh run view <id> --log-failed` |
 | Release | `gh release list` / `view` / `create` (confirm) |
 | Search | `gh search issues` / `gh search prs` |
 | Raw API | `gh api <path>` when no subcommand fits |
-
-## MCP workflow
-
-1. Call tools with full names from the tool list (`mcp_github_<tool>`).
-2. Prefer read/list tools first when the goal is ambiguous.
-3. On auth failure: report that the bound **GitHub** connector needs a PAT/OAuth header — do not invent tokens.
 
 ## Safety
 
 - **ask_user** before: merge, close, delete, release publish, secret changes,
   admin/org mutations, or force/`--delete` — unless the goal already names that exact action.
 - Prefer read-only investigation first when ambiguous.
-- Do not `git push --force` to default branches.
 
 ## Anti-patterns
 
+- Installing GitHub MCP from the market (product builtin only)
 - Using a different GitHub MCP server id or `http_request` / `curl` to GitHub APIs
-- Claiming issue/PR state without `gh` or MCP evidence
+- Preferring `gh` when the hint says `mcp` and MCP tools are listed
+- Claiming issue/PR state without MCP/`gh` evidence
 - Installing or upgrading `gh` inside the session
-- Using `git` for hosting tasks this skill covers (`gh` / MCP first)
-- Dumping unbounded `gh api` pages without limits

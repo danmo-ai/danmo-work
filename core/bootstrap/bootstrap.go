@@ -311,6 +311,7 @@ func New(cfg Config) *Core {
 	eng.RegisterTool(&builtin.TableList{Store: tableStore})
 
 	eng.SetMCPCaller(mcpManager)
+	eng.SetGitHubMCPReady(mcpManager.GitHubMCPReady)
 	mcpManager.SetToolSync(eng)
 	_ = mcpManager.SyncAll(context.Background())
 

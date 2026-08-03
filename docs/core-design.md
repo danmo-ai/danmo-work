@@ -387,7 +387,7 @@ Agent 可用能力按三层合成；Skill 与连接器共用同一 Ambient 开�
 - 单个动作的启用/禁用在连接器配置里（discover 后 persist），不绑到 Agent。
 - Ambient 开：`MountAllMCP`（跳过 `ambientMount=false` 的连接器）；Ambient 关：仅 `MountServers(agent.MCPServers)`。
 - 连接器预设可声明 `ambientMount: false`（bound-only）与 `toolTimeout`；安装时写入实例，无按连接器 id 硬编码。
-- 产品内置连接器（如 `danmo-make`、`codegraph`、`github`）由 bootstrap `ensureBuiltinConnectors` 以固定 server id 自动 seed；专家/技能走 embedded `prompt/agents` + `prompt/skills`（UI「内置」= 存在 template）。`codegraph` 为 stdio + 绑定专家；首次 `delegate_agent`→`codegraph` 时异步 `codegraph init`，完成前专家降级 `read_file`/`grep`。`github` 专家包 = 技能 + 本机 `gh`（`exec_shell`）+ **绑定型**远程 MCP（server id 同为 `github`，`AmbientMount=false`）；优先 `gh`，MCP 作已授权时的兜底；首次委派注入 `[github-gh: …]`（`ResolveGhBin`：`WORK_GH_BIN` → `~/.danmo-work/bin/gh` → `PATH`）。
+- 产品内置连接器（如 `danmo-make`、`codegraph`、`github`）由 bootstrap `ensureBuiltinConnectors` 以固定 server id 自动 seed；专家/技能走 embedded `prompt/agents` + `prompt/skills`（UI「内置」= 存在 template）。`codegraph` 为 stdio + 绑定专家；首次 `delegate_agent`→`codegraph` 时异步 `codegraph init`，完成前专家降级 `read_file`/`grep`。`github` 专家包 = 技能 + **绑定型**官方远程 MCP（server id `github`，`AmbientMount=false`，市场不再提供 `github-mcp`）+ 本机 `gh` 兜底；`GitHubMCPReady`（PAT/OAuth header 已配置）为真时优先 `mcp_github_*`，否则 `exec_shell`→`gh`；首次委派注入 `[github-access: mcp|gh|none]`。市场目录会过滤 `BuiltinConnectorIDs` 与遗留 `github-mcp`，并拒绝安装。
 
 | Tool / 能力 | 条件 |
 |------|------|

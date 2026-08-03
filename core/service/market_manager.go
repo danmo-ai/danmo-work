@@ -111,6 +111,10 @@ func (m *MarketManager) ListCatalog(ctx context.Context, refresh bool) (items []
 			continue
 		}
 		for _, item := range cat.Items {
+			// Product-seeded connectors (e.g. github) are not sold via market.
+			if item.Kind == domain.MarketKindConnector && IsProductBuiltinConnector(item.ID) {
+				continue
+			}
 			listings = append(listings, domain.MarketListing{
 				MarketItem: item,
 				SourceID:   src.SourceID(),
@@ -222,6 +226,9 @@ func (m *MarketManager) Install(ctx context.Context, req domain.InstallMarketReq
 			return nil, err
 		}
 	case domain.MarketKindConnector:
+		if IsProductBuiltinConnector(req.ID) {
+			return nil, fmt.Errorf("connector %q is a product builtin (auto-seeded); configure it under Connectors — not installable from the market", req.ID)
+		}
 		if err := m.installConnector(ctx, market, *item, ref, req.Overwrite, result); err != nil {
 			return nil, err
 		}
