@@ -10,7 +10,7 @@ import (
 	"danmo-work/core/port"
 )
 
-func TestHTTPProviderParsesUsage(t *testing.T) {
+func TestOpenAIChatCompletionsClientParsesUsage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"choices": []map[string]any{
@@ -29,7 +29,7 @@ func TestHTTPProviderParsesUsage(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewHTTPProvider(server.URL, "")
+	p := NewOpenAIChatCompletionsClient(server.URL, "")
 	resp, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "gpt-4o"}, "")
 	if err != nil {
 		t.Fatalf("chat: %v", err)
@@ -51,7 +51,7 @@ func TestHTTPProviderParsesUsage(t *testing.T) {
 	}
 }
 
-func TestHTTPProviderOmitsEmptyUsage(t *testing.T) {
+func TestOpenAIChatCompletionsClientOmitsEmptyUsage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"choices": []map[string]any{
@@ -65,7 +65,7 @@ func TestHTTPProviderOmitsEmptyUsage(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewHTTPProvider(server.URL, "")
+	p := NewOpenAIChatCompletionsClient(server.URL, "")
 	resp, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "gpt-4o"}, "")
 	if err != nil {
 		t.Fatalf("chat: %v", err)
@@ -75,7 +75,7 @@ func TestHTTPProviderOmitsEmptyUsage(t *testing.T) {
 	}
 }
 
-func TestHTTPProviderToolCallWithArguments(t *testing.T) {
+func TestOpenAIChatCompletionsClientToolCallWithArguments(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"choices": []map[string]any{
@@ -97,7 +97,7 @@ func TestHTTPProviderToolCallWithArguments(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewHTTPProvider(server.URL, "")
+	p := NewOpenAIChatCompletionsClient(server.URL, "")
 	resp, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "test"}, "")
 	if err != nil {
 		t.Fatalf("chat: %v", err)
@@ -114,7 +114,7 @@ func TestHTTPProviderToolCallWithArguments(t *testing.T) {
 	}
 }
 
-func TestHTTPProviderToolCallNullArguments(t *testing.T) {
+func TestOpenAIChatCompletionsClientToolCallNullArguments(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"choices": []map[string]any{
@@ -136,7 +136,7 @@ func TestHTTPProviderToolCallNullArguments(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewHTTPProvider(server.URL, "")
+	p := NewOpenAIChatCompletionsClient(server.URL, "")
 	_, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "test"}, "")
 	if err == nil {
 		t.Fatal("expected error for null arguments")
@@ -144,7 +144,7 @@ func TestHTTPProviderToolCallNullArguments(t *testing.T) {
 	t.Logf("got expected error: %v", err)
 }
 
-func TestHTTPProviderToolCallRepairsUnescapedQuotes(t *testing.T) {
+func TestOpenAIChatCompletionsClientToolCallRepairsUnescapedQuotes(t *testing.T) {
 	// Simulate provider returning arguments as a JSON string that itself contains
 	// unescaped quotes (common LLM damage for write/edit content).
 	brokenInner := `{"path":"note.txt","content":"quote "x" here"}`
@@ -169,7 +169,7 @@ func TestHTTPProviderToolCallRepairsUnescapedQuotes(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewHTTPProvider(server.URL, "")
+	p := NewOpenAIChatCompletionsClient(server.URL, "")
 	resp, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "test"}, "")
 	if err != nil {
 		t.Fatalf("chat: %v", err)
@@ -189,7 +189,7 @@ func TestHTTPProviderToolCallRepairsUnescapedQuotes(t *testing.T) {
 	}
 }
 
-func TestHTTPProviderToolCallEmptyStringArguments(t *testing.T) {
+func TestOpenAIChatCompletionsClientToolCallEmptyStringArguments(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"choices": []map[string]any{
@@ -211,10 +211,68 @@ func TestHTTPProviderToolCallEmptyStringArguments(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p := NewHTTPProvider(server.URL, "")
+	p := NewOpenAIChatCompletionsClient(server.URL, "")
 	_, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "test"}, "")
 	if err == nil {
 		t.Fatal("expected error for empty string arguments")
 	}
 	t.Logf("got expected error: %v", err)
 }
+
+func TestApplyChatCompletionsGenParams(t *testing.T) {
+	body := map[string]any{}
+	applyChatCompletionsGenParams(body, &port.ModelGenParams{
+		Temperature:      0.4,
+		TopP:             0.8,
+		FrequencyPenalty: 0.2,
+		PresencePenalty:  0.1,
+		Stop:             []string{"END"},
+		MaxTokens:        512,
+	})
+	if body["temperature"] != 0.4 || body["top_p"] != 0.8 {
+		t.Errorf("sampling: %v", body)
+	}
+	if body["frequency_penalty"] != 0.2 || body["presence_penalty"] != 0.1 {
+		t.Errorf("penalties: %v", body)
+	}
+	stop, _ := body["stop"].([]string)
+	if len(stop) != 1 || stop[0] != "END" {
+		t.Errorf("stop: %v", body["stop"])
+	}
+	if body["max_tokens"] != 512 {
+		t.Errorf("max_tokens: %v", body["max_tokens"])
+	}
+}
+
+func TestOpenAIChatCompletionsClient_SendsGenParams(t *testing.T) {
+	var got map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]any{"content": "ok"}}},
+		})
+	}))
+	defer server.Close()
+
+	p := NewOpenAIChatCompletionsClient(server.URL, "")
+	_, err := p.Chat(context.Background(), port.LLMChatRequest{
+		Model: "gpt-4o",
+		GenParams: &port.ModelGenParams{
+			Temperature:      0.3,
+			FrequencyPenalty: 0.5,
+			Stop:             []string{"###"},
+			MaxTokens:        100,
+		},
+	}, "")
+	if err != nil {
+		t.Fatalf("chat: %v", err)
+	}
+	if got["temperature"] != 0.3 || got["frequency_penalty"] != 0.5 || got["max_tokens"] != float64(100) {
+		t.Errorf("body: %v", got)
+	}
+	stop, ok := got["stop"].([]any)
+	if !ok || len(stop) != 1 || stop[0] != "###" {
+		t.Errorf("stop: %v", got["stop"])
+	}
+}
+

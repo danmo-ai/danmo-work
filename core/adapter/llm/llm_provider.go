@@ -102,13 +102,18 @@ func (c *DefaultLLMProviderClient) Chat(ctx context.Context, req port.LLMChatReq
 	}
 
 	timeout := c.chatTimeout(ctx)
-	switch cfg.Provider {
+	protocol := domain.NormalizeProtocol(cfg.Provider)
+	switch protocol {
 	case domain.LLMProviderAnthropic:
-		return NewAnthropicProviderWithTimeout(cfg.BaseURL, cfg.APIKey, timeout).Chat(ctx, req, effort, effortCfg)
+		return NewAnthropicMessagesClientWithTimeout(cfg.BaseURL, cfg.APIKey, timeout).Chat(ctx, req, effort, effortCfg)
 	case domain.LLMProviderMock:
 		return NewMock().Chat(ctx, req)
+	case domain.LLMProviderOpenAI:
+		return NewOpenAIChatCompletionsClientWithTimeout(cfg.BaseURL, cfg.APIKey, timeout).Chat(ctx, req, effort)
+	case domain.LLMProviderOpenAIResponses:
+		return NewOpenAIResponsesClientWithTimeout(cfg.BaseURL, cfg.APIKey, timeout).Chat(ctx, req, effort)
 	default:
-		return NewHTTPProviderWithTimeout(cfg.BaseURL, cfg.APIKey, timeout).Chat(ctx, req, effort)
+		return port.LLMChatResponse{}, fmt.Errorf("unsupported LLM protocol %q", cfg.Provider)
 	}
 }
 

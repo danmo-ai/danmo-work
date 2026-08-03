@@ -17,33 +17,35 @@ import (
 // High-effort reasoning models (e.g. deepseek max) regularly exceed 2 minutes.
 const DefaultChatHTTPTimeout = 10 * time.Minute
 
-type HTTPProvider struct {
+// OpenAIChatCompletionsClient talks to OpenAI-compatible Chat Completions APIs
+// (POST {baseURL}/chat/completions).
+type OpenAIChatCompletionsClient struct {
 	baseURL string
 	apiKey  string
 	timeout time.Duration
 	client  *http.Client
 }
 
-func NewHTTPProvider(baseURL, apiKey string) *HTTPProvider {
-	return NewHTTPProviderWithTimeout(baseURL, apiKey, DefaultChatHTTPTimeout)
+func NewOpenAIChatCompletionsClient(baseURL, apiKey string) *OpenAIChatCompletionsClient {
+	return NewOpenAIChatCompletionsClientWithTimeout(baseURL, apiKey, DefaultChatHTTPTimeout)
 }
 
-func NewHTTPProviderWithTimeout(baseURL, apiKey string, timeout time.Duration) *HTTPProvider {
+func NewOpenAIChatCompletionsClientWithTimeout(baseURL, apiKey string, timeout time.Duration) *OpenAIChatCompletionsClient {
 	if baseURL == "" {
 		baseURL = "https://api.openai.com/v1"
 	}
 	if timeout <= 0 {
 		timeout = DefaultChatHTTPTimeout
 	}
-	return &HTTPProvider{
-		baseURL: baseURL,
+	return &OpenAIChatCompletionsClient{
+		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
 		timeout: timeout,
 		client:  &http.Client{Timeout: timeout},
 	}
 }
 
-func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort string) (port.LLMChatResponse, error) {
+func (p *OpenAIChatCompletionsClient) Chat(ctx context.Context, req port.LLMChatRequest, effort string) (port.LLMChatResponse, error) {
 	model := req.Model
 	if model == "" {
 		return port.LLMChatResponse{}, fmt.Errorf("model not specified")
@@ -88,27 +90,7 @@ func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort
 		"model":    model,
 		"messages": messages,
 	}
-	if req.GenParams != nil {
-		gp := req.GenParams
-		if gp.Temperature != 0 {
-			body["temperature"] = gp.Temperature
-		}
-		if gp.TopP != 0 {
-			body["top_p"] = gp.TopP
-		}
-		if gp.FrequencyPenalty != 0 {
-			body["frequency_penalty"] = gp.FrequencyPenalty
-		}
-		if gp.PresencePenalty != 0 {
-			body["presence_penalty"] = gp.PresencePenalty
-		}
-		if len(gp.Stop) > 0 {
-			body["stop"] = gp.Stop
-		}
-		if gp.MaxTokens > 0 {
-			body["max_tokens"] = gp.MaxTokens
-		}
-	}
+	applyChatCompletionsGenParams(body, req.GenParams)
 	if len(req.Tools) > 0 {
 		var tools []map[string]any
 		for _, t := range req.Tools {
@@ -225,6 +207,33 @@ func (p *HTTPProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort
 		Done:             true,
 	}, nil
 
+}
+
+// applyChatCompletionsGenParams writes Chat Completions sampling fields.
+// Supported: temperature, top_p, frequency_penalty, presence_penalty, stop, max_tokens.
+// Zero values mean "omit / use provider default".
+func applyChatCompletionsGenParams(body map[string]any, gp *port.ModelGenParams) {
+	if gp == nil {
+		return
+	}
+	if gp.Temperature != 0 {
+		body["temperature"] = gp.Temperature
+	}
+	if gp.TopP != 0 {
+		body["top_p"] = gp.TopP
+	}
+	if gp.FrequencyPenalty != 0 {
+		body["frequency_penalty"] = gp.FrequencyPenalty
+	}
+	if gp.PresencePenalty != 0 {
+		body["presence_penalty"] = gp.PresencePenalty
+	}
+	if len(gp.Stop) > 0 {
+		body["stop"] = gp.Stop
+	}
+	if gp.MaxTokens > 0 {
+		body["max_tokens"] = gp.MaxTokens
+	}
 }
 
 func marshalArgs(args map[string]any) string {

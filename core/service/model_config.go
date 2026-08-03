@@ -73,10 +73,10 @@ func (r *ModelConfigRegistry) AvailableEfforts(modelID string) []string {
 
 // DefaultEffortsForProvider returns built-in effort levels when config omits them.
 func DefaultEffortsForProvider(provider domain.LLMProviderType) []string {
-	switch provider {
+	switch domain.NormalizeProtocol(provider) {
 	case domain.LLMProviderAnthropic:
 		return append([]string(nil), domain.DefaultEffortsAnthropic...)
-	case domain.LLMProviderOpenAI, domain.LLMProviderLocal:
+	case domain.LLMProviderOpenAI, domain.LLMProviderOpenAIResponses:
 		return append([]string(nil), domain.DefaultEffortsOpenAI...)
 	default:
 		return nil

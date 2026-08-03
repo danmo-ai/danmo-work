@@ -89,7 +89,7 @@ func (m *LLMConfigManager) Upsert(ctx context.Context, req domain.UpsertLLMProvi
 
 	cfg := domain.LLMProviderConfig{
 		ID:        existing.ID,
-		Provider:  req.Provider,
+		Provider:  domain.NormalizeProtocol(req.Provider),
 		Name:      req.Name,
 		APIKey:    req.APIKey,
 		BaseURL:   req.BaseURL,
@@ -230,7 +230,7 @@ func (m *LLMConfigManager) FetchModels(ctx context.Context, configID string) ([]
 
 func (m *LLMConfigManager) FetchModelsFromRequest(ctx context.Context, req domain.UpsertLLMProviderConfigRequest) ([]domain.LLMModelRef, error) {
 	cfg := domain.LLMProviderConfig{
-		Provider: req.Provider,
+		Provider: domain.NormalizeProtocol(req.Provider),
 		APIKey:   req.APIKey,
 		BaseURL:  req.BaseURL,
 	}
@@ -283,13 +283,15 @@ func (m *LLMConfigManager) ToggleModel(ctx context.Context, configID, modelName 
 }
 
 func listRemoteModels(ctx context.Context, cfg domain.LLMProviderConfig) ([]string, error) {
-	switch cfg.Provider {
+	switch domain.NormalizeProtocol(cfg.Provider) {
 	case domain.LLMProviderMock:
 		return []string{"mock-gpt-4", "mock-claude"}, nil
 	case domain.LLMProviderAnthropic:
 		return nil, fmt.Errorf("Anthropic API does not expose a model list endpoint; configure models manually via config.yaml")
-	default:
+	case domain.LLMProviderOpenAI, domain.LLMProviderOpenAIResponses:
 		return listOpenAICompatibleModels(ctx, cfg.BaseURL, cfg.APIKey)
+	default:
+		return nil, fmt.Errorf("unsupported LLM protocol %q", cfg.Provider)
 	}
 }
 

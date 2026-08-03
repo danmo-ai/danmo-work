@@ -7,39 +7,42 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
 )
 
-type AnthropicProvider struct {
+// AnthropicMessagesClient talks to the Anthropic Messages API
+// (POST {baseURL}/messages).
+type AnthropicMessagesClient struct {
 	baseURL string
 	apiKey  string
 	timeout time.Duration
 	client  *http.Client
 }
 
-func NewAnthropicProvider(baseURL, apiKey string) *AnthropicProvider {
-	return NewAnthropicProviderWithTimeout(baseURL, apiKey, DefaultChatHTTPTimeout)
+func NewAnthropicMessagesClient(baseURL, apiKey string) *AnthropicMessagesClient {
+	return NewAnthropicMessagesClientWithTimeout(baseURL, apiKey, DefaultChatHTTPTimeout)
 }
 
-func NewAnthropicProviderWithTimeout(baseURL, apiKey string, timeout time.Duration) *AnthropicProvider {
+func NewAnthropicMessagesClientWithTimeout(baseURL, apiKey string, timeout time.Duration) *AnthropicMessagesClient {
 	if baseURL == "" {
 		baseURL = "https://api.anthropic.com/v1"
 	}
 	if timeout <= 0 {
 		timeout = DefaultChatHTTPTimeout
 	}
-	return &AnthropicProvider{
-		baseURL: baseURL,
+	return &AnthropicMessagesClient{
+		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
 		timeout: timeout,
 		client:  &http.Client{Timeout: timeout},
 	}
 }
 
-func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest, effort string, effortCfg *EffortConfig) (port.LLMChatResponse, error) {
+func (p *AnthropicMessagesClient) Chat(ctx context.Context, req port.LLMChatRequest, effort string, effortCfg *EffortConfig) (port.LLMChatResponse, error) {
 	model := req.Model
 	if model == "" {
 		return port.LLMChatResponse{}, fmt.Errorf("model not specified")
@@ -82,24 +85,12 @@ func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest, e
 	}
 
 	body := map[string]any{
-		"model":      model,
-		"messages":   messages,
+		"model":    model,
+		"messages": messages,
 	}
-	if req.GenParams != nil {
-		gp := req.GenParams
-		if gp.MaxTokens > 0 {
-			body["max_tokens"] = gp.MaxTokens
-		}
-		if gp.TopP != 0 {
-			body["top_p"] = gp.TopP
-		}
-		if len(gp.Stop) > 0 {
-			body["stop_sequences"] = gp.Stop
-		}
-		if gp.Temperature != 0 {
-			body["temperature"] = gp.Temperature
-		}
-	}
+	// Anthropic Messages supports temperature, top_p, max_tokens, stop_sequences (+ thinking).
+	// frequency_penalty / presence_penalty are not part of this API — omit.
+	applyAnthropicGenParams(body, req.GenParams)
 	if _, ok := body["max_tokens"]; !ok {
 		body["max_tokens"] = 4096
 	}
@@ -194,3 +185,25 @@ func (p *AnthropicProvider) Chat(ctx context.Context, req port.LLMChatRequest, e
 
 	return port.LLMChatResponse{Content: content, Usage: usage, Done: true}, nil
 }
+
+// applyAnthropicGenParams writes Anthropic Messages sampling fields.
+// Supported: temperature, top_p, max_tokens, stop_sequences.
+// Not supported: frequency_penalty, presence_penalty.
+func applyAnthropicGenParams(body map[string]any, gp *port.ModelGenParams) {
+	if gp == nil {
+		return
+	}
+	if gp.MaxTokens > 0 {
+		body["max_tokens"] = gp.MaxTokens
+	}
+	if gp.TopP != 0 {
+		body["top_p"] = gp.TopP
+	}
+	if len(gp.Stop) > 0 {
+		body["stop_sequences"] = gp.Stop
+	}
+	if gp.Temperature != 0 {
+		body["temperature"] = gp.Temperature
+	}
+}
+

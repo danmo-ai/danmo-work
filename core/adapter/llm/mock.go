@@ -10,7 +10,7 @@ import (
 	"danmo-work/core/port"
 )
 
-var _ port.LLMProvider = (*MockProvider)(nil)
+var _ port.LLMProvider = (*MockClient)(nil)
 
 type mockToolCall struct {
 	Name string
@@ -30,16 +30,20 @@ type ParallelCall struct {
 	Args map[string]any
 }
 
-type MockProvider struct {
+// MockClient is an in-process LLM used by tests and demos.
+type MockClient struct {
 	mu       sync.Mutex
 	steps    []callStep
 	cursor   int
 	Requests []port.LLMChatRequest
 }
 
-func NewMock() *MockProvider { return &MockProvider{} }
+// MockProvider is a compatibility alias for MockClient.
+type MockProvider = MockClient
 
-func (p *MockProvider) AddToolCall(tool string, args map[string]any) *MockProvider {
+func NewMock() *MockClient { return &MockClient{} }
+
+func (p *MockClient) AddToolCall(tool string, args map[string]any) *MockClient {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.steps = append(p.steps, callStep{ToolCalls: []mockToolCall{{Name: tool, Args: args}}})
@@ -48,7 +52,7 @@ func (p *MockProvider) AddToolCall(tool string, args map[string]any) *MockProvid
 
 // AddParallelToolCalls queues one model step that returns multiple tool_calls
 // in a single assistant message (LLM parallel tool-call contract).
-func (p *MockProvider) AddParallelToolCalls(calls ...ParallelCall) *MockProvider {
+func (p *MockClient) AddParallelToolCalls(calls ...ParallelCall) *MockClient {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	step := callStep{ToolCalls: make([]mockToolCall, 0, len(calls))}
@@ -59,7 +63,7 @@ func (p *MockProvider) AddParallelToolCalls(calls ...ParallelCall) *MockProvider
 	return p
 }
 
-func (p *MockProvider) AddToolCallWithReasoning(tool string, args map[string]any, reasoning string) *MockProvider {
+func (p *MockClient) AddToolCallWithReasoning(tool string, args map[string]any, reasoning string) *MockClient {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.steps = append(p.steps, callStep{
@@ -69,35 +73,35 @@ func (p *MockProvider) AddToolCallWithReasoning(tool string, args map[string]any
 	return p
 }
 
-func (p *MockProvider) AddText(content string) *MockProvider {
+func (p *MockClient) AddText(content string) *MockClient {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.steps = append(p.steps, callStep{Text: content})
 	return p
 }
 
-func (p *MockProvider) AddTextWithReasoning(content, reasoning string) *MockProvider {
+func (p *MockClient) AddTextWithReasoning(content, reasoning string) *MockClient {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.steps = append(p.steps, callStep{Text: content, Reasoning: reasoning})
 	return p
 }
 
-func (p *MockProvider) Finish(summary string) *MockProvider {
+func (p *MockClient) Finish(summary string) *MockClient {
 	return p.AddText(summary)
 }
 
 // AddTextWithDelay queues a text step that waits for d (or context
 // cancellation) before returning. Useful to keep a turn "in flight" so tests
 // can cancel it deterministically.
-func (p *MockProvider) AddTextWithDelay(content string, d time.Duration) *MockProvider {
+func (p *MockClient) AddTextWithDelay(content string, d time.Duration) *MockClient {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.steps = append(p.steps, callStep{Text: content, Delay: d})
 	return p
 }
 
-func (p *MockProvider) Chat(ctx context.Context, req port.LLMChatRequest) (port.LLMChatResponse, error) {
+func (p *MockClient) Chat(ctx context.Context, req port.LLMChatRequest) (port.LLMChatResponse, error) {
 	p.mu.Lock()
 
 	p.Requests = append(p.Requests, req)

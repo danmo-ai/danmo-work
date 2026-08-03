@@ -1,13 +1,34 @@
 package domain
 
+// LLMProviderType is the wire protocol used to talk to an LLM endpoint.
+// It is NOT a vendor name — vendor presets (deepseek, qwen, …) only supply
+// defaults (protocol + base URL); one protocol maps to one client implementation.
 type LLMProviderType string
 
 const (
-	LLMProviderOpenAI    LLMProviderType = "openai"
+	// LLMProviderOpenAI is the OpenAI Chat Completions protocol (/chat/completions).
+	// Most third-party "OpenAI-compatible" endpoints use this. Existing configs keep this value.
+	LLMProviderOpenAI LLMProviderType = "openai"
+	// LLMProviderOpenAIResponses is the OpenAI Responses protocol (/responses).
+	LLMProviderOpenAIResponses LLMProviderType = "openai_responses"
+	// LLMProviderAnthropic is the Anthropic Messages protocol (/messages).
 	LLMProviderAnthropic LLMProviderType = "anthropic"
-	LLMProviderLocal     LLMProviderType = "local"
-	LLMProviderMock      LLMProviderType = "mock"
+	// LLMProviderMock is the in-process mock client (tests / demos).
+	LLMProviderMock LLMProviderType = "mock"
+	// LLMProviderLocal is a deprecated alias of LLMProviderOpenAI.
+	LLMProviderLocal LLMProviderType = "local"
 )
+
+// NormalizeProtocol maps legacy / alias protocol values onto canonical ones.
+// Unknown values are returned unchanged so the dispatcher can reject them.
+func NormalizeProtocol(p LLMProviderType) LLMProviderType {
+	switch p {
+	case LLMProviderLocal:
+		return LLMProviderOpenAI
+	default:
+		return p
+	}
+}
 
 type LLMModelRef struct {
 	Name    string `json:"name"`
@@ -74,10 +95,10 @@ type ModelConfig struct {
 // It ships via config.yaml or built-in defaults and is exposed to the frontend
 // so users can pick a preset instead of filling every field manually.
 type LLMProviderPreset struct {
-	ID          string          `json:"id"`          // e.g. "deepseek"
-	Name        string          `json:"name"`        // display name, e.g. "DeepSeek"
-	Provider    LLMProviderType `json:"provider"`    // "openai" | "anthropic" | ...
-	BaseURL     string          `json:"baseUrl"`     // default API endpoint
-	Icon        string          `json:"icon"`        // emoji or icon key
-	Description string          `json:"description"` // short human-readable description
+	ID          string          `json:"id" mapstructure:"id" yaml:"id"`
+	Name        string          `json:"name" mapstructure:"name" yaml:"name"`
+	Provider    LLMProviderType `json:"provider" mapstructure:"provider" yaml:"provider"` // protocol type
+	BaseURL     string          `json:"baseUrl" mapstructure:"base_url" yaml:"base_url"`
+	Icon        string          `json:"icon" mapstructure:"icon" yaml:"icon"`
+	Description string          `json:"description" mapstructure:"description" yaml:"description"`
 }

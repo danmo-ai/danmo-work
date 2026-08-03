@@ -16,6 +16,7 @@ import { useProjectsStore } from '@/stores/projects'
 import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
 import type { ThemeId } from '@/stores/theme'
 import { toast, confirm } from '@/utils/feedback'
+import { providerBadge, customProviderBadge } from '@/utils/provider-icon'
 import Skeleton from '@/components/common/Skeleton.vue'
 import { useAppUpdater } from '@/composables/useAppUpdater'
 import { isTauriRuntime } from '@/utils/desktop'
@@ -126,9 +127,9 @@ async function handleInstallUpdate() {
 }
 
 const providerOptions = computed<{ value: LLMProviderType; label: string }[]>(() => [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'local', label: t('settings.localProvider') },
+  { value: 'openai', label: t('settings.protocolOpenAIChatCompletions') },
+  { value: 'openai_responses', label: t('settings.protocolOpenAIResponses') },
+  { value: 'anthropic', label: t('settings.protocolAnthropicMessages') },
   { value: 'mock', label: t('settings.mockProvider') },
 ])
 
@@ -860,35 +861,6 @@ function selectCustom() {
 
 function backToChoose() {
   dialogStep.value = 'choose'
-}
-
-const presetColors: Record<string, string> = {
-  openai: 'var(--dq-success)',
-  anthropic: 'var(--dq-warning)',
-  deepseek: 'var(--dq-accent)',
-  google: 'var(--dq-info)',
-  zhipu: 'var(--dq-danger)',
-  qwen: 'var(--dq-system-orange)',
-  moonshot: 'var(--dq-system-blue)',
-  ollama: 'var(--dq-label-secondary)',
-}
-
-function presetColor(id: string) {
-  return presetColors[id] ?? 'var(--dq-label-secondary)'
-}
-
-function presetAbbr(id: string) {
-  const map: Record<string, string> = {
-    openai: 'GPT',
-    anthropic: 'C',
-    deepseek: 'DS',
-    google: 'G',
-    zhipu: 'GLM',
-    qwen: 'Q',
-    moonshot: 'K',
-    ollama: '🦙',
-  }
-  return map[id] ?? id[0]?.toUpperCase() ?? '?'
 }
 
 function openEditForm(cfg: LLMProviderConfig) {
@@ -2070,8 +2042,15 @@ const hasFooterActions = computed(() => {
             <div v-for="cfg in llm.configs" :key="cfg.id" class="provider-card">
               <div class="provider-card__head">
                 <div class="provider-card__info">
-                  <span class="provider-card__name">{{ cfg.name }}</span>
-                  <span class="provider-card__type">{{ providerLabel(cfg.provider) }}</span>
+                  <span
+                    class="provider-badge"
+                    :style="{ background: providerBadge(cfg.id, cfg.name).color }"
+                    aria-hidden="true"
+                  >{{ providerBadge(cfg.id, cfg.name).abbr }}</span>
+                  <div class="provider-card__text">
+                    <span class="provider-card__name">{{ cfg.name }}</span>
+                    <span class="provider-card__type">{{ providerLabel(cfg.provider) }}</span>
+                  </div>
                 </div>
                 <div class="provider-card__actions">
                   <DqButton size="sm" @click="openEditForm(cfg)">{{ $t('settings.edit') }}</DqButton>
@@ -2388,23 +2367,28 @@ const hasFooterActions = computed(() => {
 
           <template v-else-if="editingModel">
             <label class="settings-field">
-              <span class="settings-field__label">Context Window</span>
-              <DqInput v-model.number="editingModel.context_window" type="number" placeholder="0" />
+              <span class="settings-field__label">{{ $t('settings.modelContextWindow') }}</span>
+              <DqInput v-model.number="editingModel.context_window" type="number" :placeholder="$t('settings.modelParamUnset')" />
             </label>
             <label class="settings-field">
-              <span class="settings-field__label">Max Output</span>
-              <DqInput v-model.number="editingModel.max_output" type="number" placeholder="0" />
+              <span class="settings-field__label">{{ $t('settings.modelMaxOutput') }}</span>
+              <DqInput v-model.number="editingModel.max_output" type="number" :placeholder="$t('settings.modelParamUnset')" />
             </label>
             <label class="settings-field">
-              <span class="settings-field__label">Temperature</span>
-              <DqInput v-model.number="editingModel.temperature" type="number" placeholder="0" step="0.1" />
+              <span class="settings-field__label">{{ $t('settings.modelTemperature') }}</span>
+              <DqInput v-model.number="editingModel.temperature" type="number" :placeholder="$t('settings.modelParamUnset')" step="0.1" />
+              <span class="settings-field__hint">{{ $t('settings.modelParamUnsetHint') }}</span>
             </label>
             <label class="settings-field">
-              <span class="settings-field__label">Available Efforts</span>
+              <span class="settings-field__label">{{ $t('settings.modelTopP') }}</span>
+              <DqInput v-model.number="editingModel.top_p" type="number" :placeholder="$t('settings.modelParamUnset')" step="0.05" />
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.modelAvailableEfforts') }}</span>
               <DqInput :model-value="(editingModel.available_efforts ?? []).join(', ')" @update:model-value="editingModel.available_efforts = ($event as string).split(',').map(s => s.trim()).filter(Boolean)" placeholder="off, low, medium, high, xhigh" />
             </label>
             <label class="settings-field">
-              <span class="settings-field__label">Thinking Mode</span>
+              <span class="settings-field__label">{{ $t('settings.modelThinkingMode') }}</span>
               <DqInput v-model="editingModel.thinking_mode" placeholder="adaptive / enabled" />
             </label>
             <label class="settings-field settings-field--switch">
@@ -2416,9 +2400,31 @@ const hasFooterActions = computed(() => {
               <span class="settings-field__hint">{{ $t('settings.modelVisionDesc') }}</span>
             </label>
             <label class="settings-field">
-              <span class="settings-field__label">Effort Budget Tokens</span>
+              <span class="settings-field__label">{{ $t('settings.modelEffortBudgetTokens') }}</span>
               <DqInput :model-value="formatEffortBudgetTokens(editingModel.effort_budget_tokens)" type="textarea" :rows="3" @update:model-value="editingModel.effort_budget_tokens = parseEffortBudgetTokens($event as string)" placeholder="high:16000&#10;max:32000" />
             </label>
+
+            <div class="settings-form-group settings-form-group--nested">
+              <h3 class="settings-form-group__title">{{ $t('settings.modelAdvancedParams') }}</h3>
+              <p class="settings-form-group__desc">{{ $t('settings.modelAdvancedParamsDesc') }}</p>
+              <label class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.modelFrequencyPenalty') }}</span>
+                <DqInput v-model.number="editingModel.frequency_penalty" type="number" :placeholder="$t('settings.modelParamUnset')" step="0.1" />
+              </label>
+              <label class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.modelPresencePenalty') }}</span>
+                <DqInput v-model.number="editingModel.presence_penalty" type="number" :placeholder="$t('settings.modelParamUnset')" step="0.1" />
+              </label>
+              <label class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.modelStopSequences') }}</span>
+                <DqInput
+                  :model-value="(editingModel.stop ?? []).join(', ')"
+                  @update:model-value="editingModel.stop = ($event as string).split(',').map(s => s.trim()).filter(Boolean)"
+                  :placeholder="$t('settings.modelStopSequencesPlaceholder')"
+                />
+                <span class="settings-field__hint">{{ $t('settings.modelStopSequencesHint') }}</span>
+              </label>
+            </div>
           </template>
 
           <p v-else class="settings-form-group__desc">{{ $t('settings.noModelConfig') }}</p>
@@ -2614,12 +2620,20 @@ const hasFooterActions = computed(() => {
               class="preset-card"
               @click="selectPreset(preset)"
             >
-              <span class="preset-card__badge" :style="{ background: presetColor(preset.id) }">{{ presetAbbr(preset.id) }}</span>
+              <span
+                class="provider-badge"
+                :style="{ background: providerBadge(preset.id, preset.name).color }"
+                aria-hidden="true"
+              >{{ providerBadge(preset.id, preset.name).abbr }}</span>
               <span class="preset-card__name">{{ preset.name }}</span>
               <span class="preset-card__desc">{{ preset.description }}</span>
             </button>
             <button type="button" class="preset-card preset-card--custom" @click="selectCustom">
-              <span class="preset-card__badge preset-card__badge--custom">{{ $t('settings.customProvider')[0] }}</span>
+              <span
+                class="provider-badge"
+                :style="{ background: customProviderBadge().color }"
+                aria-hidden="true"
+              >{{ customProviderBadge().abbr }}</span>
               <span class="preset-card__name">{{ $t('settings.customProvider') }}</span>
               <span class="preset-card__desc">{{ $t('settings.customProviderDesc') }}</span>
             </button>
@@ -3281,6 +3295,29 @@ const hasFooterActions = computed(() => {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+}
+
+.provider-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.provider-badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: var(--dq-font-size-footnote);
+  font-weight: 700;
+  color: var(--dq-color-white);
+  letter-spacing: -0.5px;
+  line-height: 1;
 }
 
 .provider-card__name {
@@ -3374,23 +3411,6 @@ const hasFooterActions = computed(() => {
   border-color: var(--dq-accent);
   background: color-mix(in srgb, var(--dq-accent) 4%, var(--dq-bg-elevated));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 10%, transparent);
-}
-
-.preset-card__badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  font-size: var(--dq-font-size-footnote);
-  font-weight: 700;
-  color: var(--dq-color-white);
-  letter-spacing: -0.5px;
-}
-
-.preset-card__badge--custom {
-  background: var(--dq-label-tertiary);
 }
 
 .preset-card__name {

@@ -397,7 +397,7 @@ func ensureEvalLLM(ctx context.Context, core *bootstrap.Core, modelID, apiKey, b
 	if apiKey == "" && ptype == domain.LLMProviderAnthropic {
 		apiKey = os.Getenv("ANTHROPIC_API_KEY")
 	}
-	if apiKey == "" && ptype == domain.LLMProviderOpenAI {
+	if apiKey == "" && (ptype == domain.LLMProviderOpenAI || ptype == domain.LLMProviderOpenAIResponses || ptype == domain.LLMProviderLocal) {
 		apiKey = os.Getenv("OPENAI_API_KEY")
 	}
 	if apiKey == "" {

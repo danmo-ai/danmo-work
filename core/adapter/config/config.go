@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"danmo-work/core/domain"
@@ -172,10 +173,8 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 		cfg.Search.Provider = domain.SearchProviderDuckDuckGo
 	}
 
-	// Fill in default LLM presets if none are configured.
-	if len(cfg.LLM.Providers) == 0 {
-		cfg.LLM.Providers = defaultLLMPresets()
-	}
+	// Merge built-in LLM presets (fill empty fields; append missing ids).
+	cfg.LLM.Providers = mergeLLMPresets(cfg.LLM.Providers, defaultLLMPresets(), legacyPresetBaseURLs(l.v))
 	// Migrate legacy llm.model_limits → llm.models (renamed in 0.9.x).
 	// Without this, Load returns an empty catalog and the next Save rewrites
 	// the llm section, permanently wiping the old key.
@@ -291,23 +290,109 @@ func defaultMarketSources() []domain.MarketSource {
 // model vendors. Users can override these in ~/.danmo-work/config.yaml.
 func defaultLLMPresets() []domain.LLMProviderPreset {
 	return []domain.LLMProviderPreset{
-		{ID: "openai", Name: "OpenAI", Provider: "openai", BaseURL: "https://api.openai.com/v1", Icon: "🟢", Description: "GPT 系列、o 系列推理模型"},
-		{ID: "anthropic", Name: "Anthropic", Provider: "anthropic", BaseURL: "https://api.anthropic.com", Icon: "🟠", Description: "Claude Sonnet、Opus、Haiku"},
-		{ID: "deepseek", Name: "DeepSeek", Provider: "openai", BaseURL: "https://api.deepseek.com", Icon: "🔵", Description: "DeepSeek 系列"},
-		{ID: "google", Name: "Google Gemini", Provider: "openai", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", Icon: "🔷", Description: "Gemini Pro、Flash"},
-		{ID: "zhipu", Name: "智谱 (Zhipu)", Provider: "openai", BaseURL: "https://open.bigmodel.cn/api/paas/v4", Icon: "🟣", Description: "GLM-5.1、GLM-5、GLM-4.7"},
-		{ID: "qwen", Name: "通义千问 (Qwen)", Provider: "openai", BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", Icon: "🟡", Description: "Qwen3.7 Max、Plus、Flash、Coder"},
-		{ID: "moonshot", Name: "Moonshot (Kimi)", Provider: "openai", BaseURL: "https://api.kimi.com/coding/v1", Icon: "🌙", Description: "Kimi Code：k3、kimi-for-coding"},
-		{ID: "minimax", Name: "MiniMax", Provider: "openai", BaseURL: "https://api.minimaxi.com/v1", Icon: "🎭", Description: "MiniMax M3、M2.7"},
-		{ID: "ollama", Name: "Ollama (Local)", Provider: "openai", BaseURL: "http://localhost:11434/v1", Icon: "🦙", Description: "本地模型，通过 Ollama 运行"},
-		{ID: "siliconflow", Name: "SiliconFlow", Provider: "openai", BaseURL: "https://api.siliconflow.cn/v1", Icon: "🌊", Description: "SiliconFlow 云模型平台"},
-		{ID: "openrouter", Name: "OpenRouter", Provider: "openai", BaseURL: "https://openrouter.ai/api/v1", Icon: "🔀", Description: "多模型路由，统一接口"},
-		{ID: "together", Name: "Together AI", Provider: "openai", BaseURL: "https://api.together.xyz/v1", Icon: "🤝", Description: "开源模型推理平台"},
-		{ID: "fireworks", Name: "Fireworks AI", Provider: "openai", BaseURL: "https://api.fireworks.ai/inference/v1", Icon: "🎆", Description: "高性能推理服务"},
-		{ID: "groq", Name: "Groq", Provider: "openai", BaseURL: "https://api.groq.com/openai/v1", Icon: "⚡", Description: "超快推理速度"},
-		{ID: "deepinfra", Name: "DeepInfra", Provider: "openai", BaseURL: "https://api.deepinfra.com/v1/openai", Icon: "🏗️", Description: "开源模型部署平台"},
-		{ID: "xai", Name: "xAI", Provider: "openai", BaseURL: "https://api.x.ai/v1", Icon: "✖", Description: "Grok 系列模型"},
+		{ID: "openai", Name: "OpenAI", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.openai.com/v1", Description: "GPT 系列、o 系列推理模型"},
+		{ID: "anthropic", Name: "Anthropic", Provider: domain.LLMProviderAnthropic, BaseURL: "https://api.anthropic.com/v1", Description: "Claude Sonnet、Opus、Haiku"},
+		{ID: "deepseek", Name: "DeepSeek", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.deepseek.com/v1", Description: "DeepSeek 系列"},
+		{ID: "google", Name: "Google Gemini", Provider: domain.LLMProviderOpenAI, BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", Description: "Gemini Pro、Flash"},
+		{ID: "zhipu", Name: "智谱 (Zhipu)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://open.bigmodel.cn/api/paas/v4", Description: "GLM-5.1、GLM-5、GLM-4.7"},
+		{ID: "qwen", Name: "通义千问 (Qwen)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", Description: "Qwen3.7 Max、Plus、Flash、Coder"},
+		{ID: "moonshot", Name: "Moonshot (Kimi)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.kimi.com/coding/v1", Description: "Kimi Code：k3、kimi-for-coding"},
+		{ID: "minimax", Name: "MiniMax", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.minimaxi.com/v1", Description: "MiniMax M3、M2.7"},
+		{ID: "ollama", Name: "Ollama (Local)", Provider: domain.LLMProviderOpenAI, BaseURL: "http://localhost:11434/v1", Description: "本地模型，通过 Ollama 运行"},
+		{ID: "siliconflow", Name: "SiliconFlow", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.siliconflow.cn/v1", Description: "SiliconFlow 云模型平台"},
+		{ID: "openrouter", Name: "OpenRouter", Provider: domain.LLMProviderOpenAI, BaseURL: "https://openrouter.ai/api/v1", Description: "多模型路由，统一接口"},
+		{ID: "together", Name: "Together AI", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.together.xyz/v1", Description: "开源模型推理平台"},
+		{ID: "fireworks", Name: "Fireworks AI", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.fireworks.ai/inference/v1", Description: "高性能推理服务"},
+		{ID: "groq", Name: "Groq", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.groq.com/openai/v1", Description: "超快推理速度"},
+		{ID: "deepinfra", Name: "DeepInfra", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.deepinfra.com/v1/openai", Description: "开源模型部署平台"},
+		{ID: "xai", Name: "xAI", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.x.ai/v1", Description: "Grok 系列模型"},
 	}
+}
+
+// legacyPresetBaseURLs recovers BaseURL values stored under the broken yaml
+// key "baseurl" (written before LLMProviderPreset had yaml:"base_url" tags).
+func legacyPresetBaseURLs(v *viper.Viper) map[string]string {
+	out := map[string]string{}
+	if v == nil || !v.IsSet("llm.providers") {
+		return out
+	}
+	raw, ok := v.Get("llm.providers").([]any)
+	if !ok {
+		return out
+	}
+	for _, item := range raw {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, _ := m["id"].(string)
+		if id == "" {
+			continue
+		}
+		if u, ok := m["base_url"].(string); ok && strings.TrimSpace(u) != "" {
+			out[id] = strings.TrimSpace(u)
+			continue
+		}
+		if u, ok := m["baseurl"].(string); ok && strings.TrimSpace(u) != "" {
+			out[id] = strings.TrimSpace(u)
+		}
+	}
+	return out
+}
+
+// mergeLLMPresets fills empty fields on existing presets from defaults, appends
+// any built-in presets missing from the user list, and applies legacyBaseURLs
+// when BaseURL is still empty after merge.
+func mergeLLMPresets(existing, defaults []domain.LLMProviderPreset, legacyBaseURLs map[string]string) []domain.LLMProviderPreset {
+	if len(existing) == 0 {
+		out := make([]domain.LLMProviderPreset, len(defaults))
+		copy(out, defaults)
+		return out
+	}
+	byID := make(map[string]domain.LLMProviderPreset, len(defaults))
+	for _, d := range defaults {
+		byID[d.ID] = d
+	}
+	seen := make(map[string]bool, len(existing))
+	out := make([]domain.LLMProviderPreset, 0, len(existing)+len(defaults))
+	for _, p := range existing {
+		if def, ok := byID[p.ID]; ok {
+			if p.Name == "" {
+				p.Name = def.Name
+			}
+			if p.Provider == "" {
+				p.Provider = def.Provider
+			}
+			if strings.TrimSpace(p.BaseURL) == "" {
+				p.BaseURL = def.BaseURL
+			}
+			if p.Icon == "" {
+				p.Icon = def.Icon
+			}
+			if p.Description == "" {
+				p.Description = def.Description
+			}
+		}
+		if strings.TrimSpace(p.BaseURL) == "" {
+			if u := legacyBaseURLs[p.ID]; u != "" {
+				p.BaseURL = u
+			}
+		}
+		if p.Provider != "" {
+			p.Provider = domain.NormalizeProtocol(p.Provider)
+		}
+		out = append(out, p)
+		if p.ID != "" {
+			seen[p.ID] = true
+		}
+	}
+	for _, d := range defaults {
+		if seen[d.ID] {
+			continue
+		}
+		out = append(out, d)
+	}
+	return out
 }
 
 // Save writes the full configuration back to the YAML file.

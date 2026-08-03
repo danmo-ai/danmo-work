@@ -96,7 +96,8 @@ export interface AgentRun {
   updatedAt: string
 }
 
-export type LLMProviderType = 'openai' | 'anthropic' | 'local' | 'mock'
+/** Wire protocol for an LLM endpoint (not a vendor name). */
+export type LLMProviderType = 'openai' | 'openai_responses' | 'anthropic' | 'local' | 'mock'
 
 export interface LLMModelRef {
   name: string
