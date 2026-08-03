@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Setting, Cpu, Search, Brush, Monitor } from '@danqing/dq-shell'
 import { useLLMStore } from '@/stores/llm'
@@ -378,6 +378,31 @@ const newTemperature = ref(0)
 const newAvailableEfforts = ref('')
 const newThinkingMode = ref('')
 const newEffortBudgetTokens = ref('')
+
+/** Keep editing index in sync with the select value (single source of truth). */
+watch(
+  [selectedModel, modelConfigForm],
+  ([model]) => {
+    if (!model) {
+      selectedModel.value = '__default__'
+      editingModelIdx.value = null
+      return
+    }
+    if (model === '__default__') {
+      editingModelIdx.value = null
+      return
+    }
+    const idx = modelConfigForm.value.findIndex((m) => m.model === model)
+    editingModelIdx.value = idx >= 0 ? idx : null
+  },
+  { immediate: true, deep: true },
+)
+
+const editingModel = computed(() => {
+  const idx = editingModelIdx.value
+  if (idx === null) return null
+  return modelConfigForm.value[idx] ?? null
+})
 
 function parseEffortBudgetTokens(raw: string): Record<string, number> | undefined {
   if (!raw.trim()) return undefined
@@ -1014,11 +1039,6 @@ async function handleSaveRuntime() {
   } catch {
     /* toast already shown in store */
   }
-}
-
-function onSelectModel(model: string) {
-  const idx = modelConfigForm.value.findIndex(m => m.model === model)
-  editingModelIdx.value = idx >= 0 ? idx : null
 }
 
 function addModelEntry() {
@@ -2340,7 +2360,7 @@ const hasFooterActions = computed(() => {
         <div v-else class="settings-form">
           <label class="settings-field">
             <span class="settings-field__label">{{ $t('settings.modelName') }}</span>
-            <DqSelect v-model="selectedModel" @update:model-value="onSelectModel">
+            <DqSelect v-model="selectedModel">
               <DqOption value="__default__" :label="$t('settings.defaultModelTitle') + ' (128K / 8K / 0.7)'" />
               <DqOption
                 v-for="item in modelConfigForm"
@@ -2366,40 +2386,42 @@ const hasFooterActions = computed(() => {
             </label>
           </template>
 
-          <template v-else-if="editingModelIdx !== null">
+          <template v-else-if="editingModel">
             <label class="settings-field">
               <span class="settings-field__label">Context Window</span>
-              <DqInput v-model.number="modelConfigForm[editingModelIdx].context_window" type="number" placeholder="0" />
+              <DqInput v-model.number="editingModel.context_window" type="number" placeholder="0" />
             </label>
             <label class="settings-field">
               <span class="settings-field__label">Max Output</span>
-              <DqInput v-model.number="modelConfigForm[editingModelIdx].max_output" type="number" placeholder="0" />
+              <DqInput v-model.number="editingModel.max_output" type="number" placeholder="0" />
             </label>
             <label class="settings-field">
               <span class="settings-field__label">Temperature</span>
-              <DqInput v-model.number="modelConfigForm[editingModelIdx].temperature" type="number" placeholder="0" step="0.1" />
+              <DqInput v-model.number="editingModel.temperature" type="number" placeholder="0" step="0.1" />
             </label>
             <label class="settings-field">
               <span class="settings-field__label">Available Efforts</span>
-              <DqInput :model-value="(modelConfigForm[editingModelIdx].available_efforts ?? []).join(', ')" @update:model-value="modelConfigForm[editingModelIdx].available_efforts = ($event as string).split(',').map(s => s.trim()).filter(Boolean)" placeholder="off, low, medium, high, xhigh" />
+              <DqInput :model-value="(editingModel.available_efforts ?? []).join(', ')" @update:model-value="editingModel.available_efforts = ($event as string).split(',').map(s => s.trim()).filter(Boolean)" placeholder="off, low, medium, high, xhigh" />
             </label>
             <label class="settings-field">
               <span class="settings-field__label">Thinking Mode</span>
-              <DqInput v-model="modelConfigForm[editingModelIdx].thinking_mode" placeholder="adaptive / enabled" />
+              <DqInput v-model="editingModel.thinking_mode" placeholder="adaptive / enabled" />
             </label>
             <label class="settings-field settings-field--switch">
               <span class="settings-field__label">{{ $t('settings.modelVision') }}</span>
               <DqSwitch
-                :model-value="!!modelConfigForm[editingModelIdx].vision"
-                @update:model-value="(v: boolean) => { if (editingModelIdx !== null) modelConfigForm[editingModelIdx].vision = v }"
+                :model-value="!!editingModel.vision"
+                @update:model-value="(v: boolean) => { if (editingModel) editingModel.vision = v }"
               />
               <span class="settings-field__hint">{{ $t('settings.modelVisionDesc') }}</span>
             </label>
             <label class="settings-field">
               <span class="settings-field__label">Effort Budget Tokens</span>
-              <DqInput :model-value="formatEffortBudgetTokens(modelConfigForm[editingModelIdx].effort_budget_tokens)" type="textarea" :rows="3" @update:model-value="modelConfigForm[editingModelIdx].effort_budget_tokens = parseEffortBudgetTokens($event as string)" placeholder="high:16000&#10;max:32000" />
+              <DqInput :model-value="formatEffortBudgetTokens(editingModel.effort_budget_tokens)" type="textarea" :rows="3" @update:model-value="editingModel.effort_budget_tokens = parseEffortBudgetTokens($event as string)" placeholder="high:16000&#10;max:32000" />
             </label>
           </template>
+
+          <p v-else class="settings-form-group__desc">{{ $t('settings.noModelConfig') }}</p>
         </div>
 
       </div>

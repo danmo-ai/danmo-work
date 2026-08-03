@@ -1,0 +1,542 @@
+# Built-in per-model parameter catalog.
+# Keep in sync with config.example.yaml → llm.models.
+# Loaded when ~/.danmo-work/config.yaml has no llm.models
+# (and after migrating legacy llm.model_limits).
+- model: gpt-5.6
+  vision: true
+  context_window: 1050000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - none
+  - low
+  - medium
+  - high
+  - xhigh
+- model: gpt-5.6-terra
+  vision: true
+  context_window: 1050000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - none
+  - low
+  - medium
+  - high
+  - xhigh
+- model: gpt-5.6-luna
+  vision: true
+  context_window: 1050000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - none
+  - low
+  - medium
+  - high
+  - xhigh
+- model: gpt-5
+  vision: true
+  context_window: 400000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - none
+  - minimal
+  - low
+  - medium
+  - high
+  - xhigh
+- model: gpt-5-mini
+  vision: true
+  context_window: 400000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - minimal
+  - low
+  - medium
+  - high
+- model: gpt-5-nano
+  vision: true
+  context_window: 400000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - minimal
+  - low
+  - medium
+  - high
+- model: o4-mini
+  vision: true
+  context_window: 200000
+  max_output: 100000
+  temperature: 1.0
+  available_efforts:
+  - 'off'
+  - none
+  - minimal
+  - low
+  - medium
+  - high
+  - xhigh
+- model: o3
+  vision: true
+  context_window: 200000
+  max_output: 100000
+  temperature: 1.0
+  available_efforts:
+  - 'off'
+  - none
+  - minimal
+  - low
+  - medium
+  - high
+  - xhigh
+- model: gpt-4.1
+  vision: true
+  context_window: 1047576
+  max_output: 32768
+- model: gpt-4o
+  vision: true
+  context_window: 128000
+  max_output: 16384
+- model: claude-sonnet-5
+  vision: true
+  context_window: 1000000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+  - xhigh
+  - max
+  thinking_mode: adaptive
+- model: claude-fable-5
+  vision: true
+  context_window: 1000000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+  - xhigh
+  - max
+  thinking_mode: adaptive
+- model: claude-opus-4-8
+  vision: true
+  context_window: 1000000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+  - xhigh
+  - max
+  thinking_mode: adaptive
+- model: claude-opus-4-7
+  vision: true
+  context_window: 1000000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+  - xhigh
+  - max
+  thinking_mode: adaptive
+- model: claude-opus-4-6
+  vision: true
+  context_window: 1000000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+  - xhigh
+  - max
+  thinking_mode: adaptive
+- model: claude-sonnet-4-6
+  vision: true
+  context_window: 1000000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+  - xhigh
+  - max
+  thinking_mode: adaptive
+- model: claude-sonnet-4-5
+  vision: true
+  context_window: 200000
+  max_output: 64000
+  available_efforts:
+  - 'off'
+  - high
+  - max
+  thinking_mode: enabled
+  effort_budget_tokens:
+    high: 16000
+    max: 32000
+- model: claude-opus-4-5
+  vision: true
+  context_window: 200000
+  max_output: 64000
+  available_efforts:
+  - 'off'
+  - high
+  - max
+  thinking_mode: enabled
+  effort_budget_tokens:
+    high: 16000
+    max: 32000
+- model: claude-haiku-4-5
+  vision: true
+  context_window: 200000
+  max_output: 64000
+  available_efforts:
+  - 'off'
+  - high
+  - max
+  thinking_mode: enabled
+  effort_budget_tokens:
+    high: 16000
+    max: 32000
+- model: deepseek-v4-pro
+  context_window: 1000000
+  max_output: 384000
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+  - max
+- model: deepseek-v4-flash
+  context_window: 1000000
+  max_output: 384000
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+  - max
+- model: deepseek-chat
+  context_window: 1000000
+  max_output: 384000
+- model: deepseek-reasoner
+  context_window: 1000000
+  max_output: 384000
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+  - max
+- model: glm-5.1
+  context_window: 200000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - high
+- model: glm-5
+  context_window: 200000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - high
+- model: glm-5-turbo
+  context_window: 200000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - high
+- model: glm-4.7
+  context_window: 200000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - high
+- model: glm-4.7-flash
+  context_window: 200000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - high
+- model: glm-4.6
+  context_window: 200000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - high
+- model: glm-4.5
+  context_window: 128000
+  max_output: 96000
+  available_efforts:
+  - 'off'
+  - high
+- model: glm-4.5-air
+  context_window: 128000
+  max_output: 96000
+  available_efforts:
+  - 'off'
+  - high
+- model: qwen3.7-max
+  vision: true
+  context_window: 1000000
+  max_output: 65536
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+- model: qwen3.7-plus
+  vision: true
+  context_window: 1000000
+  max_output: 65536
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+- model: qwen3.6-flash
+  vision: true
+  context_window: 1000000
+  max_output: 65536
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+- model: qwen3.5-plus
+  vision: true
+  context_window: 1000000
+  max_output: 65536
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+- model: qwen3.5-flash
+  vision: true
+  context_window: 1000000
+  max_output: 65536
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+- model: qwen3-max
+  context_window: 256000
+  max_output: 65536
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+- model: qwen3-coder-plus
+  context_window: 1000000
+  max_output: 65536
+- model: qwen3-coder-flash
+  context_window: 1000000
+  max_output: 65536
+- model: qwen3-235b-a22b
+  context_window: 128000
+  max_output: 16384
+  available_efforts:
+  - 'off'
+  - high
+- model: qwen3-32b
+  context_window: 128000
+  max_output: 16384
+  available_efforts:
+  - 'off'
+  - high
+- model: k3
+  vision: true
+  context_window: 1000000
+  max_output: 128000
+  temperature: 1.0
+  available_efforts:
+  - 'off'
+  - low
+  - high
+  - max
+- model: kimi-for-coding
+  vision: true
+  context_window: 256000
+  max_output: 32768
+  temperature: 1.0
+  available_efforts:
+  - 'off'
+  - high
+- model: kimi-for-coding-highspeed
+  vision: true
+  context_window: 256000
+  max_output: 32768
+  temperature: 1.0
+  available_efforts:
+  - 'off'
+  - high
+- model: kimi-k2.7-code
+  vision: true
+  context_window: 256000
+  max_output: 32768
+  temperature: 1.0
+  available_efforts:
+  - 'off'
+  - high
+- model: kimi-k2.7-code-highspeed
+  vision: true
+  context_window: 256000
+  max_output: 32768
+  temperature: 1.0
+  available_efforts:
+  - 'off'
+  - high
+- model: kimi-k2.6
+  vision: true
+  context_window: 256000
+  max_output: 32768
+  available_efforts:
+  - 'off'
+  - high
+- model: MiniMax-M3
+  vision: true
+  context_window: 1000000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - high
+- model: MiniMax-M2.7
+  context_window: 204800
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - high
+- model: MiniMax-M2.7-highspeed
+  context_window: 204800
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - high
+- model: MiniMax-M2.5
+  context_window: 204800
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - high
+- model: gemini-2.5-pro
+  vision: true
+  context_window: 1048576
+  max_output: 65536
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+- model: gemini-2.5-flash
+  vision: true
+  context_window: 1048576
+  max_output: 65536
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+- model: gemini-3.1-pro-preview
+  vision: true
+  context_window: 1048576
+  max_output: 65536
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+- model: gemini-3.1-flash-lite
+  vision: true
+  context_window: 1048576
+  max_output: 65536
+  available_efforts:
+  - 'off'
+  - minimal
+  - low
+  - medium
+  - high
+- model: gemini-3-flash-preview
+  vision: true
+  context_window: 1048576
+  max_output: 65536
+  available_efforts:
+  - 'off'
+  - minimal
+  - low
+  - medium
+  - high
+- model: gemini-3.5-flash
+  vision: true
+  context_window: 1048576
+  max_output: 65536
+  available_efforts:
+  - 'off'
+  - minimal
+  - low
+  - medium
+  - high
+- model: gemini-3-pro
+  vision: true
+  context_window: 1048576
+  max_output: 65536
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+- model: gemini-3-flash
+  vision: true
+  context_window: 1048576
+  max_output: 65536
+  available_efforts:
+  - 'off'
+  - minimal
+  - low
+  - medium
+  - high
+- model: grok-4.5
+  vision: true
+  context_window: 500000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - low
+  - high
+- model: grok-4.3
+  vision: true
+  context_window: 1000000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - low
+  - high
+- model: grok-4.1-fast
+  vision: true
+  context_window: 2000000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - low
+  - high
+- model: grok-3-mini
+  vision: true
+  context_window: 1000000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - low
+  - high
