@@ -579,8 +579,8 @@
               <div class="mock-ui">
                 <header>Agent Loop</header>
                 <div class="body">
+                  <div class="mock-row"><code>delegate_agent · codegraph</code><span class="ok">OK</span></div>
                   <div class="mock-row"><code>delegate_agent · github</code><span class="ok">OK</span></div>
-                  <div class="mock-row"><code>exec_shell · gh pr view</code><span class="ok">OK</span></div>
                   <div class="mock-row"><code>Report → parent continues</code><span class="ok">OK</span></div>
                 </div>
               </div>
@@ -621,14 +621,14 @@
               <h3 data-i18n="hi.c4t"></h3>
               <p class="lead" data-i18n="hi.c4l"></p>
               <div class="chips">
-                <span class="chip">GitHub · gh</span><span class="chip">CodeGraph</span>
+                <span class="chip">GitHub</span><span class="chip">CodeGraph</span>
                 <span class="chip">MCP</span><span class="chip">cron</span>
               </div>
               <div class="mock-ui">
                 <header>Expert packs · Connectors</header>
                 <div class="body">
-                  <div class="mock-row"><code>github · gh + bound MCP</code><span class="ok">OK</span></div>
-                  <div class="mock-row"><code>codegraph · bound MCP</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>github · issues / PRs / Actions</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>mcp_codegraph_explore</code><span class="ok">OK</span></div>
                   <div class="mock-row"><code>cron → real Turn</code><span class="ok">OK</span></div>
                 </div>
               </div>
@@ -785,7 +785,7 @@
           p4t: "Coding 是车道", p4d: "不是天花板——同一架构覆盖长程 Work。",
           l1: "Web · Desktop · CLI · IM",
           l2: "Session · Turn · Step",
-          l3: "Files · MCP · Agents",
+          l3: "Files · MCP · CodeGraph · Agents",
           l4: "work.db · store.db · logs",
         },
         hi: {
@@ -799,13 +799,13 @@
           c0l: "选区 / 页 / 表 → [office-edit]；Turn 后 AI Diff：保留 · 回滚 · 分块接受。文本仍是真相源。",
           c0m: "Intent · Propose · Review · Commit",
           c1t: "子 Agent 是 Tool，不是并行黑盒",
-          c1l: "delegate_agent 开独立 Turn；结构问题 → CodeGraph，GitHub 托管 → github（本机 gh），创意 → Danmo Make；父链只收 Report。",
+          c1l: "delegate_agent 开独立 Turn；结构问题交给 CodeGraph，GitHub 托管交给 github，创意生成交给 Danmo Make；父链只收 Report。",
           c2t: "执行轨迹可信任",
           c2l: "输入输出全量持久化；中途失败可 Resume；人工改 Tool Result 后继续。",
           c3t: "记忆与业务数据分开",
           c3l: "Memory 存约定与偏好；Table Store 存可查询流水（独立 store.db）。",
           c4t: "内置专家包 + 连接器",
-          c4l: "GitHub：内置绑定 MCP → gh → git 降级。CodeGraph：共享 MCP、每项目索引。新能力 = Tool / Skill / MCP；自动化真正开 Session。",
+          c4l: "GitHub：Issue / PR / Actions。CodeGraph：共享 MCP、每项目索引；首次委派异步建图，未就绪可降级 grep。新能力 = Tool / Skill / MCP；自动化真正开 Session。",
           c5t: "人在哪聊，Agent 就在哪",
           c5l: "出站接入、无需公网回调；工具仍在本机执行，权限与密钥可控。",
         },
@@ -857,7 +857,7 @@
           p4t: "Coding is a lane", p4d: "Not the ceiling — same architecture covers long-horizon work.",
           l1: "Web · Desktop · CLI · IM",
           l2: "Session · Turn · Step",
-          l3: "Files · MCP · Agents",
+          l3: "Files · MCP · CodeGraph · Agents",
           l4: "work.db · store.db · logs",
         },
         hi: {
@@ -871,13 +871,13 @@
           c0l: "Selection / page / sheet → [office-edit]; after the turn, AI Diff: Keep · Revert · hunks. Text stays SoT.",
           c0m: "Intent · Propose · Review · Commit",
           c1t: "Sub-agents are Tools, not opaque sessions",
-          c1l: "delegate_agent opens an isolated Turn; structural code → CodeGraph, GitHub hosting → github (local gh), creative media → Danmo Make; parent continues on Report.",
+          c1l: "delegate_agent opens an isolated Turn; structural code → CodeGraph, GitHub hosting → github, creative media → Danmo Make; parent continues on Report.",
           c2t: "A trail you can trust",
           c2l: "Full persistence; Resume on failure; humans can edit Tool Results.",
           c3t: "Memory ≠ business rows",
           c3l: "Memory keeps preferences; Table Store holds queryable digests in store.db.",
           c4t: "Builtin expert packs + connectors",
-          c4l: "GitHub: builtin bound MCP → gh → git degrade. CodeGraph: shared MCP, per-project index. New power = Tool / Skill / MCP; automations start real Turns.",
+          c4l: "GitHub: issues / PRs / Actions. CodeGraph: shared MCP, per-project index; first delegate async-inits, degrades to grep until ready. New power = Tool / Skill / MCP; automations start real Turns.",
           c5t: "Meet people where they chat",
           c5l: "Outbound connect, no public callback; tools still run on your machine.",
         },
