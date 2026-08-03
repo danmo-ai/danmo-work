@@ -13,6 +13,7 @@ func TestLoadSkillTemplatesIncludesAdaptedPack(t *testing.T) {
 	want := map[string]string{
 		"debugging":               "coding",
 		"git-workflow":            "coding",
+		"github":                  "coding",
 		"test-driven-development": "coding",
 		"writing-plans":           "coding",
 		"requesting-code-review":  "coding",
