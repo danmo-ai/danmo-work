@@ -296,6 +296,9 @@ func (m *SkillManager) DivergedFromTemplate(ctx context.Context, sk domain.Skill
 	if err != nil {
 		return false, nil
 	}
+	// Seed/reset persist NormalizeSkillBodyRefs(body); compare against the same
+	// canonical form so bare refs like `references/foo.md` are not false drift.
+	tmpl.Body = NormalizeSkillBodyRefs(tmpl.Body, tmpl.ID)
 	if !skillContentEqual(sk, *tmpl) {
 		return true, nil
 	}

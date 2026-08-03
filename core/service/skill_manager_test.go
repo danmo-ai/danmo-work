@@ -233,6 +233,55 @@ func TestDivergedFromTemplate(t *testing.T) {
 	}
 }
 
+// Seed/reset rewrite bare resource refs in the body; the embedded template still
+// has the bare form. Drift detection must compare the normalized form.
+func TestDivergedFromTemplateIgnoresNormalizedBodyRefs(t *testing.T) {
+	ctx := context.Background()
+	skills := NewSkillManager(newMemSkillRepo(), newMemSkillFileRepo())
+
+	rawBody := "See `references/md-examples.md` for patterns."
+	tmpl := domain.Skill{
+		ID:          "playable-slides",
+		Name:        "playable-slides",
+		Description: "slides",
+		Body:        rawBody,
+		Builtin:     true,
+	}
+	skills.SetTemplateLoader(func(id string) (*domain.Skill, error) {
+		if id != tmpl.ID {
+			return nil, errors.New("missing")
+		}
+		cp := tmpl
+		return &cp, nil
+	})
+	skills.SetFileTemplateLoader(func(id string) ([]domain.SkillFile, error) {
+		return nil, nil
+	})
+
+	stored := tmpl
+	stored.Body = NormalizeSkillBodyRefs(rawBody, tmpl.ID)
+	if stored.Body == rawBody {
+		t.Fatal("expected NormalizeSkillBodyRefs to rewrite bare reference")
+	}
+	_ = skills.Upsert(ctx, stored)
+
+	got, err := skills.Get(ctx, tmpl.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TemplateDiverged {
+		t.Fatalf("normalized body refs must not count as template drift; body=%q", got.Body)
+	}
+
+	reset, err := skills.ResetFromTemplate(ctx, tmpl.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reset.TemplateDiverged {
+		t.Fatal("reset skill should not be diverged")
+	}
+}
+
 func TestUpsertPreservesBuiltin(t *testing.T) {
 	ctx := context.Background()
 	skills := NewSkillManager(newMemSkillRepo(), newMemSkillFileRepo())
