@@ -46,6 +46,10 @@ has_tauri_signing_key() {
 echo "==> Building backend sidecar..."
 "$SCRIPT_DIR/build_sidecar.sh"
 
+echo "==> Fetching bundled CodeGraph CLI..."
+"$SCRIPT_DIR/fetch_codegraph.sh" "$HOME/.danmo-work/bin" || true
+"$SCRIPT_DIR/fetch_codegraph.sh" "$DQ_ROOT/desktop/src-tauri/resources/codegraph" || true
+
 # Bundle Microsoft Coreutils for Windows (required — default-installed with the NSIS package)
 echo "==> Fetching bundled Coreutils for Windows (required)..."
 "$SCRIPT_DIR/fetch_windows_coreutils.sh"

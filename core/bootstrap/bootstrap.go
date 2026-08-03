@@ -483,6 +483,12 @@ func ensureBuiltinConnectors(mcp *service.MCPManager) {
 		if id == "danmo-make" {
 			entry.URL = service.ResolveDanmoMakeMCPURL()
 		}
+		if id == service.CodeGraphServerID {
+			if bin := service.ResolveCodeGraphBin(); bin != "" {
+				entry.Command = bin
+			}
+			entry.Args = "serve --mcp"
+		}
 		if existing, err := mcp.Get(ctx, id); err == nil {
 			syncBuiltinConnector(ctx, mcp, existing, entry)
 			continue
@@ -494,6 +500,10 @@ func ensureBuiltinConnectors(mcp *service.MCPManager) {
 		req := service.InstallCatalogEntry(*entry, entry.Name)
 		req.ID = id
 		req.CatalogID = id
+		if id == service.CodeGraphServerID {
+			req.Env = service.CodeGraphMCPEnv()
+			req.Network = "deny"
+		}
 		if _, err := mcp.Create(ctx, req); err != nil {
 			log.Printf("[bootstrap] seed builtin connector %q: %v", id, err)
 		}
@@ -517,17 +527,32 @@ func syncBuiltinConnector(ctx context.Context, mcp *service.MCPManager, existing
 	if entry.ToolTimeout > 0 {
 		wantTimeout = entry.ToolTimeout
 	}
-	if existing.URL == wantURL && existing.AmbientMount == wantAmbient && existing.ToolTimeout == wantTimeout {
+	wantCommand := existing.Command
+	wantArgs := existing.Args
+	wantEnv := existing.Env
+	wantNetwork := existing.Network
+	if existing.ID == service.CodeGraphServerID || entry.ID == service.CodeGraphServerID {
+		if entry.Command != "" {
+			wantCommand = entry.Command
+		}
+		if entry.Args != "" {
+			wantArgs = entry.Args
+		}
+		wantEnv = service.CodeGraphMCPEnv()
+		wantNetwork = "deny"
+	}
+	if existing.URL == wantURL && existing.AmbientMount == wantAmbient && existing.ToolTimeout == wantTimeout &&
+		existing.Command == wantCommand && existing.Args == wantArgs && existing.Env == wantEnv && existing.Network == wantNetwork {
 		return
 	}
 	req := domain.UpsertMCPServerRequest{
 		Name:         existing.Name,
 		Description:  existing.Description,
 		Transport:    existing.Transport,
-		Command:      existing.Command,
-		Args:         existing.Args,
+		Command:      wantCommand,
+		Args:         wantArgs,
 		URL:          wantURL,
-		Env:          existing.Env,
+		Env:          wantEnv,
 		Headers:      existing.Headers,
 		Auth:         existing.Auth,
 		CatalogID:    existing.CatalogID,
@@ -535,8 +560,11 @@ func syncBuiltinConnector(ctx context.Context, mcp *service.MCPManager, existing
 		EnabledTools: existing.EnabledTools,
 		ToolTimeout:  wantTimeout,
 		Enabled:      existing.Enabled,
-		Network:      existing.Network,
+		Network:      wantNetwork,
 		AmbientMount: &wantAmbient,
+	}
+	if entry.Transport != "" {
+		req.Transport = entry.Transport
 	}
 	if _, err := mcp.Update(ctx, existing.ID, req); err != nil {
 		log.Printf("[bootstrap] sync builtin connector %q: %v", existing.ID, err)

@@ -52,6 +52,10 @@ cp -f "$DEV_BACKEND_BIN" "$SIDECAR_PATH"
 if [[ -d "$HOME/.danmo-work/bin" ]]; then
   cp -f "$DEV_BACKEND_BIN" "$HOME/.danmo-work/bin/danmo-work-backend"
 fi
+# Best-effort CodeGraph CLI for the builtin expert (skip if offline / already present).
+if [[ ! -x "$HOME/.danmo-work/bin/codegraph" && ! -x "$HOME/.danmo-work/bin/codegraph.exe" ]]; then
+  "$SCRIPT_DIR/fetch_codegraph.sh" "$HOME/.danmo-work/bin" || echo "WARNING: CodeGraph CLI not fetched (expert will degrade until installed)"
+fi
 echo "==> Sidecar binary: $SIDECAR_PATH"
 echo ""
 

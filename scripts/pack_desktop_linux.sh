@@ -50,6 +50,10 @@ has_tauri_signing_key() {
 echo "==> Building backend sidecar..."
 "$SCRIPT_DIR/build_sidecar.sh"
 
+echo "==> Fetching bundled CodeGraph CLI..."
+"$SCRIPT_DIR/fetch_codegraph.sh" "$HOME/.danmo-work/bin"
+"$SCRIPT_DIR/fetch_codegraph.sh" "$DQ_ROOT/desktop/src-tauri/resources/codegraph" || true
+
 # Ensure only the target-tripled sidecar exists in bin/ to avoid duplicates in the bundle
 BIN_DIR="$DQ_ROOT/desktop/src-tauri/bin"
 rm -f "$BIN_DIR"/danmo-work-backend

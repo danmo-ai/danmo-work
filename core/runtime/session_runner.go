@@ -1558,6 +1558,10 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			if err := checkDelegation(parentPath, workerAgent.ID, cfg.teamMaxDelegationDepth); err != nil {
 				return domain.Report{}, err
 			}
+			if workerAgent.ID == service.CodeGraphServerID {
+				st := service.EnsureCodeGraphIndex(workDir)
+				goal = service.CodeGraphIndexHint(st, workDir) + "\n\n" + goal
+			}
 			childPath := appendTurnPath(parentPath, childTurnID, workerAgent.ID)
 			childCtx := TurnContext{
 				SessionID: sessionID, TurnID: childTurnID,

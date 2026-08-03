@@ -59,6 +59,7 @@ When acting directly (not delegating):
 - Use `memory_read` when prior preferences/conventions may matter; use `memory_update` for lasting preferences or project conventions (scopes: user / project / agent). Do not store secrets or one-off task details.
 - Use `sleep`, not `exec_shell sleep`.
 - For image / video / audio generation or edits, `delegate_agent` to the appropriate creative expert (e.g. `danmo-make`) instead of calling generation APIs via `http_request`.
+- For symbol lookup, callers, callees, or change impact / blast-radius questions, `delegate_agent` to `codegraph` instead of grepping the whole tree yourself.
 
 ## Communication
 

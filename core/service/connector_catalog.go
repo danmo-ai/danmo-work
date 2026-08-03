@@ -103,11 +103,12 @@ func DefaultConnectorCatalog() []domain.ConnectorCatalogEntry {
 			Tags:        []string{"local", "files", "test"},
 		},
 		DanmoMakeCatalogEntry(),
+		CodeGraphCatalogEntry(),
 	}
 }
 
 // BuiltinConnectorIDs are product connectors auto-seeded on bootstrap (fixed server id).
-var BuiltinConnectorIDs = []string{"danmo-make"}
+var BuiltinConnectorIDs = []string{"danmo-make", "codegraph"}
 
 // DanmoMakeCatalogEntry is the built-in local creative MCP preset.
 func DanmoMakeCatalogEntry() domain.ConnectorCatalogEntry {
@@ -123,6 +124,29 @@ func DanmoMakeCatalogEntry() domain.ConnectorCatalogEntry {
 		Region:       "global",
 		Tags:         []string{"danmo-make", "image", "video", "audio", "generation", "local"},
 		ToolTimeout:  900,
+		AmbientMount: boolPtr(false),
+	}
+}
+
+// CodeGraphCatalogEntry is the built-in local code-intelligence MCP (bound-only).
+func CodeGraphCatalogEntry() domain.ConnectorCatalogEntry {
+	cmd := ResolveCodeGraphBin()
+	if cmd == "" {
+		cmd = codeGraphBinName // seed placeholder; bootstrap refreshes when binary appears
+	}
+	return domain.ConnectorCatalogEntry{
+		ID:           CodeGraphServerID,
+		Name:         "CodeGraph",
+		Description:  "Local code knowledge graph via CodeGraph MCP (bound-only; use with codegraph expert).",
+		Category:     "local",
+		Transport:    "stdio",
+		Command:      cmd,
+		Args:         "serve --mcp",
+		Auth:         domain.MCPAuthNone,
+		DocsURL:      "https://colbymchenry.github.io/codegraph/",
+		Region:       "global",
+		Tags:         []string{"codegraph", "code", "symbols", "impact", "local"},
+		ToolTimeout:  120,
 		AmbientMount: boolPtr(false),
 	}
 }

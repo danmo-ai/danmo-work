@@ -24,6 +24,9 @@
 /desktop/src-tauri/keys/
 /desktop/src-tauri/resources/coreutils/coreutils.exe
 /desktop/src-tauri/resources/coreutils/VERSION
+/desktop/src-tauri/resources/codegraph/codegraph
+/desktop/src-tauri/resources/codegraph/codegraph.exe
+/desktop/src-tauri/resources/codegraph/CODEGRAPH_VERSION
 
 # SQLite data
 /data/

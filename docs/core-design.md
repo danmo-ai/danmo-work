@@ -387,7 +387,7 @@ Agent 可用能力按三层合成；Skill 与连接器共用同一 Ambient 开�
 - 单个动作的启用/禁用在连接器配置里（discover 后 persist），不绑到 Agent。
 - Ambient 开：`MountAllMCP`（跳过 `ambientMount=false` 的连接器）；Ambient 关：仅 `MountServers(agent.MCPServers)`。
 - 连接器预设可声明 `ambientMount: false`（bound-only）与 `toolTimeout`；安装时写入实例，无按连接器 id 硬编码。
-- 产品内置连接器（如 `danmo-make`）由 bootstrap `ensureBuiltinConnectors` 以固定 server id 自动 seed；专家/技能走 embedded `prompt/agents` + `prompt/skills`（UI「内置」= 存在 template）。
+- 产品内置连接器（如 `danmo-make`、`codegraph`）由 bootstrap `ensureBuiltinConnectors` 以固定 server id 自动 seed；专家/技能走 embedded `prompt/agents` + `prompt/skills`（UI「内置」= 存在 template）。`codegraph` 为 stdio + 绑定专家；首次 `delegate_agent`→`codegraph` 时异步 `codegraph init`，完成前专家降级 `read_file`/`grep`。
 
 | Tool / 能力 | 条件 |
 |------|------|
