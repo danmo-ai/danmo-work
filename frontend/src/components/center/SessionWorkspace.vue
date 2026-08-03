@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { computed, ref, watch, watchEffect, onMounted, onUnmounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -787,48 +787,60 @@ function approvalTool(payload: unknown) {
   return String(p?.tool ?? p?.name ?? '')
 }
 
-/** Right-rail anchors for pending permission.ask / ask_user in the session stream. */
-const approvalAnchors = computed((): ApprovalAnchor[] => {
-  const events = sessions.streamEvents
-  if (!events.length) return []
-  const maxSeq = Math.max(1, events[events.length - 1]?.seq ?? 1)
-  const out: ApprovalAnchor[] = []
-  for (const e of events) {
-    if (e.type === 'permission.ask') {
-      const id = approvalId(e.payload)
-      const pending = !!id && !sessions.decidedApprovalIds.has(id)
-      if (!pending) continue
-      const tool = approvalTool(e.payload)
-      out.push({
-        key: `perm-${id || e.seq}`,
-        seq: e.seq,
-        turnId: e.turnId || '',
-        kind: 'permission',
-        pending: true,
-        label: tool ? `待审批 · ${tool}` : '待审批',
-        topPercent: Math.min(92, Math.max(6, (e.seq / maxSeq) * 100)),
-      })
-    } else if (e.type === 'ask_user.pending') {
-      if (!isAskActionable(e)) continue
-      const q = askUserQuestion(e.payload)
-      out.push({
-        key: `ask-${askUserId(e.payload) || e.seq}`,
-        seq: e.seq,
-        turnId: e.turnId || '',
-        kind: 'ask',
-        pending: true,
-        label: q ? `待回答 · ${q.slice(0, 36)}` : '待回答',
-        topPercent: Math.min(92, Math.max(6, (e.seq / maxSeq) * 100)),
-      })
+/** Right-rail anchors for pending permission.ask / ask_user in the session stream.
+ *  Use a ref (not nested computeds) so .value is never undefined during setup/HMR re-entry. */
+const approvalAnchors = ref<ApprovalAnchor[]>([])
+
+watchEffect(() => {
+  try {
+    const events = sessions.streamEvents
+    // Depend on decision set so anchors clear after approve/deny.
+    void sessions.decidedApprovalIds?.size
+    void sessions.resolvedAskCallIds?.size
+    if (!Array.isArray(events) || events.length === 0) {
+      approvalAnchors.value = []
+      return
     }
-  }
-  // Spread overlapping tops slightly so stacked asks stay clickable
-  for (let i = 1; i < out.length; i++) {
-    if (out[i].topPercent - out[i - 1].topPercent < 4) {
-      out[i].topPercent = Math.min(94, out[i - 1].topPercent + 4)
+    const maxSeq = Math.max(1, events[events.length - 1]?.seq ?? 1)
+    const out: ApprovalAnchor[] = []
+    for (const e of events) {
+      if (e.type === 'permission.ask') {
+        const id = approvalId(e.payload)
+        const pending = !!id && !sessions.decidedApprovalIds.has(id)
+        if (!pending) continue
+        const tool = approvalTool(e.payload)
+        out.push({
+          key: `perm-${id || e.seq}`,
+          seq: e.seq,
+          turnId: e.turnId || '',
+          kind: 'permission',
+          pending: true,
+          label: tool ? `待审批 · ${tool}` : '待审批',
+          topPercent: Math.min(92, Math.max(6, (e.seq / maxSeq) * 100)),
+        })
+      } else if (e.type === 'ask_user.pending') {
+        if (!isAskActionable(e)) continue
+        const q = askUserQuestion(e.payload)
+        out.push({
+          key: `ask-${askUserId(e.payload) || e.seq}`,
+          seq: e.seq,
+          turnId: e.turnId || '',
+          kind: 'ask',
+          pending: true,
+          label: q ? `待回答 · ${q.slice(0, 36)}` : '待回答',
+          topPercent: Math.min(92, Math.max(6, (e.seq / maxSeq) * 100)),
+        })
+      }
     }
+    for (let i = 1; i < out.length; i++) {
+      if (out[i].topPercent - out[i - 1].topPercent < 4) {
+        out[i].topPercent = Math.min(94, out[i - 1].topPercent + 4)
+      }
+    }
+    approvalAnchors.value = out
+  } catch {
+    approvalAnchors.value = []
   }
-  return out
 })
 
 async function jumpToApprovalAnchor(a: ApprovalAnchor) {
@@ -862,7 +874,7 @@ async function jumpToApprovalAnchor(a: ApprovalAnchor) {
 }
 
 function jumpToFirstPendingApproval() {
-  const first = approvalAnchors.value.find((a) => a.pending)
+  const first = (approvalAnchors.value ?? []).find((a) => a.pending)
   if (first) void jumpToApprovalAnchor(first)
 }
 
@@ -899,7 +911,7 @@ const composerAskItems = computed(() =>
 
 /** When a new ask_user / permission card appears, keep composer-side cards in view (no timeline jump). */
 watch(
-  () => approvalAnchors.value.filter((a) => a.pending).map((a) => a.key).join('|'),
+  () => (approvalAnchors.value ?? []).filter((a) => a.pending).map((a) => a.key).join('|'),
   async (keys, prev) => {
     if (!keys || keys === prev) return
     await nextTick()
@@ -1528,7 +1540,7 @@ watch(
 )
 
 watch(
-  () => approvalAnchors.value.filter((a) => a.pending).length,
+  () => (approvalAnchors.value ?? []).filter((a) => a.pending).length,
   (n) => { workspaceUi.pendingApprovals = n },
   { immediate: true },
 )
@@ -1536,7 +1548,7 @@ watch(
 watch(
   () => ({
     sessionId: sessions.currentSessionId,
-    askPending: approvalAnchors.value.some((a) => a.pending && a.kind === 'ask'),
+    askPending: (approvalAnchors.value ?? []).some((a) => a.pending && a.kind === 'ask'),
   }),
   ({ sessionId, askPending }) => {
     if (sessionId && askPending) sessionActivity.setLocalAsk(sessionId)
@@ -1643,7 +1655,7 @@ function onTitleKeydown(e: KeyboardEvent) {
       <div
         ref="scrollAreaRef"
         class="session-workspace__scroll"
-        :class="{ 'has-approval-rail': approvalAnchors.length > 0 }"
+        :class="{ 'has-approval-rail': (approvalAnchors?.length ?? 0) > 0 }"
         :style="{ paddingBottom: `${composerOverlayPx + 28}px` }"
         @scroll="onScrollAreaScroll"
       >

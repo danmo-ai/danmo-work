@@ -10,7 +10,7 @@ export interface ApprovalAnchor {
 }
 
 defineProps<{
-  anchors: ApprovalAnchor[]
+  anchors?: ApprovalAnchor[]
 }>()
 
 const emit = defineEmits<{
@@ -20,13 +20,13 @@ const emit = defineEmits<{
 
 <template>
   <aside
-    v-if="anchors.length"
+    v-if="(anchors?.length ?? 0) > 0"
     class="approval-rail"
     :aria-label="$t('sessions.approvalRailLabel')"
   >
     <div class="approval-rail__track" />
     <button
-      v-for="a in anchors"
+      v-for="a in (anchors ?? [])"
       :key="a.key"
       type="button"
       class="approval-rail__anchor"
