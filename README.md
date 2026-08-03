@@ -82,6 +82,7 @@ Add an LLM API key in the UI or `~/.danmo-work/config.yaml`. See [Development](#
 | Keep / Revert / accept hunks vs pre-turn snapshot | Opaque overwrite you can’t unwind |
 | Inspectable Memory + schema-free Table Store | Black-box memory or another vector DB |
 | MCP + cron/webhook Automations | Scripts glued outside the loop |
+| Builtin **CodeGraph** expert (symbols / callers / impact) | Whole-repo grep on every structural question |
 | WeChat · Feishu · WeCom · QQ on the same loop | Public-webhook IM hacks |
 | Resume / replay / edit Tool Results | Restart the chat and hope |
 
@@ -156,7 +157,7 @@ Same Agent Loop from IM; tools run on your machine. Sessions keyed by `(channel,
 
 ### Experts, skills, connectors
 
-Capability units — not a workflow graph. Summon skills via `@` in Composer.
+Capability units — not a workflow graph. Summon skills via `@` in Composer. Team mode uses `delegate_agent` to call builtin or market experts.
 
 | Expert prompts | Skill library | Runtime |
 |----------------|---------------|---------|
@@ -164,11 +165,20 @@ Capability units — not a workflow graph. Summon skills via `@` in Composer.
 
 - **Experts** — local + market agents (prompt / skills / tools / knowledge)
 - **Skills** — Agentskills (`SKILL.md`); built-in & custom
-- **MCP** — catalog → `mcp_<server>_<tool>`; encrypted secrets; permission gate
+- **MCP / Connectors** — catalog → `mcp_<server>_<tool>`; encrypted secrets; permission gate
 - **Automations** — cron / webhook → real session turns
 - **Memory** — `memory_*` (user / project / agent); Memory tab
 - **Table Store** — schema-free `table_*` on `store.db`
 - **Runtime** — turn limits, tool output cap, delegation depth, sandbox / network
+
+#### Builtin expert packs
+
+Product-seeded experts ship with a matching skill + bound-only connector (`AmbientMount=false`). The lead agent summons them with `delegate_agent` — they are not ambient for every session.
+
+| Expert | What it does |
+|--------|----------------|
+| **CodeGraph** | Local code intelligence (definitions, callers, impact / blast radius) via a bundled [CodeGraph](https://github.com/colbymchenry/codegraph) CLI. One shared MCP connector; each project keeps its own `.codegraph/` index. **First** `delegate_agent` → `codegraph` starts async `codegraph init`; while indexing (or if the binary is missing), the expert **degrades** to `read_file` / `grep` and still answers. Ordinary non-code projects are untouched until you delegate. Install/refresh the CLI with `scripts/fetch_codegraph.sh` (desktop packs fetch it too). |
+| **Danmo Make** | Local image / video / audio generation via the Danmo Make MCP (separate app; URL from `~/.danmo-make/api.port`). |
 
 ---
 
@@ -198,7 +208,7 @@ User input → [LLM] plans Tool Call DAG → execute
   → done
 ```
 
-Expert team collaboration is the same loop in **Team** mode: you state a clear goal; the lead model decides whom to summon, writes a precise `delegate_agent` brief (goal + context), and continues when children Report back.
+Expert team collaboration is the same loop in **Team** mode: you state a clear goal; the lead model decides whom to summon, writes a precise `delegate_agent` brief (goal + context), and continues when children Report back. For structural code questions (who calls X, blast radius), prefer `delegate_agent` → `codegraph`; for local creative generation, prefer `danmo-make`.
 
 | Clear intent (Team) | LLM-driven delegation |
 |---------------------|------------------------|

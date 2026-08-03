@@ -573,14 +573,14 @@
               <h3 data-i18n="hi.c1t"></h3>
               <p class="lead" data-i18n="hi.c1l"></p>
               <div class="chips">
-                <span class="chip">delegate_agent</span><span class="chip">hard isolation</span>
-                <span class="chip">same chain</span><span class="chip">Report</span>
+                <span class="chip">delegate_agent</span><span class="chip">codegraph</span>
+                <span class="chip">danmo-make</span><span class="chip">Report</span>
               </div>
               <div class="mock-ui">
                 <header>Agent Loop</header>
                 <div class="body">
-                  <div class="mock-row"><code>delegate_agent · researcher</code><span class="ok">OK</span></div>
-                  <div class="mock-row"><code>child Turn · tools/skills</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>delegate_agent · codegraph</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>explore · callers · impact</code><span class="ok">OK</span></div>
                   <div class="mock-row"><code>Report → parent continues</code><span class="ok">OK</span></div>
                 </div>
               </div>
@@ -621,14 +621,14 @@
               <h3 data-i18n="hi.c4t"></h3>
               <p class="lead" data-i18n="hi.c4l"></p>
               <div class="chips">
-                <span class="chip">MCP</span><span class="chip">secrets</span>
-                <span class="chip">cron</span><span class="chip">webhook</span>
+                <span class="chip">CodeGraph</span><span class="chip">MCP</span>
+                <span class="chip">bound-only</span><span class="chip">cron</span>
               </div>
               <div class="mock-ui">
-                <header>Connectors · Automations</header>
+                <header>Connectors · Expert packs</header>
                 <div class="body">
-                  <div class="mock-row"><code>mcp_notion_search</code><span class="ok">OK</span></div>
-                  <div class="mock-row"><code>mcp_feishu_bitable</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>mcp_codegraph_explore</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>async init · degrade grep</code><span class="ok">live</span></div>
                   <div class="mock-row"><code>cron → real Turn</code><span class="ok">OK</span></div>
                 </div>
               </div>
@@ -785,27 +785,27 @@
           p4t: "Coding 是车道", p4d: "不是天花板——同一架构覆盖长程 Work。",
           l1: "Web · Desktop · CLI · IM",
           l2: "Session · Turn · Step",
-          l3: "Files · MCP · Agents",
+          l3: "Files · MCP · CodeGraph · Agents",
           l4: "work.db · store.db · logs",
         },
         hi: {
           t0: "Document Stage", d0: "文档 / 幻灯片 / 表格 · AI Diff 共审",
-          t1: "多 Agent 委派", d1: "同一思维链，硬隔离",
+          t1: "多 Agent 委派", d1: "同一思维链 · CodeGraph / Make",
           t2: "Turn Log", d2: "恢复 · 回放 · 改结果",
           t3: "Memory + Table Store", d3: "可检视记忆与业务流水",
-          t4: "MCP + 自动化", d4: "连接器、密钥、cron/webhook",
+          t4: "MCP + 内置专家包", d4: "CodeGraph · 连接器 · 自动化",
           t5: "IM 通道", d5: "微信 · 飞书 · 企微 · QQ",
           c0t: "人与 AI 共审编辑 Office",
           c0l: "选区 / 页 / 表 → [office-edit]；Turn 后 AI Diff：保留 · 回滚 · 分块接受。文本仍是真相源。",
           c0m: "Intent · Propose · Review · Commit",
           c1t: "子 Agent 是 Tool，不是并行黑盒",
-          c1l: "delegate_agent 开独立 Turn；父链只收 Report，轨迹仍可检视。",
+          c1l: "delegate_agent 开独立 Turn；结构问题交给 CodeGraph，创意生成交给 Danmo Make；父链只收 Report。",
           c2t: "执行轨迹可信任",
           c2l: "输入输出全量持久化；中途失败可 Resume；人工改 Tool Result 后继续。",
           c3t: "记忆与业务数据分开",
           c3l: "Memory 存约定与偏好；Table Store 存可查询流水（独立 store.db）。",
-          c4t: "能力扩展不叠复杂度",
-          c4l: "新能力 = 新 Tool / Skill / MCP；自动化真正开启带 Turn Log 的 Session。",
+          c4t: "内置专家包 + 连接器",
+          c4l: "CodeGraph：共享 MCP、每项目索引；首次委派异步建图，未就绪可降级 grep。新能力 = Tool / Skill / MCP；自动化真正开 Session。",
           c5t: "人在哪聊，Agent 就在哪",
           c5l: "出站接入、无需公网回调；工具仍在本机执行，权限与密钥可控。",
         },
@@ -857,27 +857,27 @@
           p4t: "Coding is a lane", p4d: "Not the ceiling — same architecture covers long-horizon work.",
           l1: "Web · Desktop · CLI · IM",
           l2: "Session · Turn · Step",
-          l3: "Files · MCP · Agents",
+          l3: "Files · MCP · CodeGraph · Agents",
           l4: "work.db · store.db · logs",
         },
         hi: {
           t0: "Document Stage", d0: "Docs / slides / sheets · AI Diff review",
-          t1: "Multi-agent", d1: "Same chain, hard isolation",
+          t1: "Multi-agent", d1: "Same chain · CodeGraph / Make",
           t2: "Turn Log", d2: "Resume · replay · edit",
           t3: "Memory + Table Store", d3: "Visible memory & business rows",
-          t4: "MCP + Automations", d4: "Connectors, secrets, cron/webhook",
+          t4: "MCP + expert packs", d4: "CodeGraph · connectors · cron",
           t5: "IM channels", d5: "WeChat · Feishu · WeCom · QQ",
           c0t: "Human ↔ AI Office co-edit",
           c0l: "Selection / page / sheet → [office-edit]; after the turn, AI Diff: Keep · Revert · hunks. Text stays SoT.",
           c0m: "Intent · Propose · Review · Commit",
           c1t: "Sub-agents are Tools, not opaque sessions",
-          c1l: "delegate_agent opens an isolated Turn; parent continues on Report.",
+          c1l: "delegate_agent opens an isolated Turn; structural code → CodeGraph, creative media → Danmo Make; parent continues on Report.",
           c2t: "A trail you can trust",
           c2l: "Full persistence; Resume on failure; humans can edit Tool Results.",
           c3t: "Memory ≠ business rows",
           c3l: "Memory keeps preferences; Table Store holds queryable digests in store.db.",
-          c4t: "Grow capability without graph sprawl",
-          c4l: "New power = Tool / Skill / MCP; automations start real logged Turns.",
+          c4t: "Builtin expert packs + connectors",
+          c4l: "CodeGraph: shared MCP, per-project index; first delegate async-inits, degrades to grep until ready. New power = Tool / Skill / MCP; automations start real Turns.",
           c5t: "Meet people where they chat",
           c5l: "Outbound connect, no public callback; tools still run on your machine.",
         },
