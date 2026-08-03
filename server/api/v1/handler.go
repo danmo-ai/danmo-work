@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	containerpkg "danmo-work/core/adapter/container"
+	"danmo-work/core/adapter/config"
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
 	"danmo-work/core/service"
@@ -156,6 +157,8 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/browser/status", getBrowserStatus(h))
 	api.GET("/model-configs", getModelConfigs(h))
 	api.PUT("/model-configs", updateModelConfigs(h))
+	api.POST("/model-configs/refresh", refreshModelConfigsHandler(h))
+	api.GET("/reasoning-dialects", listReasoningDialects())
 	api.GET("/search/config", getSearchConfig(h))
 	api.PUT("/search/config", updateSearchConfig(h))
 	api.GET("/agents", listAgents(h))
@@ -1916,6 +1919,32 @@ func updateModelConfigs(h *Handler) gin.HandlerFunc {
 			h.LLMConfig.SetModelConfigs(models)
 		}
 		c.JSON(http.StatusOK, models)
+	}
+}
+
+func refreshModelConfigsHandler(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cfg, err := h.Config.Get(c)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		models := config.RefreshModelConfigs(cfg.LLM.Models, config.DefaultModelConfigs())
+		cfg.LLM.Models = models
+		if _, err := h.Config.Update(c, domain.UpdateConfigFileRequest{LLM: &cfg.LLM}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if h.LLMConfig != nil {
+			h.LLMConfig.SetModelConfigs(models)
+		}
+		c.JSON(http.StatusOK, models)
+	}
+}
+
+func listReasoningDialects() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, domain.ReasoningDialectInfos)
 	}
 }
 

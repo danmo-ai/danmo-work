@@ -1,8 +1,10 @@
 # Built-in per-model parameter catalog.
 # Keep in sync with config.example.yaml → llm.models.
+# Dialects: see core/adapter/llm/REASONING_DIALECTS.md
 # Loaded when ~/.danmo-work/config.yaml has no llm.models
 # (and after migrating legacy llm.model_limits).
 - model: gpt-5.6
+  reasoning_dialect: openai
   vision: true
   context_window: 1050000
   max_output: 128000
@@ -14,6 +16,7 @@
   - high
   - xhigh
 - model: gpt-5.6-terra
+  reasoning_dialect: openai
   vision: true
   context_window: 1050000
   max_output: 128000
@@ -25,6 +28,7 @@
   - high
   - xhigh
 - model: gpt-5.6-luna
+  reasoning_dialect: openai
   vision: true
   context_window: 1050000
   max_output: 128000
@@ -36,6 +40,7 @@
   - high
   - xhigh
 - model: gpt-5
+  reasoning_dialect: openai
   vision: true
   context_window: 400000
   max_output: 128000
@@ -48,6 +53,7 @@
   - high
   - xhigh
 - model: gpt-5-mini
+  reasoning_dialect: openai
   vision: true
   context_window: 400000
   max_output: 128000
@@ -58,6 +64,7 @@
   - medium
   - high
 - model: gpt-5-nano
+  reasoning_dialect: openai
   vision: true
   context_window: 400000
   max_output: 128000
@@ -68,6 +75,7 @@
   - medium
   - high
 - model: o4-mini
+  reasoning_dialect: openai
   vision: true
   context_window: 200000
   max_output: 100000
@@ -81,6 +89,7 @@
   - high
   - xhigh
 - model: o3
+  reasoning_dialect: openai
   vision: true
   context_window: 200000
   max_output: 100000
@@ -94,10 +103,12 @@
   - high
   - xhigh
 - model: gpt-4.1
+  reasoning_dialect: openai
   vision: true
   context_window: 1047576
   max_output: 32768
 - model: gpt-4o
+  reasoning_dialect: openai
   vision: true
   context_window: 128000
   max_output: 16384
@@ -105,6 +116,7 @@
   vision: true
   context_window: 1000000
   max_output: 128000
+  thinking_mode: adaptive
   available_efforts:
   - 'off'
   - low
@@ -112,11 +124,11 @@
   - high
   - xhigh
   - max
-  thinking_mode: adaptive
 - model: claude-fable-5
   vision: true
   context_window: 1000000
   max_output: 128000
+  thinking_mode: adaptive
   available_efforts:
   - 'off'
   - low
@@ -124,11 +136,11 @@
   - high
   - xhigh
   - max
-  thinking_mode: adaptive
 - model: claude-opus-4-8
   vision: true
   context_window: 1000000
   max_output: 128000
+  thinking_mode: adaptive
   available_efforts:
   - 'off'
   - low
@@ -136,11 +148,11 @@
   - high
   - xhigh
   - max
-  thinking_mode: adaptive
 - model: claude-opus-4-7
   vision: true
   context_window: 1000000
   max_output: 128000
+  thinking_mode: adaptive
   available_efforts:
   - 'off'
   - low
@@ -148,11 +160,11 @@
   - high
   - xhigh
   - max
-  thinking_mode: adaptive
 - model: claude-opus-4-6
   vision: true
   context_window: 1000000
   max_output: 128000
+  thinking_mode: adaptive
   available_efforts:
   - 'off'
   - low
@@ -160,11 +172,11 @@
   - high
   - xhigh
   - max
-  thinking_mode: adaptive
 - model: claude-sonnet-4-6
   vision: true
   context_window: 1000000
   max_output: 128000
+  thinking_mode: adaptive
   available_efforts:
   - 'off'
   - low
@@ -172,16 +184,15 @@
   - high
   - xhigh
   - max
-  thinking_mode: adaptive
 - model: claude-sonnet-4-5
   vision: true
   context_window: 200000
   max_output: 64000
+  thinking_mode: enabled
   available_efforts:
   - 'off'
   - high
   - max
-  thinking_mode: enabled
   effort_budget_tokens:
     high: 16000
     max: 32000
@@ -189,11 +200,11 @@
   vision: true
   context_window: 200000
   max_output: 64000
+  thinking_mode: enabled
   available_efforts:
   - 'off'
   - high
   - max
-  thinking_mode: enabled
   effort_budget_tokens:
     high: 16000
     max: 32000
@@ -201,38 +212,50 @@
   vision: true
   context_window: 200000
   max_output: 64000
+  thinking_mode: enabled
   available_efforts:
   - 'off'
   - high
   - max
-  thinking_mode: enabled
   effort_budget_tokens:
     high: 16000
     max: 32000
 - model: deepseek-v4-pro
+  reasoning_dialect: deepseek
   context_window: 1000000
   max_output: 384000
   available_efforts:
   - 'off'
-  - low
-  - medium
   - high
   - max
 - model: deepseek-v4-flash
+  reasoning_dialect: deepseek
   context_window: 1000000
   max_output: 384000
   available_efforts:
   - 'off'
-  - low
-  - medium
   - high
   - max
 - model: deepseek-chat
+  reasoning_dialect: deepseek
   context_window: 1000000
   max_output: 384000
+  available_efforts:
+  - 'off'
+  - high
+  - max
 - model: deepseek-reasoner
+  reasoning_dialect: deepseek
   context_window: 1000000
   max_output: 384000
+  available_efforts:
+  - 'off'
+  - high
+  - max
+- model: glm-5.2
+  reasoning_dialect: glm
+  context_window: 200000
+  max_output: 128000
   available_efforts:
   - 'off'
   - low
@@ -240,54 +263,63 @@
   - high
   - max
 - model: glm-5.1
+  reasoning_dialect: glm
   context_window: 200000
   max_output: 128000
   available_efforts:
   - 'off'
   - high
 - model: glm-5
+  reasoning_dialect: glm
   context_window: 200000
   max_output: 128000
   available_efforts:
   - 'off'
   - high
 - model: glm-5-turbo
+  reasoning_dialect: glm
   context_window: 200000
   max_output: 128000
   available_efforts:
   - 'off'
   - high
 - model: glm-4.7
+  reasoning_dialect: glm
   context_window: 200000
   max_output: 128000
   available_efforts:
   - 'off'
   - high
 - model: glm-4.7-flash
+  reasoning_dialect: glm
   context_window: 200000
   max_output: 128000
   available_efforts:
   - 'off'
   - high
 - model: glm-4.6
+  reasoning_dialect: glm
   context_window: 200000
   max_output: 128000
   available_efforts:
   - 'off'
   - high
 - model: glm-4.5
+  reasoning_dialect: glm
   context_window: 128000
   max_output: 96000
   available_efforts:
   - 'off'
   - high
 - model: glm-4.5-air
+  reasoning_dialect: glm
   context_window: 128000
   max_output: 96000
   available_efforts:
   - 'off'
   - high
 - model: qwen3.7-max
+  reasoning_dialect: qwen
   vision: true
   context_window: 1000000
   max_output: 65536
@@ -297,6 +329,7 @@
   - medium
   - high
 - model: qwen3.7-plus
+  reasoning_dialect: qwen
   vision: true
   context_window: 1000000
   max_output: 65536
@@ -306,6 +339,7 @@
   - medium
   - high
 - model: qwen3.6-flash
+  reasoning_dialect: qwen
   vision: true
   context_window: 1000000
   max_output: 65536
@@ -315,6 +349,7 @@
   - medium
   - high
 - model: qwen3.5-plus
+  reasoning_dialect: qwen
   vision: true
   context_window: 1000000
   max_output: 65536
@@ -324,6 +359,7 @@
   - medium
   - high
 - model: qwen3.5-flash
+  reasoning_dialect: qwen
   vision: true
   context_window: 1000000
   max_output: 65536
@@ -333,6 +369,7 @@
   - medium
   - high
 - model: qwen3-max
+  reasoning_dialect: qwen
   context_window: 256000
   max_output: 65536
   available_efforts:
@@ -341,66 +378,97 @@
   - medium
   - high
 - model: qwen3-coder-plus
+  reasoning_dialect: qwen
   context_window: 1000000
   max_output: 65536
+  available_efforts:
+  - 'off'
+  - high
 - model: qwen3-coder-flash
+  reasoning_dialect: qwen
   context_window: 1000000
   max_output: 65536
+  available_efforts:
+  - 'off'
+  - high
 - model: qwen3-235b-a22b
+  reasoning_dialect: qwen
   context_window: 128000
   max_output: 16384
   available_efforts:
   - 'off'
   - high
 - model: qwen3-32b
+  reasoning_dialect: qwen
   context_window: 128000
   max_output: 16384
   available_efforts:
   - 'off'
   - high
 - model: k3
+  reasoning_dialect: kimi_k3
   vision: true
   context_window: 1000000
   max_output: 128000
   temperature: 1.0
   available_efforts:
-  - 'off'
+  - low
+  - high
+  - max
+- model: k3-256k
+  reasoning_dialect: kimi_k3
+  vision: true
+  context_window: 262144
+  max_output: 128000
+  temperature: 1.0
+  available_efforts:
+  - low
+  - high
+  - max
+- model: kimi-k3
+  reasoning_dialect: kimi_k3
+  vision: true
+  context_window: 1048576
+  max_output: 128000
+  temperature: 1.0
+  available_efforts:
   - low
   - high
   - max
 - model: kimi-for-coding
+  reasoning_dialect: kimi_code
   vision: true
   context_window: 256000
   max_output: 32768
   temperature: 1.0
   available_efforts:
-  - 'off'
   - high
 - model: kimi-for-coding-highspeed
+  reasoning_dialect: kimi_code
   vision: true
   context_window: 256000
   max_output: 32768
   temperature: 1.0
   available_efforts:
-  - 'off'
   - high
 - model: kimi-k2.7-code
+  reasoning_dialect: kimi_code
   vision: true
   context_window: 256000
   max_output: 32768
   temperature: 1.0
   available_efforts:
-  - 'off'
   - high
 - model: kimi-k2.7-code-highspeed
+  reasoning_dialect: kimi_code
   vision: true
   context_window: 256000
   max_output: 32768
   temperature: 1.0
   available_efforts:
-  - 'off'
   - high
 - model: kimi-k2.6
+  reasoning_dialect: kimi
   vision: true
   context_window: 256000
   max_output: 32768
@@ -408,6 +476,7 @@
   - 'off'
   - high
 - model: MiniMax-M3
+  reasoning_dialect: minimax
   vision: true
   context_window: 1000000
   max_output: 128000
@@ -415,24 +484,28 @@
   - 'off'
   - high
 - model: MiniMax-M2.7
+  reasoning_dialect: minimax
   context_window: 204800
   max_output: 128000
   available_efforts:
   - 'off'
   - high
 - model: MiniMax-M2.7-highspeed
+  reasoning_dialect: minimax
   context_window: 204800
   max_output: 128000
   available_efforts:
   - 'off'
   - high
 - model: MiniMax-M2.5
+  reasoning_dialect: minimax
   context_window: 204800
   max_output: 128000
   available_efforts:
   - 'off'
   - high
 - model: gemini-2.5-pro
+  reasoning_dialect: gemini
   vision: true
   context_window: 1048576
   max_output: 65536
@@ -442,6 +515,7 @@
   - medium
   - high
 - model: gemini-2.5-flash
+  reasoning_dialect: gemini
   vision: true
   context_window: 1048576
   max_output: 65536
@@ -451,6 +525,7 @@
   - medium
   - high
 - model: gemini-3.1-pro-preview
+  reasoning_dialect: gemini
   vision: true
   context_window: 1048576
   max_output: 65536
@@ -460,6 +535,7 @@
   - medium
   - high
 - model: gemini-3.1-flash-lite
+  reasoning_dialect: gemini
   vision: true
   context_window: 1048576
   max_output: 65536
@@ -470,6 +546,7 @@
   - medium
   - high
 - model: gemini-3-flash-preview
+  reasoning_dialect: gemini
   vision: true
   context_window: 1048576
   max_output: 65536
@@ -480,6 +557,7 @@
   - medium
   - high
 - model: gemini-3.5-flash
+  reasoning_dialect: gemini
   vision: true
   context_window: 1048576
   max_output: 65536
@@ -490,6 +568,7 @@
   - medium
   - high
 - model: gemini-3-pro
+  reasoning_dialect: gemini
   vision: true
   context_window: 1048576
   max_output: 65536
@@ -499,6 +578,7 @@
   - medium
   - high
 - model: gemini-3-flash
+  reasoning_dialect: gemini
   vision: true
   context_window: 1048576
   max_output: 65536
@@ -509,34 +589,44 @@
   - medium
   - high
 - model: grok-4.5
+  reasoning_dialect: grok
   vision: true
   context_window: 500000
   max_output: 128000
   available_efforts:
-  - 'off'
   - low
+  - medium
   - high
 - model: grok-4.3
+  reasoning_dialect: grok
   vision: true
   context_window: 1000000
   max_output: 128000
   available_efforts:
   - 'off'
+  - none
   - low
+  - medium
   - high
 - model: grok-4.1-fast
+  reasoning_dialect: grok
   vision: true
   context_window: 2000000
   max_output: 128000
   available_efforts:
   - 'off'
+  - none
   - low
+  - medium
   - high
 - model: grok-3-mini
+  reasoning_dialect: grok
   vision: true
   context_window: 1000000
   max_output: 128000
   available_efforts:
   - 'off'
+  - none
   - low
+  - medium
   - high

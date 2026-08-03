@@ -155,6 +155,8 @@ export interface ModelConfig {
   available_efforts?: string[]
   thinking_mode?: string
   effort_budget_tokens?: Record<string, number>
+  /** Chat Completions thinking dialect — see GET /reasoning-dialects */
+  reasoning_dialect?: string
   /** Accepts image content parts when true. */
   vision?: boolean
 }

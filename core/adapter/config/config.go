@@ -181,10 +181,11 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 	if len(cfg.LLM.Models) == 0 {
 		if migrated := migrateLegacyModelLimits(l.v); len(migrated) > 0 {
 			cfg.LLM.Models = migrated
-		} else {
-			cfg.LLM.Models = defaultModelConfigs()
 		}
 	}
+	// Append new built-in entries and fill empty reasoning_dialect / zero limits.
+	cfg.LLM.Models = mergeModelConfigs(cfg.LLM.Models, defaultModelConfigs())
+
 	if cfg.Market.CacheTTLHours <= 0 {
 		cfg.Market.CacheTTLHours = 6
 	}
@@ -227,6 +228,22 @@ func migrateLegacyModelLimits(v *viper.Viper) []domain.ModelConfig {
 		out = append(out, m)
 	}
 	return out
+}
+
+// DefaultModelConfigs returns the built-in per-model parameter catalog.
+func DefaultModelConfigs() []domain.ModelConfig {
+	return defaultModelConfigs()
+}
+
+// MergeModelConfigs fills empty catalog fields and appends missing built-in models.
+func MergeModelConfigs(existing, defaults []domain.ModelConfig) []domain.ModelConfig {
+	return mergeModelConfigs(existing, defaults)
+}
+
+// RefreshModelConfigs overlays built-in dialect/efforts/limits onto matching models
+// and appends any missing built-in models. Custom-only entries are preserved.
+func RefreshModelConfigs(existing, defaults []domain.ModelConfig) []domain.ModelConfig {
+	return refreshModelConfigs(existing, defaults)
 }
 
 // defaultModelConfigs returns the built-in per-model parameter catalog.
@@ -296,7 +313,7 @@ func defaultLLMPresets() []domain.LLMProviderPreset {
 		{ID: "google", Name: "Google Gemini", Provider: domain.LLMProviderOpenAI, BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", Description: "Gemini Pro、Flash"},
 		{ID: "zhipu", Name: "智谱 (Zhipu)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://open.bigmodel.cn/api/paas/v4", Description: "GLM-5.1、GLM-5、GLM-4.7"},
 		{ID: "qwen", Name: "通义千问 (Qwen)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", Description: "Qwen3.7 Max、Plus、Flash、Coder"},
-		{ID: "moonshot", Name: "Moonshot (Kimi)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.kimi.com/coding/v1", Description: "Kimi Code：k3、kimi-for-coding"},
+		{ID: "moonshot", Name: "Moonshot (Kimi)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.kimi.com/coding/v1", Description: "Kimi Code：k3、k3-256k、kimi-for-coding"},
 		{ID: "minimax", Name: "MiniMax", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.minimaxi.com/v1", Description: "MiniMax M3、M2.7"},
 		{ID: "ollama", Name: "Ollama (Local)", Provider: domain.LLMProviderOpenAI, BaseURL: "http://localhost:11434/v1", Description: "本地模型，通过 Ollama 运行"},
 		{ID: "siliconflow", Name: "SiliconFlow", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.siliconflow.cn/v1", Description: "SiliconFlow 云模型平台"},
@@ -388,6 +405,109 @@ func mergeLLMPresets(existing, defaults []domain.LLMProviderPreset, legacyBaseUR
 	}
 	for _, d := range defaults {
 		if seen[d.ID] {
+			continue
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
+// mergeModelConfigs fills empty reasoning_dialect (and related zero fields) from
+// the built-in catalog, and appends any default models missing from the user list.
+func mergeModelConfigs(existing, defaults []domain.ModelConfig) []domain.ModelConfig {
+	if len(defaults) == 0 {
+		return existing
+	}
+	byModel := make(map[string]domain.ModelConfig, len(defaults))
+	for _, d := range defaults {
+		if d.Model == "" {
+			continue
+		}
+		byModel[d.Model] = d
+	}
+	seen := make(map[string]bool, len(existing))
+	out := make([]domain.ModelConfig, 0, len(existing)+len(defaults))
+	for _, m := range existing {
+		if def, ok := byModel[m.Model]; ok {
+			if m.ReasoningDialect == "" && def.ReasoningDialect != "" {
+				m.ReasoningDialect = def.ReasoningDialect
+			}
+			if m.ContextWindow == 0 && def.ContextWindow > 0 {
+				m.ContextWindow = def.ContextWindow
+			}
+			if m.MaxOutput == 0 && def.MaxOutput > 0 {
+				m.MaxOutput = def.MaxOutput
+			}
+			if len(m.AvailableEfforts) == 0 && len(def.AvailableEfforts) > 0 {
+				m.AvailableEfforts = append([]string(nil), def.AvailableEfforts...)
+			}
+			if m.ThinkingMode == "" && def.ThinkingMode != "" {
+				m.ThinkingMode = def.ThinkingMode
+			}
+			if len(m.EffortBudgetTokens) == 0 && len(def.EffortBudgetTokens) > 0 {
+				m.EffortBudgetTokens = def.EffortBudgetTokens
+			}
+		}
+		out = append(out, m)
+		if m.Model != "" {
+			seen[m.Model] = true
+		}
+	}
+	for _, d := range defaults {
+		if d.Model == "" || seen[d.Model] {
+			continue
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
+// refreshModelConfigs overlays built-in dialect/efforts/limits onto matching models
+// (user-only entries kept), then appends any missing built-in models.
+func refreshModelConfigs(existing, defaults []domain.ModelConfig) []domain.ModelConfig {
+	if len(defaults) == 0 {
+		return existing
+	}
+	byModel := make(map[string]domain.ModelConfig, len(defaults))
+	for _, d := range defaults {
+		if d.Model != "" {
+			byModel[d.Model] = d
+		}
+	}
+	seen := make(map[string]bool, len(existing))
+	out := make([]domain.ModelConfig, 0, len(existing)+len(defaults))
+	for _, m := range existing {
+		if def, ok := byModel[m.Model]; ok {
+			if def.ReasoningDialect != "" {
+				m.ReasoningDialect = def.ReasoningDialect
+			}
+			if def.ContextWindow > 0 {
+				m.ContextWindow = def.ContextWindow
+			}
+			if def.MaxOutput > 0 {
+				m.MaxOutput = def.MaxOutput
+			}
+			if len(def.AvailableEfforts) > 0 {
+				m.AvailableEfforts = append([]string(nil), def.AvailableEfforts...)
+			}
+			if def.ThinkingMode != "" {
+				m.ThinkingMode = def.ThinkingMode
+			}
+			if len(def.EffortBudgetTokens) > 0 {
+				m.EffortBudgetTokens = def.EffortBudgetTokens
+			}
+			m.Vision = def.Vision
+			if def.Temperature != 0 {
+				m.Temperature = def.Temperature
+			}
+		}
+		out = append(out, m)
+		if m.Model != "" {
+			seen[m.Model] = true
+		}
+	}
+	for _, d := range defaults {
+		if d.Model == "" || seen[d.Model] {
 			continue
 		}
 		out = append(out, d)

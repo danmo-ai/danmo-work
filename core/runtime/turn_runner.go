@@ -60,12 +60,13 @@ type ContentPart struct {
 }
 
 type Message struct {
-	Role       Role          `json:"role"`
-	Content    string        `json:"content,omitempty"`
-	Parts      []ContentPart `json:"parts,omitempty"`
-	ToolCalls  []ToolCall    `json:"tool_calls,omitempty"`
-	ToolCallID string        `json:"tool_call_id,omitempty"`
-	Name       string        `json:"name,omitempty"`
+	Role             Role          `json:"role"`
+	Content          string        `json:"content,omitempty"`
+	Parts            []ContentPart `json:"parts,omitempty"`
+	ToolCalls        []ToolCall    `json:"tool_calls,omitempty"`
+	ToolCallID       string        `json:"tool_call_id,omitempty"`
+	Name             string        `json:"name,omitempty"`
+	ReasoningContent string        `json:"reasoning_content,omitempty"`
 }
 
 type ToolCall struct {
@@ -88,8 +89,9 @@ func toPortMessages(msgs []Message) []port.ChatMessage {
 		}
 		out[i] = port.ChatMessage{
 			Role: string(m.Role), Content: m.Content, Parts: parts,
-			ToolCalls:  toPortToolCalls(m.ToolCalls),
-			ToolCallID: m.ToolCallID, Name: m.Name,
+			ToolCalls:        toPortToolCalls(m.ToolCalls),
+			ToolCallID:       m.ToolCallID, Name: m.Name,
+			ReasoningContent: m.ReasoningContent,
 		}
 	}
 	return out
@@ -408,7 +410,11 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		for i, tc := range resp.ToolCalls {
 			assistantToolCalls[i] = ToolCall{ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments}
 		}
-		assistantMsg := Message{Role: RoleAssistant, ToolCalls: assistantToolCalls}
+		assistantMsg := Message{
+			Role:             RoleAssistant,
+			ToolCalls:        assistantToolCalls,
+			ReasoningContent: resp.ReasoningContent,
+		}
 		messages = append(messages, assistantMsg)
 		p.logAssistantMessage(assistantMsg)
 

@@ -89,8 +89,20 @@ func (c *DefaultLLMProviderClient) Chat(ctx context.Context, req port.LLMChatReq
 				if len(gp.EffortBudgetTokens) == 0 {
 					gp.EffortBudgetTokens = rp.EffortBudgetTokens
 				}
+				if gp.ReasoningDialect == "" {
+					gp.ReasoningDialect = rp.ReasoningDialect
+				}
 			}
 		}
+	}
+	if req.GenParams == nil {
+		req.GenParams = &port.ModelGenParams{}
+	}
+	if req.GenParams.ReasoningDialect == "" {
+		req.GenParams.ReasoningDialect = domain.InferReasoningDialect(modelID)
+	}
+	if req.GenParams.ReasoningDialect == "" {
+		req.GenParams.ReasoningDialect = domain.ReasoningDialectOpenAI
 	}
 
 	var effortCfg *EffortConfig

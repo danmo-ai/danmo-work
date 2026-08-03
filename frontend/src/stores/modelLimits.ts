@@ -38,5 +38,22 @@ export const useModelConfigStore = defineStore('modelConfig', () => {
     }
   }
 
-  return { models, loading, saving, load, save }
+  async function refreshFromBuiltin() {
+    saving.value = true
+    try {
+      const data = await fetchJSON<ModelConfig[]>('/model-configs/refresh', {
+        method: 'POST',
+      })
+      models.value = asArray(data)
+      toast.success('模型参数已从内置目录刷新')
+      return models.value
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '刷新失败')
+      throw e
+    } finally {
+      saving.value = false
+    }
+  }
+
+  return { models, loading, saving, load, save, refreshFromBuiltin }
 })

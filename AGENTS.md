@@ -16,6 +16,7 @@
 | CLI entry | `cli/main.go` |
 | TUI entry | `tui/main.go` |
 | Frontend | `frontend/` → build to `out/frontend/dist/` |
+| Reasoning dialects | `core/adapter/llm/REASONING_DIALECTS.md` + `domain.ReasoningDialectInfos` |
 | Optional OCI env | `environments/agent-base/` → CI Release asset (not in app packs); `make build-env-tar` locally |
 | Dev scripts | `scripts/start_backend.sh`, `scripts/start_web.sh`, `scripts/start_desktop.sh`, `scripts/stop.sh` |
 | Paths | `scripts/out_paths.sh` |

@@ -130,13 +130,23 @@ func modelConfigToGenParams(c domain.ModelConfig) *port.ModelGenParams {
 		Stop:               c.Stop,
 		ThinkingMode:       c.ThinkingMode,
 		EffortBudgetTokens: c.EffortBudgetTokens,
+		ReasoningDialect:   c.ReasoningDialect,
+	}
+	if p.ReasoningDialect == "" {
+		p.ReasoningDialect = domain.InferReasoningDialect(c.Model)
 	}
 	if p.MaxTokens == 0 && p.Temperature == 0 && p.TopP == 0 &&
 		p.FrequencyPenalty == 0 && p.PresencePenalty == 0 &&
-		len(p.Stop) == 0 && p.ThinkingMode == "" && len(p.EffortBudgetTokens) == 0 {
+		len(p.Stop) == 0 && p.ThinkingMode == "" && len(p.EffortBudgetTokens) == 0 &&
+		p.ReasoningDialect == "" {
 		return nil
 	}
 	return p
+}
+
+// InferReasoningDialect is kept as an alias for callers in this package.
+func InferReasoningDialect(modelID string) string {
+	return domain.InferReasoningDialect(modelID)
 }
 
 // AllModels returns the current config-based model configs.

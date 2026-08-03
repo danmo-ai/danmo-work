@@ -1062,6 +1062,19 @@ async function handleSaveModelConfig() {
   }
 }
 
+async function handleRefreshModelConfig() {
+  try {
+    const refreshed = await modelConfig.refreshFromBuiltin()
+    modelConfigForm.value = [...refreshed]
+    editingModelIdx.value = null
+    selectedModel.value = '__default__'
+    await llm.loadModels()
+    sessions.syncModelSelection(llm.models)
+  } catch {
+    /* toast already shown in store */
+  }
+}
+
 
 const menuItems = computed(() => [
   { id: 'models' as SettingsTab, label: t('settings.models'), icon: Cpu },
@@ -2366,54 +2379,48 @@ const hasFooterActions = computed(() => {
           </template>
 
           <template v-else-if="editingModel">
-            <label class="settings-field">
-              <span class="settings-field__label">{{ $t('settings.modelContextWindow') }}</span>
-              <DqInput v-model.number="editingModel.context_window" type="number" :placeholder="$t('settings.modelParamUnset')" />
-            </label>
-            <label class="settings-field">
-              <span class="settings-field__label">{{ $t('settings.modelMaxOutput') }}</span>
-              <DqInput v-model.number="editingModel.max_output" type="number" :placeholder="$t('settings.modelParamUnset')" />
-            </label>
-            <label class="settings-field">
-              <span class="settings-field__label">{{ $t('settings.modelTemperature') }}</span>
-              <DqInput v-model.number="editingModel.temperature" type="number" :placeholder="$t('settings.modelParamUnset')" step="0.1" />
-              <span class="settings-field__hint">{{ $t('settings.modelParamUnsetHint') }}</span>
-            </label>
-            <label class="settings-field">
-              <span class="settings-field__label">{{ $t('settings.modelTopP') }}</span>
-              <DqInput v-model.number="editingModel.top_p" type="number" :placeholder="$t('settings.modelParamUnset')" step="0.05" />
-            </label>
-            <label class="settings-field">
-              <span class="settings-field__label">{{ $t('settings.modelAvailableEfforts') }}</span>
-              <DqInput :model-value="(editingModel.available_efforts ?? []).join(', ')" @update:model-value="editingModel.available_efforts = ($event as string).split(',').map(s => s.trim()).filter(Boolean)" placeholder="off, low, medium, high, xhigh" />
-            </label>
-            <label class="settings-field">
-              <span class="settings-field__label">{{ $t('settings.modelThinkingMode') }}</span>
-              <DqInput v-model="editingModel.thinking_mode" placeholder="adaptive / enabled" />
-            </label>
-            <label class="settings-field settings-field--switch">
-              <span class="settings-field__label">{{ $t('settings.modelVision') }}</span>
-              <DqSwitch
-                :model-value="!!editingModel.vision"
-                @update:model-value="(v: boolean) => { if (editingModel) editingModel.vision = v }"
-              />
-              <span class="settings-field__hint">{{ $t('settings.modelVisionDesc') }}</span>
-            </label>
-            <label class="settings-field">
-              <span class="settings-field__label">{{ $t('settings.modelEffortBudgetTokens') }}</span>
-              <DqInput :model-value="formatEffortBudgetTokens(editingModel.effort_budget_tokens)" type="textarea" :rows="3" @update:model-value="editingModel.effort_budget_tokens = parseEffortBudgetTokens($event as string)" placeholder="high:16000&#10;max:32000" />
-            </label>
+            <div class="settings-form-group settings-form-group--nested">
+              <h3 class="settings-form-group__title">{{ $t('settings.modelGroupCapacity') }}</h3>
+              <p class="settings-form-group__desc">{{ $t('settings.modelGroupCapacityDesc') }}</p>
+              <label class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.modelContextWindow') }}</span>
+                <DqInput v-model.number="editingModel.context_window" type="number" :placeholder="$t('settings.modelParamUnset')" />
+              </label>
+              <label class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.modelMaxOutput') }}</span>
+                <DqInput v-model.number="editingModel.max_output" type="number" :placeholder="$t('settings.modelParamUnset')" />
+              </label>
+              <label class="settings-field settings-field--switch">
+                <span class="settings-field__label">{{ $t('settings.modelVision') }}</span>
+                <DqSwitch
+                  :model-value="!!editingModel.vision"
+                  @update:model-value="(v: boolean) => { if (editingModel) editingModel.vision = v }"
+                />
+                <span class="settings-field__hint">{{ $t('settings.modelVisionDesc') }}</span>
+              </label>
+            </div>
 
             <div class="settings-form-group settings-form-group--nested">
-              <h3 class="settings-form-group__title">{{ $t('settings.modelAdvancedParams') }}</h3>
-              <p class="settings-form-group__desc">{{ $t('settings.modelAdvancedParamsDesc') }}</p>
+              <h3 class="settings-form-group__title">{{ $t('settings.modelGroupSampling') }}</h3>
+              <p class="settings-form-group__desc">{{ $t('settings.modelGroupSamplingDesc') }}</p>
+              <label class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.modelTemperature') }}</span>
+                <DqInput v-model.number="editingModel.temperature" type="number" :placeholder="$t('settings.modelParamUnset')" step="0.1" />
+                <span class="settings-field__hint">{{ $t('settings.modelParamUnsetHint') }}</span>
+              </label>
+              <label class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.modelTopP') }}</span>
+                <DqInput v-model.number="editingModel.top_p" type="number" :placeholder="$t('settings.modelParamUnset')" step="0.05" />
+              </label>
               <label class="settings-field">
                 <span class="settings-field__label">{{ $t('settings.modelFrequencyPenalty') }}</span>
                 <DqInput v-model.number="editingModel.frequency_penalty" type="number" :placeholder="$t('settings.modelParamUnset')" step="0.1" />
+                <span class="settings-field__hint">{{ $t('settings.modelFrequencyPenaltyHint') }}</span>
               </label>
               <label class="settings-field">
                 <span class="settings-field__label">{{ $t('settings.modelPresencePenalty') }}</span>
                 <DqInput v-model.number="editingModel.presence_penalty" type="number" :placeholder="$t('settings.modelParamUnset')" step="0.1" />
+                <span class="settings-field__hint">{{ $t('settings.modelPresencePenaltyHint') }}</span>
               </label>
               <label class="settings-field">
                 <span class="settings-field__label">{{ $t('settings.modelStopSequences') }}</span>
@@ -2423,6 +2430,58 @@ const hasFooterActions = computed(() => {
                   :placeholder="$t('settings.modelStopSequencesPlaceholder')"
                 />
                 <span class="settings-field__hint">{{ $t('settings.modelStopSequencesHint') }}</span>
+              </label>
+            </div>
+
+            <div class="settings-form-group settings-form-group--nested">
+              <h3 class="settings-form-group__title">{{ $t('settings.modelGroupReasoning') }}</h3>
+              <p class="settings-form-group__desc">{{ $t('settings.modelGroupReasoningDesc') }}</p>
+              <label class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.modelAvailableEfforts') }}</span>
+                <DqInput :model-value="(editingModel.available_efforts ?? []).join(', ')" @update:model-value="editingModel.available_efforts = ($event as string).split(',').map(s => s.trim()).filter(Boolean)" placeholder="off, low, medium, high, xhigh" />
+                <span class="settings-field__hint">{{ $t('settings.modelAvailableEffortsHint') }}</span>
+              </label>
+              <label class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.modelReasoningDialect') }}</span>
+                <DqSelect
+                  :model-value="editingModel.reasoning_dialect ?? ''"
+                  @update:model-value="(v: string) => { if (editingModel) editingModel.reasoning_dialect = v || undefined }"
+                >
+                  <DqOption value="" :label="$t('settings.modelReasoningDialectAuto')" />
+                  <DqOption value="openai" :label="$t('settings.modelReasoningDialectOpenAI')" />
+                  <DqOption value="deepseek" :label="$t('settings.modelReasoningDialectDeepSeek')" />
+                  <DqOption value="qwen" :label="$t('settings.modelReasoningDialectQwen')" />
+                  <DqOption value="kimi" :label="$t('settings.modelReasoningDialectKimi')" />
+                  <DqOption value="kimi_code" :label="$t('settings.modelReasoningDialectKimiCode')" />
+                  <DqOption value="kimi_k3" :label="$t('settings.modelReasoningDialectKimiK3')" />
+                  <DqOption value="glm" :label="$t('settings.modelReasoningDialectGLM')" />
+                  <DqOption value="minimax" :label="$t('settings.modelReasoningDialectMiniMax')" />
+                  <DqOption value="gemini" :label="$t('settings.modelReasoningDialectGemini')" />
+                  <DqOption value="grok" :label="$t('settings.modelReasoningDialectGrok')" />
+                </DqSelect>
+                <span class="settings-field__hint">{{ $t('settings.modelReasoningDialectHint') }}</span>
+              </label>
+            </div>
+
+            <div class="settings-form-group settings-form-group--nested">
+              <h3 class="settings-form-group__title">{{ $t('settings.modelGroupAnthropic') }}</h3>
+              <p class="settings-form-group__desc">{{ $t('settings.modelGroupAnthropicDesc') }}</p>
+              <label class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.modelThinkingMode') }}</span>
+                <DqSelect
+                  :model-value="editingModel.thinking_mode ?? ''"
+                  @update:model-value="(v: string) => { if (editingModel) editingModel.thinking_mode = v || undefined }"
+                >
+                  <DqOption value="" :label="$t('settings.modelThinkingModeUnset')" />
+                  <DqOption value="adaptive" :label="$t('settings.modelThinkingModeAdaptive')" />
+                  <DqOption value="enabled" :label="$t('settings.modelThinkingModeEnabled')" />
+                </DqSelect>
+                <span class="settings-field__hint">{{ $t('settings.modelThinkingModeHint') }}</span>
+              </label>
+              <label class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.modelEffortBudgetTokens') }}</span>
+                <DqInput :model-value="formatEffortBudgetTokens(editingModel.effort_budget_tokens)" type="textarea" :rows="3" @update:model-value="editingModel.effort_budget_tokens = parseEffortBudgetTokens($event as string)" placeholder="high:16000&#10;max:32000" />
+                <span class="settings-field__hint">{{ $t('settings.modelEffortBudgetTokensHint') }}</span>
               </label>
             </div>
           </template>
@@ -2502,6 +2561,9 @@ const hasFooterActions = computed(() => {
           </DqButton>
           <DqButton v-else-if="activeTab === 'models'" type="primary" @click="openNewForm">{{ $t('settings.addProvider') }}</DqButton>
           <DqButton v-else-if="activeTab === 'modelConfig'" @click="addModelEntry">{{ $t('settings.addModelConfig') }}</DqButton>
+          <DqButton v-if="activeTab === 'modelConfig'" :disabled="modelConfig.saving" @click="handleRefreshModelConfig">
+            {{ modelConfig.saving ? $t('common.refreshing') : $t('settings.refreshModelConfig') }}
+          </DqButton>
           <DqButton v-if="activeTab === 'modelConfig'" type="primary" :disabled="modelConfig.saving" @click="handleSaveModelConfig">
             {{ modelConfig.saving ? $t('common.saving') : $t('common.save_') }}
           </DqButton>
@@ -2585,15 +2647,15 @@ const hasFooterActions = computed(() => {
             <DqInput v-model.number="newTemperature" type="number" placeholder="0" step="0.1" />
           </label>
           <label class="settings-field">
-            <span class="settings-field__label">Available Efforts</span>
+            <span class="settings-field__label">{{ $t('settings.modelAvailableEfforts') }}</span>
             <DqInput v-model="newAvailableEfforts" placeholder="off, low, medium, high, xhigh" />
           </label>
           <label class="settings-field">
-            <span class="settings-field__label">Thinking Mode</span>
+            <span class="settings-field__label">{{ $t('settings.modelThinkingMode') }}</span>
             <DqInput v-model="newThinkingMode" placeholder="adaptive / enabled" />
           </label>
           <label class="settings-field">
-            <span class="settings-field__label">Effort Budget Tokens</span>
+            <span class="settings-field__label">{{ $t('settings.modelEffortBudgetTokens') }}</span>
             <DqInput v-model="newEffortBudgetTokens" type="textarea" :rows="3" placeholder="high:16000&#10;max:32000" />
           </label>
           <div class="settings-actions">
@@ -2956,6 +3018,17 @@ const hasFooterActions = computed(() => {
 
 .settings-form-group + .settings-form-group {
   margin-top: 24px;
+}
+
+.settings-form-group--nested {
+  padding: 14px 16px;
+  border: 1px solid var(--dq-shell-divider);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dq-bg-elevated) 80%, transparent);
+}
+
+.settings-form-group--nested + .settings-form-group--nested {
+  margin-top: 14px;
 }
 
 .settings-form-group__head {

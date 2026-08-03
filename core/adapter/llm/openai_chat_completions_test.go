@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"danmo-work/core/domain"
 	"danmo-work/core/port"
 )
 
@@ -273,6 +274,53 @@ func TestOpenAIChatCompletionsClient_SendsGenParams(t *testing.T) {
 	stop, ok := got["stop"].([]any)
 	if !ok || len(stop) != 1 || stop[0] != "###" {
 		t.Errorf("stop: %v", got["stop"])
+	}
+}
+
+func TestOpenAIChatCompletionsClient_QwenDialectRequest(t *testing.T) {
+	var got map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{
+				"message": map[string]any{
+					"content":           "ok",
+					"reasoning_content": "think",
+				},
+			}},
+		})
+	}))
+	defer server.Close()
+
+	p := NewOpenAIChatCompletionsClient(server.URL, "")
+	resp, err := p.Chat(context.Background(), port.LLMChatRequest{
+		Model: "qwen3-max",
+		GenParams: &port.ModelGenParams{
+			ReasoningDialect: domain.ReasoningDialectQwen,
+		},
+		Messages: []port.ChatMessage{
+			{Role: "assistant", ReasoningContent: "prev", ToolCalls: []port.ChatToolCall{
+				{ID: "1", Name: "bash", Arguments: map[string]any{"command": "ls"}},
+			}},
+			{Role: "tool", ToolCallID: "1", Content: "a"},
+		},
+	}, "high")
+	if err != nil {
+		t.Fatalf("chat: %v", err)
+	}
+	if got["enable_thinking"] != true {
+		t.Fatalf("enable_thinking: %v", got)
+	}
+	if _, ok := got["reasoning_effort"]; ok {
+		t.Fatal("unexpected reasoning_effort")
+	}
+	msgs := got["messages"].([]any)
+	first := msgs[0].(map[string]any)
+	if first["reasoning_content"] != "prev" {
+		t.Fatalf("echo reasoning_content: %v", first)
+	}
+	if resp.ReasoningContent != "think" {
+		t.Fatalf("resp reasoning: %q", resp.ReasoningContent)
 	}
 }
 

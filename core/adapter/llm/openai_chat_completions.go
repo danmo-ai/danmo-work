@@ -51,6 +51,9 @@ func (p *OpenAIChatCompletionsClient) Chat(ctx context.Context, req port.LLMChat
 		return port.LLMChatResponse{}, fmt.Errorf("model not specified")
 	}
 
+	dialect := resolveReasoningDialect(req.GenParams, model)
+	echoReasoning := dialectEchoesReasoning(dialect)
+
 	messages := make([]map[string]any, 0, len(req.Messages))
 	for _, m := range req.Messages {
 		msg := map[string]any{
@@ -83,6 +86,9 @@ func (p *OpenAIChatCompletionsClient) Chat(ctx context.Context, req port.LLMChat
 			msg["tool_call_id"] = m.ToolCallID
 			msg["name"] = m.Name
 		}
+		if echoReasoning && m.ReasoningContent != "" {
+			msg["reasoning_content"] = m.ReasoningContent
+		}
 		messages = append(messages, msg)
 	}
 
@@ -111,9 +117,7 @@ func (p *OpenAIChatCompletionsClient) Chat(ctx context.Context, req port.LLMChat
 		}
 	}
 
-	if effort != "" && effort != "off" {
-		body["reasoning_effort"] = effort
-	}
+	applyReasoningDialectRequest(body, dialect, effort, req.GenParams)
 
 	b, err := json.Marshal(body)
 	if err != nil {
@@ -143,11 +147,23 @@ func (p *OpenAIChatCompletionsClient) Chat(ctx context.Context, req port.LLMChat
 		return port.LLMChatResponse{}, classifyHTTPError(resp.StatusCode, respBody)
 	}
 
+	out, err := parseChatCompletionsResponse(respBody)
+	if err != nil {
+		return port.LLMChatResponse{}, err
+	}
+	content, reasoning := normalizeChatCompletionsReasoning(out.Content, out.ReasoningContent, "", dialect)
+	out.Content = content
+	out.ReasoningContent = reasoning
+	return out, nil
+}
+
+func parseChatCompletionsResponse(respBody []byte) (port.LLMChatResponse, error) {
 	var result struct {
 		Choices []struct {
 			Message struct {
 				Content          string `json:"content"`
 				ReasoningContent string `json:"reasoning_content"`
+				Reasoning        string `json:"reasoning"`
 				ToolCalls        []struct {
 					ID       string `json:"id"`
 					Function struct {
@@ -180,6 +196,10 @@ func (p *OpenAIChatCompletionsClient) Chat(ctx context.Context, req port.LLMChat
 	}
 
 	choice := result.Choices[0].Message
+	reasoning := choice.ReasoningContent
+	if reasoning == "" {
+		reasoning = choice.Reasoning
+	}
 	if len(choice.ToolCalls) > 0 {
 		var tcs []port.ChatToolCall
 		for _, tc := range choice.ToolCalls {
@@ -195,18 +215,17 @@ func (p *OpenAIChatCompletionsClient) Chat(ctx context.Context, req port.LLMChat
 		}
 		return port.LLMChatResponse{
 			ToolCalls:        tcs,
-			ReasoningContent: choice.ReasoningContent,
+			ReasoningContent: reasoning,
 			Usage:            usage,
 		}, nil
 	}
 
 	return port.LLMChatResponse{
 		Content:          choice.Content,
-		ReasoningContent: choice.ReasoningContent,
+		ReasoningContent: reasoning,
 		Usage:            usage,
 		Done:             true,
 	}, nil
-
 }
 
 // applyChatCompletionsGenParams writes Chat Completions sampling fields.

@@ -71,6 +71,20 @@ var DefaultEffortsOpenAI = []string{"off", "low", "medium", "high", "xhigh"}
 // DefaultEffortsAnthropic is used when an Anthropic model has no available_efforts in config.
 var DefaultEffortsAnthropic = []string{"off", "high", "max"}
 
+// Reasoning dialect values for OpenAI-compatible Chat Completions vendors.
+const (
+	ReasoningDialectOpenAI   = "openai"    // reasoning_effort
+	ReasoningDialectDeepSeek = "deepseek"  // thinking.type + reasoning_effort + echo
+	ReasoningDialectQwen     = "qwen"      // enable_thinking (+ thinking_budget)
+	ReasoningDialectKimi     = "kimi"      // K2.6/K2.5: thinking.type / thinking.keep
+	ReasoningDialectKimiCode = "kimi_code" // K2.7 Code / kimi-for-coding: always-on preserved thinking
+	ReasoningDialectKimiK3   = "kimi_k3"   // K3: always-on via reasoning_effort + echo
+	ReasoningDialectGLM      = "glm"       // Zhipu: thinking.type (+ clear_thinking) + optional reasoning_effort
+	ReasoningDialectMiniMax  = "minimax"   // reasoning_split + optional thinking.type
+	ReasoningDialectGemini   = "gemini"    // reasoning_effort (incl. "none" when off)
+	ReasoningDialectGrok     = "grok"      // xAI reasoning_effort
+)
+
 // ModelConfig defines per-model configuration including context window, max
 // output tokens, and generation parameter overrides. All fields are optional;
 // unset values fall back to built-in pattern rules.
@@ -86,6 +100,10 @@ type ModelConfig struct {
 	AvailableEfforts   []string       `json:"available_efforts,omitempty" mapstructure:"available_efforts" yaml:"available_efforts,omitempty"`
 	ThinkingMode       string         `json:"thinking_mode,omitempty" mapstructure:"thinking_mode" yaml:"thinking_mode,omitempty"`
 	EffortBudgetTokens map[string]int `json:"effort_budget_tokens,omitempty" mapstructure:"effort_budget_tokens" yaml:"effort_budget_tokens,omitempty"`
+	// ReasoningDialect selects Chat Completions thinking request/response shape
+	// for OpenAI-compatible vendors (see ReasoningDialectInfos / REASONING_DIALECTS.md).
+	// Empty → inferred from model id when possible, else openai.
+	ReasoningDialect string `json:"reasoning_dialect,omitempty" mapstructure:"reasoning_dialect" yaml:"reasoning_dialect,omitempty"`
 	// Vision marks whether the model accepts multimodal image input.
 	// When false/omitted, image parts are stripped before Chat.
 	Vision bool `json:"vision,omitempty" mapstructure:"vision" yaml:"vision,omitempty"`

@@ -21,6 +21,9 @@ type ChatMessage struct {
 	ToolCalls  []ChatToolCall
 	ToolCallID string
 	Name       string
+	// ReasoningContent is prior-turn chain-of-thought to echo for dialects
+	// that require it (DeepSeek/Qwen/Kimi tool-call multi-turn).
+	ReasoningContent string
 }
 
 type ChatToolCall struct {
@@ -48,6 +51,8 @@ type ModelGenParams struct {
 	Stop               []string
 	ThinkingMode       string         // "adaptive" or "enabled"; for Anthropic thinking
 	EffortBudgetTokens map[string]int // effort → budget_tokens mapping
+	// ReasoningDialect: see domain.ReasoningDialectInfos / REASONING_DIALECTS.md
+	ReasoningDialect string
 }
 
 type LLMChatResponse struct {
