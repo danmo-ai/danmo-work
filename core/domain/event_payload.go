@@ -63,9 +63,11 @@ type ErrorPayload struct {
 }
 
 type LLMUsagePayload struct {
-	PromptTokens     int `json:"promptTokens,omitempty"`
-	CompletionTokens int `json:"completionTokens,omitempty"`
-	TotalTokens      int `json:"totalTokens,omitempty"`
+	PromptTokens     int    `json:"promptTokens,omitempty"`
+	CompletionTokens int    `json:"completionTokens,omitempty"`
+	TotalTokens      int    `json:"totalTokens,omitempty"`
+	Model            string `json:"model,omitempty"`
+	AgentID          string `json:"agentId,omitempty"`
 }
 
 type SessionCompletedPayload struct {

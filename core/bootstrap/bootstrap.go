@@ -206,6 +206,9 @@ func New(cfg Config) *Core {
 	marketMgr := service.NewMarketManager(configManager, marketReg, skills, agents, mcpManager)
 
 	stream := dqruntime.NewStreamEventManager(st.StreamEvents())
+	usageSink := dqruntime.NewUsageSink(st.Usage(), st.Sessions())
+	stream.SetUsageSink(usageSink)
+	go dqruntime.BackfillUsageFromStreamEvents(context.Background(), st.Usage(), st.Sessions(), st.StreamEvents())
 	checkpointStore := turnlog.NewCheckpointStore(pm.ProjectDir)
 	fileChangeStore := turnlog.NewFileChangeStore(pm.ProjectDir)
 	snapshotStore := turnlog.NewSnapshotStore(pm.ProjectDir)

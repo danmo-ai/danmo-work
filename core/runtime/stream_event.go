@@ -18,6 +18,7 @@ type StreamEventManager struct {
 	seq   atomic.Int64
 	subs  map[string][]chan domain.StreamEvent
 	store port.StreamEventRepo
+	usage *UsageSink
 }
 
 func NewStreamEventManager(repo port.StreamEventRepo) *StreamEventManager {
@@ -29,6 +30,13 @@ func NewStreamEventManager(repo port.StreamEventRepo) *StreamEventManager {
 		m.seq.Store(repo.MaxSeq())
 	}
 	return m
+}
+
+// SetUsageSink attaches the token usage rollup side-path (optional).
+func (m *StreamEventManager) SetUsageSink(sink *UsageSink) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.usage = sink
 }
 
 func (m *StreamEventManager) Publish(ctx context.Context, sessionID, turnID, typ string, payload any) domain.StreamEvent {
@@ -50,6 +58,7 @@ func (m *StreamEventManager) Publish(ctx context.Context, sessionID, turnID, typ
 	}
 
 	m.mu.RLock()
+	sink := m.usage
 	for _, ch := range m.subs[sessionID] {
 		select {
 		case ch <- ev:
@@ -59,6 +68,14 @@ func (m *StreamEventManager) Publish(ctx context.Context, sessionID, turnID, typ
 		}
 	}
 	m.mu.RUnlock()
+
+	if sink != nil {
+		sinkCtx := ctx
+		if ctx == nil || ctx.Err() != nil {
+			sinkCtx = context.Background()
+		}
+		sink.OnEvent(sinkCtx, ev)
+	}
 
 	return ev
 }

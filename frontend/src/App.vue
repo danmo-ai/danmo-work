@@ -34,7 +34,7 @@ function onGlobalKeydown(e: KeyboardEvent) {
 const activeModule = computed<AppModule>(() => {
   const name = route.name as string
   if (name === 'sessions') return 'sessions'
-  if (['workers', 'knowledge', 'skills', 'mcpServers', 'automations', 'settings'].includes(name)) {
+  if (['workers', 'knowledge', 'skills', 'mcpServers', 'automations', 'usage', 'settings'].includes(name)) {
     return name as AppModule
   }
   return 'sessions'

@@ -2,6 +2,8 @@ package port
 
 import (
 	"context"
+	"time"
+
 	"danmo-work/core/domain"
 )
 
@@ -27,6 +29,22 @@ type Repository interface {
 	WeixinBindings()  WeixinBindingRepo
 	ChannelBindings() ChannelBindingRepo
 	AppMeta()         AppMetaRepo
+	Usage()           UsageRepo
+}
+
+// UsageRepo persists turn/session/project token rollups (not per-call rows).
+type UsageRepo interface {
+	AddDelta(ctx context.Context, turnID, sessionID, projectID string, delta domain.UsageDelta, at time.Time) error
+	Get(ctx context.Context, grain domain.UsageGrain, refID string) (domain.UsageRollup, error)
+	ListBySession(ctx context.Context, sessionID string) ([]domain.UsageRollup, error)
+	ListByProject(ctx context.Context, projectID string, grain domain.UsageGrain) ([]domain.UsageRollup, error)
+	SummarizeSession(ctx context.Context, sessionID string) (domain.UsageBreakdown, error)
+	SummarizeProject(ctx context.Context, projectID string) (domain.UsageBreakdown, error)
+	// SummarizeScope aggregates tokens + turn count for optional project/model filters.
+	SummarizeScope(ctx context.Context, projectID, model string) (domain.UsageSummary, error)
+	Series(ctx context.Context, filter domain.UsageSeriesFilter) ([]domain.UsageSeriesPoint, error)
+	// HasGrain reports whether any rollup exists for grain+refID (backfill gate).
+	HasGrain(ctx context.Context, grain domain.UsageGrain, refID string) (bool, error)
 }
 
 // KnowledgeBaseRepo persists knowledge-base catalog metadata.

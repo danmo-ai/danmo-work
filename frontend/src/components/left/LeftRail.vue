@@ -107,6 +107,7 @@ const menuItems = computed(() => [
   { module: 'skills' as const, label: t('navigation.skills'), icon: MagicStick },
   { module: 'mcpServers' as const, label: t('navigation.mcpServer'), isMcp: true },
   { module: 'automations' as const, label: t('navigation.automations'), icon: Tools },
+  { module: 'usage' as const, label: t('navigation.usage'), icon: Document },
 ])
 
 function navigate(module: AppModule) {

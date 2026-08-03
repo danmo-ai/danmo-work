@@ -23,6 +23,7 @@ const {
   usageRatio,
   usageLevel,
   compactionHistory,
+  sessionTotalTokens,
 } = useSessionContextUsage()
 
 onMounted(() => {
@@ -37,7 +38,11 @@ const fullLabel = computed(
     `${formatTokenCount(usedTokens.value)} / ${formatTokenCount(contextWindow.value)} (${percentLabel.value})`,
 )
 
-const tip = computed(() => `${t('sessions.contextUsageHint')}: ${fullLabel.value}`)
+const tip = computed(() => {
+  const ctx = `${t('sessions.contextUsageHint')}: ${fullLabel.value}`
+  if (sessionTotalTokens.value <= 0) return ctx
+  return `${ctx}\n${t('sessions.tokenUsageHint')}: ${formatTokenCount(sessionTotalTokens.value)}`
+})
 </script>
 
 <template>
@@ -59,10 +64,12 @@ const tip = computed(() => `${t('sessions.contextUsageHint')}: ${fullLabel.value
         <template v-if="props.compact">
           {{ formatTokenCount(usedTokens) }}/{{ formatTokenCount(contextWindow) }}
           <span class="context-usage__pct">{{ percentLabel }}</span>
+          <span v-if="sessionTotalTokens > 0" class="context-usage__sum">Σ{{ formatTokenCount(sessionTotalTokens) }}</span>
         </template>
         <template v-else>
           {{ formatTokenCount(usedTokens) }} / {{ formatTokenCount(contextWindow) }}
           <span class="context-usage__pct">({{ percentLabel }})</span>
+          <span v-if="sessionTotalTokens > 0" class="context-usage__sum">Σ {{ formatTokenCount(sessionTotalTokens) }}</span>
         </template>
       </span>
     </div>
@@ -145,6 +152,11 @@ const tip = computed(() => `${t('sessions.contextUsageHint')}: ${fullLabel.value
 .context-usage__pct {
   color: var(--dq-label-tertiary);
   margin-left: 4px;
+}
+
+.context-usage__sum {
+  color: var(--dq-label-tertiary);
+  margin-left: 6px;
 }
 
 .context-usage.is-empty .context-usage__fill {

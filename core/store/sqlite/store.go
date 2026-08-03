@@ -148,6 +148,7 @@ func (s *Store) migrate() error {
 		&weixinAccountModel{},
 		&weixinBindingModel{},
 		&channelBindingModel{},
+		&usageRollupModel{},
 	); err != nil {
 		return err
 	}

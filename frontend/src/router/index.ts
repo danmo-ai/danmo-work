@@ -2,7 +2,7 @@ import { createRouter, createWebHistory, createWebHashHistory } from 'vue-router
 import type { RouteRecordRaw } from 'vue-router'
 import type { AppModule } from '@/types/app-module'
 
-const modules: AppModule[] = ['sessions', 'workers', 'knowledge', 'skills', 'mcpServers', 'automations', 'settings']
+const modules: AppModule[] = ['sessions', 'workers', 'knowledge', 'skills', 'mcpServers', 'automations', 'usage', 'settings']
 
 const routes: RouteRecordRaw[] = [
   {

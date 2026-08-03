@@ -1,1 +1,9 @@
-export type AppModule = 'sessions' | 'workers' | 'knowledge' | 'skills' | 'mcpServers' | 'automations' | 'settings'
+export type AppModule =
+  | 'sessions'
+  | 'workers'
+  | 'knowledge'
+  | 'skills'
+  | 'mcpServers'
+  | 'automations'
+  | 'usage'
+  | 'settings'

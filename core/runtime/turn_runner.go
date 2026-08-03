@@ -361,6 +361,8 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 				PromptTokens:     resp.Usage.PromptTokens,
 				CompletionTokens: resp.Usage.CompletionTokens,
 				TotalTokens:      resp.Usage.TotalTokens,
+				Model:            tctx.Model,
+				AgentID:          tctx.Agent.ID,
 			})
 		}
 

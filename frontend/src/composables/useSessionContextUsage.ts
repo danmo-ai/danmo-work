@@ -51,7 +51,10 @@ export function useSessionContextUsage(modelId?: Ref<string> | (() => string)) {
     for (const ev of sessions.streamEvents) {
       if (ev.type !== 'llm.usage') continue
       const p = asRecord(ev.payload)
-      sum += num(p?.totalTokens ?? p?.total_tokens)
+      const total = num(p?.totalTokens ?? p?.total_tokens)
+      const prompt = num(p?.promptTokens ?? p?.prompt_tokens)
+      const completion = num(p?.completionTokens ?? p?.completion_tokens)
+      sum += total > 0 ? total : prompt + completion
     }
     return sum
   })
@@ -107,7 +110,10 @@ export function useSessionContextUsage(modelId?: Ref<string> | (() => string)) {
     for (const ev of source) {
       if (ev.type !== 'llm.usage' || ev.turnId !== turnId) continue
       const p = asRecord(ev.payload)
-      sum += num(p?.totalTokens ?? p?.total_tokens)
+      const total = num(p?.totalTokens ?? p?.total_tokens)
+      const prompt = num(p?.promptTokens ?? p?.prompt_tokens)
+      const completion = num(p?.completionTokens ?? p?.completion_tokens)
+      sum += total > 0 ? total : prompt + completion
     }
     return sum
   }
