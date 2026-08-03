@@ -225,12 +225,12 @@ func LoadBuiltinSkillFiles(skillID string) ([]domain.SkillFile, error) {
 }
 
 func parseSkill(content, dirName string) (*domain.Skill, error) {
-	var fm skillFrontmatter
-	parts := strings.SplitN(content, "---", 3)
-	if len(parts) < 3 {
+	fmText, body, ok := splitFrontmatter(content)
+	if !ok {
 		return nil, fmt.Errorf("skill %q: missing YAML frontmatter", dirName)
 	}
-	if err := yaml.Unmarshal([]byte(strings.TrimSpace(parts[1])), &fm); err != nil {
+	var fm skillFrontmatter
+	if err := yaml.Unmarshal([]byte(fmText), &fm); err != nil {
 		return nil, fmt.Errorf("skill %q: parse frontmatter: %w", dirName, err)
 	}
 	if fm.Name == "" {
@@ -244,7 +244,25 @@ func parseSkill(content, dirName string) (*domain.Skill, error) {
 		Compatibility: fm.Compatibility,
 		Metadata:      fm.Metadata,
 		AllowedTools:  fm.AllowedTools,
-		Body:          strings.TrimSpace(parts[2]),
+		Body:          strings.TrimSpace(body),
 		SourcePath:    dirName,
 	}, nil
+}
+
+// splitFrontmatter separates YAML frontmatter from the Markdown body. The
+// closing delimiter must be a line consisting of exactly "---" — a naive
+// SplitN(content, "---", 3) breaks when the frontmatter itself contains the
+// substring "---" (e.g. a description mentioning Markdown page breaks).
+func splitFrontmatter(content string) (fmText, body string, ok bool) {
+	content = strings.TrimPrefix(content, "\ufeff")
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return "", "", false
+	}
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			return strings.Join(lines[1:i], "\n"), strings.Join(lines[i+1:], "\n"), true
+		}
+	}
+	return "", "", false
 }

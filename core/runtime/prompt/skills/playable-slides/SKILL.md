@@ -1,6 +1,6 @@
 ---
 name: playable-slides
-description: Author slide decks as Marp-compatible GFM Markdown (`type: slides`, `---` page breaks) for Danmo Slides Stage. Office Stage programmatically renders playable HTML — do not invent full HTML decks. Use for talks, pitches, training, or presentations — PPTX is not required.
+description: "Author slide decks as Marp-compatible GFM Markdown (`type: slides`, `---` page breaks) for Danmo Slides Stage. Office Stage programmatically renders playable HTML — do not invent full HTML decks. Use for talks, pitches, training, or presentations — PPTX is not required."
 license: MIT
 compatibility: Requires write, edit, read_file
 metadata:
