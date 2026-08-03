@@ -1196,16 +1196,25 @@ func (p *TurnRunner) snipHead(messages []Message, budget int) []Message {
 				ids[tc.ID] = true
 			}
 			result = removeAt(result, i)
+			if lastUserIdx > i {
+				lastUserIdx--
+			}
 			for j := i; j < len(result); {
 				rj := result[j]
 				if rj.Role == RoleTool && ids[rj.ToolCallID] {
 					result = removeAt(result, j)
+					if lastUserIdx > j {
+						lastUserIdx--
+					}
 				} else {
 					j++
 				}
 			}
 		} else {
 			result = removeAt(result, i)
+			if lastUserIdx > i {
+				lastUserIdx--
+			}
 		}
 	}
 	return result

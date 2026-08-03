@@ -600,6 +600,37 @@ func TestSnipHeadPreservesLastUserMessage(t *testing.T) {
 	}
 }
 
+// Regression: lastUserIdx must shift left as head messages are removed.
+// With a stale index the guard never fired and the goal (plus this-turn work)
+// could be snipped once the retained window alone exceeded the budget.
+func TestSnipHeadPreservesGoalAndTurnWorkUnderExtremeBudget(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, nil, nil, nil)
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "old history message 1 with some padding text here"},
+		{Role: RoleAssistant, Content: "old response 1 with some padding text here"},
+		{Role: RoleUser, Content: "current goal — must survive even under extreme budget"},
+		{Role: RoleAssistant, Content: "this turn work after the goal"},
+	}
+	out := tr.snipHead(msgs, 1) // budget impossible to satisfy
+
+	foundGoal, foundWork := false, false
+	for _, m := range out {
+		if m.Role == RoleUser && m.Content == "current goal — must survive even under extreme budget" {
+			foundGoal = true
+		}
+		if m.Role == RoleAssistant && m.Content == "this turn work after the goal" {
+			foundWork = true
+		}
+	}
+	if !foundGoal {
+		t.Fatalf("goal removed by snipHead under extreme budget; out=%+v", out)
+	}
+	if !foundWork {
+		t.Fatalf("this-turn work after the goal removed; out=%+v", out)
+	}
+}
+
 type failingLLM struct {
 	calls int
 }
