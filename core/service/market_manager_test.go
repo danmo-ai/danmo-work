@@ -196,8 +196,8 @@ func TestMarketInstallNormalizesBodyWithCatalogID(t *testing.T) {
 		t.Fatal(err)
 	}
 	cat := `{
-  "version": 1,
-  "skills": [{"id":"tlc__pr-review","name":"PR Review","path":"skills/pr-review","kind":"skill"}]
+  "schemaVersion": 1,
+  "items": [{"id":"tlc__pr-review","name":"PR Review","path":"skills/pr-review","kind":"skill"}]
 }`
 	if err := os.MkdirAll(filepath.Join(root, "catalog"), 0o755); err != nil {
 		t.Fatal(err)

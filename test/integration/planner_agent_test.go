@@ -10,6 +10,7 @@ import (
 const agentPlanner = "planner"
 
 func TestPlannerCreateSession(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)
@@ -57,6 +58,7 @@ func TestPlannerCreateSession(t *testing.T) {
 }
 
 func TestPlannerNoWriteTools(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)
@@ -91,6 +93,7 @@ func TestPlannerNoWriteTools(t *testing.T) {
 }
 
 func TestPlannerMultiTurn(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)

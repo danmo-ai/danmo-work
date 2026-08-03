@@ -44,6 +44,167 @@ func TestMountBuiltinToolsSkipsCoreAskUser(t *testing.T) {
 	}
 }
 
+type memStreamRepo struct {
+	mu     sync.Mutex
+	events []domain.StreamEvent
+}
+
+func (r *memStreamRepo) Save(_ context.Context, ev domain.StreamEvent) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = append(r.events, ev)
+	return nil
+}
+
+func (r *memStreamRepo) ListBySession(_ context.Context, sessionID string, since int64) ([]domain.StreamEvent, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []domain.StreamEvent
+	for _, ev := range r.events {
+		if ev.SessionID == sessionID && ev.Seq > since {
+			out = append(out, ev)
+		}
+	}
+	return out, nil
+}
+
+func (r *memStreamRepo) MaxSeq() int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.events) == 0 {
+		return 0
+	}
+	return r.events[len(r.events)-1].Seq
+}
+
+type memApprovalRepo struct {
+	mu   sync.Mutex
+	byID map[string]domain.Approval
+}
+
+func newMemApprovalRepo() *memApprovalRepo {
+	return &memApprovalRepo{byID: make(map[string]domain.Approval)}
+}
+
+func (r *memApprovalRepo) Create(_ context.Context, a domain.Approval) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.byID[a.ID] = a
+	return nil
+}
+
+func (r *memApprovalRepo) Get(_ context.Context, id string) (domain.Approval, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	a, ok := r.byID[id]
+	if !ok {
+		return domain.Approval{}, errors.New("approval not found")
+	}
+	return a, nil
+}
+
+func (r *memApprovalRepo) Update(_ context.Context, a domain.Approval) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.byID[a.ID] = a
+	return nil
+}
+
+func (r *memApprovalRepo) ListByStatus(_ context.Context, status string) ([]domain.Approval, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []domain.Approval
+	for _, a := range r.byID {
+		if a.Status == status {
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
+
+// Regression: a turn cancelled while waiting for approval must clean up the
+// in-memory waiter maps and expire the DB row instead of leaking both until
+// the next process restart.
+func TestWaitApprovalCancelSettlesAbandonedApproval(t *testing.T) {
+	repo := newMemApprovalRepo()
+	e := &Engine{
+		approvals:    service.NewApprovalManager(repo),
+		stream:       NewStreamEventManager(&memStreamRepo{}),
+		approvalWait: make(map[string]chan ApprovalOutcome),
+		approvalMeta: make(map[string]approvalMeta),
+	}
+
+	id := e.CreateApproval("sess-appr", "turn-appr", "exec_shell", "rm -rf x", "high_risk", "")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := e.WaitApproval(ctx, id); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+
+	e.mu.Lock()
+	_, waitLeak := e.approvalWait[id]
+	_, metaLeak := e.approvalMeta[id]
+	e.mu.Unlock()
+	if waitLeak || metaLeak {
+		t.Fatal("approvalWait/approvalMeta must be cleaned up after cancelled wait")
+	}
+
+	a, err := repo.Get(context.Background(), id)
+	if err != nil {
+		t.Fatalf("get approval: %v", err)
+	}
+	if a.Status != "expired" {
+		t.Fatalf("approval status: want expired, got %q", a.Status)
+	}
+
+	var decided bool
+	for _, ev := range e.stream.ListSince("sess-appr", 0) {
+		if ev.Type != domain.EventPermissionDecided {
+			continue
+		}
+		var p domain.PermissionDecidedPayload
+		if json.Unmarshal(ev.Payload, &p) == nil && p.ApprovalID == id && !p.Approved {
+			decided = true
+		}
+	}
+	if !decided {
+		t.Fatal("expected permission.decided(approved=false) after abandoned wait")
+	}
+
+	// A later user click must be a no-op on the already-expired row.
+	e.ResolveApproval(id, true, "once")
+	a, _ = repo.Get(context.Background(), id)
+	if a.Status != "expired" {
+		t.Fatalf("late resolve must not resurrect approval, got %q", a.Status)
+	}
+}
+
+func TestNewRuntimeIDUniqueUnderConcurrency(t *testing.T) {
+	const n = 2000
+	ids := make(chan string, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ids <- newRuntimeID("turn")
+		}()
+	}
+	wg.Wait()
+	close(ids)
+	seen := make(map[string]bool, n)
+	for id := range ids {
+		if seen[id] {
+			t.Fatalf("duplicate id generated: %s", id)
+		}
+		seen[id] = true
+		if !strings.HasPrefix(id, "turn-") {
+			t.Fatalf("unexpected id format: %s", id)
+		}
+	}
+}
+
 func TestReserveSessionTurnPreventsConcurrentStartAndResume(t *testing.T) {
 	engine := &Engine{}
 	if err := engine.reserveSessionTurn("session-1", "turn-1"); err != nil {

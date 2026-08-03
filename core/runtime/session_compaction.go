@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
@@ -20,6 +22,11 @@ const (
 	defaultSubInterval   = 4
 	defaultToolTruncate  = 2000
 	tokenEstimateDivisor = 4
+	// imagePartTokenEstimate is a flat per-image cost. Counting base64 bytes
+	// like text would wildly overestimate (providers bill images by dimensions,
+	// e.g. Anthropic caps around ~1600 tokens per image); ignoring them
+	// underestimates and delays the compaction trigger.
+	imagePartTokenEstimate = 1600
 )
 
 type CompactionManager struct {
@@ -40,12 +47,21 @@ type CompactionCheckpointStore interface {
 
 type compactionCfg struct {
 	enabled      bool
+	model        string // runtime.compaction.model — summarize with this instead of the session model
 	maxTokens    int
 	triggerRatio float64
 	cutTokens    int
 	turnInterval int
 	subInterval  int
 	toolTruncate int
+}
+
+// summaryModel resolves the model used for compaction summaries.
+func (c compactionCfg) summaryModel(sessionModel string) string {
+	if c.model != "" {
+		return c.model
+	}
+	return sessionModel
 }
 
 func NewCompactionManager(llm port.LLMProvider, stream port.EventStream, configStore port.ConfigStore, store CompactionCheckpointStore, modelLimits *ModelConfigRegistry) *CompactionManager {
@@ -82,6 +98,7 @@ func (m *CompactionManager) loadCfg(ctx context.Context) compactionCfg {
 		if c, err := m.configStore.Load(ctx); err == nil {
 			rt := c.Runtime.Compaction
 			cfg.enabled = rt.Enabled
+			cfg.model = strings.TrimSpace(rt.Model)
 			if rt.MaxTokens > 0 {
 				cfg.maxTokens = rt.MaxTokens
 			}
@@ -192,8 +209,11 @@ func (m *CompactionManager) Compact(ctx context.Context, sessionID, turnID strin
 	oldMessages := messages[:cutIdx]
 	conversation := serializeConversation(oldMessages, cfg.toolTruncate)
 
-	summary, err := m.summarize(ctx, conversation, prevCP, model)
+	summary, err := m.summarize(ctx, conversation, prevCP, cfg.summaryModel(model))
 	if err != nil || summary == "" {
+		if err != nil {
+			log.Printf("[compaction] summarize session %s: %v", sessionID, err)
+		}
 		return 0
 	}
 
@@ -235,8 +255,11 @@ func (m *CompactionManager) CompactToRetain(ctx context.Context, sessionID, turn
 	cfg := m.loadCfg(ctx)
 	prevCP := m.getCheckpoint(sessionID)
 	conversation := serializeConversation(oldMessages, cfg.toolTruncate)
-	summary, err := m.summarize(ctx, conversation, prevCP, model)
+	summary, err := m.summarize(ctx, conversation, prevCP, cfg.summaryModel(model))
 	if err != nil || summary == "" {
+		if err != nil {
+			log.Printf("[compaction] summarize session %s: %v", sessionID, err)
+		}
 		return false
 	}
 	src := todoSource
@@ -270,6 +293,11 @@ func (m *CompactionManager) CompactToRetain(ctx context.Context, sessionID, turn
 	return true
 }
 
+// summarizeTimeout bounds the compaction LLM call. Compaction runs while the
+// session turn slot may still be reserved; a hung provider must not block the
+// session indefinitely.
+const summarizeTimeout = 3 * time.Minute
+
 func (m *CompactionManager) summarize(ctx context.Context, conversation string, prev *domain.CompactionCheckpoint, model string) (string, error) {
 	var prompt string
 	if prev != nil && prev.Summary != "" {
@@ -278,6 +306,8 @@ func (m *CompactionManager) summarize(ctx context.Context, conversation string, 
 		prompt = fmt.Sprintf(compactionPrompt, conversation)
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, summarizeTimeout)
+	defer cancel()
 	resp, err := m.llm.Chat(ctx, port.LLMChatRequest{
 		Model: model,
 		Messages: []port.ChatMessage{
@@ -538,6 +568,11 @@ func estimateMessageTokens(m Message) int {
 	n += len(m.Content) / tokenEstimateDivisor
 	n += len(m.Name) / tokenEstimateDivisor
 	n += len(m.ToolCallID) / tokenEstimateDivisor
+	for _, p := range m.Parts {
+		if p.Type == "image" && p.Data != "" {
+			n += imagePartTokenEstimate
+		}
+	}
 	for _, tc := range m.ToolCalls {
 		n += len(tc.ID) / tokenEstimateDivisor
 		n += len(tc.Name) / tokenEstimateDivisor

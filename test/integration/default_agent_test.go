@@ -16,6 +16,7 @@ import (
 const agentDefault = "default"
 
 func TestDefaultCreateSession(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)
@@ -58,6 +59,7 @@ func TestDefaultCreateSession(t *testing.T) {
 }
 
 func TestDefaultNewTurn(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)
@@ -97,6 +99,7 @@ func TestDefaultNewTurn(t *testing.T) {
 }
 
 func TestDefaultReview(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)
@@ -141,6 +144,7 @@ func TestDefaultReview(t *testing.T) {
 }
 
 func TestDefaultRecover(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)
@@ -206,6 +210,7 @@ firstTurnDone:
 }
 
 func TestDefaultInterrupt(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)
@@ -261,6 +266,7 @@ func TestDefaultInterrupt(t *testing.T) {
 }
 
 func TestDefaultContinueAfterInterrupt(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)
@@ -342,6 +348,7 @@ func TestDefaultContinueAfterInterrupt(t *testing.T) {
 }
 
 func TestDefaultTurnLogPersistence(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)
@@ -400,6 +407,7 @@ func TestDefaultTurnLogPersistence(t *testing.T) {
 }
 
 func TestDefaultDBPersistence(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)
@@ -465,6 +473,7 @@ func TestDefaultDBPersistence(t *testing.T) {
 }
 
 func TestDefaultLLMUsage(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)
@@ -497,6 +506,7 @@ func TestDefaultLLMUsage(t *testing.T) {
 }
 
 func TestDefaultFullLifecycle(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)
@@ -585,6 +595,7 @@ func TestDefaultFullLifecycle(t *testing.T) {
 }
 
 func TestDefaultSameSessionMultiTurn(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)
@@ -642,6 +653,7 @@ func TestDefaultSameSessionMultiTurn(t *testing.T) {
 }
 
 func TestDefaultApprovalFlow(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCoreWithAutoApprove(t, false)
 	// Force weak isolation so exec_shell still asks (sandbox-on auto-allow would skip).
 	if core.Sandbox != nil {
@@ -726,6 +738,7 @@ func TestDefaultApprovalFlow(t *testing.T) {
 }
 
 func TestDefaultCrossTurnMessages(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)
@@ -766,6 +779,7 @@ func TestDefaultCrossTurnMessages(t *testing.T) {
 // parsed from the real LLM response (not mock). This caught the parseArgs bug
 // where OpenAI-compatible APIs return arguments as a JSON string, not object.
 func TestDefaultToolCallWithRealLLM(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)

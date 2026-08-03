@@ -14,6 +14,7 @@ import (
 const agentTeam = "team"
 
 func TestTeamCreateSession(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	r := newRouter(t, core)
 
@@ -47,6 +48,7 @@ func TestTeamCreateSession(t *testing.T) {
 }
 
 func TestTeamDelegation(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	r := newRouter(t, core)
 
@@ -81,6 +83,7 @@ func TestTeamDelegation(t *testing.T) {
 }
 
 func TestTeamMultiTurn(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	r := newRouter(t, core)
 
@@ -119,6 +122,7 @@ func TestTeamMultiTurn(t *testing.T) {
 }
 
 func TestTeamCancelTurn(t *testing.T) {
+	requireRealLLM(t)
 	core, _ := setupCore(t)
 	r := newRouter(t, core)
 

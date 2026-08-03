@@ -19,6 +19,10 @@ func (m *ApprovalManager) Create(ctx context.Context, a domain.Approval) error {
 	return m.store.Create(ctx, a)
 }
 
+func (m *ApprovalManager) Get(ctx context.Context, id string) (domain.Approval, error) {
+	return m.store.Get(ctx, id)
+}
+
 func (m *ApprovalManager) Update(ctx context.Context, a domain.Approval) error {
 	return m.store.Update(ctx, a)
 }

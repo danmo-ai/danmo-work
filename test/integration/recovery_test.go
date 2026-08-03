@@ -10,27 +10,44 @@ import (
 	"testing"
 	"time"
 
+	"danmo-work/core/adapter/llm"
 	"danmo-work/core/bootstrap"
 	"danmo-work/core/domain"
 )
 
 // ---------- helpers ----------
 
-// setupRecoveryEnv creates a temp dir with DB + data dir, copies the seed DB,
-// and returns paths for the caller to use before calling bootstrap.New.
+// setupRecoveryEnv creates a temp dir with DB + data dir (copying the seed DB
+// in real-LLM mode, starting fresh in mock mode) and returns paths for the
+// caller to use before calling bootstrap.New.
 func setupRecoveryEnv(t *testing.T) (dbPath, dataDir string) {
 	t.Helper()
 	tmpDir := t.TempDir()
 	dbPath = filepath.Join(tmpDir, "work.db")
-	copyDB(t, "data/work.db", dbPath)
+	if !useMockLLM(t) {
+		copyDB(t, "data/work.db", dbPath)
+	}
 	dataDir = filepath.Join(tmpDir, "data")
 	t.Setenv("WORK_DB_PATH", dbPath)
+	t.Setenv("WORK_STORE_DB_PATH", filepath.Join(tmpDir, "store.db"))
 	return dbPath, dataDir
 }
 
-func newCore(t *testing.T, dataDir string) *bootstrap.Core {
+// newCore boots a core against the env prepared by setupRecoveryEnv. In mock
+// mode each core gets its own MockProvider (a restart discards the old one,
+// mirroring a real process restart); script funcs queue steps and are ignored
+// in real mode.
+func newCore(t *testing.T, dataDir string, script ...func(m *llm.MockProvider)) *bootstrap.Core {
 	t.Helper()
-	return bootstrap.New(bootstrap.Config{AutoApprove: true, DataDir: dataDir})
+	cfg := bootstrap.Config{AutoApprove: true, DataDir: dataDir}
+	if useMockLLM(t) {
+		provider := llm.NewMock()
+		for _, s := range script {
+			s(provider)
+		}
+		cfg.LLM = provider
+	}
+	return bootstrap.New(cfg)
 }
 
 // ---------- Test: RecoverRunning cleans up zombie turns ----------
@@ -222,7 +239,13 @@ func TestCheckpointRecoveryFromDisk(t *testing.T) {
 // ---------- Test: Cancel sets correct DB status ----------
 
 func TestCancelSetsCorrectDBStatus(t *testing.T) {
-	core, _ := setupCore(t)
+	// In mock mode the second turn's LLM step blocks (ctx-aware) so the
+	// cancel lands while the turn is genuinely in flight; in real mode the
+	// long-answer prompt keeps the real LLM busy long enough.
+	core, _ := setupCore(t, func(m *llm.MockProvider) {
+		m.Finish("完成")
+		m.AddTextWithDelay("这轮不会完成", 60*time.Second)
+	})
 	modelID := pickTestModel(t, core)
 	r := newRouter(t, core)
 
