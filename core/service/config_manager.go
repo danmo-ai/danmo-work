@@ -18,6 +18,11 @@ func NewConfigManager(store port.ConfigStore) *ConfigManager {
 	return &ConfigManager{store: store}
 }
 
+// Store returns the underlying config store (for optional migrator checks).
+func (m *ConfigManager) Store() port.ConfigStore {
+	return m.store
+}
+
 func (m *ConfigManager) Get(ctx context.Context) (*domain.ConfigFile, error) {
 	return m.store.Load(ctx)
 }

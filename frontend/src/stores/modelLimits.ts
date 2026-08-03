@@ -14,6 +14,16 @@ export const useModelConfigStore = defineStore('modelConfig', () => {
     try {
       const data = await fetchJSON<ModelConfig[]>('/model-configs')
       models.value = asArray(data)
+      // Old backends / stale catalogs: force built-in dialect overlay once.
+      const missingDialect = models.value.some((m) => !m.reasoning_dialect)
+      if (missingDialect) {
+        try {
+          const refreshed = await fetchJSON<ModelConfig[]>('/model-configs/refresh', { method: 'POST' })
+          models.value = asArray(refreshed)
+        } catch {
+          /* refresh endpoint may be missing on older sidecars */
+        }
+      }
     } catch {
       models.value = []
     } finally {

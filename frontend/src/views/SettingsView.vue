@@ -1063,11 +1063,17 @@ async function handleSaveModelConfig() {
 }
 
 async function handleRefreshModelConfig() {
+  const prev = selectedModel.value
   try {
     const refreshed = await modelConfig.refreshFromBuiltin()
     modelConfigForm.value = [...refreshed]
-    editingModelIdx.value = null
-    selectedModel.value = '__default__'
+    if (prev && prev !== '__default__' && refreshed.some((m) => m.model === prev)) {
+      selectedModel.value = prev
+      editingModelIdx.value = refreshed.findIndex((m) => m.model === prev)
+    } else {
+      editingModelIdx.value = null
+      selectedModel.value = '__default__'
+    }
     await llm.loadModels()
     sessions.syncModelSelection(llm.models)
   } catch {

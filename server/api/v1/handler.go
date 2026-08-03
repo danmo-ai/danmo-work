@@ -1887,6 +1887,21 @@ func getModelConfigs(h *Handler) gin.HandlerFunc {
 		if models == nil {
 			models = []domain.ModelConfig{}
 		}
+		refreshed := config.RefreshModelConfigs(models, config.DefaultModelConfigs())
+		legacyDisk := false
+		if mig, ok := h.Config.Store().(port.ModelCatalogMigrator); ok {
+			legacyDisk = mig.ConfigFileLacksReasoningDialects()
+		}
+		if legacyDisk || config.ModelConfigsNeedPersist(models, refreshed) {
+			cfg.LLM.Models = refreshed
+			if saved, err := h.Config.Update(c, domain.UpdateConfigFileRequest{LLM: &cfg.LLM}); err == nil {
+				refreshed = saved.LLM.Models
+			}
+			models = refreshed
+		}
+		if h.LLMConfig != nil {
+			h.LLMConfig.SetModelConfigs(models)
+		}
 		c.JSON(http.StatusOK, models)
 	}
 }

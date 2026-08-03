@@ -52,6 +52,25 @@ func NewLoader(path string) *Loader {
 	return &Loader{path: path, v: v}
 }
 
+// ConfigFileLacksReasoningDialects reports whether the YAML on disk has an
+// llm.models list but no reasoning_dialect keys yet (pre-dialect catalog).
+func (l *Loader) ConfigFileLacksReasoningDialects() bool {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	b, err := os.ReadFile(l.path)
+	if err != nil {
+		return false
+	}
+	text := string(b)
+	if !strings.Contains(text, "\n  models:") && !strings.Contains(text, "\nmodels:") {
+		// also match "models:" under llm
+		if !strings.Contains(text, "models:") {
+			return false
+		}
+	}
+	return !strings.Contains(text, "reasoning_dialect:")
+}
+
 func setDefaults(v *viper.Viper) {
 	v.SetDefault("data.dir", paths.DataDir())
 	v.SetDefault("data.database", paths.DatabaseFile())
@@ -416,7 +435,7 @@ func mergeLLMPresets(existing, defaults []domain.LLMProviderPreset, legacyBaseUR
 // the built-in catalog, and appends any default models missing from the user list.
 func mergeModelConfigs(existing, defaults []domain.ModelConfig) []domain.ModelConfig {
 	if len(defaults) == 0 {
-		return existing
+		return fillInferredDialects(existing)
 	}
 	byModel := make(map[string]domain.ModelConfig, len(defaults))
 	for _, d := range defaults {
@@ -447,6 +466,12 @@ func mergeModelConfigs(existing, defaults []domain.ModelConfig) []domain.ModelCo
 			if len(m.EffortBudgetTokens) == 0 && len(def.EffortBudgetTokens) > 0 {
 				m.EffortBudgetTokens = def.EffortBudgetTokens
 			}
+			if !m.Vision && def.Vision {
+				m.Vision = true
+			}
+			if m.Temperature == 0 && def.Temperature != 0 {
+				m.Temperature = def.Temperature
+			}
 		}
 		out = append(out, m)
 		if m.Model != "" {
@@ -459,7 +484,63 @@ func mergeModelConfigs(existing, defaults []domain.ModelConfig) []domain.ModelCo
 		}
 		out = append(out, d)
 	}
-	return out
+	return fillInferredDialects(out)
+}
+
+// fillInferredDialects sets ReasoningDialect from model id when still empty.
+func fillInferredDialects(models []domain.ModelConfig) []domain.ModelConfig {
+	for i := range models {
+		if models[i].ReasoningDialect != "" {
+			continue
+		}
+		if d := domain.InferReasoningDialect(models[i].Model); d != "" {
+			models[i].ReasoningDialect = d
+		}
+	}
+	return models
+}
+
+// ModelConfigsNeedPersist reports whether refreshed/merged models gained dialects,
+// efforts, limits, or new entries versus the previous snapshot.
+func ModelConfigsNeedPersist(before, after []domain.ModelConfig) bool {
+	if len(after) != len(before) {
+		return true
+	}
+	byBefore := make(map[string]domain.ModelConfig, len(before))
+	for _, m := range before {
+		byBefore[m.Model] = m
+	}
+	for _, m := range after {
+		b, ok := byBefore[m.Model]
+		if !ok {
+			return true
+		}
+		if m.ReasoningDialect != b.ReasoningDialect {
+			return true
+		}
+		if m.ContextWindow != b.ContextWindow || m.MaxOutput != b.MaxOutput {
+			return true
+		}
+		if m.Vision != b.Vision {
+			return true
+		}
+		if !stringSlicesEqual(m.AvailableEfforts, b.AvailableEfforts) {
+			return true
+		}
+	}
+	return false
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // refreshModelConfigs overlays built-in dialect/efforts/limits onto matching models
@@ -480,6 +561,10 @@ func refreshModelConfigs(existing, defaults []domain.ModelConfig) []domain.Model
 		if def, ok := byModel[m.Model]; ok {
 			if def.ReasoningDialect != "" {
 				m.ReasoningDialect = def.ReasoningDialect
+			} else if m.ReasoningDialect == "" {
+				if d := domain.InferReasoningDialect(m.Model); d != "" {
+					m.ReasoningDialect = d
+				}
 			}
 			if def.ContextWindow > 0 {
 				m.ContextWindow = def.ContextWindow
@@ -499,6 +584,10 @@ func refreshModelConfigs(existing, defaults []domain.ModelConfig) []domain.Model
 			m.Vision = def.Vision
 			if def.Temperature != 0 {
 				m.Temperature = def.Temperature
+			}
+		} else if m.ReasoningDialect == "" {
+			if d := domain.InferReasoningDialect(m.Model); d != "" {
+				m.ReasoningDialect = d
 			}
 		}
 		out = append(out, m)
