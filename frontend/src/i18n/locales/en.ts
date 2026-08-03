@@ -855,7 +855,6 @@ export default {
     toolInput: 'Input',
     toolOutput: 'Output',
     toolError: 'Error',
-    toolsGroup: '{n} tools',
     toolsRunning: '{n} running',
     toolsError: '{n} failed',
     toolsCompleted: '{n} done',

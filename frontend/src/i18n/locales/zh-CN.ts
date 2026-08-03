@@ -854,7 +854,6 @@ export default {
     toolInput: '输入',
     toolOutput: '输出',
     toolError: '错误',
-    toolsGroup: '{n} 个工具',
     toolsRunning: '{n} 运行中',
     toolsError: '{n} 失败',
     toolsCompleted: '{n} 完成',

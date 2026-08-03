@@ -30,27 +30,27 @@ const { t } = useI18n()
 const sessions = useSessionsStore()
 
 const counts = computed(() => {
-  let completed = 0
   let error = 0
   let running = 0
-  let cancelled = 0
   for (const c of props.cards) {
-    if (c.status === 'completed') completed++
-    else if (c.status === 'error') error++
-    else if (c.status === 'cancelled') cancelled++
+    if (c.status === 'error') error++
     else if (c.status === 'running' || c.status === 'pending') running++
   }
-  return { completed, error, running, cancelled, total: props.cards.length }
+  return { error, running }
 })
 
 const hasRunning = computed(() => counts.value.running > 0)
 
 const nameSummary = computed(() => {
-  const names = props.cards
-    .map((c) => friendlyToolDisplayName(c.name, c.inputStr, sessions.agents, t))
-    .filter(Boolean)
-  if (names.length <= 3) return names.join(', ')
-  return `${names.slice(0, 3).join(', ')} +${names.length - 3}`
+  const countsByName = new Map<string, number>()
+  for (const c of props.cards) {
+    const name = friendlyToolDisplayName(c.name, c.inputStr, sessions.agents, t)
+    if (!name) continue
+    countsByName.set(name, (countsByName.get(name) ?? 0) + 1)
+  }
+  const parts = [...countsByName.entries()].map(([name, n]) => (n > 1 ? `${name} ×${n}` : name))
+  if (parts.length <= 3) return parts.join(', ')
+  return `${parts.slice(0, 3).join(', ')} +${parts.length - 3}`
 })
 
 const statusHint = computed(() => {
@@ -77,8 +77,7 @@ const statusHint = computed(() => {
     >
       <span class="tool-group__dot" aria-hidden="true" />
       <span class="tool-group__label">
-        <span class="tool-group__title">{{ t('sessions.toolsGroup', { n: counts.total }) }}</span>
-        <span v-if="!expanded && nameSummary" class="tool-group__names">{{ nameSummary }}</span>
+        <span v-if="nameSummary" class="tool-group__names">{{ nameSummary }}</span>
         <span v-if="statusHint" class="tool-group__hint">{{ statusHint }}</span>
       </span>
       <span class="tool-group__trail">
@@ -171,13 +170,6 @@ const statusHint = computed(() => {
   max-width: calc(100% - 20px);
 }
 
-.tool-group__title {
-  flex-shrink: 0;
-  font-size: var(--dq-font-size-body);
-  font-weight: 500;
-  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
-}
-
 .tool-group__names {
   flex: 0 1 auto;
   min-width: 0;
@@ -185,24 +177,20 @@ const statusHint = computed(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--dq-font-size-body);
+  font-weight: 500;
   color: var(--dq-label-quaternary, var(--dq-label-tertiary));
   font-family: var(--dq-font-mono, ui-monospace, monospace);
 }
 
-.tool-group__header:hover .tool-group__title,
-.tool-group.is-expanded .tool-group__title {
-  color: var(--dq-label-tertiary);
-}
-
-.tool-group.is-running .tool-group__title,
-.tool-group.is-error .tool-group__title {
-  font-weight: 600;
+.tool-group__header:hover .tool-group__names,
+.tool-group.is-expanded .tool-group__names {
   color: var(--dq-label-tertiary);
 }
 
 .tool-group.is-running .tool-group__names,
 .tool-group.is-error .tool-group__names {
-  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
+  font-weight: 600;
+  color: var(--dq-label-tertiary);
 }
 
 .tool-group__hint {
