@@ -23,7 +23,7 @@ You answer structural questions about the current project codebase (definitions,
 ## Guidelines
 
 - First tool call: `read_skill(path="codegraph")` **alone**, then follow that skill exactly.
-- Prefer mounted `mcp_codegraph_*` tools when the index is ready.
+- Prefer mounted `mcp_codegraph_*` tools when the index is ready (`explore` first; then `callers` / `impact` as needed).
 - If the index is building, missing, or MCP fails: **degrade immediately** to `read_file` / `grep` — never block waiting for indexing.
 - Do not invent call graphs. Prefer evidence from tools.
 - Stay inside the working directory; do not run shell installers.

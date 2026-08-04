@@ -1,7 +1,11 @@
 package service
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"compress/gzip"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -33,23 +37,25 @@ type codeGraphJob struct {
 }
 
 var (
-	codeGraphMu   sync.Mutex
-	codeGraphJobs = map[string]*codeGraphJob{}
+	codeGraphMu        sync.Mutex
+	codeGraphJobs      = map[string]*codeGraphJob{}
+	codeGraphExtractMu sync.Mutex
 )
 
 var codeGraphHomeBinDir = userHomeDanmoBin
 
-// ResolveCodeGraphBin returns the path to the bundled/local codegraph CLI.
-// Order: WORK_CODEGRAPH_BIN → ~/.danmo-work/bin/codegraph → executable-dir sibling → PATH.
+// ResolveCodeGraphBin returns the path to the bundled/local codegraph CLI
+// (sunerpy/codegraph-rust). If only a compressed archive is present, it is
+// extracted into ~/.danmo-work/bin on first resolve.
+// Order: WORK_CODEGRAPH_BIN → home bin (extract if needed) → executable-dir sibling → PATH.
 func ResolveCodeGraphBin() string {
 	if p := strings.TrimSpace(os.Getenv("WORK_CODEGRAPH_BIN")); p != "" {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p
 		}
 	}
-	homeBin := filepath.Join(codeGraphHomeBinDir(), codeGraphExecutableName())
-	if st, err := os.Stat(homeBin); err == nil && !st.IsDir() {
-		return homeBin
+	if bin, err := ensureCodeGraphBinExtracted(); err == nil && bin != "" {
+		return bin
 	}
 	if exe, err := os.Executable(); err == nil {
 		sibling := filepath.Join(filepath.Dir(exe), codeGraphExecutableName())
@@ -70,12 +76,238 @@ func codeGraphExecutableName() string {
 	return codeGraphBinName
 }
 
+func codeGraphArchiveName() string {
+	if runtime.GOOS == "windows" {
+		return "codegraph.zip"
+	}
+	return "codegraph.tar.gz"
+}
+
 func userHomeDanmoBin() string {
 	h, err := os.UserHomeDir()
 	if err != nil || h == "" {
 		return filepath.Join(".", ".danmo-work", "bin")
 	}
 	return filepath.Join(h, ".danmo-work", "bin")
+}
+
+func codeGraphVersionFile(dir string) string {
+	return filepath.Join(dir, "CODEGRAPH_VERSION")
+}
+
+func readCodeGraphVersion(dir string) string {
+	b, err := os.ReadFile(codeGraphVersionFile(dir))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+func codeGraphBinUsable(binPath string) bool {
+	st, err := os.Stat(binPath)
+	if err != nil || st.IsDir() {
+		return false
+	}
+	// Reject leftover npm/shell wrappers from the old Colby bundle.
+	if runtime.GOOS != "windows" {
+		f, err := os.Open(binPath)
+		if err != nil {
+			return false
+		}
+		var hdr [2]byte
+		_, _ = f.Read(hdr[:])
+		_ = f.Close()
+		if string(hdr[:]) == "#!" {
+			return false
+		}
+	}
+	return true
+}
+
+// findCodeGraphArchive returns a path to codegraph.tar.gz / codegraph.zip.
+func findCodeGraphArchive() string {
+	name := codeGraphArchiveName()
+	candidates := []string{
+		filepath.Join(codeGraphHomeBinDir(), name),
+	}
+	if exe, err := os.Executable(); err == nil {
+		dir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(dir, name),
+			filepath.Join(dir, "codegraph", name),
+			filepath.Join(dir, "resources", "codegraph", name),
+		)
+	}
+	for _, p := range candidates {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() && st.Size() > 0 {
+			return p
+		}
+	}
+	return ""
+}
+
+// ensureCodeGraphBinExtracted returns ~/.danmo-work/bin/codegraph, extracting
+// from a local archive when the unpacked binary is missing or is a stale wrapper.
+func ensureCodeGraphBinExtracted() (string, error) {
+	codeGraphExtractMu.Lock()
+	defer codeGraphExtractMu.Unlock()
+
+	home := codeGraphHomeBinDir()
+	dest := filepath.Join(home, codeGraphExecutableName())
+	if codeGraphBinUsable(dest) {
+		return dest, nil
+	}
+
+	archive := findCodeGraphArchive()
+	if archive == "" {
+		if st, err := os.Stat(dest); err == nil && !st.IsDir() {
+			return dest, nil
+		}
+		return "", fmt.Errorf("codegraph archive not found")
+	}
+
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		return "", err
+	}
+	if err := extractCodeGraphArchive(archive, dest); err != nil {
+		return "", err
+	}
+	// Keep VERSION next to the binary when we extracted from home archive.
+	if filepath.Dir(archive) == home {
+		// already there
+	} else if ver := readCodeGraphVersion(filepath.Dir(archive)); ver != "" {
+		_ = os.WriteFile(codeGraphVersionFile(home), []byte(ver+"\n"), 0o644)
+	}
+	log.Printf("[codegraph] extracted %s → %s", archive, dest)
+	return dest, nil
+}
+
+func extractCodeGraphArchive(archive, destBin string) error {
+	tmpDir, err := os.MkdirTemp("", "codegraph-extract-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	var found string
+	switch {
+	case strings.HasSuffix(strings.ToLower(archive), ".zip"):
+		found, err = extractCodeGraphZip(archive, tmpDir)
+	default:
+		found, err = extractCodeGraphTarGz(archive, tmpDir)
+	}
+	if err != nil {
+		return err
+	}
+	if found == "" {
+		return fmt.Errorf("codegraph binary not found in %s", archive)
+	}
+
+	tmpDest := destBin + ".tmp"
+	_ = os.Remove(tmpDest)
+	in, err := os.Open(found)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(tmpDest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		_ = os.Remove(tmpDest)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		_ = os.Remove(tmpDest)
+		return err
+	}
+	if err := os.Rename(tmpDest, destBin); err != nil {
+		_ = os.Remove(tmpDest)
+		return err
+	}
+	return nil
+}
+
+func extractCodeGraphTarGz(archive, outDir string) (string, error) {
+	f, err := os.Open(archive)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return "", err
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	var found string
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		if hdr.Typeflag != tar.TypeReg {
+			continue
+		}
+		base := filepath.Base(hdr.Name)
+		if base != "codegraph" && base != "codegraph.exe" {
+			continue
+		}
+		dest := filepath.Join(outDir, base)
+		if err := writeRegularFile(dest, tr, hdr.FileInfo().Mode()); err != nil {
+			return "", err
+		}
+		found = dest
+		// Prefer the first match; archives usually have one binary.
+		break
+	}
+	return found, nil
+}
+
+func extractCodeGraphZip(archive, outDir string) (string, error) {
+	zr, err := zip.OpenReader(archive)
+	if err != nil {
+		return "", err
+	}
+	defer zr.Close()
+	var found string
+	for _, zf := range zr.File {
+		base := filepath.Base(zf.Name)
+		if base != "codegraph" && base != "codegraph.exe" {
+			continue
+		}
+		rc, err := zf.Open()
+		if err != nil {
+			return "", err
+		}
+		dest := filepath.Join(outDir, base)
+		err = writeRegularFile(dest, rc, 0o755)
+		_ = rc.Close()
+		if err != nil {
+			return "", err
+		}
+		found = dest
+		break
+	}
+	return found, nil
+}
+
+func writeRegularFile(dest string, r io.Reader, mode os.FileMode) error {
+	if mode == 0 {
+		mode = 0o755
+	}
+	out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, r)
+	return err
 }
 
 // CodeGraphIndexDir is <workDir>/.codegraph.
@@ -202,6 +434,8 @@ func CodeGraphIndexHint(state CodeGraphIndexState, workDir string) string {
 }
 
 // CodeGraphMCPEnv is the env block for the builtin stdio connector.
+// sunerpy/codegraph-rust lists only a default subset in tools/list unless
+// CODEGRAPH_MCP_TOOLS is set; keep explore/impact/callers/status (+ search/node).
 func CodeGraphMCPEnv() string {
-	return "CODEGRAPH_MCP_TOOLS=explore,impact,callers,status"
+	return "CODEGRAPH_MCP_TOOLS=explore,impact,callers,status,search,node"
 }

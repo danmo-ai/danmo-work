@@ -179,7 +179,7 @@ Danmo Work 是：**模型在同一条链上编排**；你提供能力（Tool / S
 
 | 专家 | 作用 |
 |------|------|
-| **CodeGraph** | 本地代码智能（跳定义、找调用、影响面），内置 [CodeGraph](https://github.com/colbymchenry/codegraph) CLI。全局共享一条 MCP 连接器；每个项目各自 `.codegraph/` 索引。**首次** `delegate_agent` → `codegraph` 时异步 `codegraph init`；索引未就绪或缺二进制时，专家**降级**用 `read_file` / `grep` 仍可作答。普通无代码工作项目在未委派前不会建图。可用 `scripts/fetch_codegraph.sh` 安装/更新 CLI（桌面打包脚本也会拉取）。 |
+| **CodeGraph** | 本地代码智能（跳定义、找调用、影响面），内置 [CodeGraph-Rust](https://github.com/sunerpy/codegraph-rust) 压缩包（约 10 MB）。按平台打包的 `first_launch` 脚本在启动后异步解压。全局共享一条 MCP 连接器；每个项目各自 `.codegraph/` 索引。**首次** `delegate_agent` → `codegraph` 时异步 `codegraph init`；索引未就绪或缺二进制时，专家**降级**用 `read_file` / `grep` 仍可作答。普通无代码工作项目在未委派前不会建图。可用 `scripts/fetch_codegraph.sh` 安装/更新 CLI（桌面打包脚本也会拉取）。 |
 | **GitHub** | GitHub 平台工作——Issue、Pull Request、Actions、Release 及相关托管操作。 |
 | **Danmo Make** | 本地图文音视频生成（独立应用；URL 读 `~/.danmo-make/api.port`）。 |
 

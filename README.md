@@ -178,7 +178,7 @@ System prompts and tool schemas ride along on **every** model call — more capa
 
 | Expert | What it does |
 |--------|----------------|
-| **CodeGraph** | Local code intelligence (definitions, callers, impact / blast radius) via a bundled [CodeGraph](https://github.com/colbymchenry/codegraph) CLI. One shared MCP connector; each project keeps its own `.codegraph/` index. **First** `delegate_agent` → `codegraph` starts async `codegraph init`; while indexing (or if the binary is missing), the expert **degrades** to `read_file` / `grep` and still answers. Ordinary non-code projects are untouched until you delegate. Install/refresh the CLI with `scripts/fetch_codegraph.sh` (desktop packs fetch it too). |
+| **CodeGraph** | Local code intelligence (definitions, callers, impact / blast radius) via a bundled [CodeGraph-Rust](https://github.com/sunerpy/codegraph-rust) archive (~10 MB compressed). Platform `first_launch` scripts unpack it asynchronously after startup. One shared MCP connector; each project keeps its own `.codegraph/` index. **First** `delegate_agent` → `codegraph` starts async `codegraph init`; while indexing (or if the binary is missing), the expert **degrades** to `read_file` / `grep` and still answers. Ordinary non-code projects are untouched until you delegate. Install/refresh the CLI with `scripts/fetch_codegraph.sh` (desktop packs fetch it too). |
 | **GitHub** | GitHub platform work — issues, pull requests, Actions, releases, and related hosting tasks. |
 | **Danmo Make** | Local image / video / audio generation via the Danmo Make MCP (separate app; URL from `~/.danmo-make/api.port`). |
 
