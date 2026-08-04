@@ -26,12 +26,12 @@
 | **不只是写代码** | 报告、幻灯片、表格、自动化同一条链——写代码是车道，不是天花板 |
 | **Document Stage + AI Diff** | 提案 → 审阅 → 保留 / 回滚 / 分块接受；文本始终是真相源 |
 | **Turn Log 即状态** | 每一步 Tool Call 落盘——中断可接着跑，不用重开对话碰运气 |
-| **主链更轻** | 专家包按需 `delegate_agent`，不 ambient 堆进每一轮；KV Cache 友好前缀 → 更省 Token，历史少被裁剪 |
-| **IM 共用同一 Loop** | 微信 · 飞书 · 企微 · QQ — 出站接入，无需公网回调 hack |
-| **MIT 自托管 + MCP** | 数据在 `~/.danmo-work/`；兼容 Anthropic / OpenAI 接口；用 MCP 扩展能力 |
+| **主链更轻** | 专家按需 `delegate_agent`，不往每一轮塞满工具；前缀稳定、利于 KV Cache → 更省 Token，历史也不容易被裁没 |
+| **IM 共用同一 Loop** | 微信 · 飞书 · 企微 · QQ — 出站接入，不必折腾公网回调 |
+| **MIT 自托管 + MCP** | 数据在 `~/.danmo-work/`；兼容 Anthropic / OpenAI；用 MCP 扩展能力 |
 
-多数方案是：人编排，模型执行。  
-**Danmo Work：** 模型在同一条链上编排；你提供 Tool；需要人时通过 `ask_user` 参与。
+多数产品是人排流程、模型干活。  
+**Danmo Work** 反过来：模型在同一条链上自己编排；你提供工具；要人拍板时用 `ask_user`。
 
 ---
 
@@ -93,15 +93,15 @@ make dev-web   # → http://localhost:5801/app/
 
 ## 专家
 
-系统提示和工具说明会在**每一次**模型调用里带上。内置专家包（配套技能；需要时加绑定型 MCP）**不会** ambient 挂在主链——主 Agent 用 `delegate_agent` 按需召唤，专家上下文隔离，稳定前缀保持 KV Cache 友好。
+系统提示和工具说明会跟着**每一次**模型调用走。内置专家（自带技能；需要时再挂 MCP）**不会**常驻主链——主 Agent 用 `delegate_agent` 按需请来，专家上下文单独开，主链前缀更稳，也更吃得开 KV Cache。
 
 | 专家 | 作用 |
 |------|------|
-| **CodeGraph** | 本地代码智能，内置 [CodeGraph-Rust](https://github.com/sunerpy/codegraph-rust) 压缩包（约 10 MB；`first_launch` 异步解压）。首次 `delegate_agent` 建索引；未就绪时降级 `read_file` / `grep` |
-| **GitHub** | Issue / PR / Actions / Release — MCP → `gh` → `git` 降级 |
-| **Danmo Make** | 本地图文音视频生成（独立应用） |
+| **CodeGraph** | 查定义、调用关系、改动影响面。内置 [CodeGraph-Rust](https://github.com/sunerpy/codegraph-rust)（约 10 MB，首次启动后台解压）。第一次委派时建索引；图还没好也能先靠读文件 / 搜索顶上。 |
+| **GitHub** | 处理 Issue、Pull Request、Actions、Release 等 GitHub 上的日常协作。 |
+| **Danmo Make** | 在本机生成或编辑图片、视频、音频（需单独安装 Danmo Make）。 |
 
-此外：技能（Composer `@`）、MCP 连接器、记忆（`memory_*`）、Table Store（`table_*`）、cron/webhook 自动化。界面里配的是能力积木，不是工作流图。
+另外还有：技能（Composer 里 `@`）、MCP 连接器、记忆（`memory_*`）、Table Store（`table_*`）、cron / webhook 自动化。界面里配的是能力积木，不是工作流画布。
 
 ---
 
