@@ -44,6 +44,16 @@ const headerTitle = computed(() => {
 
 const selectedDocs = computed(() => (selectedId.value ? knowledge.documentsFor(selectedId.value) : []))
 
+const knowledgeTabs = computed(() => [
+  { label: t('knowledge.basicInfo'), value: 'info' as const },
+  {
+    label: selectedDocs.value.length
+      ? `${t('knowledge.documents')} (${selectedDocs.value.length})`
+      : t('knowledge.documents'),
+    value: 'documents' as const,
+  },
+])
+
 onMounted(async () => {
   await knowledge.loadBases()
   if (sortedBases.value.length && !selectedId.value) {
@@ -190,8 +200,15 @@ async function saveDocument() {
   }
 }
 
-async function removeDocument(docId: string) {
+async function removeDocument(docId: string, title: string) {
   if (!selected.value) return
+  try {
+    await confirm(t('knowledge.deleteDocConfirm', { name: title }), t('knowledge.deleteDocTitle'), {
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
   try {
     await knowledge.removeDocument(docId)
     if (editingDocId.value === docId) closeDocEditor()
@@ -213,7 +230,7 @@ function baseInitial(name: string) {
 
 function formatDate(value: string) {
   if (!value) return ''
-  return new Date(value).toLocaleString('zh-CN')
+  return new Date(value).toLocaleString()
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -227,55 +244,69 @@ function onKeydown(e: KeyboardEvent) {
 
 <template>
   <WorkspaceShell
-    :title="$t('knowledge.title')"
-    :count="sortedBases.length"
-    :count-label="$t('knowledge.countLabel')"
-    :create-label="$t('knowledge.newBase')"
+    custom-rail
     :has-selection="hasSelection"
     @create="openCreate"
     @keydown="onKeydown"
   >
     <template #rail>
-      <DqEmpty v-if="!sortedBases.length" class="resource-rail__empty" :description="$t('knowledge.noBases')" />
-      <nav v-else class="resource-rail__list" aria-label="知识库列表">
-        <button
-          v-for="base in sortedBases"
-          :key="base.id"
-          type="button"
-          class="resource-rail__row"
-          :class="{ 'is-active': selectedId === base.id && !isCreating }"
-          @click="selectBase(base.id)"
-        >
-          <span class="resource-rail__avatar">{{ baseInitial(base.name) }}</span>
-          <span class="resource-rail__meta">
-            <span class="resource-rail__name">{{ base.name }}</span>
-            <span class="resource-rail__desc">{{ base.documentCount }} {{ $t('knowledge.documents') }}</span>
-          </span>
-        </button>
-      </nav>
+      <div class="resource-rail__section">
+        <div class="resource-rail__section-head">
+          <span class="resource-rail__section-title">{{ $t('knowledge.title') }}</span>
+          <DqIconButton :aria-label="$t('knowledge.newBase')" @click="openCreate">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14" stroke-linecap="round" />
+            </svg>
+          </DqIconButton>
+        </div>
+        <DqEmpty v-if="!sortedBases.length" class="resource-rail__empty" :description="$t('knowledge.noBases')" />
+        <nav v-else class="resource-rail__list" :aria-label="$t('knowledge.baseList')">
+          <button
+            v-for="base in sortedBases"
+            :key="base.id"
+            type="button"
+            class="resource-rail__row"
+            :class="{ 'is-active': selectedId === base.id && !isCreating }"
+            @click="selectBase(base.id)"
+          >
+            <span class="resource-rail__avatar">{{ baseInitial(base.name) }}</span>
+            <span class="resource-rail__meta">
+              <span class="resource-rail__name">{{ base.name }}</span>
+              <span class="resource-rail__desc">
+                {{ $t('knowledge.docCount', { count: base.documentCount }) }}
+              </span>
+            </span>
+          </button>
+        </nav>
+      </div>
     </template>
 
     <template #empty>
       <DqEmpty :description="$t('knowledge.emptySelection')">
         <p class="resource-workspace__hint">{{ $t('knowledge.emptySelectionHint') }}</p>
+        <div class="resource-workspace__empty-actions">
+          <DqButton type="primary" @click="openCreate">{{ $t('knowledge.newBase') }}</DqButton>
+        </div>
       </DqEmpty>
     </template>
 
     <template #header>
       <div class="resource-workspace__identity">
         <h1 class="resource-workspace__title">{{ headerTitle }}</h1>
-        <div v-if="selected?.updatedAt && !isCreating" class="resource-workspace__badges">
-          <span class="resource-workspace__hint">{{ $t('knowledge.updated') }}{{ formatDate(selected.updatedAt) }}</span>
+        <div v-if="selected && !isCreating" class="resource-workspace__badges">
+          <span class="resource-rail__tag is-accent">
+            {{ $t('knowledge.docCount', { count: selected.documentCount }) }}
+          </span>
+          <span v-if="selected.updatedAt" class="resource-workspace__hint">
+            {{ $t('knowledge.updated') }}{{ formatDate(selected.updatedAt) }}
+          </span>
         </div>
       </div>
       <DqSegmented
         v-if="!isCreating"
         v-model="activeTab"
         class="resource-workspace__segmented"
-        :options="[
-          { label: $t('knowledge.basicInfo'), value: 'info' },
-          { label: $t('knowledge.documents'), value: 'documents' },
-        ]"
+        :options="knowledgeTabs"
       />
     </template>
 
@@ -287,31 +318,47 @@ function onKeydown(e: KeyboardEvent) {
         </label>
         <label class="resource-field resource-field--block">
           <span class="resource-field__label">{{ $t('common.description') }}</span>
-          <DqInput v-model="form.description" type="textarea" :rows="5" :placeholder="$t('knowledge.descriptionPlaceholder')" />
+          <DqInput
+            v-model="form.description"
+            type="textarea"
+            :rows="5"
+            :placeholder="$t('knowledge.descriptionPlaceholder')"
+          />
         </label>
       </section>
 
       <section v-show="activeTab === 'documents'" class="resource-section knowledge-docs">
-        <div class="knowledge-docs__list-card resource-list-card">
-          <div class="knowledge-docs__list-head">
-            <DqButton type="primary" @click="openNewDocument">{{ $t('knowledge.addDoc') }}</DqButton>
-          </div>
-          <div v-for="doc in selectedDocs" :key="doc.id" class="resource-list-card__item">
+        <div class="resource-section__toolbar">
+          <DqButton size="sm" :disabled="isCreating || !selectedId" @click="openNewDocument">
+            {{ $t('knowledge.addDoc') }}
+          </DqButton>
+        </div>
+
+        <div v-if="!selectedDocs.length && !docEditorOpen" class="resource-section__empty">
+          <DqEmpty :description="$t('knowledge.noDocuments')" />
+        </div>
+        <div v-else-if="selectedDocs.length" class="resource-list-card">
+          <div
+            v-for="doc in selectedDocs"
+            :key="doc.id"
+            class="resource-list-card__item"
+            :class="{ 'is-active': editingDocId === doc.id && docEditorOpen }"
+          >
             <div class="resource-list-card__meta">
               <span class="resource-list-card__name">{{ doc.title }}</span>
               <span class="resource-list-card__desc">{{ formatDate(doc.updatedAt) }}</span>
             </div>
             <div class="resource-list-card__actions">
-              <button type="button" class="resource-list-card__action" @click="openDocument(doc.id, 'view')">
+              <DqButton size="sm" @click="openDocument(doc.id, 'view')">
                 {{ $t('knowledge.docViewMode') }}
-              </button>
-              <button type="button" class="resource-list-card__action" @click="openDocument(doc.id, 'edit')">
+              </DqButton>
+              <DqButton size="sm" @click="openDocument(doc.id, 'edit')">
                 {{ $t('knowledge.docOpen') }}
-              </button>
+              </DqButton>
               <button
                 type="button"
                 class="resource-list-card__action resource-list-card__action--danger"
-                @click="removeDocument(doc.id)"
+                @click="removeDocument(doc.id, doc.title)"
               >
                 {{ $t('common.delete') }}
               </button>
@@ -319,7 +366,7 @@ function onKeydown(e: KeyboardEvent) {
           </div>
         </div>
 
-        <div v-if="docEditorOpen" class="knowledge-docs__editor">
+        <div v-if="docEditorOpen" class="knowledge-docs__editor resource-panel">
           <div class="knowledge-docs__editor-bar">
             <label class="resource-field knowledge-docs__title-field">
               <span class="resource-field__label">{{ $t('knowledge.docTitle') }}</span>
@@ -338,10 +385,16 @@ function onKeydown(e: KeyboardEvent) {
                   { label: $t('knowledge.docEditMode'), value: 'edit' },
                 ]"
               />
-              <DqButton v-if="docMode === 'edit'" type="primary" :disabled="docSaving" @click="saveDocument">
+              <DqButton
+                v-if="docMode === 'edit'"
+                type="primary"
+                size="sm"
+                :disabled="docSaving"
+                @click="saveDocument"
+              >
                 {{ $t('knowledge.docSave') }}
               </DqButton>
-              <DqButton @click="closeDocEditor">{{ $t('knowledge.docCancel') }}</DqButton>
+              <DqButton size="sm" @click="closeDocEditor">{{ $t('knowledge.docCancel') }}</DqButton>
             </div>
           </div>
           <div class="knowledge-docs__editor-body">
@@ -354,7 +407,9 @@ function onKeydown(e: KeyboardEvent) {
               @update="onDocUpdate"
             />
           </div>
-          <p v-if="docDirty" class="resource-workspace__hint">{{ $t('common.saveShortcut') }}</p>
+          <p v-if="docDirty" class="resource-workspace__hint knowledge-docs__dirty">
+            {{ $t('common.saveShortcut') }}
+          </p>
         </div>
       </section>
     </template>
@@ -362,7 +417,9 @@ function onKeydown(e: KeyboardEvent) {
     <template #footer>
       <span class="resource-workspace__hint">{{ $t('common.saveShortcut') }}</span>
       <div class="resource-workspace__footer-actions">
-        <DqButton v-if="isCreating" @click="isCreating = false; selectedId = null">{{ $t('common.cancel') }}</DqButton>
+        <DqButton v-if="isCreating" @click="isCreating = false; selectedId = null">
+          {{ $t('common.cancel') }}
+        </DqButton>
         <DqButton v-if="!isCreating" @click="removeSelected">{{ $t('common.delete') }}</DqButton>
         <DqButton type="primary" :disabled="saving" @click="save">
           {{ isCreating ? $t('knowledge.createBase') : $t('common.save') }}
@@ -373,50 +430,113 @@ function onKeydown(e: KeyboardEvent) {
 </template>
 
 <style scoped>
+.resource-rail__section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.resource-rail__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 10px 6px 14px;
+  flex-shrink: 0;
+}
+
+.resource-rail__section-title {
+  font-size: var(--dq-font-size-caption);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dq-label-tertiary);
+}
+
+.resource-rail__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 6px 6px;
+}
+
+.resource-workspace__empty-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: center;
+}
+
+.resource-section__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.resource-section__empty {
+  padding: 24px 0;
+}
+
+.resource-list-card__item.is-active {
+  border-color: color-mix(in srgb, var(--dq-accent) 28%, var(--dq-border-subtle));
+}
+
 .knowledge-docs {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-height: 0;
+  max-width: none;
   height: 100%;
 }
-.knowledge-docs__list-head {
-  margin-bottom: 8px;
-}
+
 .knowledge-docs__editor {
   flex: 1;
   min-height: 420px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  border: 1px solid var(--dq-border);
-  border-radius: 8px;
-  background: var(--dq-bg-base);
+  gap: 0;
+  padding: 0;
   overflow: hidden;
 }
+
 .knowledge-docs__editor-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: flex-end;
   justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--dq-separator-light);
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--dq-glass-border, var(--dq-separator-light));
+  background: var(--dq-glass-bar-bg, color-mix(in srgb, var(--dq-bg-elevated) 45%, transparent));
 }
+
 .knowledge-docs__title-field {
   flex: 1;
   min-width: 200px;
+  margin-bottom: 0;
 }
+
 .knowledge-docs__editor-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
 }
+
 .knowledge-docs__editor-body {
   flex: 1;
   min-height: 360px;
   display: flex;
   flex-direction: column;
+  background: color-mix(in srgb, var(--dq-bg-elevated) 40%, transparent);
+  overflow: hidden;
+}
+
+.knowledge-docs__dirty {
+  margin: 0;
+  padding: 8px 14px;
+  border-top: 1px solid var(--dq-separator-light);
 }
 </style>

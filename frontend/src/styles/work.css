@@ -1801,6 +1801,12 @@ body.teams-is-resizing {
   text-align: left;
 }
 
+.resource-list-card__item.is-active {
+  background: color-mix(in srgb, var(--dq-accent) 12%, var(--dq-fill-tertiary));
+  border-color: color-mix(in srgb, var(--dq-accent) 28%, var(--dq-border-subtle));
+  box-shadow: inset 2px 0 0 var(--dq-accent);
+}
+
 .resource-list-card__meta {
   flex: 1;
   min-width: 0;

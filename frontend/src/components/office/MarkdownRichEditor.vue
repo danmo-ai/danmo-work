@@ -532,7 +532,7 @@ defineExpose({
   flex: 1;
   min-height: 0;
   min-width: 0;
-  background: var(--dq-bg-base);
+  background: transparent;
   color: var(--dq-label-primary);
 }
 .md-rich__editor {
@@ -546,16 +546,16 @@ defineExpose({
   height: 100%;
   border: none;
   border-radius: 0;
-  --md-bk-color: var(--dq-bg-base);
+  --md-bk-color: transparent;
   --md-color: var(--dq-label-primary);
-  --md-bk-color-outstand: var(--dq-bg-elevated);
+  --md-bk-color-outstand: color-mix(in srgb, var(--dq-bg-elevated) 70%, transparent);
   --md-border-color: var(--dq-separator-light);
   --md-scrollbar-bg-color: transparent;
   --md-scrollbar-thumb-color: color-mix(in srgb, var(--dq-label-quaternary) 50%, transparent);
 }
 .md-rich :deep(.md-editor-toolbar-wrapper) {
-  background: var(--dq-bg-elevated);
-  border-bottom: 1px solid var(--dq-separator-light);
+  background: var(--dq-glass-bar-bg, color-mix(in srgb, var(--dq-bg-elevated) 55%, transparent));
+  border-bottom: 1px solid var(--dq-glass-border, var(--dq-separator-light));
 }
 .md-rich.is-readonly :deep(.md-editor-toolbar-wrapper) {
   display: none;
@@ -573,9 +573,9 @@ defineExpose({
   gap: 2px;
   padding: 4px;
   border-radius: 8px;
-  border: 1px solid var(--dq-border);
+  border: 1px solid var(--dq-glass-border, var(--dq-border));
   background: var(--dq-bg-elevated);
-  box-shadow: 0 6px 20px color-mix(in srgb, #000 18%, transparent);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--dq-mask) 18%, transparent);
   white-space: nowrap;
 }
 .md-rich__ai-btn {
@@ -615,7 +615,7 @@ defineExpose({
 .md-rich__ai-dialog-backdrop {
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, #000 35%, transparent);
+  background: color-mix(in srgb, var(--dq-mask) 35%, transparent);
 }
 .md-rich__ai-annotate {
   position: relative;
@@ -626,9 +626,9 @@ defineExpose({
   gap: 8px;
   padding: 12px;
   border-radius: 10px;
-  border: 1px solid var(--dq-border);
+  border: 1px solid var(--dq-glass-border, var(--dq-border));
   background: var(--dq-bg-elevated);
-  box-shadow: 0 12px 40px color-mix(in srgb, #000 28%, transparent);
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--dq-mask) 28%, transparent);
 }
 .md-rich__ai-annotate-title {
   font-size: var(--dq-font-size-caption);
@@ -640,9 +640,9 @@ defineExpose({
   resize: vertical;
   min-height: 64px;
   padding: 8px 10px;
-  border: 1px solid var(--dq-border);
+  border: 1px solid var(--dq-border-subtle);
   border-radius: 6px;
-  background: var(--dq-bg-base);
+  background: color-mix(in srgb, var(--dq-bg-elevated) 60%, transparent);
   color: var(--dq-label-primary);
   font-size: var(--dq-font-size-caption);
   font-family: inherit;
