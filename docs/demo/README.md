@@ -37,7 +37,7 @@ python3 -m http.server -d docs/demo 8765
 ### Product tour
 
 1. **Architecture** — user → LLM plans Tool Calls → Agent Loop → Turn Log → Document Stage; pillars + surface/runtime/tools/store strip  
-2. **Highlights** — Document Stage · multi-agent (CodeGraph / Danmo Make) · Turn Log · Memory/Table Store · MCP + builtin expert packs · IM channels  
+2. **Highlights** — Document Stage · fewer tokens (expert isolation + KV cache) · Turn Log · Memory/Table Store · MCP + builtin expert packs · IM channels  
 3. **Capacity** — research→report · delegate→slides · Feishu→sheet  
 
 ### Office co-edit tour

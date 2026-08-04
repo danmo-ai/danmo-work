@@ -79,6 +79,7 @@ make dev-web   # → http://localhost:5801/app/
 | Danmo Work | 常见做法 |
 |------------|----------|
 | 一条思维链 + 硬隔离的子 Agent | 多个并行 Session，交接黑盒 |
+| **主链更轻**：专家包独立上下文 + KV Cache 友好前缀 → 更省 Token，历史少被裁剪 | 所有专家的提示与工具说明每轮塞进主会话，窗口很快爆、老对话被砍 |
 | Document Stage + **AI Diff**（文档 / 幻灯片 / 表格） | 聊天框里扔一堆 Markdown |
 | 对照回合前快照：保留、回滚、按块接受 | AI 直接覆盖文件，改完难撤回 |
 | 可查看、可编辑的 Memory + 无固定 Schema 的 Table Store | 黑盒产品记忆，或另接一套向量库 |
@@ -174,7 +175,7 @@ Danmo Work 是：**模型在同一条链上编排**；你提供能力（Tool / S
 
 #### 内置专家包
 
-产品启动时自动 seed：专家 + 配套技能（需要 MCP 时再加 **绑定型**连接器，`AmbientMount=false`）。主 Agent 通过 `delegate_agent` 召唤；不会 ambient 挂到每个会话。
+系统提示和工具描述会在**每一次**模型调用里重复带上——能力越多，主链固定开销越大。产品把专家做成独立包（配套技能；需要 MCP 时再加 **绑定型**连接器，`AmbientMount=false`）：主 Agent 用 `delegate_agent` 按需召唤，提示与工具只进入子上下文，不 ambient 挂在每一轮。稳定系统前缀也按 KV Cache 友好方式分区。同样任务更省 Token，有效对话历史更少被压缩裁掉。
 
 | 专家 | 作用 |
 |------|------|

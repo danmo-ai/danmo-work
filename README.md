@@ -78,6 +78,7 @@ Add an LLM API key in the UI or `~/.danmo-work/config.yaml`. See [Development](#
 | You get | Instead of |
 |---------|------------|
 | One thinking chain + hard-isolated sub-agents | Parallel sessions / opaque handoffs |
+| **A lighter main chain**: isolated expert packs + KV-cache-friendly prefixes → fewer tokens, less history compacted away | Every specialist prompt and tool schema stuffed into every call until the window blows up |
 | Document Stage + **AI Diff** (doc / slides / sheet) | Chat that dumps Markdown into a void |
 | Keep / Revert / accept hunks vs pre-turn snapshot | Opaque overwrite you can’t unwind |
 | Inspectable Memory + schema-free Table Store | Black-box memory or another vector DB |
@@ -173,7 +174,7 @@ Capability units — not a workflow graph. Summon skills via `@` in Composer. Te
 
 #### Builtin expert packs
 
-Product-seeded experts ship with a matching skill (and a bound-only connector when the pack needs MCP — `AmbientMount=false`). The lead agent summons them with `delegate_agent` — they are not ambient for every session.
+System prompts and tool schemas ride along on **every** model call — more capabilities usually means a heavier fixed tax on the main chain. Product-seeded experts ship as isolated packs (matching skill; bound-only connector when MCP is needed — `AmbientMount=false`): the lead agent summons them with `delegate_agent`, so their prompts and tools enter the child context only when needed, not ambient on every turn. The stable system prefix is also partitioned to stay KV-cache friendly. Same work, fewer tokens — and less of the conversation that matters gets compacted away.
 
 | Expert | What it does |
 |--------|----------------|

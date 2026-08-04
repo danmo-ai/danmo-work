@@ -573,14 +573,14 @@
               <h3 data-i18n="hi.c1t"></h3>
               <p class="lead" data-i18n="hi.c1l"></p>
               <div class="chips">
-                <span class="chip">delegate_agent</span><span class="chip">codegraph</span>
-                <span class="chip">github</span><span class="chip">danmo-make</span>
+                <span class="chip">delegate_agent</span><span class="chip">KV cache</span>
+                <span class="chip">isolated context</span><span class="chip">fewer tokens</span>
               </div>
               <div class="mock-ui">
-                <header>Agent Loop</header>
+                <header>Main chain · light prefix</header>
                 <div class="body">
-                  <div class="mock-row"><code>delegate_agent · codegraph</code><span class="ok">OK</span></div>
-                  <div class="mock-row"><code>delegate_agent · github</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>stable system prefix → KV cache hit</code><span class="ok">OK</span></div>
+                  <div class="mock-row"><code>expert tools only in child Turn</code><span class="ok">OK</span></div>
                   <div class="mock-row"><code>Report → parent continues</code><span class="ok">OK</span></div>
                 </div>
               </div>
@@ -790,7 +790,7 @@
         },
         hi: {
           t0: "Document Stage", d0: "文档 / 幻灯片 / 表格 · AI Diff 共审",
-          t1: "多 Agent 委派", d1: "同一思维链 · CodeGraph / GitHub / Make",
+          t1: "更省 Token", d1: "专家隔离 · KV Cache · 少裁剪",
           t2: "Turn Log", d2: "恢复 · 回放 · 改结果",
           t3: "Memory + Table Store", d3: "可检视记忆与业务流水",
           t4: "MCP + 内置专家包", d4: "GitHub · CodeGraph · 连接器",
@@ -798,8 +798,8 @@
           c0t: "人与 AI 共审编辑 Office",
           c0l: "选区 / 页 / 表 → [office-edit]；Turn 后 AI Diff：保留 · 回滚 · 分块接受。文本仍是真相源。",
           c0m: "Intent · Propose · Review · Commit",
-          c1t: "子 Agent 是 Tool，不是并行黑盒",
-          c1l: "delegate_agent 开独立 Turn；结构问题交给 CodeGraph，GitHub 托管交给 github，创意生成交给 Danmo Make；父链只收 Report。",
+          c1t: "主链不背全套专家工具包",
+          c1l: "系统提示和工具说明每次模型调用都要带上。专家包放在独立上下文，需要时再 delegate（CodeGraph / GitHub / Make）；稳定前缀吃满 KV Cache。更省 Token，有效历史更少被压缩裁掉。",
           c2t: "执行轨迹可信任",
           c2l: "输入输出全量持久化；中途失败可 Resume；人工改 Tool Result 后继续。",
           c3t: "记忆与业务数据分开",
@@ -862,7 +862,7 @@
         },
         hi: {
           t0: "Document Stage", d0: "Docs / slides / sheets · AI Diff review",
-          t1: "Multi-agent", d1: "Same chain · CodeGraph / GitHub / Make",
+          t1: "Fewer tokens", d1: "Isolated experts · KV cache · less cut",
           t2: "Turn Log", d2: "Resume · replay · edit",
           t3: "Memory + Table Store", d3: "Visible memory & business rows",
           t4: "MCP + expert packs", d4: "GitHub · CodeGraph · connectors",
@@ -870,8 +870,8 @@
           c0t: "Human ↔ AI Office co-edit",
           c0l: "Selection / page / sheet → [office-edit]; after the turn, AI Diff: Keep · Revert · hunks. Text stays SoT.",
           c0m: "Intent · Propose · Review · Commit",
-          c1t: "Sub-agents are Tools, not opaque sessions",
-          c1l: "delegate_agent opens an isolated Turn; structural code → CodeGraph, GitHub hosting → github, creative media → Danmo Make; parent continues on Report.",
+          c1t: "The main chain doesn’t carry every expert kit",
+          c1l: "System prompts and tool schemas ride every model call. Expert packs stay isolated until you delegate (CodeGraph / GitHub / Make); the stable prefix stays KV-cache friendly. Fewer tokens — and less history compacted away.",
           c2t: "A trail you can trust",
           c2l: "Full persistence; Resume on failure; humans can edit Tool Results.",
           c3t: "Memory ≠ business rows",
