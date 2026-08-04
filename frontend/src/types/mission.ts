@@ -161,6 +161,12 @@ export interface ModelConfig {
   vision?: boolean
 }
 
+export interface ModelConfigsResponse {
+  models: ModelConfig[]
+  /** True when local catalog differs from built-in (needs explicit reset). */
+  catalogDiverged: boolean
+}
+
 export type SearchProvider =
   | 'duckduckgo'
   | 'bing'

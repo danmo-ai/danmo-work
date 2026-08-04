@@ -52,25 +52,6 @@ func NewLoader(path string) *Loader {
 	return &Loader{path: path, v: v}
 }
 
-// ConfigFileLacksReasoningDialects reports whether the YAML on disk has an
-// llm.models list but no reasoning_dialect keys yet (pre-dialect catalog).
-func (l *Loader) ConfigFileLacksReasoningDialects() bool {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	b, err := os.ReadFile(l.path)
-	if err != nil {
-		return false
-	}
-	text := string(b)
-	if !strings.Contains(text, "\n  models:") && !strings.Contains(text, "\nmodels:") {
-		// also match "models:" under llm
-		if !strings.Contains(text, "models:") {
-			return false
-		}
-	}
-	return !strings.Contains(text, "reasoning_dialect:")
-}
-
 func setDefaults(v *viper.Viper) {
 	v.SetDefault("data.dir", paths.DataDir())
 	v.SetDefault("data.database", paths.DatabaseFile())
@@ -202,8 +183,14 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 			cfg.LLM.Models = migrated
 		}
 	}
-	// Append new built-in entries and fill empty reasoning_dialect / zero limits.
-	cfg.LLM.Models = mergeModelConfigs(cfg.LLM.Models, defaultModelConfigs())
+	// Seed built-in catalog only when the user has no models yet. Existing
+	// local entries are left untouched — built-in updates surface as
+	// catalogDiverged and require an explicit reset (POST /model-configs/refresh).
+	if len(cfg.LLM.Models) == 0 {
+		cfg.LLM.Models = defaultModelConfigs()
+	} else {
+		cfg.LLM.Models = fillInferredDialects(cfg.LLM.Models)
+	}
 
 	if cfg.Market.CacheTTLHours <= 0 {
 		cfg.Market.CacheTTLHours = 6
@@ -254,15 +241,18 @@ func DefaultModelConfigs() []domain.ModelConfig {
 	return defaultModelConfigs()
 }
 
-// MergeModelConfigs fills empty catalog fields and appends missing built-in models.
-func MergeModelConfigs(existing, defaults []domain.ModelConfig) []domain.ModelConfig {
-	return mergeModelConfigs(existing, defaults)
-}
-
 // RefreshModelConfigs overlays built-in dialect/efforts/limits onto matching models
 // and appends any missing built-in models. Custom-only entries are preserved.
+// This is the explicit user-reset path (POST /model-configs/refresh).
 func RefreshModelConfigs(existing, defaults []domain.ModelConfig) []domain.ModelConfig {
 	return refreshModelConfigs(existing, defaults)
+}
+
+// ModelConfigsDivergedFromBuiltin reports whether an explicit refresh would change
+// the local catalog (newer built-in params, missing built-in models, or local edits
+// that differ from the built-in overlay for known models).
+func ModelConfigsDivergedFromBuiltin(existing, defaults []domain.ModelConfig) bool {
+	return modelConfigsDiffer(existing, refreshModelConfigs(existing, defaults))
 }
 
 // defaultModelConfigs returns the built-in per-model parameter catalog.
@@ -431,62 +421,6 @@ func mergeLLMPresets(existing, defaults []domain.LLMProviderPreset, legacyBaseUR
 	return out
 }
 
-// mergeModelConfigs fills empty reasoning_dialect (and related zero fields) from
-// the built-in catalog, and appends any default models missing from the user list.
-func mergeModelConfigs(existing, defaults []domain.ModelConfig) []domain.ModelConfig {
-	if len(defaults) == 0 {
-		return fillInferredDialects(existing)
-	}
-	byModel := make(map[string]domain.ModelConfig, len(defaults))
-	for _, d := range defaults {
-		if d.Model == "" {
-			continue
-		}
-		byModel[d.Model] = d
-	}
-	seen := make(map[string]bool, len(existing))
-	out := make([]domain.ModelConfig, 0, len(existing)+len(defaults))
-	for _, m := range existing {
-		if def, ok := byModel[m.Model]; ok {
-			if m.ReasoningDialect == "" && def.ReasoningDialect != "" {
-				m.ReasoningDialect = def.ReasoningDialect
-			}
-			if m.ContextWindow == 0 && def.ContextWindow > 0 {
-				m.ContextWindow = def.ContextWindow
-			}
-			if m.MaxOutput == 0 && def.MaxOutput > 0 {
-				m.MaxOutput = def.MaxOutput
-			}
-			if len(m.AvailableEfforts) == 0 && len(def.AvailableEfforts) > 0 {
-				m.AvailableEfforts = append([]string(nil), def.AvailableEfforts...)
-			}
-			if m.ThinkingMode == "" && def.ThinkingMode != "" {
-				m.ThinkingMode = def.ThinkingMode
-			}
-			if len(m.EffortBudgetTokens) == 0 && len(def.EffortBudgetTokens) > 0 {
-				m.EffortBudgetTokens = def.EffortBudgetTokens
-			}
-			if !m.Vision && def.Vision {
-				m.Vision = true
-			}
-			if m.Temperature == 0 && def.Temperature != 0 {
-				m.Temperature = def.Temperature
-			}
-		}
-		out = append(out, m)
-		if m.Model != "" {
-			seen[m.Model] = true
-		}
-	}
-	for _, d := range defaults {
-		if d.Model == "" || seen[d.Model] {
-			continue
-		}
-		out = append(out, d)
-	}
-	return fillInferredDialects(out)
-}
-
 // fillInferredDialects sets ReasoningDialect from model id when still empty.
 func fillInferredDialects(models []domain.ModelConfig) []domain.ModelConfig {
 	for i := range models {
@@ -500,9 +434,9 @@ func fillInferredDialects(models []domain.ModelConfig) []domain.ModelConfig {
 	return models
 }
 
-// ModelConfigsNeedPersist reports whether refreshed/merged models gained dialects,
-// efforts, limits, or new entries versus the previous snapshot.
-func ModelConfigsNeedPersist(before, after []domain.ModelConfig) bool {
+// modelConfigsDiffer reports whether two catalogs differ in length or in
+// fields that RefreshModelConfigs overlays from the built-in catalog.
+func modelConfigsDiffer(before, after []domain.ModelConfig) bool {
 	if len(after) != len(before) {
 		return true
 	}
@@ -524,7 +458,16 @@ func ModelConfigsNeedPersist(before, after []domain.ModelConfig) bool {
 		if m.Vision != b.Vision {
 			return true
 		}
+		if m.ThinkingMode != b.ThinkingMode {
+			return true
+		}
+		if m.Temperature != b.Temperature {
+			return true
+		}
 		if !stringSlicesEqual(m.AvailableEfforts, b.AvailableEfforts) {
+			return true
+		}
+		if !intMapsEqual(m.EffortBudgetTokens, b.EffortBudgetTokens) {
 			return true
 		}
 	}
@@ -537,6 +480,18 @@ func stringSlicesEqual(a, b []string) bool {
 	}
 	for i := range a {
 		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func intMapsEqual(a, b map[string]int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
 			return false
 		}
 	}

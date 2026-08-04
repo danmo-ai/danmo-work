@@ -1063,6 +1063,11 @@ async function handleSaveModelConfig() {
 }
 
 async function handleRefreshModelConfig() {
+  try {
+    await confirm(t('settings.resetModelConfigConfirm'), t('settings.resetModelConfigTitle'), { type: 'warning' })
+  } catch {
+    return
+  }
   const prev = selectedModel.value
   try {
     const refreshed = await modelConfig.refreshFromBuiltin()
@@ -2349,6 +2354,20 @@ const hasFooterActions = computed(() => {
           <p>{{ $t('settings.modelConfigDesc') }}</p>
         </header>
 
+        <div
+          v-if="!modelConfig.loading && modelConfig.catalogDiverged"
+          class="model-config-banner"
+          role="status"
+        >
+          <div class="model-config-banner__text">
+            <strong>{{ $t('settings.modelConfigDiverged') }}</strong>
+            <span>{{ $t('settings.modelConfigDivergedHint') }}</span>
+          </div>
+          <DqButton size="sm" type="primary" :disabled="modelConfig.saving" @click="handleRefreshModelConfig">
+            {{ $t('settings.refreshModelConfig') }}
+          </DqButton>
+        </div>
+
         <div v-if="modelConfig.loading" class="settings-empty settings-empty--skeleton">
           <Skeleton variant="title" width="30%" />
           <Skeleton variant="card" width="100%" />
@@ -3007,6 +3026,36 @@ const hasFooterActions = computed(() => {
   margin: 0;
   font-size: var(--dq-font-size-caption);
   color: var(--dq-label-tertiary);
+}
+
+.model-config-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dq-system-orange) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dq-system-orange) 28%, transparent);
+}
+
+.model-config-banner__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--dq-font-size-footnote);
+  color: var(--dq-label-primary);
+  line-height: 1.45;
+}
+
+.model-config-banner__text strong {
+  font-weight: 600;
+}
+
+.model-config-banner__text span {
+  color: var(--dq-label-secondary);
 }
 
 .settings-form {
