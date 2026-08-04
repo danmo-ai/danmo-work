@@ -83,7 +83,7 @@ make dev-web   # → http://localhost:5801/app/
 | 对照回合前快照：保留、回滚、按块接受 | AI 直接覆盖文件，改完难撤回 |
 | 可查看、可编辑的 Memory + 无固定 Schema 的 Table Store | 黑盒产品记忆，或另接一套向量库 |
 | MCP 连接器 + cron / webhook 自动化 | 循环外再拼一堆脚本 |
-| 内置 **CodeGraph** 专家（符号 / 调用 / 影响面） | 结构问题每次全仓 grep |
+| 内置 **CodeGraph** 专家（查符号、调用链、影响面） | 结构问题每次全仓 grep |
 | 微信 · 飞书 · 企微 · QQ 共用同一 Loop | 先搭公网回调才能接 IM |
 | 可恢复、可回放，也能改 Tool 结果再继续 | 出问题只能重开对话碰运气 |
 
@@ -158,7 +158,7 @@ Danmo Work 是：**模型在同一条链上编排**；你提供能力（Tool / S
 
 ### 专家、技能与连接器
 
-在界面里配置的是**能力积木**（提示词、Skill、沙箱、委派），不是工作流图。Composer 里用 `@` 即可召唤技能；Team 模式下用 `delegate_agent` 召唤内置或市场专家。
+界面里配的是**能力积木**（提示词、技能、沙箱、委派），不是工作流画布。Composer 里 `@` 即可点技能；Team 模式下用 `delegate_agent` 请来内置或市场专家。
 
 | 专家提示词 | 技能库 | 运行时 |
 |-----------|--------|--------|
@@ -166,21 +166,21 @@ Danmo Work 是：**模型在同一条链上编排**；你提供能力（Tool / S
 
 - **专家** — 本地与市场 Agent：提示词、技能、工具、知识库
 - **技能** — Agentskills（`SKILL.md`），内置与自定义均可
-- **MCP / 连接器** — 目录映射为 `mcp_<server>_<tool>`；密钥加密存储，高风险操作走权限门禁
-- **自动化** — cron / webhook 真正发起 session turn，可用 Turn Log 回放
+- **连接器（MCP）** — 装上后变成 `mcp_<server>_<tool>`；密钥加密存放，高风险操作需审批
+- **自动化** — cron / webhook 会真正开一轮 session，可用 Turn Log 回看
 - **记忆** — `memory_*`（user / project / agent），界面有独立记忆页
-- **Table Store** — 无固定 Schema 的 `table_*`，独立落在 `store.db`
-- **运行时** — Turn 上限、Tool 输出上限、委派深度、沙箱与网络策略
+- **Table Store** — 灵活业务表 `table_*`，落在独立的 `store.db`
+- **运行时** — 回合上限、工具输出上限、委派深度、沙箱与网络策略
 
 #### 内置专家包
 
-产品启动时自动 seed：专家 + 配套技能（需要 MCP 时再加 **绑定型**连接器，`AmbientMount=false`）。主 Agent 通过 `delegate_agent` 召唤；不会 ambient 挂到每个会话。
+装好即可用：每位专家自带配套技能；需要 MCP 时也会备好连接器，且默认只挂在该专家上，不会塞进每个会话。主 Agent 通过 `delegate_agent` 按需召唤。
 
 | 专家 | 作用 |
 |------|------|
-| **CodeGraph** | 本地代码智能（跳定义、找调用、影响面），内置 [CodeGraph](https://github.com/colbymchenry/codegraph) CLI。全局共享一条 MCP 连接器；每个项目各自 `.codegraph/` 索引。**首次** `delegate_agent` → `codegraph` 时异步 `codegraph init`；索引未就绪或缺二进制时，专家**降级**用 `read_file` / `grep` 仍可作答。普通无代码工作项目在未委派前不会建图。可用 `scripts/fetch_codegraph.sh` 安装/更新 CLI（桌面打包脚本也会拉取）。 |
-| **GitHub** | GitHub 平台工作——Issue、Pull Request、Actions、Release 及相关托管操作。 |
-| **Danmo Make** | 本地图文音视频生成（独立应用；URL 读 `~/.danmo-make/api.port`）。 |
+| **CodeGraph** | 回答「定义在哪、谁调用了谁、改一处会影响哪里」这类结构问题。内置 [CodeGraph](https://github.com/colbymchenry/codegraph) CLI，按项目维护本地索引；第一次委派时后台建图，图还没好也能先靠读文件 / 搜索顶上。安装或更新：`scripts/fetch_codegraph.sh`（桌面打包也会拉取）。 |
+| **GitHub** | 处理 Issue、Pull Request、Actions、Release 等 GitHub 上的日常协作。 |
+| **Danmo Make** | 在本机生成或编辑图片、视频、音频（需单独安装 Danmo Make；服务地址读自 `~/.danmo-make/api.port`）。 |
 
 ---
 
@@ -210,7 +210,7 @@ Danmo Work 是：**模型在同一条链上编排**；你提供能力（Tool / S
   → 完成
 ```
 
-专家团协作就是同一套循环开 **Team** 模式：你把目标和要求写清楚；主 Agent 自行决定委派谁、用清晰的 `delegate_agent` 说明（goal + context），子 Agent 回报后再继续。结构类代码问题（谁调用了 X、改动影响面）优先 `delegate_agent` → `codegraph`；GitHub 托管操作（Issue / PR / Actions）优先 `github`；本地创意生成优先 `danmo-make`。
+开 **Team** 模式后仍是同一套循环：你把目标和要求说清楚，主 Agent 自行决定找谁、写清委派说明（goal + context），子 Agent 回报后再往下做。查调用关系、影响面 → `codegraph`；Issue / PR / Actions → `github`；本机出图出片 → `danmo-make`。
 
 | 意图清晰（Team） | LLM 自主委派 |
 |------------------|--------------|
