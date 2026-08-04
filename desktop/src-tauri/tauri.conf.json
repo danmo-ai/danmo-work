@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Danmo Work",
-  "version": "0.9.27",
+  "version": "0.9.28",
   "identifier": "com.danmo.work",
   "build": {
     "beforeDevCommand": "cd ../frontend && npm run dev",
