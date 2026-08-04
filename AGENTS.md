@@ -18,7 +18,7 @@
 | Frontend | `frontend/` → build to `out/frontend/dist/` |
 | Reasoning dialects | `core/adapter/llm/REASONING_DIALECTS.md` + `domain.ReasoningDialectInfos` |
 | Optional OCI env | `environments/agent-base/` → CI Release asset (not in app packs); `make build-env-tar` locally |
-| First-launch hooks | `scripts/first_launch/{darwin,linux,windows}/` — staged per platform by `scripts/stage_first_launch.sh` |
+| First-launch hooks | `scripts/first_launch/{darwin,linux,windows}/` — staged per platform; CodeGraph CLI via **market connector deps scripts** |
 | Dev scripts | `scripts/start_backend.sh`, `scripts/start_web.sh`, `scripts/start_desktop.sh`, `scripts/stop.sh` |
 | Paths | `scripts/out_paths.sh` |
 

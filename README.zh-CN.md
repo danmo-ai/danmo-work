@@ -97,7 +97,7 @@ make dev-web   # → http://localhost:5801/app/
 
 | 专家 | 作用 |
 |------|------|
-| **CodeGraph** | 查定义、调用关系、改动影响面。内置 [CodeGraph-Rust](https://github.com/sunerpy/codegraph-rust)（约 10 MB，首次启动后台解压）。第一次委派时建索引；图还没好也能先靠读文件 / 搜索顶上。 |
+| **CodeGraph** | 查定义、调用关系、改动影响面。从**市场**安装专家（连带技能 + 连接器；连接器 **deps 脚本**拉取约 10 MB CLI，[CodeGraph-Rust](https://github.com/sunerpy/codegraph-rust)）。第一次委派时建索引；图还没好也能先靠读文件 / 搜索顶上。 |
 | **GitHub** | 处理 Issue、Pull Request、Actions、Release 等 GitHub 上的日常协作。 |
 | **Danmo Make** | 在本机生成或编辑图片、视频、音频（需单独安装 Danmo Make）。 |
 

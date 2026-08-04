@@ -16,7 +16,7 @@ type MarketSource struct {
 
 // ConfigMarketSection is persisted under market in config.yaml.
 type ConfigMarketSection struct {
-	CacheTTLHours int           `json:"cacheTtlHours" mapstructure:"cache_ttl_hours" yaml:"cache_ttl_hours"`
+	CacheTTLHours int            `json:"cacheTtlHours" mapstructure:"cache_ttl_hours" yaml:"cache_ttl_hours"`
 	Sources       []MarketSource `json:"sources" mapstructure:"sources" yaml:"sources"`
 }
 
@@ -43,8 +43,14 @@ type MarketItem struct {
 	Author        string         `json:"author,omitempty"`
 	Path          string         `json:"path"`
 	SkillDeps     []string       `json:"skillDeps,omitempty"`
-	UpdatedAt     string         `json:"updatedAt,omitempty"`
-	Compatibility string         `json:"compatibility,omitempty"`
+	ConnectorDeps []string       `json:"connectorDeps,omitempty"` // expert/bundle → connectors
+	// Deps maps platform → relative install script path inside the connector package
+	// (e.g. "darwin":"deps/darwin.sh"). Empty means use package convention deps/.
+	Deps map[string]string `json:"deps,omitempty"`
+	// UninstallDeps maps platform → relative uninstall/cleanup script (optional).
+	UninstallDeps map[string]string `json:"uninstallDeps,omitempty"`
+	UpdatedAt     string            `json:"updatedAt,omitempty"`
+	Compatibility string            `json:"compatibility,omitempty"`
 }
 
 // MarketCatalog is the parsed catalog/index.json for one source.
@@ -77,19 +83,42 @@ type InstallMarketRequest struct {
 	Overwrite bool   `json:"overwrite,omitempty"`
 }
 
+// ConnectorDepsRun records one deps/uninstall script execution during market install/uninstall.
+type ConnectorDepsRun struct {
+	ConnectorID string `json:"connectorId"`
+	Script      string `json:"script,omitempty"`
+	Log         string `json:"log,omitempty"`
+	Phase       string `json:"phase"` // install | uninstall
+}
+
 // InstallMarketResult summarizes what was written locally.
 type InstallMarketResult struct {
-	Kind       string   `json:"kind"`
-	ID         string   `json:"id"`
-	SourceID   string   `json:"sourceId"`
-	Ref        string   `json:"ref,omitempty"`
-	Version    string   `json:"version,omitempty"`
-	Installed  []string `json:"installed,omitempty"`  // ids written (skill + deps)
-	Skipped    []string `json:"skipped,omitempty"`
+	Kind       string             `json:"kind"`
+	ID         string             `json:"id"`
+	SourceID   string             `json:"sourceId"`
+	Ref        string             `json:"ref,omitempty"`
+	Version    string             `json:"version,omitempty"`
+	Installed  []string           `json:"installed,omitempty"` // ids written (skill/expert/connector)
+	DepsRuns   []ConnectorDepsRun `json:"depsRuns,omitempty"`  // per-connector install script logs
+	DepsScript string             `json:"depsScript,omitempty"` // last install script (compat)
+	DepsLog    string             `json:"depsLog,omitempty"`    // last install log (compat)
+	Skipped    []string           `json:"skipped,omitempty"`
 }
 
 // UninstallMarketRequest removes a market-installed skill, expert, or connector.
 type UninstallMarketRequest struct {
-	Kind string `json:"kind"`
-	ID   string `json:"id"`
+	Kind       string `json:"kind"`
+	ID         string `json:"id"`
+	RunCleanup bool   `json:"runCleanup,omitempty"` // connector: run optional uninstall deps script
+	SourceID   string `json:"sourceId,omitempty"`   // preferred market source for package fetch
+	Ref        string `json:"ref,omitempty"`
+}
+
+// UninstallMarketResult summarizes connector cleanup + removal.
+type UninstallMarketResult struct {
+	Kind          string             `json:"kind"`
+	ID            string             `json:"id"`
+	CleanupRuns   []ConnectorDepsRun `json:"cleanupRuns,omitempty"`
+	CleanupScript string             `json:"cleanupScript,omitempty"`
+	CleanupLog    string             `json:"cleanupLog,omitempty"`
 }

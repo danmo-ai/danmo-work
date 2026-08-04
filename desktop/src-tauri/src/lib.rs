@@ -274,7 +274,6 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
 
     let coreutils = prepare_coreutils(app, &home);
     prepare_first_launch_script(app, &home);
-    prepare_codegraph_archive(app, &home);
 
     let log_file = OpenOptions::new()
         .create(true)
@@ -594,75 +593,8 @@ fn wait_for_backend_listen(addr: &str, timeout: Duration, interval: Duration) ->
     false
 }
 
-/// Copy the compressed CodeGraph CLI from the app bundle into ~/.danmo-work/bin.
-/// The first-launch script unpacks it asynchronously after the backend starts.
-fn prepare_codegraph_archive(app: &AppHandle, home: &Path) {
-    let bin_dir = home.join("bin");
-    if let Err(e) = fs::create_dir_all(&bin_dir) {
-        eprintln!("[codegraph] create bin: {e}");
-        return;
-    }
-    #[cfg(windows)]
-    let names = ["codegraph.zip", "CODEGRAPH_VERSION"];
-    #[cfg(not(windows))]
-    let names = ["codegraph.tar.gz", "CODEGRAPH_VERSION"];
-
-    for name in names {
-        let bundled = resolve_resource_file(
-            app,
-            &format!("codegraph/{name}"),
-            &[
-                PathBuf::from("codegraph").join(name),
-                PathBuf::from("resources").join("codegraph").join(name),
-            ],
-        );
-        let Some(src) = bundled else {
-            continue;
-        };
-        let dst = bin_dir.join(name);
-        let need_copy = match (fs::metadata(&src), fs::metadata(&dst)) {
-            (Ok(a), Ok(b)) => a.len() != b.len(),
-            (Ok(_), Err(_)) => true,
-            (Err(e), _) => {
-                eprintln!("[codegraph] metadata {}: {e}", src.display());
-                continue;
-            }
-        };
-        if need_copy {
-            if let Err(e) = fs::copy(&src, &dst) {
-                eprintln!("[codegraph] copy {}: {e}", name);
-                continue;
-            }
-            eprintln!("[codegraph] staged {}", dst.display());
-        }
-    }
-}
-
-fn resolve_resource_file(app: &AppHandle, resource_key: &str, relative: &[PathBuf]) -> Option<PathBuf> {
-    if let Ok(p) = app.path().resolve(resource_key, BaseDirectory::Resource) {
-        if p.is_file() {
-            return Some(p);
-        }
-    }
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.to_path_buf()))?;
-    for rel in relative {
-        let candidates = [
-            exe_dir.join(rel),
-            exe_dir.join("resources").join(rel),
-            exe_dir.join("..").join("Resources").join(rel),
-            exe_dir.join("..").join("resources").join(rel),
-        ];
-        if let Some(p) = candidates.into_iter().find(|p| p.is_file()) {
-            return Some(p);
-        }
-    }
-    None
-}
-
 /// Copy the platform first-launch script from the app bundle into ~/.danmo-work/first_launch.
-/// The Go sidecar runs it asynchronously on startup (CodeGraph extract, future hooks).
+/// The Go sidecar runs it asynchronously on startup (optional post-install hooks).
 fn prepare_first_launch_script(app: &AppHandle, home: &Path) {
     let dest_dir = home.join("first_launch");
     if let Err(e) = fs::create_dir_all(&dest_dir) {

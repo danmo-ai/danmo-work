@@ -38,8 +38,7 @@
       "bin/danmo-work-backend"
     ],
     "resources": [
-      "resources/first_launch/*",
-      "resources/codegraph/*"
+      "resources/first_launch/*"
     ]
   },
   "plugins": {

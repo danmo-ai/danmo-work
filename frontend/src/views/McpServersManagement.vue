@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import WorkspaceShell from '@/components/common/WorkspaceShell.vue'
 import MarketBrowser from '@/components/market/MarketBrowser.vue'
 import MarketCatalogRail from '@/components/market/MarketCatalogRail.vue'
@@ -13,6 +14,7 @@ type Transport = 'stdio' | 'sse' | 'streamable-http'
 type PageView = 'library' | 'market'
 
 const { t } = useI18n()
+const route = useRoute()
 const mcp = useMcpServersStore()
 const marketStore = useMarketStore()
 
@@ -114,6 +116,21 @@ const hasSelection = computed(
     isCreating.value ||
     !!selectedId.value,
 )
+
+const hasCodegraphConnector = computed(() =>
+  mcp.items.some((s) => s.id === 'codegraph' || s.catalogId === 'codegraph'),
+)
+
+async function openCodegraphMarket() {
+  await Promise.all([marketStore.loadSources(), marketStore.loadCatalog()])
+  const item =
+    marketStore.catalog.find((i) => i.kind === 'connector' && i.id === 'codegraph' && !i.installed) ??
+    marketStore.catalog.find((i) => i.kind === 'connector' && i.id === 'codegraph')
+  if (item) {
+    marketSelectedKey.value = `${item.sourceId}:${item.id}`
+  }
+  pageView.value = 'market'
+}
 const headerTitle = computed(() => {
   if (pageView.value === 'market') {
     return marketSelected.value?.name || t('market.tab')
@@ -141,8 +158,28 @@ async function refreshLibrary(preferSelectId?: string | null) {
 }
 
 onMounted(() => {
-  void refreshLibrary()
+  void refreshLibrary().then(() => {
+    applyRouteConnectorQuery()
+  })
 })
+
+watch(
+  () => route.query.id,
+  () => {
+    applyRouteConnectorQuery()
+  },
+)
+
+function applyRouteConnectorQuery() {
+  const q = route.query.id
+  const id = typeof q === 'string' ? q : Array.isArray(q) ? q[0] : ''
+  if (!id) return
+  pageView.value = 'library'
+  const resolved = resolveServerId(id)
+  if (resolved) {
+    selectServer(resolved)
+  }
+}
 
 watch(pageView, (view) => {
   if (view === 'library') {
@@ -164,9 +201,9 @@ function resolveServerId(catalogOrServerId: string): string | null {
   return byCatalog?.id ?? null
 }
 
-async function onMarketInstalled(id: string) {
-  pageView.value = 'library'
-  await refreshLibrary(id)
+async function onMarketInstalled(_id: string) {
+  // Stay on market so deps script logs remain visible; user can open Library via "Configure".
+  await mcp.load()
 }
 
 async function viewInstalledConnector(id: string) {
@@ -344,6 +381,10 @@ function onKeydown(e: KeyboardEvent) {
               </span>
             </button>
           </nav>
+          <div v-if="!hasCodegraphConnector" class="resource-rail__group">
+            <p class="resource-workspace__hint">{{ $t('connectors.codegraphMarketHint') }}</p>
+            <DqButton size="sm" @click="openCodegraphMarket">{{ $t('connectors.installCodegraph') }}</DqButton>
+          </div>
         </template>
         <MarketCatalogRail v-else v-model:selected-key="marketSelectedKey" kind="connector" />
       </div>
@@ -352,7 +393,12 @@ function onKeydown(e: KeyboardEvent) {
     <template #empty>
       <DqEmpty :description="$t('connectors.emptySelection')">
         <p class="resource-workspace__hint">{{ $t('connectors.emptySelectionHint') }}</p>
-        <DqButton @click="pageView = 'market'">{{ $t('market.tab') }}</DqButton>
+        <div class="resource-workspace__hint-actions">
+          <DqButton @click="pageView = 'market'">{{ $t('market.tab') }}</DqButton>
+          <DqButton v-if="!hasCodegraphConnector" @click="openCodegraphMarket">
+            {{ $t('connectors.installCodegraph') }}
+          </DqButton>
+        </div>
       </DqEmpty>
     </template>
 

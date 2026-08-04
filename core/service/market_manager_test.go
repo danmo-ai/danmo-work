@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -267,7 +269,7 @@ func TestMarketUninstallRestoresBuiltinSkill(t *testing.T) {
 		Metadata:     map[string]string{"market.source": "local"},
 	})
 
-	if err := mgr.Uninstall(ctx, domain.UninstallMarketRequest{
+	if _, err := mgr.Uninstall(ctx, domain.UninstallMarketRequest{
 		Kind: "skill",
 		ID:   "debugging",
 	}); err != nil {
@@ -354,4 +356,141 @@ func (r *memMCPServerRepo) Upsert(ctx context.Context, s domain.MCPServer) error
 func (r *memMCPServerRepo) Delete(ctx context.Context, id string) error {
 	delete(r.byID, id)
 	return nil
+}
+
+func TestMarketInstallExpertPullsConnectorDepsScript(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("bash deps fixture")
+	}
+	home := t.TempDir()
+	prevHome := marketDepsHome
+	marketDepsHome = func() string { return home }
+	t.Cleanup(func() { marketDepsHome = prevHome })
+
+	root := t.TempDir()
+	skillPkg := filepath.Join(root, "skills", "cg-skill")
+	connPkg := filepath.Join(root, "connectors", "cg-conn")
+	expertPkg := filepath.Join(root, "experts", "cg-expert")
+	for _, d := range []string{skillPkg, connPkg, expertPkg, filepath.Join(connPkg, "deps")} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	payload := []byte("CGfake-expert-dep")
+	markerScript := "#!/bin/sh\nmkdir -p \"$DANMO_HOME/bin\"\nprintf '%s' '" + string(payload) + "' > \"$DANMO_HOME/bin/codegraph\"\nchmod +x \"$DANMO_HOME/bin/codegraph\"\necho deps-ok\n"
+	platform := runtime.GOOS
+	if platform != "darwin" && platform != "linux" {
+		t.Skip("unix deps only")
+	}
+	scriptPath := filepath.Join(connPkg, "deps", platform+".sh")
+	if err := os.WriteFile(scriptPath, []byte(markerScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillPkg, "SKILL.md"), []byte("---\nname: cg-skill\ndescription: t\n---\n\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	connJSON := `{
+  "id":"cg-conn","name":"CG Conn","transport":"stdio","command":"codegraph","args":"serve --mcp","auth":"none","ambientMount":false
+}`
+	if err := os.WriteFile(filepath.Join(connPkg, "connector.json"), []byte(connJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	agentMD := `---
+id: cg-expert
+name: CG Expert
+mode: subagent
+skills:
+  - cg-skill
+mcp_servers:
+  - cg-conn
+---
+
+prompt
+`
+	if err := os.WriteFile(filepath.Join(expertPkg, "AGENT.md"), []byte(agentMD), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cat := fmt.Sprintf(`{
+  "schemaVersion": 2,
+  "items": [
+    {"id":"cg-skill","name":"CG Skill","kind":"skill","path":"skills/cg-skill"},
+    {"id":"cg-conn","name":"CG Conn","kind":"connector","path":"connectors/cg-conn","deps":{"%s":"deps/%s.sh"}},
+    {"id":"cg-expert","name":"CG Expert","kind":"expert","path":"experts/cg-expert","skillDeps":["cg-skill"],"connectorDeps":["cg-conn"]}
+  ]
+}`, platform, platform)
+	if err := os.MkdirAll(filepath.Join(root, "catalog"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "catalog", "index.json"), []byte(cat), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfgStore := &memConfigStore{cfg: &domain.ConfigFile{
+		Market: domain.ConfigMarketSection{
+			Sources: []domain.MarketSource{{ID: "local", Kind: "git", Enabled: true}},
+		},
+	}}
+	skills := NewSkillManager(newMemSkillRepo(), newMemSkillFileRepo())
+	agents := NewAgentManager(newMemAgentRepo())
+	mcp := NewMCPManager(newMemMCPServerRepo())
+	mgr := NewMarketManager(NewConfigManager(cfgStore), &fakeRegistry{m: &fakeMarket{id: "local", root: root}}, skills, agents, mcp)
+
+	res, err := mgr.Install(context.Background(), domain.InstallMarketRequest{
+		SourceID: "local", Kind: "expert", ID: "cg-expert", Overwrite: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantInstalled := map[string]bool{"cg-skill": true, "cg-conn": true, "cg-expert": true}
+	for _, id := range res.Installed {
+		delete(wantInstalled, id)
+	}
+	if len(wantInstalled) != 0 {
+		t.Fatalf("missing installs %v; got %+v", wantInstalled, res)
+	}
+	if res.DepsScript == "" {
+		t.Fatalf("expected deps script run, got %+v", res)
+	}
+	if len(res.DepsRuns) == 0 {
+		t.Fatalf("expected depsRuns, got %+v", res)
+	}
+	if !strings.Contains(res.DepsLog, "deps-ok") {
+		t.Fatalf("deps log missing: %q", res.DepsLog)
+	}
+	if _, err := skills.Get(context.Background(), "cg-skill"); err != nil {
+		t.Fatal("skill dep missing")
+	}
+	if _, err := agents.Get(context.Background(), "cg-expert"); err != nil {
+		t.Fatal("expert missing")
+	}
+	if _, err := mcp.Get(context.Background(), "cg-conn"); err != nil {
+		t.Fatal("connector dep missing")
+	}
+	bin := filepath.Join(home, "bin", "codegraph")
+	b, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != string(payload) {
+		t.Fatalf("payload mismatch")
+	}
+}
+
+func TestFirstLaunchScriptsHaveNoCodegraphUnpack(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", "..", "scripts", "first_launch"))
+	paths := []string{
+		filepath.Join(root, "darwin", "post-install.sh"),
+		filepath.Join(root, "linux", "post-install.sh"),
+		filepath.Join(root, "windows", "post-install.ps1"),
+	}
+	for _, p := range paths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := string(data)
+		if strings.Contains(s, "install_codegraph") || strings.Contains(s, "Expand-Archive") {
+			t.Fatalf("%s still unpacks codegraph", p)
+		}
+	}
 }

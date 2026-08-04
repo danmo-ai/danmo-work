@@ -66,10 +66,14 @@ func uninstallMarketItem(h *MarketHandler) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if err := h.Market.Uninstall(c, req); err != nil {
+		result, err := h.Market.Uninstall(c, req)
+		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		if result == nil {
+			result = &domain.UninstallMarketResult{Kind: req.Kind, ID: req.ID}
+		}
+		c.JSON(http.StatusOK, result)
 	}
 }

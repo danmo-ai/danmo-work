@@ -3,9 +3,7 @@
     "resources": {
       "resources/coreutils/coreutils.exe": "coreutils/coreutils.exe",
       "resources/first_launch/post-install.ps1": "first_launch/post-install.ps1",
-      "resources/first_launch/PLATFORM": "first_launch/PLATFORM",
-      "resources/codegraph/codegraph.zip": "codegraph/codegraph.zip",
-      "resources/codegraph/CODEGRAPH_VERSION": "codegraph/CODEGRAPH_VERSION"
+      "resources/first_launch/PLATFORM": "first_launch/PLATFORM"
     },
     "windows": {
       "nsis": {

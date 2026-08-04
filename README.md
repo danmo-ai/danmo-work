@@ -97,7 +97,7 @@ System prompts and tool schemas ride every model call. Builtin expert packs (ski
 
 | Expert | Role |
 |--------|------|
-| **CodeGraph** | Local code intelligence via bundled [CodeGraph-Rust](https://github.com/sunerpy/codegraph-rust) (~10 MB archive; `first_launch` unpacks async). First `delegate_agent` inits the index; degrades to `read_file` / `grep` until ready |
+| **CodeGraph** | Local code intelligence via [CodeGraph-Rust](https://github.com/sunerpy/codegraph-rust). Install from **Market** (expert pulls skill + connector; connector **deps script** fetches ~10 MB CLI). First `delegate_agent` inits the index; degrades to `read_file` / `grep` until ready. |
 | **GitHub** | GitHub platform work — issues, pull requests, Actions, releases, and related hosting tasks |
 | **Danmo Make** | Local image / video / audio generation (separate app) |
 

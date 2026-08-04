@@ -272,11 +272,23 @@ export interface MarketListing {
   author?: string
   path: string
   skillDeps?: string[]
+  connectorDeps?: string[]
+  /** platform → package-relative install deps script */
+  deps?: Record<string, string>
+  /** platform → package-relative uninstall/cleanup script */
+  uninstallDeps?: Record<string, string>
   updatedAt?: string
   compatibility?: string
   sourceId: string
   sourceName?: string
   installed?: boolean
+}
+
+export interface ConnectorDepsRun {
+  connectorId: string
+  script?: string
+  log?: string
+  phase: 'install' | 'uninstall' | string
 }
 
 export interface InstallMarketResult {
@@ -286,5 +298,16 @@ export interface InstallMarketResult {
   ref?: string
   version?: string
   installed?: string[]
+  depsRuns?: ConnectorDepsRun[]
+  depsScript?: string
+  depsLog?: string
   skipped?: string[]
+}
+
+export interface UninstallMarketResult {
+  kind: string
+  id: string
+  cleanupRuns?: ConnectorDepsRun[]
+  cleanupScript?: string
+  cleanupLog?: string
 }

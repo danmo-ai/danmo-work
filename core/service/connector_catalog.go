@@ -91,13 +91,13 @@ func DefaultConnectorCatalog() []domain.ConnectorCatalogEntry {
 			Tags:        []string{"local", "files", "test"},
 		},
 		DanmoMakeCatalogEntry(),
-		CodeGraphCatalogEntry(),
 		GitHubCatalogEntry(),
 	}
 }
 
 // BuiltinConnectorIDs are product connectors auto-seeded on bootstrap (fixed server id).
-var BuiltinConnectorIDs = []string{"danmo-make", "codegraph", GitHubExpertID}
+// CodeGraph is market-installed (connector deps script + CLI), not product-seeded.
+var BuiltinConnectorIDs = []string{"danmo-make", GitHubExpertID}
 
 // DanmoMakeCatalogEntry is the built-in local creative MCP preset.
 func DanmoMakeCatalogEntry() domain.ConnectorCatalogEntry {
@@ -214,6 +214,7 @@ func InstallCatalogEntry(entry domain.ConnectorCatalogEntry, name string) domain
 		Command:           entry.Command,
 		Args:              entry.Args,
 		URL:               entry.URL,
+		Env:               entry.Env,
 		Auth:              entry.Auth,
 		OAuthAuthorizeURL: entry.OAuthAuthorizeURL,
 		OAuthTokenURL:     entry.OAuthTokenURL,

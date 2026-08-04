@@ -10,6 +10,7 @@ type ConnectorCatalogEntry struct {
 	URL         string      `json:"url,omitempty"`
 	Command     string      `json:"command,omitempty"`
 	Args        string      `json:"args,omitempty"`
+	Env         string      `json:"env,omitempty"` // KEY=value per line (stdio)
 	Auth        MCPAuthMode `json:"auth"`
 	// DocsURL points users at setup instructions.
 	DocsURL           string `json:"docsUrl,omitempty"`

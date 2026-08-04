@@ -118,6 +118,21 @@ const hasSelection = computed(
     !!selectedId.value,
 )
 
+const hasCodegraphExpert = computed(() =>
+  sortedAgents.value.some((a) => a.id === 'codegraph'),
+)
+
+async function openCodegraphMarket() {
+  await Promise.all([marketStore.loadSources(), marketStore.loadCatalog()])
+  const item =
+    marketStore.catalog.find((i) => i.kind === 'expert' && i.id === 'codegraph' && !i.installed) ??
+    marketStore.catalog.find((i) => i.kind === 'expert' && i.id === 'codegraph')
+  if (item) {
+    marketSelectedKey.value = `${item.sourceId}:${item.id}`
+  }
+  pageView.value = 'market'
+}
+
 const headerTitle = computed(() => {
   if (pageView.value === 'market') {
     return marketSelected.value?.name || t('market.tab')
@@ -128,10 +143,8 @@ const headerTitle = computed(() => {
 
 async function onMarketInstalled(id: string) {
   await Promise.all([globalAgents.load(), skills.load()])
-  if (id && globalAgents.items.some((a) => a.id === id)) {
-    pageView.value = 'library'
-    selectAgent(id)
-  }
+  // Stay on market so deps script logs + connector jump links remain visible.
+  void id
 }
 
 function viewInstalledExpert(id: string) {
@@ -447,6 +460,10 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
               </button>
             </nav>
           </div>
+          <div v-if="!hasCodegraphExpert" class="resource-rail__group">
+            <p class="resource-workspace__hint">{{ $t('teams.codegraphMarketHint') }}</p>
+            <DqButton size="sm" @click="openCodegraphMarket">{{ $t('teams.installCodegraph') }}</DqButton>
+          </div>
         </template>
         </template>
         <MarketCatalogRail v-else v-model:selected-key="marketSelectedKey" kind="expert" />
@@ -456,7 +473,12 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
     <template #empty>
       <DqEmpty :description="$t('teams.emptySelection')">
         <p class="resource-workspace__hint">{{ $t('teams.emptySelectionHint') }}</p>
-        <DqButton @click="pageView = 'market'">{{ $t('market.tab') }}</DqButton>
+        <div class="resource-workspace__hint-actions">
+          <DqButton @click="pageView = 'market'">{{ $t('market.tab') }}</DqButton>
+          <DqButton v-if="!hasCodegraphExpert" @click="openCodegraphMarket">
+            {{ $t('teams.installCodegraph') }}
+          </DqButton>
+        </div>
       </DqEmpty>
     </template>
 

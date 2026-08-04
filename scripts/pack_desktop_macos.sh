@@ -45,10 +45,6 @@ has_tauri_signing_key() {
 echo "==> Building backend sidecar..."
 "$SCRIPT_DIR/build_sidecar.sh"
 
-echo "==> Fetching bundled CodeGraph CLI..."
-"$SCRIPT_DIR/fetch_codegraph.sh" "$HOME/.danmo-work/bin"
-"$SCRIPT_DIR/fetch_codegraph.sh" "$DQ_ROOT/desktop/src-tauri/resources/codegraph" || true
-
 echo "==> Staging macOS first-launch script..."
 "$SCRIPT_DIR/stage_first_launch.sh" darwin "$HOME/.danmo-work/first_launch"
 "$SCRIPT_DIR/stage_first_launch.sh" darwin "$DQ_ROOT/desktop/src-tauri/resources/first_launch"

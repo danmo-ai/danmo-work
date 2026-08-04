@@ -211,7 +211,6 @@ func (m *MarketManager) Install(ctx context.Context, req domain.InstallMarketReq
 		for _, depID := range item.SkillDeps {
 			depItem := findSkillItem(cat.Items, depID)
 			if depItem == nil {
-				// Try installing by id path convention if catalog omits dep.
 				depItem = &domain.MarketItem{
 					Kind: domain.MarketKindSkill,
 					ID:   depID,
@@ -222,8 +221,53 @@ func (m *MarketManager) Install(ctx context.Context, req domain.InstallMarketReq
 				return nil, fmt.Errorf("install skill dep %s: %w", depID, err)
 			}
 		}
+		// Then connector deps (each may download platform binaries).
+		for _, depID := range item.ConnectorDeps {
+			depItem := findConnectorItem(cat.Items, depID)
+			if depItem == nil {
+				depItem = &domain.MarketItem{
+					Kind: domain.MarketKindConnector,
+					ID:   depID,
+					Path: "connectors/" + depID,
+				}
+			}
+			if IsProductBuiltinConnector(depItem.ID) {
+				return nil, fmt.Errorf("connector dep %q is a product builtin; not installable from the market", depItem.ID)
+			}
+			if err := m.installConnector(ctx, market, *depItem, ref, req.Overwrite, result); err != nil {
+				return nil, fmt.Errorf("install connector dep %s: %w", depID, err)
+			}
+		}
 		if err := m.installExpert(ctx, market, *item, ref, req.Overwrite, result); err != nil {
 			return nil, err
+		}
+	case domain.MarketKindBundle:
+		// Same dependency order as expert for now.
+		for _, depID := range item.SkillDeps {
+			depItem := findSkillItem(cat.Items, depID)
+			if depItem == nil {
+				depItem = &domain.MarketItem{Kind: domain.MarketKindSkill, ID: depID, Path: "skills/" + depID}
+			}
+			if err := m.installSkill(ctx, market, *depItem, ref, req.Overwrite, result); err != nil {
+				return nil, fmt.Errorf("install skill dep %s: %w", depID, err)
+			}
+		}
+		for _, depID := range item.ConnectorDeps {
+			depItem := findConnectorItem(cat.Items, depID)
+			if depItem == nil {
+				depItem = &domain.MarketItem{Kind: domain.MarketKindConnector, ID: depID, Path: "connectors/" + depID}
+			}
+			if IsProductBuiltinConnector(depItem.ID) {
+				return nil, fmt.Errorf("connector dep %q is a product builtin", depItem.ID)
+			}
+			if err := m.installConnector(ctx, market, *depItem, ref, req.Overwrite, result); err != nil {
+				return nil, fmt.Errorf("install connector dep %s: %w", depID, err)
+			}
+		}
+		if item.Path != "" {
+			if err := m.installExpert(ctx, market, *item, ref, req.Overwrite, result); err != nil {
+				return nil, err
+			}
 		}
 	case domain.MarketKindConnector:
 		if IsProductBuiltinConnector(req.ID) {
@@ -247,6 +291,15 @@ func (m *MarketManager) Install(ctx context.Context, req domain.InstallMarketReq
 func findSkillItem(items []domain.MarketItem, id string) *domain.MarketItem {
 	for i := range items {
 		if items[i].ID == id && items[i].Kind == domain.MarketKindSkill {
+			return &items[i]
+		}
+	}
+	return nil
+}
+
+func findConnectorItem(items []domain.MarketItem, id string) *domain.MarketItem {
+	for i := range items {
+		if items[i].ID == id && items[i].Kind == domain.MarketKindConnector {
 			return &items[i]
 		}
 	}
@@ -433,6 +486,22 @@ func (m *MarketManager) installConnector(
 	if cleanup != nil {
 		defer cleanup()
 	}
+
+	// Platform deps script (download binaries, apt/brew, init config, …).
+	if scriptRel, logOut, derr := RunConnectorDepsForPackage(ctx, dir, item); derr != nil {
+		return derr
+	} else if scriptRel != "" {
+		run := domain.ConnectorDepsRun{
+			ConnectorID: item.ID,
+			Script:      scriptRel,
+			Log:         logOut,
+			Phase:       "install",
+		}
+		result.DepsRuns = append(result.DepsRuns, run)
+		result.DepsScript = scriptRel
+		result.DepsLog = logOut
+	}
+
 	entry, err := m.connImp.Import(dir)
 	if err != nil {
 		return err
@@ -449,9 +518,26 @@ func (m *MarketManager) installConnector(
 	if item.Category != "" && entry.Category == "" {
 		entry.Category = item.Category
 	}
+	// Prefer resolved local binary when stdio command is a bare name.
+	if entry.Transport == "stdio" || entry.Transport == "" {
+		if bin := ResolveCodeGraphBin(); bin != "" && (entry.Command == "" || entry.Command == codeGraphBinName || entry.Command == codeGraphExecutableName() || entry.ID == CodeGraphServerID) {
+			if entry.ID == CodeGraphServerID || entry.Command == codeGraphBinName || entry.Command == codeGraphExecutableName() {
+				entry.Command = bin
+			}
+		}
+		if entry.ID == CodeGraphServerID && strings.TrimSpace(entry.Env) == "" {
+			entry.Env = CodeGraphMCPEnv()
+		}
+	}
 	req := InstallCatalogEntry(*entry, entry.Name)
 	req.CatalogID = entry.ID
 	req.MarketSource = market.SourceID()
+	if entry.ID == CodeGraphServerID {
+		req.Network = "deny"
+		if strings.TrimSpace(req.Env) == "" {
+			req.Env = CodeGraphMCPEnv()
+		}
+	}
 	if found {
 		srv, uerr := m.mcp.Update(ctx, existing.ID, req)
 		if uerr != nil {
@@ -470,67 +556,136 @@ func (m *MarketManager) installConnector(
 }
 
 // Uninstall removes a market-installed skill, expert, or connector. Builtin items are refused.
-func (m *MarketManager) Uninstall(ctx context.Context, req domain.UninstallMarketRequest) error {
+// For connectors with RunCleanup=true, an optional uninstall deps script is fetched and run first.
+func (m *MarketManager) Uninstall(ctx context.Context, req domain.UninstallMarketRequest) (*domain.UninstallMarketResult, error) {
 	if req.Kind == "" || req.ID == "" {
-		return fmt.Errorf("kind and id are required")
+		return nil, fmt.Errorf("kind and id are required")
 	}
+	out := &domain.UninstallMarketResult{Kind: req.Kind, ID: req.ID}
 	switch domain.MarketItemKind(req.Kind) {
 	case domain.MarketKindSkill:
 		sk, err := m.skills.Get(ctx, req.ID)
 		if err != nil || sk == nil {
-			return fmt.Errorf("skill %q not found", req.ID)
+			return nil, fmt.Errorf("skill %q not found", req.ID)
 		}
 		if sk.MarketSource == "" {
-			return fmt.Errorf("skill %q was not installed from the market", req.ID)
+			return nil, fmt.Errorf("skill %q was not installed from the market", req.ID)
 		}
 		// Template-backed skills must return to the builtin pack instead of
 		// disappearing from the library until the next process restart.
 		if m.skills.HasTemplate(req.ID) {
 			if _, err := m.skills.ResetFromTemplate(ctx, req.ID); err != nil {
-				return err
+				return nil, err
 			}
 			break
 		}
 		if err := m.skills.Delete(ctx, req.ID); err != nil {
-			return err
+			return nil, err
 		}
 		_ = m.skills.DeleteFiles(ctx, req.ID)
 	case domain.MarketKindExpert:
 		ag, err := m.agents.Get(ctx, req.ID)
 		if err != nil || ag == nil {
-			return fmt.Errorf("expert %q not found", req.ID)
+			return nil, fmt.Errorf("expert %q not found", req.ID)
 		}
 		if ag.MarketSource == "" {
-			return fmt.Errorf("expert %q was not installed from the market", req.ID)
+			return nil, fmt.Errorf("expert %q was not installed from the market", req.ID)
 		}
 		if err := m.agents.Delete(ctx, req.ID); err != nil {
-			return err
+			return nil, err
 		}
 	case domain.MarketKindConnector:
 		if m.mcp == nil {
-			return fmt.Errorf("connector market uninstall is not configured")
+			return nil, fmt.Errorf("connector market uninstall is not configured")
 		}
 		srv, ok, err := m.mcp.FindByCatalogID(ctx, req.ID)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !ok {
-			return fmt.Errorf("connector %q not found", req.ID)
+			return nil, fmt.Errorf("connector %q not found", req.ID)
 		}
 		if srv.MarketSource == "" {
-			return fmt.Errorf("connector %q was not installed from the market", req.ID)
+			return nil, fmt.Errorf("connector %q was not installed from the market", req.ID)
+		}
+		if req.RunCleanup {
+			if cerr := m.runConnectorCleanup(ctx, req, srv, out); cerr != nil {
+				return out, cerr
+			}
 		}
 		if err := m.mcp.Delete(ctx, srv.ID); err != nil {
-			return err
+			return out, err
 		}
 	default:
-		return fmt.Errorf("unsupported kind %q", req.Kind)
+		return nil, fmt.Errorf("unsupported kind %q", req.Kind)
 	}
 	m.mu.Lock()
 	m.cache = nil
 	m.cacheWarnings = nil
 	m.mu.Unlock()
+	return out, nil
+}
+
+func (m *MarketManager) runConnectorCleanup(
+	ctx context.Context,
+	req domain.UninstallMarketRequest,
+	srv domain.MCPServer,
+	out *domain.UninstallMarketResult,
+) error {
+	sourceID := strings.TrimSpace(req.SourceID)
+	if sourceID == "" {
+		sourceID = srv.MarketSource
+	}
+	market, ok := m.registry.Get(sourceID)
+	if !ok {
+		return fmt.Errorf("market source %q not found for cleanup", sourceID)
+	}
+	item, err := m.lookupConnectorCatalogItem(ctx, market, req.ID)
+	if err != nil {
+		return err
+	}
+	ref := strings.TrimSpace(req.Ref)
+	dir, cleanup, err := market.FetchPackage(ctx, *item, ref)
+	if err != nil {
+		return fmt.Errorf("fetch connector package for cleanup: %w", err)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+	scriptRel, logOut, err := RunConnectorUninstallForPackage(ctx, dir, *item)
+	if err != nil {
+		return err
+	}
+	if scriptRel == "" {
+		return nil
+	}
+	run := domain.ConnectorDepsRun{
+		ConnectorID: item.ID,
+		Script:      scriptRel,
+		Log:         logOut,
+		Phase:       "uninstall",
+	}
+	out.CleanupRuns = append(out.CleanupRuns, run)
+	out.CleanupScript = scriptRel
+	out.CleanupLog = logOut
 	return nil
+}
+
+func (m *MarketManager) lookupConnectorCatalogItem(ctx context.Context, market port.Market, id string) (*domain.MarketItem, error) {
+	cat, err := market.FetchCatalog(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if item := findConnectorItem(cat.Items, id); item != nil {
+		cp := *item
+		return &cp, nil
+	}
+	// Fallback: package path convention when catalog entry is missing.
+	return &domain.MarketItem{
+		Kind: domain.MarketKindConnector,
+		ID:   id,
+		Path: "connectors/" + id,
+	}, nil
 }
 
 // compatibilityFromSkillMetadata derives a soft tip from nested ClawHub runtime metadata.

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchJSON, asArray } from '@/api/client'
-import type { MarketListing, MarketSource, InstallMarketResult } from '@/types'
+import type { MarketListing, MarketSource, InstallMarketResult, UninstallMarketResult } from '@/types'
 
 interface MarketCatalogResponse {
   items?: MarketListing[] | null
@@ -15,6 +15,8 @@ export const useMarketStore = defineStore('market', () => {
   const loading = ref(false)
   const installing = ref<string | null>(null)
   const error = ref('')
+  const lastInstallResult = ref<InstallMarketResult | null>(null)
+  const lastUninstallResult = ref<UninstallMarketResult | null>(null)
 
   async function loadSources() {
     sources.value = asArray(await fetchJSON<MarketSource[]>('/market/sources').catch(() => [] as MarketSource[]))
@@ -61,9 +63,16 @@ export const useMarketStore = defineStore('market', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sourceId, kind, id, overwrite }),
       })
+      lastInstallResult.value = result
       // Optimistic update — don't block the install button on a full catalog refresh
       // (GitHub/Gitee refresh can hang and leave the spinner stuck).
       markInstalled(kind, id, true)
+      if (result?.installed?.length) {
+        for (const iid of result.installed) {
+          if (iid !== id) markInstalled('connector', iid, true)
+          if (iid !== id) markInstalled('skill', iid, true)
+        }
+      }
       void loadCatalog(true)
       return result
     } finally {
@@ -71,16 +80,27 @@ export const useMarketStore = defineStore('market', () => {
     }
   }
 
-  async function uninstall(kind: string, id: string) {
+  async function uninstall(
+    kind: string,
+    id: string,
+    opts?: { runCleanup?: boolean; sourceId?: string },
+  ) {
     installing.value = `${kind}:${id}`
     try {
-      await fetchJSON('/market/uninstall', {
+      const result = await fetchJSON<UninstallMarketResult>('/market/uninstall', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind, id }),
+        body: JSON.stringify({
+          kind,
+          id,
+          runCleanup: !!opts?.runCleanup,
+          sourceId: opts?.sourceId || undefined,
+        }),
       })
+      lastUninstallResult.value = result
       markInstalled(kind, id, false)
       void loadCatalog(true)
+      return result
     } finally {
       installing.value = null
     }
@@ -93,6 +113,8 @@ export const useMarketStore = defineStore('market', () => {
     loading,
     installing,
     error,
+    lastInstallResult,
+    lastUninstallResult,
     loadSources,
     loadCatalog,
     install,

@@ -52,21 +52,15 @@ cp -f "$DEV_BACKEND_BIN" "$SIDECAR_PATH"
 if [[ -d "$HOME/.danmo-work/bin" ]]; then
   cp -f "$DEV_BACKEND_BIN" "$HOME/.danmo-work/bin/danmo-work-backend"
 fi
-# Best-effort CodeGraph CLI archive for the builtin expert (extracts on first launch).
-if [[ ! -f "$HOME/.danmo-work/bin/codegraph.tar.gz" && ! -f "$HOME/.danmo-work/bin/codegraph.zip" && ! -x "$HOME/.danmo-work/bin/codegraph" && ! -x "$HOME/.danmo-work/bin/codegraph.exe" ]]; then
-  "$SCRIPT_DIR/fetch_codegraph.sh" "$HOME/.danmo-work/bin" || echo "WARNING: CodeGraph CLI not fetched (expert will degrade until installed)"
-fi
-# Stage platform first-launch script (async extract / future hooks).
+# Stage platform first-launch script (post-install hooks; CodeGraph CLI comes from market).
 case "$(uname -s)" in
   Darwin)
     "$SCRIPT_DIR/stage_first_launch.sh" darwin "$HOME/.danmo-work/first_launch" || true
     "$SCRIPT_DIR/stage_first_launch.sh" darwin "$DQ_ROOT/desktop/src-tauri/resources/first_launch" || true
-    "$SCRIPT_DIR/fetch_codegraph.sh" "$DQ_ROOT/desktop/src-tauri/resources/codegraph" || true
     ;;
   Linux)
     "$SCRIPT_DIR/stage_first_launch.sh" linux "$HOME/.danmo-work/first_launch" || true
     "$SCRIPT_DIR/stage_first_launch.sh" linux "$DQ_ROOT/desktop/src-tauri/resources/first_launch" || true
-    "$SCRIPT_DIR/fetch_codegraph.sh" "$DQ_ROOT/desktop/src-tauri/resources/codegraph" || true
     ;;
 esac
 echo "==> Sidecar binary: $SIDECAR_PATH"
