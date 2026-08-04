@@ -26,7 +26,10 @@
 /desktop/src-tauri/resources/coreutils/VERSION
 /desktop/src-tauri/resources/codegraph/codegraph
 /desktop/src-tauri/resources/codegraph/codegraph.exe
+/desktop/src-tauri/resources/codegraph/codegraph.tar.gz
+/desktop/src-tauri/resources/codegraph/codegraph.zip
 /desktop/src-tauri/resources/codegraph/CODEGRAPH_VERSION
+/desktop/src-tauri/resources/first_launch/
 
 # SQLite data
 /data/

@@ -8,6 +8,7 @@
 //	  data/         — projects, turn logs, checkpoints
 //	  bin/          — desktop sidecar binary (optional)
 //	  bin/coreutils/— Windows Microsoft Coreutils multi-call + applet hardlinks (optional)
+//	  first_launch/ — platform post-install script + stamp (optional)
 //	  backend.log   — desktop sidecar log (optional)
 package paths
 

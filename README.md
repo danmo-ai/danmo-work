@@ -97,7 +97,7 @@ System prompts and tool schemas ride every model call. Builtin expert packs (ski
 
 | Expert | Role |
 |--------|------|
-| **CodeGraph** | Local code intelligence (definitions, callers, impact). First delegate async-inits the index; degrades to `read_file` / `grep` until ready |
+| **CodeGraph** | Local code intelligence via bundled [CodeGraph-Rust](https://github.com/sunerpy/codegraph-rust) (~10 MB archive; `first_launch` unpacks async). First `delegate_agent` inits the index; degrades to `read_file` / `grep` until ready |
 | **GitHub** | Issues, PRs, Actions, releases — MCP → `gh` → `git` fallback |
 | **Danmo Make** | Local image / video / audio generation (separate app) |
 

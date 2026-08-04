@@ -7,7 +7,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
-#[cfg(windows)]
 use tauri::path::BaseDirectory;
 
 const HELP_URL: &str = "https://github.com/danmo-ai/danmo-work#macos-%E5%AE%89%E8%A3%85";
@@ -274,6 +273,8 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
     eprintln!("[sidecar] runtime: {}", binary.display());
 
     let coreutils = prepare_coreutils(app, &home);
+    prepare_first_launch_script(app, &home);
+    prepare_codegraph_archive(app, &home);
 
     let log_file = OpenOptions::new()
         .create(true)
@@ -591,6 +592,156 @@ fn wait_for_backend_listen(addr: &str, timeout: Duration, interval: Duration) ->
         std::thread::sleep(interval);
     }
     false
+}
+
+/// Copy the compressed CodeGraph CLI from the app bundle into ~/.danmo-work/bin.
+/// The first-launch script unpacks it asynchronously after the backend starts.
+fn prepare_codegraph_archive(app: &AppHandle, home: &Path) {
+    let bin_dir = home.join("bin");
+    if let Err(e) = fs::create_dir_all(&bin_dir) {
+        eprintln!("[codegraph] create bin: {e}");
+        return;
+    }
+    #[cfg(windows)]
+    let names = ["codegraph.zip", "CODEGRAPH_VERSION"];
+    #[cfg(not(windows))]
+    let names = ["codegraph.tar.gz", "CODEGRAPH_VERSION"];
+
+    for name in names {
+        let bundled = resolve_resource_file(
+            app,
+            &format!("codegraph/{name}"),
+            &[
+                PathBuf::from("codegraph").join(name),
+                PathBuf::from("resources").join("codegraph").join(name),
+            ],
+        );
+        let Some(src) = bundled else {
+            continue;
+        };
+        let dst = bin_dir.join(name);
+        let need_copy = match (fs::metadata(&src), fs::metadata(&dst)) {
+            (Ok(a), Ok(b)) => a.len() != b.len(),
+            (Ok(_), Err(_)) => true,
+            (Err(e), _) => {
+                eprintln!("[codegraph] metadata {}: {e}", src.display());
+                continue;
+            }
+        };
+        if need_copy {
+            if let Err(e) = fs::copy(&src, &dst) {
+                eprintln!("[codegraph] copy {}: {e}", name);
+                continue;
+            }
+            eprintln!("[codegraph] staged {}", dst.display());
+        }
+    }
+}
+
+fn resolve_resource_file(app: &AppHandle, resource_key: &str, relative: &[PathBuf]) -> Option<PathBuf> {
+    if let Ok(p) = app.path().resolve(resource_key, BaseDirectory::Resource) {
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))?;
+    for rel in relative {
+        let candidates = [
+            exe_dir.join(rel),
+            exe_dir.join("resources").join(rel),
+            exe_dir.join("..").join("Resources").join(rel),
+            exe_dir.join("..").join("resources").join(rel),
+        ];
+        if let Some(p) = candidates.into_iter().find(|p| p.is_file()) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// Copy the platform first-launch script from the app bundle into ~/.danmo-work/first_launch.
+/// The Go sidecar runs it asynchronously on startup (CodeGraph extract, future hooks).
+fn prepare_first_launch_script(app: &AppHandle, home: &Path) {
+    let dest_dir = home.join("first_launch");
+    if let Err(e) = fs::create_dir_all(&dest_dir) {
+        eprintln!("[first-launch] create dir: {e}");
+        return;
+    }
+
+    #[cfg(windows)]
+    let names = ["post-install.ps1", "PLATFORM"];
+    #[cfg(not(windows))]
+    let names = ["post-install.sh", "PLATFORM"];
+
+    for name in names {
+        let bundled = resolve_first_launch_resource(app, name);
+        let Some(src) = bundled else {
+            continue;
+        };
+        let dst = dest_dir.join(name);
+        let need_copy = match (fs::metadata(&src), fs::metadata(&dst)) {
+            (Ok(a), Ok(b)) => {
+                a.len() != b.len()
+                    || a.modified()
+                        .ok()
+                        .zip(b.modified().ok())
+                        .map(|(x, y)| x > y)
+                        .unwrap_or(true)
+            }
+            (Ok(_), Err(_)) => true,
+            (Err(e), _) => {
+                eprintln!("[first-launch] metadata {}: {e}", src.display());
+                continue;
+            }
+        };
+        if need_copy {
+            if let Err(e) = fs::copy(&src, &dst) {
+                eprintln!("[first-launch] copy {}: {e}", name);
+                continue;
+            }
+            #[cfg(unix)]
+            if name.ends_with(".sh") {
+                use std::os::unix::fs::PermissionsExt;
+                if let Ok(meta) = fs::metadata(&dst) {
+                    let mut perms = meta.permissions();
+                    perms.set_mode(0o755);
+                    let _ = fs::set_permissions(&dst, perms);
+                }
+            }
+            eprintln!("[first-launch] staged {}", dst.display());
+        }
+    }
+}
+
+fn resolve_first_launch_resource(app: &AppHandle, name: &str) -> Option<PathBuf> {
+    if let Ok(p) = app
+        .path()
+        .resolve(format!("first_launch/{name}"), BaseDirectory::Resource)
+    {
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))?;
+    let candidates = [
+        exe_dir.join("first_launch").join(name),
+        exe_dir.join("resources").join("first_launch").join(name),
+        exe_dir
+            .join("..")
+            .join("Resources")
+            .join("first_launch")
+            .join(name),
+        exe_dir
+            .join("..")
+            .join("resources")
+            .join("first_launch")
+            .join(name),
+    ];
+    candidates.into_iter().find(|p| p.is_file())
 }
 
 /// Open help documentation on first launch (macOS only, due to unsigned app)

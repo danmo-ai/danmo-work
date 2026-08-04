@@ -50,6 +50,10 @@ echo "==> Fetching bundled CodeGraph CLI..."
 "$SCRIPT_DIR/fetch_codegraph.sh" "$HOME/.danmo-work/bin" || true
 "$SCRIPT_DIR/fetch_codegraph.sh" "$DQ_ROOT/desktop/src-tauri/resources/codegraph" || true
 
+echo "==> Staging Windows first-launch script..."
+"$SCRIPT_DIR/stage_first_launch.sh" windows "$HOME/.danmo-work/first_launch" || true
+"$SCRIPT_DIR/stage_first_launch.sh" windows "$DQ_ROOT/desktop/src-tauri/resources/first_launch" || true
+
 # Bundle Microsoft Coreutils for Windows (required — default-installed with the NSIS package)
 echo "==> Fetching bundled Coreutils for Windows (required)..."
 "$SCRIPT_DIR/fetch_windows_coreutils.sh"

@@ -353,6 +353,11 @@ func New(cfg Config) *Core {
 		_ = err
 	}
 
+	service.StartFirstLaunchAsync(func() {
+		// Refresh builtin connectors after post-install (e.g. CodeGraph binary unpacked).
+		ensureBuiltinConnectors(mcpManager)
+	})
+
 	return &Core{
 		Store:         st,
 		TableStore:    tableStore,

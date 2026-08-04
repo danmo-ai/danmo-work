@@ -97,7 +97,7 @@ make dev-web   # → http://localhost:5801/app/
 
 | 专家 | 作用 |
 |------|------|
-| **CodeGraph** | 本地代码智能（定义、调用、影响面）。首次委派异步建索引；未就绪时降级 `read_file` / `grep` |
+| **CodeGraph** | 本地代码智能，内置 [CodeGraph-Rust](https://github.com/sunerpy/codegraph-rust) 压缩包（约 10 MB；`first_launch` 异步解压）。首次 `delegate_agent` 建索引；未就绪时降级 `read_file` / `grep` |
 | **GitHub** | Issue / PR / Actions / Release — MCP → `gh` → `git` 降级 |
 | **Danmo Make** | 本地图文音视频生成（独立应用） |
 

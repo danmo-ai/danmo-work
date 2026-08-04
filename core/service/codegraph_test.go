@@ -1,6 +1,9 @@
 package service
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -8,6 +11,30 @@ import (
 	"testing"
 	"time"
 )
+
+func writeTestCodeGraphTarGz(path, name string, payload []byte) error {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	hdr := &tar.Header{
+		Name: name,
+		Mode: 0o755,
+		Size: int64(len(payload)),
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		return err
+	}
+	if _, err := tw.Write(payload); err != nil {
+		return err
+	}
+	if err := tw.Close(); err != nil {
+		return err
+	}
+	if err := gz.Close(); err != nil {
+		return err
+	}
+	return os.WriteFile(path, buf.Bytes(), 0o644)
+}
 
 func TestResolveCodeGraphBinEnvOverride(t *testing.T) {
 	dir := t.TempDir()
@@ -41,6 +68,45 @@ func TestEnsureCodeGraphIndexMissingBinary(t *testing.T) {
 	}
 	if codeGraphIndexReady(dir) {
 		t.Fatal("should not create .codegraph without binary")
+	}
+}
+
+func TestResolveCodeGraphBinExtractsArchive(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("tar.gz fixture")
+	}
+	home := t.TempDir()
+	prev := codeGraphHomeBinDir
+	codeGraphHomeBinDir = func() string { return home }
+	t.Cleanup(func() { codeGraphHomeBinDir = prev })
+	t.Setenv("WORK_CODEGRAPH_BIN", "")
+	t.Setenv("PATH", home)
+
+	// Not a shebang — real Mach-O/ELF also won't start with #!.
+	payload := []byte("CGfake-binary-payload")
+	archive := filepath.Join(home, "codegraph.tar.gz")
+	if err := writeTestCodeGraphTarGz(archive, "codegraph", payload); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "CODEGRAPH_VERSION"), []byte("0.0.0-test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := ResolveCodeGraphBin()
+	want := filepath.Join(home, "codegraph")
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+	b, err := os.ReadFile(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != string(payload) {
+		t.Fatalf("extracted contents mismatch")
+	}
+	// Second resolve should reuse the unpacked binary.
+	if again := ResolveCodeGraphBin(); again != want {
+		t.Fatalf("second resolve %q want %q", again, want)
 	}
 }
 
@@ -100,5 +166,17 @@ func TestCodeGraphIndexHint(t *testing.T) {
 	h := CodeGraphIndexHint(CodeGraphIndexing, "/tmp/p")
 	if !strings.Contains(h, "indexing") || !strings.Contains(h, "degrade") {
 		t.Fatalf("hint=%q", h)
+	}
+}
+
+func TestCodeGraphMCPEnv(t *testing.T) {
+	env := CodeGraphMCPEnv()
+	if !strings.Contains(env, "CODEGRAPH_MCP_TOOLS=") {
+		t.Fatalf("env=%q", env)
+	}
+	for _, tool := range []string{"explore", "impact", "callers", "status"} {
+		if !strings.Contains(env, tool) {
+			t.Fatalf("env missing %q: %q", tool, env)
+		}
 	}
 }

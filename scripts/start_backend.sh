@@ -14,6 +14,12 @@ BACKEND_PORT="${DQ_BACKEND_PORT}"
 dq_ensure_out_layout
 "$SCRIPT_DIR/stop.sh" 2>/dev/null || true
 
+# Stage first-launch hooks for this host (CodeGraph extract, …).
+case "$(uname -s)" in
+  Darwin) "$SCRIPT_DIR/stage_first_launch.sh" darwin "$HOME/.danmo-work/first_launch" || true ;;
+  Linux) "$SCRIPT_DIR/stage_first_launch.sh" linux "$HOME/.danmo-work/first_launch" || true ;;
+esac
+
 echo "==> Starting $APP_NAME (backend only) [${DQ_PROJECT}]"
 echo "    Backend : http://127.0.0.1:${BACKEND_PORT}"
 
