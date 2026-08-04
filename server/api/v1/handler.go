@@ -1887,22 +1887,16 @@ func getModelConfigs(h *Handler) gin.HandlerFunc {
 		if models == nil {
 			models = []domain.ModelConfig{}
 		}
-		refreshed := config.RefreshModelConfigs(models, config.DefaultModelConfigs())
-		legacyDisk := false
-		if mig, ok := h.Config.Store().(port.ModelCatalogMigrator); ok {
-			legacyDisk = mig.ConfigFileLacksReasoningDialects()
-		}
-		if legacyDisk || config.ModelConfigsNeedPersist(models, refreshed) {
-			cfg.LLM.Models = refreshed
-			if saved, err := h.Config.Update(c, domain.UpdateConfigFileRequest{LLM: &cfg.LLM}); err == nil {
-				refreshed = saved.LLM.Models
-			}
-			models = refreshed
-		}
+		// Local catalog is user-owned: never auto-overlay or persist built-in
+		// updates. Surface drift so the UI can prompt for an explicit reset.
+		diverged := config.ModelConfigsDivergedFromBuiltin(models, config.DefaultModelConfigs())
 		if h.LLMConfig != nil {
 			h.LLMConfig.SetModelConfigs(models)
 		}
-		c.JSON(http.StatusOK, models)
+		c.JSON(http.StatusOK, domain.ModelConfigsResponse{
+			Models:          models,
+			CatalogDiverged: diverged,
+		})
 	}
 }
 
@@ -1933,7 +1927,10 @@ func updateModelConfigs(h *Handler) gin.HandlerFunc {
 		if h.LLMConfig != nil {
 			h.LLMConfig.SetModelConfigs(models)
 		}
-		c.JSON(http.StatusOK, models)
+		c.JSON(http.StatusOK, domain.ModelConfigsResponse{
+			Models:          models,
+			CatalogDiverged: config.ModelConfigsDivergedFromBuiltin(models, config.DefaultModelConfigs()),
+		})
 	}
 }
 
@@ -1953,7 +1950,10 @@ func refreshModelConfigsHandler(h *Handler) gin.HandlerFunc {
 		if h.LLMConfig != nil {
 			h.LLMConfig.SetModelConfigs(models)
 		}
-		c.JSON(http.StatusOK, models)
+		c.JSON(http.StatusOK, domain.ModelConfigsResponse{
+			Models:          models,
+			CatalogDiverged: false,
+		})
 	}
 }
 

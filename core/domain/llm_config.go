@@ -109,6 +109,14 @@ type ModelConfig struct {
 	Vision bool `json:"vision,omitempty" mapstructure:"vision" yaml:"vision,omitempty"`
 }
 
+// ModelConfigsResponse is returned by GET/PUT/POST model-configs endpoints.
+// CatalogDiverged is true when an explicit reset would change the local catalog
+// (newer built-in params, missing built-in models, or local edits on known models).
+type ModelConfigsResponse struct {
+	Models          []ModelConfig `json:"models"`
+	CatalogDiverged bool          `json:"catalogDiverged"`
+}
+
 // LLMProviderPreset is a template for quickly creating a provider config.
 // It ships via config.yaml or built-in defaults and is exposed to the frontend
 // so users can pick a preset instead of filling every field manually.

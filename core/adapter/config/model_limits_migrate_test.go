@@ -44,15 +44,9 @@ func TestLoadMigratesLegacyModelLimits(t *testing.T) {
 	if cfg.LLM.Models[1].Model != "claude-sonnet-4" || cfg.LLM.Models[1].MaxOutput != 64000 {
 		t.Fatalf("second migrated model = %+v", cfg.LLM.Models[1])
 	}
-	foundK3 := false
-	for _, m := range cfg.LLM.Models {
-		if m.Model == "k3-256k" {
-			foundK3 = true
-			break
-		}
-	}
-	if !foundK3 {
-		t.Fatal("expected built-in k3-256k appended after migrate")
+	// Load no longer auto-appends built-ins; drift is reported for an explicit reset.
+	if !ModelConfigsDivergedFromBuiltin(cfg.LLM.Models, DefaultModelConfigs()) {
+		t.Fatal("expected catalog diverged after legacy migrate (missing built-in models)")
 	}
 
 	// Saving any section must persist llm.models and drop the legacy key.
@@ -106,6 +100,9 @@ func TestLoadSeedsDefaultModelsWhenEmpty(t *testing.T) {
 	if !found {
 		t.Fatalf("expected gpt-4o in default catalog, got %d entries", len(cfg.LLM.Models))
 	}
+	if ModelConfigsDivergedFromBuiltin(cfg.LLM.Models, DefaultModelConfigs()) {
+		t.Fatal("fresh default seed should not report catalog diverged")
+	}
 }
 
 func TestLoadKeepsExplicitModels(t *testing.T) {
@@ -126,18 +123,17 @@ func TestLoadKeepsExplicitModels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.LLM.Models) < 1 || cfg.LLM.Models[0].Model != "custom-only" {
+	if len(cfg.LLM.Models) != 1 || cfg.LLM.Models[0].Model != "custom-only" {
 		t.Fatalf("unexpected models: %+v", cfg.LLM.Models)
 	}
-	foundK3 := false
+	// Built-in models are not auto-merged; user must reset explicitly.
 	for _, m := range cfg.LLM.Models {
-		if m.Model == "k3-256k" && m.ReasoningDialect == "kimi_k3" {
-			foundK3 = true
-			break
+		if m.Model == "k3-256k" {
+			t.Fatal("did not expect built-in k3-256k auto-merged into local catalog")
 		}
 	}
-	if !foundK3 {
-		t.Fatal("expected built-in k3-256k merged into catalog")
+	if !ModelConfigsDivergedFromBuiltin(cfg.LLM.Models, DefaultModelConfigs()) {
+		t.Fatal("expected catalog diverged when built-in models are missing locally")
 	}
 }
 
@@ -169,5 +165,38 @@ func TestRefreshModelConfigsOverlaysDialect(t *testing.T) {
 	if !found {
 		t.Fatal("missing k3-256k")
 	}
+	if ModelConfigsDivergedFromBuiltin(out, DefaultModelConfigs()) {
+		t.Fatal("after refresh, catalog should match built-in overlay")
+	}
 }
 
+func TestModelConfigsDivergedFromBuiltinDetectsStaleParams(t *testing.T) {
+	defaults := DefaultModelConfigs()
+	var k3 *domain.ModelConfig
+	for i := range defaults {
+		if defaults[i].Model == "k3" {
+			k3 = &defaults[i]
+			break
+		}
+	}
+	if k3 == nil {
+		t.Fatal("builtin k3 missing")
+	}
+	stale := []domain.ModelConfig{
+		{Model: "k3", ContextWindow: 1, ReasoningDialect: "openai", AvailableEfforts: []string{"off"}},
+	}
+	// Pad with all other built-ins so only k3 params differ.
+	for _, d := range defaults {
+		if d.Model == "k3" {
+			continue
+		}
+		stale = append(stale, d)
+	}
+	if !ModelConfigsDivergedFromBuiltin(stale, defaults) {
+		t.Fatal("expected diverge when built-in params changed for a known model")
+	}
+	synced := RefreshModelConfigs(stale, defaults)
+	if ModelConfigsDivergedFromBuiltin(synced, defaults) {
+		t.Fatal("expected no diverge after refresh")
+	}
+}

@@ -206,12 +206,6 @@ type ConfigStore interface {
 	Save(ctx context.Context, cfg *domain.ConfigFile) error
 }
 
-// ModelCatalogMigrator is implemented by config loaders that can detect a
-// legacy on-disk llm.models catalog missing reasoning_dialect keys.
-type ModelCatalogMigrator interface {
-	ConfigFileLacksReasoningDialects() bool
-}
-
 type ApprovalRepo interface {
 	Create(ctx context.Context, a domain.Approval) error
 	Get(ctx context.Context, id string) (domain.Approval, error)
