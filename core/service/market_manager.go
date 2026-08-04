@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -544,6 +545,7 @@ func (m *MarketManager) installConnector(
 			return uerr
 		}
 		result.Installed = append(result.Installed, srv.ID)
+		m.refreshConnectorTools(ctx, srv.ID)
 		return nil
 	}
 	req.ID = entry.ID
@@ -552,7 +554,19 @@ func (m *MarketManager) installConnector(
 		return cerr
 	}
 	result.Installed = append(result.Installed, srv.ID)
+	m.refreshConnectorTools(ctx, srv.ID)
 	return nil
+}
+
+// refreshConnectorTools dials the MCP server so status becomes connected and tools are listed.
+// Failure is non-fatal: the connector row is already persisted (status may be "error").
+func (m *MarketManager) refreshConnectorTools(ctx context.Context, id string) {
+	if m.mcp == nil || strings.TrimSpace(id) == "" {
+		return
+	}
+	if _, err := m.mcp.RefreshTools(ctx, id); err != nil {
+		log.Printf("[market] connector %s: refresh tools after install: %v", id, err)
+	}
 }
 
 // Uninstall removes a market-installed skill, expert, or connector. Builtin items are refused.
