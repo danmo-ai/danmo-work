@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"danmo-work/core/domain"
@@ -47,6 +48,45 @@ func TestLocalFetchCatalogAndPackage(t *testing.T) {
 	}
 	defer cleanup()
 	if _, err := os.Stat(filepath.Join(dir, "SKILL.md")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAssertZipArchive(t *testing.T) {
+	if err := assertZipArchive([]byte("PK\x03\x04xxxx"), "http://example/a.zip"); err != nil {
+		t.Fatal(err)
+	}
+	err := assertZipArchive([]byte("<!DOCTYPE html><html>"), "http://example/a.zip")
+	if err == nil || !strings.Contains(err.Error(), "HTML") {
+		t.Fatalf("want HTML error, got %v", err)
+	}
+	err = assertZipArchive([]byte(`{"status":404}`), "http://example/a.zip")
+	if err == nil || !strings.Contains(err.Error(), "not a zip") {
+		t.Fatalf("want not-a-zip error, got %v", err)
+	}
+}
+
+func TestGiteeArchiveDownloadIsZip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("network")
+	}
+	m := New(domain.MarketSource{
+		ID:       "official-gitee",
+		Kind:     "git",
+		Platform: "gitee",
+		Repo:     "https://gitee.com/danmo-ai/dq-market",
+		Ref:      "main",
+		Enabled:  true,
+	})
+	url, err := m.archiveURL("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := m.httpGet(context.Background(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := assertZipArchive(data, url); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/creack/pty"
@@ -50,17 +51,38 @@ func projectTerminal(h *Handler) gin.HandlerFunc {
 		}
 		_ = os.MkdirAll(dir, 0755)
 
+		cols := uint16(120)
+		rows := uint16(32)
+		if v := c.Query("cols"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 && n < 1000 {
+				cols = uint16(n)
+			}
+		}
+		if v := c.Query("rows"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 && n < 1000 {
+				rows = uint16(n)
+			}
+		}
+
 		conn, err := terminalUpgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
 			return
 		}
 		defer conn.Close()
 
-		cmd := exec.Command(defaultShell())
+		shell := defaultShell()
+		var cmd *exec.Cmd
+		// zsh PROMPT_SP prints a bare "%" when it thinks the prior line had no
+		// trailing newline — common when a PTY starts at 0×0 / wrong size.
+		if runtime.GOOS != "windows" && filepath.Base(shell) == "zsh" {
+			cmd = exec.Command(shell, "-o", "NO_PROMPT_SP", "-i")
+		} else {
+			cmd = exec.Command(shell)
+		}
 		cmd.Dir = dir
 		cmd.Env = append(os.Environ(), "TERM=xterm-256color")
 
-		ptmx, err := pty.Start(cmd)
+		ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: cols, Rows: rows})
 		if err != nil {
 			_ = conn.WriteMessage(websocket.TextMessage, []byte("\x1b[31m启动终端失败: "+err.Error()+"\x1b[0m\r\n"))
 			_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "pty start failed"))

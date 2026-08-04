@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onMounted } from 'vue'
+import { computed, ref, watch, watchEffect, nextTick, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import {
@@ -42,6 +42,11 @@ const workspaceUi = useWorkspaceUiStore()
 const { leftRailCollapsed: collapsed } = storeToRefs(workspaceUi)
 
 const railStyle = computed(() => (collapsed.value ? { width: '44px' } : { width: `${width.value}px` }))
+
+watchEffect(() => {
+  const px = collapsed.value ? 44 : width.value
+  document.documentElement.style.setProperty('--app-left-rail-width', `${px}px`)
+})
 
 function expandLeftRail() {
   workspaceUi.setLeftRailCollapsed(false)

@@ -137,6 +137,7 @@ export const useKnowledgeStore = defineStore('knowledge', () => {
     createBase,
     updateBase,
     removeBase,
+    deleteBase: removeBase,
     addDocument,
     updateDocument,
     removeDocument,

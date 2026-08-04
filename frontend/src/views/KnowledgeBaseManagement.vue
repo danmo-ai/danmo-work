@@ -1,122 +1,175 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import WorkspaceShell from '@/components/common/WorkspaceShell.vue'
-import MarkdownRichEditor from '@/components/office/MarkdownRichEditor.vue'
+import MdEditor from '@/components/common/MdEditor.vue'
 import { useKnowledgeStore } from '@/stores/knowledge'
 import { confirm, toast } from '@/utils/feedback'
-import type { KnowledgeBase } from '@/types'
+
+const SELECTED_KB_KEY = 'app-selected-kb-id'
 
 const { t } = useI18n()
 const knowledge = useKnowledgeStore()
 
-const selectedId = ref<string | null>(null)
-const isCreating = ref(false)
+const selectedBaseId = ref('')
+const selectedDocId = ref<string | null>(null)
+const isCreatingDoc = ref(false)
 const saving = ref(false)
-const activeTab = ref<'info' | 'documents'>('info')
-const pendingDocTitle = ref('')
-const pendingDocContent = ref('')
-const editingDocId = ref<string | null>(null)
-const docEditorOpen = ref(false)
-const docMode = ref<'view' | 'edit'>('edit')
-const docDirty = ref(false)
-const docSaving = ref(false)
-const docEditorRef = ref<InstanceType<typeof MarkdownRichEditor> | null>(null)
+const dirty = ref(false)
+const contentSnapshot = ref('')
+const titleSnapshot = ref('')
 
-const form = ref<KnowledgeBase>({
-  id: '',
-  name: '',
-  description: '',
-  documentCount: 0,
-  updatedAt: '',
-})
+const docTitle = ref('')
+const docContent = ref('')
+
+const showBaseCreate = ref(false)
+const showBaseSettings = ref(false)
+const baseFormName = ref('')
+const baseFormDescription = ref('')
+const baseSaving = ref(false)
 
 const sortedBases = computed(() =>
   [...knowledge.bases].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
 )
 
-const selected = computed(() => knowledge.bases.find((b) => b.id === selectedId.value))
-const hasSelection = computed(() => isCreating.value || !!selectedId.value)
+const selectedBase = computed(() => knowledge.bases.find((b) => b.id === selectedBaseId.value))
+
+const selectedDocs = computed(() =>
+  selectedBaseId.value ? knowledge.documentsFor(selectedBaseId.value) : [],
+)
+
+const hasSelection = computed(() => isCreatingDoc.value || !!selectedDocId.value)
+
 const headerTitle = computed(() => {
-  if (isCreating.value) return form.value.name.trim() || t('knowledge.newBase')
-  return selected.value?.name.trim() || t('knowledge.untitled')
+  if (isCreatingDoc.value) return docTitle.value.trim() || t('knowledge.addDoc')
+  return docTitle.value.trim() || t('knowledge.untitledDoc')
 })
 
-const selectedDocs = computed(() => (selectedId.value ? knowledge.documentsFor(selectedId.value) : []))
-
-const knowledgeTabs = computed(() => [
-  { label: t('knowledge.basicInfo'), value: 'info' as const },
-  {
-    label: selectedDocs.value.length
-      ? `${t('knowledge.documents')} (${selectedDocs.value.length})`
-      : t('knowledge.documents'),
-    value: 'documents' as const,
-  },
-])
+const canDeleteBase = computed(() => sortedBases.value.length > 1)
 
 onMounted(async () => {
+  window.addEventListener('keydown', onKeydown)
   await knowledge.loadBases()
-  if (sortedBases.value.length && !selectedId.value) {
-    await selectBase(sortedBases.value[0].id)
+  if (!sortedBases.value.length) {
+    const base = await knowledge.createBase({ name: t('knowledge.defaultBaseName') })
+    await selectBase(base.id)
+    return
   }
+  const saved = localStorage.getItem(SELECTED_KB_KEY)
+  const initial =
+    (saved && sortedBases.value.some((b) => b.id === saved) && saved) ||
+    sortedBases.value.find((b) => b.id === 'kb-default')?.id ||
+    sortedBases.value[0].id
+  await selectBase(initial)
 })
 
-watch(activeTab, async (tab) => {
-  if (tab === 'documents' && selectedId.value) {
-    await knowledge.loadDocs(selectedId.value)
-  }
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
 })
+
+watch(selectedBaseId, (id) => {
+  if (id) localStorage.setItem(SELECTED_KB_KEY, id)
+})
+
+watch([docTitle, docContent], () => {
+  if (!hasSelection.value) return
+  dirty.value = docTitle.value !== titleSnapshot.value || docContent.value !== contentSnapshot.value
+})
+
+async function guardDirty(): Promise<boolean> {
+  if (!dirty.value) return true
+  try {
+    await confirm(t('knowledge.unsavedLeave'), t('knowledge.unsavedTitle'), { type: 'warning' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function onBaseSwitchCommand(cmd: string) {
+  if (!cmd.startsWith('base:')) return
+  const next = cmd.slice('base:'.length)
+  if (!next || next === selectedBaseId.value) return
+  if (!(await guardDirty())) return
+  await selectBase(next)
+}
 
 async function selectBase(id: string) {
-  isCreating.value = false
-  selectedId.value = id
-  activeTab.value = 'info'
-  closeDocEditor()
-  const base = knowledge.bases.find((b) => b.id === id)
-  if (base) form.value = { ...base }
+  selectedBaseId.value = id
+  clearDocEditor()
   await knowledge.loadDocs(id)
+  if (selectedDocs.value.length) {
+    await openDocument(selectedDocs.value[0].id, true)
+  }
 }
 
-function openCreate() {
-  isCreating.value = true
-  selectedId.value = null
-  activeTab.value = 'info'
-  closeDocEditor()
-  form.value = { id: '', name: '', description: '', documentCount: 0, updatedAt: '' }
+function clearDocEditor() {
+  selectedDocId.value = null
+  isCreatingDoc.value = false
+  docTitle.value = ''
+  docContent.value = ''
+  titleSnapshot.value = ''
+  contentSnapshot.value = ''
+  dirty.value = false
 }
 
-function closeDocEditor() {
-  editingDocId.value = null
-  pendingDocTitle.value = ''
-  pendingDocContent.value = ''
-  docEditorOpen.value = false
-  docDirty.value = false
-  docMode.value = 'edit'
+async function openNewDocument() {
+  if (!selectedBaseId.value) return
+  if (!(await guardDirty())) return
+  isCreatingDoc.value = true
+  selectedDocId.value = null
+  docTitle.value = ''
+  docContent.value = ''
+  titleSnapshot.value = ''
+  contentSnapshot.value = ''
+  dirty.value = false
 }
 
-async function save() {
-  if (!form.value.name.trim()) {
-    toast.warning(t('knowledge.namePlaceholder'))
+async function openDocument(docId: string, skipGuard = false) {
+  if (!skipGuard && selectedDocId.value === docId && !isCreatingDoc.value) return
+  if (!skipGuard && !(await guardDirty())) return
+  try {
+    const doc = await knowledge.getDocument(docId)
+    isCreatingDoc.value = false
+    selectedDocId.value = doc.id
+    docTitle.value = doc.title
+    docContent.value = doc.content ?? ''
+    titleSnapshot.value = docTitle.value
+    contentSnapshot.value = docContent.value
+    dirty.value = false
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
+  }
+}
+
+async function saveDocument() {
+  if (!selectedBaseId.value || !docTitle.value.trim()) {
+    toast.warning(t('knowledge.docTitlePlaceholder'))
+    return
+  }
+  if (!docContent.value.trim()) {
+    toast.warning(t('knowledge.contentPlaceholder'))
     return
   }
   saving.value = true
   try {
-    if (isCreating.value) {
-      const base = await knowledge.createBase({
-        name: form.value.name.trim(),
-        description: form.value.description?.trim() ?? '',
-      })
-      toast.success(t('knowledge.created'))
-      isCreating.value = false
-      await selectBase(base.id)
-    } else if (selected.value) {
-      await knowledge.updateBase(selected.value.id, {
-        name: form.value.name.trim(),
-        description: form.value.description?.trim() ?? '',
-      })
-      toast.success(t('knowledge.saved'))
-      await selectBase(selected.value.id)
+    if (selectedDocId.value) {
+      await knowledge.updateDocument(selectedDocId.value, docTitle.value.trim(), docContent.value)
+    } else {
+      const doc = await knowledge.addDocument(
+        selectedBaseId.value,
+        docTitle.value.trim(),
+        docContent.value,
+      )
+      selectedDocId.value = doc.id
+      isCreatingDoc.value = false
     }
+    titleSnapshot.value = docTitle.value.trim()
+    contentSnapshot.value = docContent.value
+    dirty.value = false
+    await knowledge.loadBases()
+    await knowledge.loadDocs(selectedBaseId.value)
+    toast.success(t('knowledge.docAdded'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
   } finally {
@@ -124,84 +177,12 @@ async function save() {
   }
 }
 
-async function removeSelected() {
-  if (!selected.value) return
-  try {
-    await confirm(t('knowledge.deleteConfirm', { name: selected.value.name }), t('knowledge.deleteTitle'), { type: 'warning' })
-  } catch {
+async function removeSelectedDoc() {
+  if (!selectedDocId.value) {
+    clearDocEditor()
     return
   }
-  try {
-    await knowledge.removeBase(selected.value.id)
-    selectedId.value = null
-    isCreating.value = false
-    closeDocEditor()
-    toast.success(t('knowledge.deleted'))
-  } catch (e) {
-    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
-  }
-}
-
-function openNewDocument() {
-  editingDocId.value = null
-  pendingDocTitle.value = ''
-  pendingDocContent.value = ''
-  docMode.value = 'edit'
-  docEditorOpen.value = true
-  docDirty.value = false
-  void nextTick(() => {
-    docEditorRef.value?.setContent('', { emitUpdate: false })
-  })
-}
-
-async function openDocument(docId: string, mode: 'view' | 'edit' = 'edit') {
-  try {
-    const doc = await knowledge.getDocument(docId)
-    editingDocId.value = doc.id
-    pendingDocTitle.value = doc.title
-    pendingDocContent.value = doc.content ?? ''
-    docMode.value = mode
-    docEditorOpen.value = true
-    docDirty.value = false
-    await nextTick()
-    docEditorRef.value?.setContent(pendingDocContent.value, { emitUpdate: false })
-  } catch (e) {
-    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
-  }
-}
-
-async function saveDocument() {
-  if (!selected.value || !pendingDocTitle.value.trim()) {
-    toast.warning(t('knowledge.docTitlePlaceholder'))
-    return
-  }
-  const content = docEditorRef.value?.getMarkdown() || pendingDocContent.value
-  if (!content.trim()) {
-    toast.warning(t('knowledge.contentPlaceholder'))
-    return
-  }
-  docSaving.value = true
-  try {
-    if (editingDocId.value) {
-      await knowledge.updateDocument(editingDocId.value, pendingDocTitle.value.trim(), content)
-    } else {
-      const doc = await knowledge.addDocument(selected.value.id, pendingDocTitle.value.trim(), content)
-      editingDocId.value = doc.id
-    }
-    pendingDocContent.value = content
-    docDirty.value = false
-    await knowledge.loadBases()
-    await knowledge.loadDocs(selected.value.id)
-    toast.success(t('knowledge.docAdded'))
-  } catch (e) {
-    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
-  } finally {
-    docSaving.value = false
-  }
-}
-
-async function removeDocument(docId: string, title: string) {
-  if (!selected.value) return
+  const title = docTitle.value.trim() || t('knowledge.untitledDoc')
   try {
     await confirm(t('knowledge.deleteDocConfirm', { name: title }), t('knowledge.deleteDocTitle'), {
       type: 'warning',
@@ -210,34 +191,114 @@ async function removeDocument(docId: string, title: string) {
     return
   }
   try {
-    await knowledge.removeDocument(docId)
-    if (editingDocId.value === docId) closeDocEditor()
-    await knowledge.loadBases()
+    await knowledge.removeDocument(selectedDocId.value)
     toast.success(t('knowledge.docDeleted'))
+    clearDocEditor()
+    await knowledge.loadBases()
+    if (selectedDocs.value.length) await openDocument(selectedDocs.value[0].id)
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
   }
 }
 
-function onDocUpdate() {
-  docDirty.value = true
-  pendingDocContent.value = docEditorRef.value?.getMarkdown() || pendingDocContent.value
+function openCreateBase() {
+  baseFormName.value = ''
+  baseFormDescription.value = ''
+  showBaseCreate.value = true
 }
 
-function baseInitial(name: string) {
-  return name.trim().charAt(0).toUpperCase() || 'K'
+function openBaseSettings() {
+  if (!selectedBase.value) return
+  baseFormName.value = selectedBase.value.name
+  baseFormDescription.value = selectedBase.value.description ?? ''
+  showBaseSettings.value = true
 }
 
-function formatDate(value: string) {
-  if (!value) return ''
-  return new Date(value).toLocaleString()
+async function submitCreateBase() {
+  if (!baseFormName.value.trim()) {
+    toast.warning(t('knowledge.namePlaceholder'))
+    return
+  }
+  baseSaving.value = true
+  try {
+    const base = await knowledge.createBase({
+      name: baseFormName.value.trim(),
+      description: baseFormDescription.value.trim(),
+    })
+    showBaseCreate.value = false
+    toast.success(t('knowledge.created'))
+    await selectBase(base.id)
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
+  } finally {
+    baseSaving.value = false
+  }
+}
+
+async function submitBaseSettings() {
+  if (!selectedBase.value) return
+  if (!baseFormName.value.trim()) {
+    toast.warning(t('knowledge.namePlaceholder'))
+    return
+  }
+  baseSaving.value = true
+  try {
+    await knowledge.updateBase(selectedBase.value.id, {
+      name: baseFormName.value.trim(),
+      description: baseFormDescription.value.trim(),
+    })
+    showBaseSettings.value = false
+    toast.success(t('knowledge.saved'))
+    await knowledge.loadBases()
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
+  } finally {
+    baseSaving.value = false
+  }
+}
+
+async function removeCurrentBase() {
+  if (!selectedBase.value) return
+  if (!canDeleteBase.value) {
+    toast.warning(t('knowledge.cannotDeleteLastBase'))
+    return
+  }
+  try {
+    await confirm(
+      t('knowledge.deleteConfirm', { name: selectedBase.value.name }),
+      t('knowledge.deleteTitle'),
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  try {
+    const deletingId = selectedBase.value.id
+    await knowledge.deleteBase(deletingId)
+    showBaseSettings.value = false
+    toast.success(t('knowledge.deleted'))
+    await knowledge.loadBases()
+    const next =
+      sortedBases.value.find((b) => b.id === 'kb-default')?.id || sortedBases.value[0]?.id
+    if (next) await selectBase(next)
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
+  }
+}
+
+function onBaseMenu(cmd: string) {
+  if (cmd === 'settings') openBaseSettings()
+  else if (cmd === 'delete') void removeCurrentBase()
+}
+
+function docInitial(title: string) {
+  return title.trim().charAt(0).toUpperCase() || 'D'
 }
 
 function onKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') {
     e.preventDefault()
-    if (docEditorOpen.value && docMode.value === 'edit') void saveDocument()
-    else void save()
+    if (hasSelection.value) void saveDocument()
   }
 }
 </script>
@@ -246,35 +307,113 @@ function onKeydown(e: KeyboardEvent) {
   <WorkspaceShell
     custom-rail
     :has-selection="hasSelection"
-    @create="openCreate"
     @keydown="onKeydown"
+    @create="openNewDocument"
   >
     <template #rail>
       <div class="resource-rail__section">
+        <div class="knowledge-rail__base">
+          <DqDropdown class="knowledge-rail__base-switch" @command="onBaseSwitchCommand">
+            <button
+              type="button"
+              class="knowledge-rail__base-trigger"
+              :aria-label="$t('knowledge.title')"
+            >
+              <span
+                class="resource-rail__name knowledge-rail__base-name"
+                style="font-size: var(--dq-font-size-body); font-weight: 600;"
+              >
+                {{ selectedBase?.name || $t('knowledge.title') }}
+              </span>
+              <svg
+                class="knowledge-rail__base-chevron"
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+            <template #dropdown>
+              <DqDropdownMenu>
+                <DqDropdownItem
+                  v-for="base in sortedBases"
+                  :key="base.id"
+                  :command="`base:${base.id}`"
+                >
+                  {{ base.name }}
+                </DqDropdownItem>
+              </DqDropdownMenu>
+            </template>
+          </DqDropdown>
+          <DqIconButton :aria-label="$t('knowledge.newBase')" @click="openCreateBase">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14" stroke-linecap="round" />
+            </svg>
+          </DqIconButton>
+          <DqDropdown @command="onBaseMenu">
+            <DqIconButton :aria-label="$t('knowledge.baseSettings')">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                <circle cx="12" cy="5" r="1.6" />
+                <circle cx="12" cy="12" r="1.6" />
+                <circle cx="12" cy="19" r="1.6" />
+              </svg>
+            </DqIconButton>
+            <template #dropdown>
+              <DqDropdownMenu>
+                <DqDropdownItem command="settings">{{ $t('knowledge.baseSettings') }}</DqDropdownItem>
+                <DqDropdownItem command="delete" :disabled="!canDeleteBase">
+                  {{ $t('common.delete') }}
+                </DqDropdownItem>
+              </DqDropdownMenu>
+            </template>
+          </DqDropdown>
+        </div>
+
         <div class="resource-rail__section-head">
-          <span class="resource-rail__section-title">{{ $t('knowledge.title') }}</span>
-          <DqIconButton :aria-label="$t('knowledge.newBase')" @click="openCreate">
+          <span class="resource-rail__section-title">{{ $t('knowledge.documents') }}</span>
+          <DqIconButton
+            :aria-label="$t('knowledge.addDoc')"
+            :disabled="!selectedBaseId"
+            @click="openNewDocument"
+          >
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 5v14M5 12h14" stroke-linecap="round" />
             </svg>
           </DqIconButton>
         </div>
-        <DqEmpty v-if="!sortedBases.length" class="resource-rail__empty" :description="$t('knowledge.noBases')" />
-        <nav v-else class="resource-rail__list" :aria-label="$t('knowledge.baseList')">
+
+        <DqEmpty
+          v-if="!selectedDocs.length && !isCreatingDoc"
+          class="resource-rail__empty"
+          :description="$t('knowledge.noDocuments')"
+        />
+        <nav v-else class="resource-rail__list" :aria-label="$t('knowledge.documents')">
           <button
-            v-for="base in sortedBases"
-            :key="base.id"
+            v-if="isCreatingDoc"
+            type="button"
+            class="resource-rail__row is-active"
+          >
+            <span class="resource-rail__avatar resource-rail__avatar--new">+</span>
+            <span class="resource-rail__meta">
+              <span class="resource-rail__name">{{ docTitle.trim() || $t('knowledge.addDoc') }}</span>
+            </span>
+          </button>
+          <button
+            v-for="doc in selectedDocs"
+            :key="doc.id"
             type="button"
             class="resource-rail__row"
-            :class="{ 'is-active': selectedId === base.id && !isCreating }"
-            @click="selectBase(base.id)"
+            :class="{ 'is-active': selectedDocId === doc.id && !isCreatingDoc }"
+            @click="openDocument(doc.id)"
           >
-            <span class="resource-rail__avatar">{{ baseInitial(base.name) }}</span>
+            <span class="resource-rail__avatar">{{ docInitial(doc.title) }}</span>
             <span class="resource-rail__meta">
-              <span class="resource-rail__name">{{ base.name }}</span>
-              <span class="resource-rail__desc">
-                {{ $t('knowledge.docCount', { count: base.documentCount }) }}
-              </span>
+              <span class="resource-rail__name">{{ doc.title }}</span>
             </span>
           </button>
         </nav>
@@ -282,10 +421,12 @@ function onKeydown(e: KeyboardEvent) {
     </template>
 
     <template #empty>
-      <DqEmpty :description="$t('knowledge.emptySelection')">
-        <p class="resource-workspace__hint">{{ $t('knowledge.emptySelectionHint') }}</p>
+      <DqEmpty :description="$t('knowledge.emptyDocSelection')">
+        <p class="resource-workspace__hint">{{ $t('knowledge.emptyDocSelectionHint') }}</p>
         <div class="resource-workspace__empty-actions">
-          <DqButton type="primary" @click="openCreate">{{ $t('knowledge.newBase') }}</DqButton>
+          <DqButton type="primary" :disabled="!selectedBaseId" @click="openNewDocument">
+            {{ $t('knowledge.addDoc') }}
+          </DqButton>
         </div>
       </DqEmpty>
     </template>
@@ -293,172 +434,154 @@ function onKeydown(e: KeyboardEvent) {
     <template #header>
       <div class="resource-workspace__identity">
         <h1 class="resource-workspace__title">{{ headerTitle }}</h1>
-        <div v-if="selected && !isCreating" class="resource-workspace__badges">
-          <span class="resource-rail__tag is-accent">
-            {{ $t('knowledge.docCount', { count: selected.documentCount }) }}
-          </span>
-          <span v-if="selected.updatedAt" class="resource-workspace__hint">
-            {{ $t('knowledge.updated') }}{{ formatDate(selected.updatedAt) }}
-          </span>
-        </div>
       </div>
-      <DqSegmented
-        v-if="!isCreating"
-        v-model="activeTab"
-        class="resource-workspace__segmented"
-        :options="knowledgeTabs"
-      />
     </template>
 
     <template #body>
-      <section v-show="activeTab === 'info'" class="resource-section">
-        <label class="resource-field resource-field--block">
-          <span class="resource-field__label">{{ $t('common.name') }}</span>
-          <DqInput v-model="form.name" :placeholder="$t('knowledge.dummyName')" />
-        </label>
-        <label class="resource-field resource-field--block">
-          <span class="resource-field__label">{{ $t('common.description') }}</span>
+      <section class="resource-section resource-section--body knowledge-doc-editor">
+        <label class="resource-field resource-field--inline knowledge-doc-editor__title">
+          <span class="resource-field__label">{{ $t('knowledge.docTitle') }}</span>
           <DqInput
-            v-model="form.description"
-            type="textarea"
-            :rows="5"
-            :placeholder="$t('knowledge.descriptionPlaceholder')"
+            v-model="docTitle"
+            class="knowledge-doc-editor__title-input"
+            :placeholder="$t('knowledge.docTitlePlaceholder')"
           />
         </label>
-      </section>
-
-      <section v-show="activeTab === 'documents'" class="resource-section knowledge-docs">
-        <div class="resource-section__toolbar">
-          <DqButton size="sm" :disabled="isCreating || !selectedId" @click="openNewDocument">
-            {{ $t('knowledge.addDoc') }}
-          </DqButton>
-        </div>
-
-        <div v-if="!selectedDocs.length && !docEditorOpen" class="resource-section__empty">
-          <DqEmpty :description="$t('knowledge.noDocuments')" />
-        </div>
-        <div v-else-if="selectedDocs.length" class="resource-list-card">
-          <div
-            v-for="doc in selectedDocs"
-            :key="doc.id"
-            class="resource-list-card__item"
-            :class="{ 'is-active': editingDocId === doc.id && docEditorOpen }"
-          >
-            <div class="resource-list-card__meta">
-              <span class="resource-list-card__name">{{ doc.title }}</span>
-              <span class="resource-list-card__desc">{{ formatDate(doc.updatedAt) }}</span>
-            </div>
-            <div class="resource-list-card__actions">
-              <DqButton size="sm" @click="openDocument(doc.id, 'view')">
-                {{ $t('knowledge.docViewMode') }}
-              </DqButton>
-              <DqButton size="sm" @click="openDocument(doc.id, 'edit')">
-                {{ $t('knowledge.docOpen') }}
-              </DqButton>
-              <button
-                type="button"
-                class="resource-list-card__action resource-list-card__action--danger"
-                @click="removeDocument(doc.id, doc.title)"
-              >
-                {{ $t('common.delete') }}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="docEditorOpen" class="knowledge-docs__editor resource-panel">
-          <div class="knowledge-docs__editor-bar">
-            <label class="resource-field knowledge-docs__title-field">
-              <span class="resource-field__label">{{ $t('knowledge.docTitle') }}</span>
-              <DqInput
-                v-model="pendingDocTitle"
-                :disabled="docMode === 'view'"
-                :placeholder="$t('knowledge.docTitlePlaceholder')"
-              />
-            </label>
-            <div class="knowledge-docs__editor-actions">
-              <DqSegmented
-                v-model="docMode"
-                size="sm"
-                :options="[
-                  { label: $t('knowledge.docViewMode'), value: 'view' },
-                  { label: $t('knowledge.docEditMode'), value: 'edit' },
-                ]"
-              />
-              <DqButton
-                v-if="docMode === 'edit'"
-                type="primary"
-                size="sm"
-                :disabled="docSaving"
-                @click="saveDocument"
-              >
-                {{ $t('knowledge.docSave') }}
-              </DqButton>
-              <DqButton size="sm" @click="closeDocEditor">{{ $t('knowledge.docCancel') }}</DqButton>
-            </div>
-          </div>
-          <div class="knowledge-docs__editor-body">
-            <MarkdownRichEditor
-              ref="docEditorRef"
-              :editable="docMode === 'edit'"
-              :show-toolbar="docMode === 'edit'"
-              :show-toc="true"
-              :placeholder="$t('knowledge.contentPlaceholder')"
-              @update="onDocUpdate"
-            />
-          </div>
-          <p v-if="docDirty" class="resource-workspace__hint knowledge-docs__dirty">
-            {{ $t('common.saveShortcut') }}
-          </p>
-        </div>
+        <MdEditor
+          v-model="docContent"
+          :rows="20"
+          :placeholder="$t('knowledge.contentPlaceholder')"
+        />
       </section>
     </template>
 
     <template #footer>
       <span class="resource-workspace__hint">{{ $t('common.saveShortcut') }}</span>
       <div class="resource-workspace__footer-actions">
-        <DqButton v-if="isCreating" @click="isCreating = false; selectedId = null">
-          {{ $t('common.cancel') }}
+        <DqButton v-if="selectedDocId || isCreatingDoc" @click="removeSelectedDoc">
+          {{ isCreatingDoc ? $t('common.cancel') : $t('common.delete') }}
         </DqButton>
-        <DqButton v-if="!isCreating" @click="removeSelected">{{ $t('common.delete') }}</DqButton>
-        <DqButton type="primary" :disabled="saving" @click="save">
-          {{ isCreating ? $t('knowledge.createBase') : $t('common.save') }}
+        <DqButton type="primary" :disabled="saving || !dirty" @click="saveDocument">
+          {{ $t('common.save') }}
         </DqButton>
       </div>
     </template>
   </WorkspaceShell>
+
+  <DqDialog
+    v-model:open="showBaseCreate"
+    :title="$t('knowledge.newBase')"
+    variant="glass"
+    width="400px"
+  >
+    <div class="knowledge-base-form">
+      <label class="resource-field resource-field--block">
+        <span class="resource-field__label">{{ $t('common.name') }}</span>
+        <DqInput v-model="baseFormName" :placeholder="$t('knowledge.dummyName')" />
+      </label>
+      <label class="resource-field resource-field--block">
+        <span class="resource-field__label">{{ $t('common.description') }}</span>
+        <DqInput
+          v-model="baseFormDescription"
+          type="textarea"
+          :rows="3"
+          :placeholder="$t('knowledge.descriptionPlaceholder')"
+        />
+      </label>
+    </div>
+    <template #footer>
+      <DqButton @click="showBaseCreate = false">{{ $t('common.cancel') }}</DqButton>
+      <DqButton type="primary" :disabled="baseSaving" @click="submitCreateBase">
+        {{ $t('common.create') }}
+      </DqButton>
+    </template>
+  </DqDialog>
+
+  <DqDialog
+    v-model:open="showBaseSettings"
+    :title="$t('knowledge.baseSettings')"
+    variant="glass"
+    width="400px"
+  >
+    <div class="knowledge-base-form">
+      <label class="resource-field resource-field--block">
+        <span class="resource-field__label">{{ $t('common.name') }}</span>
+        <DqInput v-model="baseFormName" :placeholder="$t('knowledge.dummyName')" />
+      </label>
+      <label class="resource-field resource-field--block">
+        <span class="resource-field__label">{{ $t('common.description') }}</span>
+        <DqInput
+          v-model="baseFormDescription"
+          type="textarea"
+          :rows="3"
+          :placeholder="$t('knowledge.descriptionPlaceholder')"
+        />
+      </label>
+    </div>
+    <template #footer>
+      <DqButton
+        class="knowledge-base-form__danger"
+        :disabled="!canDeleteBase"
+        @click="removeCurrentBase"
+      >
+        {{ $t('common.delete') }}
+      </DqButton>
+      <div class="knowledge-base-form__spacer" />
+      <DqButton @click="showBaseSettings = false">{{ $t('common.cancel') }}</DqButton>
+      <DqButton type="primary" :disabled="baseSaving" @click="submitBaseSettings">
+        {{ $t('common.save') }}
+      </DqButton>
+    </template>
+  </DqDialog>
 </template>
 
 <style scoped>
-.resource-rail__section {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-  overflow: hidden;
-}
-
-.resource-rail__section-head {
+.knowledge-rail__base {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 10px 6px 14px;
+  gap: 4px;
+  padding: 10px 8px 6px 10px;
   flex-shrink: 0;
 }
 
-.resource-rail__section-title {
-  font-size: var(--dq-font-size-caption);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--dq-label-tertiary);
+.knowledge-rail__base-switch {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.resource-rail__list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0 6px 6px;
+.knowledge-rail__base-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid var(--dq-glass-control-border, var(--dq-glass-border));
+  border-radius: 8px;
+  background: var(--dq-glass-control-bg, color-mix(in srgb, var(--dq-bg-elevated) 40%, transparent));
+  color: var(--dq-label-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.knowledge-rail__base-trigger:hover {
+  background: var(--dq-glass-control-bg-hover, color-mix(in srgb, var(--dq-label-primary) 6%, transparent));
+}
+
+.knowledge-rail__base-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--dq-font-size-body);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge-rail__base-chevron {
+  flex-shrink: 0;
+  color: var(--dq-label-tertiary);
 }
 
 .resource-workspace__empty-actions {
@@ -468,75 +591,51 @@ function onKeydown(e: KeyboardEvent) {
   justify-content: center;
 }
 
-.resource-section__toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 10px;
-}
-
-.resource-section__empty {
-  padding: 24px 0;
-}
-
-.resource-list-card__item.is-active {
-  border-color: color-mix(in srgb, var(--dq-accent) 28%, var(--dq-border-subtle));
-}
-
-.knowledge-docs {
+.knowledge-doc-editor {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-height: 0;
-  max-width: none;
   height: 100%;
 }
 
-.knowledge-docs__editor {
-  flex: 1;
-  min-height: 420px;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-.knowledge-docs__editor-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: flex-end;
-  justify-content: space-between;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--dq-glass-border, var(--dq-separator-light));
-  background: var(--dq-glass-bar-bg, color-mix(in srgb, var(--dq-bg-elevated) 45%, transparent));
-}
-
-.knowledge-docs__title-field {
-  flex: 1;
-  min-width: 200px;
-  margin-bottom: 0;
-}
-
-.knowledge-docs__editor-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.knowledge-docs__editor-body {
-  flex: 1;
-  min-height: 360px;
-  display: flex;
-  flex-direction: column;
-  background: color-mix(in srgb, var(--dq-bg-elevated) 40%, transparent);
-  overflow: hidden;
-}
-
-.knowledge-docs__dirty {
+.knowledge-doc-editor__title {
   margin: 0;
-  padding: 8px 14px;
-  border-top: 1px solid var(--dq-separator-light);
+  flex-shrink: 0;
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.knowledge-doc-editor__title .resource-field__label {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.knowledge-doc-editor__title-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.knowledge-doc-editor :deep(.work-md) {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.knowledge-doc-editor :deep(.work-md__body) {
+  min-height: 320px;
+}
+
+.knowledge-base-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.knowledge-base-form__spacer {
+  flex: 1;
+}
+
+.knowledge-base-form__danger {
+  margin-right: auto;
 }
 </style>

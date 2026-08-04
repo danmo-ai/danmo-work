@@ -113,3 +113,53 @@ func TestKnowledgeManagerCRUDAndSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestEnsureDefaultBase(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "work.db")
+	st, err := sqlitestore.New(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgr := service.NewKnowledgeManager(
+		st.KnowledgeBases(),
+		st.KnowledgeDocs(),
+		st.KnowledgeIndex(),
+		filepath.Join(dir, "knowledge"),
+		nil,
+	)
+	ctx := context.Background()
+
+	b, err := mgr.EnsureDefaultBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.ID != service.DefaultKnowledgeBaseID {
+		t.Fatalf("id=%s", b.ID)
+	}
+	again, err := mgr.EnsureDefaultBase(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.ID != b.ID {
+		t.Fatalf("expected same default, got %s", again.ID)
+	}
+	list, err := mgr.ListBases(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("bases=%d", len(list))
+	}
+
+	if err := mgr.DeleteBase(ctx, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	list, err = mgr.ListBases(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].ID != service.DefaultKnowledgeBaseID {
+		t.Fatalf("expected default recreated, got %#v", list)
+	}
+}

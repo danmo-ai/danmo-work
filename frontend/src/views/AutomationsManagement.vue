@@ -284,7 +284,7 @@ function onKeydown(e: KeyboardEvent) {
         </DqButton>
         <DqButton v-if="!isCreating" @click="removeSelected">{{ $t('common.delete') }}</DqButton>
         <DqButton type="primary" :disabled="saving" @click="save">
-          {{ isCreating ? $t('automations.createAutomation') : $t('common.save') }}
+          {{ isCreating ? $t('common.create') : $t('common.save') }}
         </DqButton>
       </div>
     </template>

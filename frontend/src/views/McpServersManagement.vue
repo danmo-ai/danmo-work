@@ -482,7 +482,7 @@ function onKeydown(e: KeyboardEvent) {
           </label>
           <div class="resource-field resource-field--toggle">
             <span class="resource-field__label">&nbsp;</span>
-            <DqButton size="sm" @click="saveOAuthToken">{{ $t('connectors.completeOAuth') }}</DqButton>
+            <DqButton size="sm" @click="saveOAuthToken">{{ $t('common.save') }}</DqButton>
           </div>
         </div>
         <!-- Discovered Tools -->
@@ -534,7 +534,7 @@ function onKeydown(e: KeyboardEvent) {
         </DqButton>
         <DqButton v-if="!isCreating" @click="removeSelected">{{ $t('common.delete') }}</DqButton>
         <DqButton type="primary" :disabled="saving" @click="save">
-          {{ isCreating ? $t('connectors.createServer') : $t('common.save') }}
+          {{ isCreating ? $t('common.create') : $t('common.save') }}
         </DqButton>
       </div>
     </template>

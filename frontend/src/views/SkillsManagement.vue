@@ -769,7 +769,7 @@ function formatSize(bytes: number): string {
       <div class="import-actions">
         <DqButton @click="closeFileEditor">{{ $t('common.cancel') }}</DqButton>
         <DqButton type="primary" :disabled="fileEditorSaving" @click="saveFileEditor">
-          {{ $t('common.save_') }}
+          {{ $t('common.save') }}
         </DqButton>
       </div>
     </template>

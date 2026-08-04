@@ -167,7 +167,7 @@ const { t } = useI18n()
         @keydown.enter.prevent="emit('edit-save')"
         @keydown.esc.prevent="emit('edit-cancel')"
       />
-      <button type="button" class="att-tray__edit-btn" @click="emit('edit-save')">{{ t('common.save_') }}</button>
+      <button type="button" class="att-tray__edit-btn" @click="emit('edit-save')">{{ t('common.save') }}</button>
       <button type="button" class="att-tray__edit-btn att-tray__edit-btn--ghost" @click="emit('edit-cancel')">
         {{ t('common.cancel') }}
       </button>

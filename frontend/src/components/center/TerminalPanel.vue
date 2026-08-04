@@ -66,6 +66,11 @@ function wsUrl(): string {
   const httpBase = apiBaseUrl() || window.location.origin
   const u = new URL(`${httpBase}/api/v1/projects/${props.projectId}/terminal`)
   u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'
+  // Pass fitted size so the PTY/shell starts with a real geometry (avoids zsh "%").
+  if (term && term.cols > 0 && term.rows > 0) {
+    u.searchParams.set('cols', String(term.cols))
+    u.searchParams.set('rows', String(term.rows))
+  }
   return u.toString()
 }
 
@@ -168,6 +173,11 @@ onMounted(() => {
   if (containerRef.value) {
     term.open(containerRef.value)
     applyTheme()
+    try {
+      fit.fit()
+    } catch {
+      /* ignore */
+    }
   }
   term.onData((data) => {
     if (ws?.readyState === WebSocket.OPEN) {
@@ -182,9 +192,11 @@ onMounted(() => {
   themeObserver = new MutationObserver(() => applyTheme())
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
 
-  connect()
-  // Drawer animation + portal layout: keep trying until we get a real size.
-  scheduleRefit(props.active !== false)
+  // Fit first, then connect so the server can StartWithSize(cols, rows).
+  scheduleRefit(false)
+  window.setTimeout(() => {
+    if (!disposed) connect()
+  }, 0)
   window.setTimeout(() => scheduleRefit(true), 120)
   window.setTimeout(() => scheduleRefit(true), 360)
 })

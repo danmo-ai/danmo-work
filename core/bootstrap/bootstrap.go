@@ -165,6 +165,9 @@ func New(cfg Config) *Core {
 	if err := knowledgeMgr.MigrateLegacyContents(context.Background(), st.LegacyDocContent, st.ClearLegacyDocContent); err != nil {
 		log.Printf("[bootstrap] knowledge legacy migrate: %v", err)
 	}
+	if _, err := knowledgeMgr.EnsureDefaultBase(context.Background()); err != nil {
+		log.Printf("[bootstrap] knowledge default base: %v", err)
+	}
 	if err := knowledgeMgr.ReindexAll(context.Background()); err != nil {
 		log.Printf("[bootstrap] knowledge reindex: %v", err)
 	}

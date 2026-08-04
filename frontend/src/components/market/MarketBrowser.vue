@@ -351,7 +351,7 @@ function openConnector(id: string) {
   border-radius: 10px;
   padding: 16px 18px;
   background: var(--dq-surface, transparent);
-  max-width: 640px;
+  width: 100%;
 }
 .market-card__head {
   display: flex;

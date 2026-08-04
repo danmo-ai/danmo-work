@@ -188,10 +188,16 @@ func (m *Market) downloadZipExtractPath(ctx context.Context, ref, pkgPath, destR
 		if splitErr == nil {
 			alt := fmt.Sprintf("https://codeload.github.com/%s/%s/zip/refs/tags/%s", owner, name, ref)
 			data, err = m.httpGet(ctx, alt)
+			if err == nil {
+				url = alt
+			}
 		}
 	}
 	if err != nil {
 		return fmt.Errorf("download archive: %w", err)
+	}
+	if err := assertZipArchive(data, url); err != nil {
+		return err
 	}
 
 	zipPath := filepath.Join(destRoot, "repo.zip")
@@ -200,7 +206,7 @@ func (m *Market) downloadZipExtractPath(ctx context.Context, ref, pkgPath, destR
 	}
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("open archive from %s: %w", url, err)
 	}
 	defer zr.Close()
 
@@ -268,7 +274,10 @@ func (m *Market) httpGet(ctx context.Context, url string) ([]byte, error) {
 			req.Header.Set("Authorization", "token "+m.source.Token)
 		}
 	}
-	req.Header.Set("User-Agent", "danmo-work-market")
+	// Gitee archive endpoints serve an HTML interstitial to unknown UAs (HTTP 200).
+	// A curl-compatible UA gets the real zip via blazearchive redirect.
+	req.Header.Set("User-Agent", "curl/8.7.1")
+	req.Header.Set("Accept", "*/*")
 	resp, err := m.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -282,6 +291,21 @@ func (m *Market) httpGet(ctx context.Context, url string) ([]byte, error) {
 		return nil, fmt.Errorf("GET %s: HTTP %d", url, resp.StatusCode)
 	}
 	return body, nil
+}
+
+// assertZipArchive rejects HTML/JSON error bodies that some hosts return as HTTP 200.
+func assertZipArchive(data []byte, url string) error {
+	if len(data) >= 4 && data[0] == 'P' && data[1] == 'K' {
+		return nil
+	}
+	snip := strings.TrimSpace(string(data))
+	if len(snip) > 120 {
+		snip = snip[:120] + "…"
+	}
+	if strings.HasPrefix(strings.ToLower(snip), "<!doctype html") || strings.HasPrefix(strings.ToLower(snip), "<html") {
+		return fmt.Errorf("download from %s returned HTML instead of a zip (anti-bot or login page); try Official (GitHub) or check network", url)
+	}
+	return fmt.Errorf("download from %s is not a zip archive (got %q)", url, snip)
 }
 
 func splitOwnerRepo(repo string) (owner, name string, err error) {

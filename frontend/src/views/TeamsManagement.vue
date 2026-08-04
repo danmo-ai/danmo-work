@@ -728,7 +728,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
           <DqButton v-if="!isCreating" @click="removeSelected">{{ $t('common.delete') }}</DqButton>
           <DqButton v-if="!isCreating" @click="resetSelected">{{ $t('common.reset') }}</DqButton>
           <DqButton type="primary" :disabled="saving" @click="save">
-            {{ isCreating ? $t('teams.createAgent') : $t('common.save') }}
+            {{ isCreating ? $t('common.create') : $t('common.save') }}
           </DqButton>
         </div>
       </template>

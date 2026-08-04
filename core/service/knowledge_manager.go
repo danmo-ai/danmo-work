@@ -65,6 +65,44 @@ func (m *KnowledgeManager) ReindexAll(ctx context.Context) error {
 	return nil
 }
 
+// DefaultKnowledgeBaseID is the stable id for the auto-created default KB.
+const DefaultKnowledgeBaseID = "kb-default"
+
+// EnsureDefaultBase creates the default knowledge base when none exist.
+// If bases already exist, returns the default id when present, otherwise the first base.
+func (m *KnowledgeManager) EnsureDefaultBase(ctx context.Context) (domain.KnowledgeBase, error) {
+	list, err := m.bases.List(ctx)
+	if err != nil {
+		return domain.KnowledgeBase{}, err
+	}
+	if len(list) > 0 {
+		for _, b := range list {
+			if b.ID == DefaultKnowledgeBaseID {
+				b.DocumentCount, _ = m.docs.CountByKB(ctx, b.ID)
+				return b, nil
+			}
+		}
+		b := list[0]
+		b.DocumentCount, _ = m.docs.CountByKB(ctx, b.ID)
+		return b, nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	b := domain.KnowledgeBase{
+		ID:          DefaultKnowledgeBaseID,
+		Name:        "默认知识库",
+		Description: "",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := os.MkdirAll(filepath.Join(m.rootDir, b.ID), 0o755); err != nil {
+		return domain.KnowledgeBase{}, err
+	}
+	if err := m.bases.Upsert(ctx, b); err != nil {
+		return domain.KnowledgeBase{}, err
+	}
+	return b, nil
+}
+
 func (m *KnowledgeManager) ListBases(ctx context.Context) ([]domain.KnowledgeBase, error) {
 	return m.bases.List(ctx)
 }
@@ -128,7 +166,11 @@ func (m *KnowledgeManager) DeleteBase(ctx context.Context, id string) error {
 	}
 	_ = m.index.DeleteByKB(ctx, id)
 	_ = os.RemoveAll(filepath.Join(m.rootDir, id))
-	return m.bases.Delete(ctx, id)
+	if err := m.bases.Delete(ctx, id); err != nil {
+		return err
+	}
+	_, _ = m.EnsureDefaultBase(ctx)
+	return nil
 }
 
 func (m *KnowledgeManager) ListDocs(ctx context.Context, kbID string) ([]domain.KnowledgeDoc, error) {

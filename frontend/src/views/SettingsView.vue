@@ -2564,25 +2564,25 @@ const hasFooterActions = computed(() => {
         <div class="settings-panel__footer-actions">
           <DqButton v-if="activeTab === 'modelConfig' && editingModelIdx !== null" type="danger" size="sm" @click="removeSelectedModel">{{ $t('common.delete') }}</DqButton>
           <DqButton v-if="activeTab === 'runtime'" type="primary" :disabled="runtimeConfig.saving" @click="handleSaveRuntime">
-            {{ runtimeConfig.saving ? $t('common.saving') : $t('common.save_') }}
+            {{ runtimeConfig.saving ? $t('common.saving') : $t('common.save') }}
           </DqButton>
           <DqButton v-else-if="activeTab === 'weixin'" type="primary" :disabled="weixin.saving" @click="handleSaveWeixin">
-            {{ weixin.saving ? $t('common.saving') : $t('common.save_') }}
+            {{ weixin.saving ? $t('common.saving') : $t('common.save') }}
           </DqButton>
           <DqButton v-else-if="activeTab === 'feishu'" type="primary" :disabled="feishu.saving" @click="handleSaveFeishu">
-            {{ feishu.saving ? $t('common.saving') : $t('common.save_') }}
+            {{ feishu.saving ? $t('common.saving') : $t('common.save') }}
           </DqButton>
           <DqButton v-else-if="activeTab === 'wecom'" type="primary" :disabled="wecom.saving" @click="handleSaveWecom">
-            {{ wecom.saving ? $t('common.saving') : $t('common.save_') }}
+            {{ wecom.saving ? $t('common.saving') : $t('common.save') }}
           </DqButton>
           <DqButton v-else-if="activeTab === 'qq'" type="primary" :disabled="qq.saving" @click="handleSaveQQ">
-            {{ qq.saving ? $t('common.saving') : $t('common.save_') }}
+            {{ qq.saving ? $t('common.saving') : $t('common.save') }}
           </DqButton>
           <DqButton v-else-if="activeTab === 'search'" type="primary" :disabled="searchConfig.saving" @click="handleSaveSearch">
-            {{ searchConfig.saving ? $t('common.saving') : $t('common.save_') }}
+            {{ searchConfig.saving ? $t('common.saving') : $t('common.save') }}
           </DqButton>
           <DqButton v-else-if="activeTab === 'market'" type="primary" :disabled="marketConfig.saving" @click="handleSaveMarket">
-            {{ marketConfig.saving ? $t('common.saving') : $t('common.save_') }}
+            {{ marketConfig.saving ? $t('common.saving') : $t('common.save') }}
           </DqButton>
           <DqButton v-else-if="activeTab === 'models'" type="primary" @click="openNewForm">{{ $t('settings.addProvider') }}</DqButton>
           <DqButton v-else-if="activeTab === 'modelConfig'" @click="addModelEntry">{{ $t('settings.addModelConfig') }}</DqButton>
@@ -2590,7 +2590,7 @@ const hasFooterActions = computed(() => {
             {{ modelConfig.saving ? $t('common.refreshing') : $t('settings.refreshModelConfig') }}
           </DqButton>
           <DqButton v-if="activeTab === 'modelConfig'" type="primary" :disabled="modelConfig.saving" @click="handleSaveModelConfig">
-            {{ modelConfig.saving ? $t('common.saving') : $t('common.save_') }}
+            {{ modelConfig.saving ? $t('common.saving') : $t('common.save') }}
           </DqButton>
         </div>
       </footer>
@@ -2684,7 +2684,7 @@ const hasFooterActions = computed(() => {
             <DqInput v-model="newEffortBudgetTokens" type="textarea" :rows="3" placeholder="high:16000&#10;max:32000" />
           </label>
           <div class="settings-actions">
-            <DqButton type="primary" @click="confirmAddModel">{{ $t('common.save_') }}</DqButton>
+            <DqButton type="primary" @click="confirmAddModel">{{ $t('common.save') }}</DqButton>
           </div>
         </div>
       </DqDialog>
@@ -2829,7 +2829,7 @@ const hasFooterActions = computed(() => {
           <div v-else class="settings-actions">
             <DqButton @click="cancelForm">{{ $t('common.cancel') }}</DqButton>
             <DqButton type="primary" :disabled="llm.saving" @click="handleSave">
-              {{ llm.saving ? $t('common.saving') : (editingId ? $t('common.update') : $t('common.save_')) }}
+              {{ llm.saving ? $t('common.saving') : (editingId ? $t('common.update') : $t('common.save')) }}
             </DqButton>
           </div>
         </template>

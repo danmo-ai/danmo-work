@@ -8,9 +8,12 @@ withDefaults(
     hasSelection?: boolean
     /** When true, skip default count/create rail head — use #rail for full rail chrome */
     customRail?: boolean
+    /** Collapse the left resource rail (e.g. while a glass drawer owns focus). */
+    hideRail?: boolean
   }>(),
   {
     customRail: false,
+    hideRail: false,
   },
 )
 
@@ -23,10 +26,11 @@ defineEmits<{
 <template>
   <div
     class="resource-shell float-island"
+    :class="{ 'resource-shell--rail-hidden': hideRail }"
     tabindex="-1"
     @keydown="$emit('keydown', $event)"
   >
-    <aside class="resource-rail">
+    <aside v-show="!hideRail" class="resource-rail">
       <template v-if="!customRail">
         <div class="resource-rail__head">
           <span class="resource-rail__count">{{ count }}</span>

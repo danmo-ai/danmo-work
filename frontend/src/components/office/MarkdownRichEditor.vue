@@ -23,7 +23,7 @@ const props = withDefaults(
     editable: true,
     placeholder: '',
     showToolbar: true,
-    showToc: true,
+    showToc: false,
     enableSelectionAi: false,
   },
 )
@@ -354,7 +354,8 @@ function applyEditableMode() {
     // Source-only edit — split preview eats too much horizontal space.
     md.togglePreviewOnly(false)
     md.togglePreview(false)
-    if (props.showToc) md.toggleCatalog(true)
+    // Never force-open catalog: it steals width and often collapses into a useless strip.
+    md.toggleCatalog(false)
   } else {
     md.togglePreviewOnly(true)
     md.toggleCatalog(false)
@@ -546,12 +547,51 @@ defineExpose({
   height: 100%;
   border: none;
   border-radius: 0;
-  --md-bk-color: transparent;
+  background: transparent !important;
   --md-color: var(--dq-label-primary);
+  --md-hover-color: var(--dq-label-secondary);
+  --md-bk-color: transparent;
   --md-bk-color-outstand: color-mix(in srgb, var(--dq-bg-elevated) 70%, transparent);
-  --md-border-color: var(--dq-separator-light);
+  --md-bk-hover-color: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
+  --md-border-color: var(--dq-glass-border, var(--dq-separator-light));
   --md-scrollbar-bg-color: transparent;
   --md-scrollbar-thumb-color: color-mix(in srgb, var(--dq-label-quaternary) 50%, transparent);
+}
+.md-rich :deep(.md-editor-dark) {
+  --md-color: var(--dq-label-primary);
+  --md-bk-color: transparent;
+  --md-bk-color-outstand: color-mix(in srgb, var(--dq-bg-elevated) 70%, transparent);
+  background: transparent !important;
+}
+.md-rich :deep(.cm-editor),
+.md-rich :deep(.cm-scroller),
+.md-rich :deep(.cm-gutters) {
+  background: transparent !important;
+}
+.md-rich :deep(.cm-content) {
+  caret-color: var(--dq-accent);
+}
+.md-rich :deep(.cm-activeLine),
+.md-rich :deep(.cm-activeLineGutter) {
+  background: color-mix(in srgb, var(--dq-accent) 7%, transparent) !important;
+}
+.md-rich :deep(.cm-cursor) {
+  border-left-color: var(--dq-accent) !important;
+}
+.md-rich :deep(.md-editor-content-wrapper),
+.md-rich :deep(.md-editor-input-wrapper) {
+  width: 100% !important;
+  flex: 1 1 auto !important;
+  background: transparent !important;
+}
+.md-rich :deep(.md-editor-catalog-editor),
+.md-rich :deep(.md-editor-catalog-flat) {
+  /* Catalog stays available via toolbar when showToc; keep it usable if opened. */
+  min-width: 160px;
+  width: 200px;
+  background: color-mix(in srgb, var(--dq-bg-elevated) 55%, transparent) !important;
+  border-inline-start: 1px solid var(--dq-glass-border, var(--dq-separator-light));
+  color: var(--dq-label-secondary);
 }
 .md-rich :deep(.md-editor-toolbar-wrapper) {
   background: var(--dq-glass-bar-bg, color-mix(in srgb, var(--dq-bg-elevated) 55%, transparent));
