@@ -98,7 +98,7 @@ System prompts and tool schemas ride every model call. Builtin expert packs (ski
 | Expert | Role |
 |--------|------|
 | **CodeGraph** | Local code intelligence via bundled [CodeGraph-Rust](https://github.com/sunerpy/codegraph-rust) (~10 MB archive; `first_launch` unpacks async). First `delegate_agent` inits the index; degrades to `read_file` / `grep` until ready |
-| **GitHub** | Issues, PRs, Actions, releases — MCP → `gh` → `git` fallback |
+| **GitHub** | GitHub platform work — issues, pull requests, Actions, releases, and related hosting tasks |
 | **Danmo Make** | Local image / video / audio generation (separate app) |
 
 Also: Skills (`@` in Composer), MCP connectors, Memory (`memory_*`), Table Store (`table_*`), cron/webhook Automations. Configure in the UI — capability units, not a workflow graph.
