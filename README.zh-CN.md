@@ -95,13 +95,17 @@ make dev-web   # → http://localhost:5801/app/
 
 系统提示和工具说明会跟着**每一次**模型调用走。内置专家（自带技能；需要时再挂 MCP）**不会**常驻主链——主 Agent 用 `delegate_agent` 按需请来，专家上下文单独开，主链前缀更稳，也更吃得开 KV Cache。
 
+使用方式（Composer `@` / 专家图标、协作开关、完整清单）：见 **[专家使用说明](docs/experts.md)**。
+
 | 专家 | 作用 |
 |------|------|
-| **CodeGraph** | 查定义、调用关系、改动影响面。从**市场**安装专家（连带技能 + 连接器；连接器 **deps 脚本**拉取约 10 MB CLI，[CodeGraph-Rust](https://github.com/sunerpy/codegraph-rust)）。第一次委派时建索引；图还没好也能先靠读文件 / 搜索顶上。 |
+| **Document** | 报告、幻灯、表格等职场文档（Office Stage 同源 Markdown）。 |
+| **小说创作** | 长篇/网文工程化写作（章合同 → 草稿 → 审稿 → Commit；需环境已内置或安装 `novel`）。 |
 | **GitHub** | 处理 Issue、Pull Request、Actions、Release 等 GitHub 上的日常协作。 |
 | **Danmo Make** | 在本机生成或编辑图片、视频、音频（需单独安装 Danmo Make）。 |
+| **CodeGraph** | 查定义、调用关系、改动影响面。从**市场**安装专家（连带技能 + 连接器；连接器 **deps 脚本**拉取约 10 MB CLI，[CodeGraph-Rust](https://github.com/sunerpy/codegraph-rust)）。第一次委派时建索引；图还没好也能先靠读文件 / 搜索顶上。 |
 
-另外还有：技能（Composer 里 `@`）、MCP 连接器、记忆（`memory_*`）、Table Store（`table_*`）、cron / webhook 自动化。界面里配的是能力积木，不是工作流画布。
+另外还有：技能与专家（Composer 里 `@`）、MCP 连接器、记忆（`memory_*`）、Table Store（`table_*`）、cron / webhook 自动化。界面里配的是能力积木，不是工作流画布。
 
 ---
 
@@ -124,6 +128,7 @@ mkdir -p ~/.danmo-work && cp config.example.yaml ~/.danmo-work/config.yaml
 | 文档 | 说明 |
 |------|------|
 | [docs/core-design.md](docs/core-design.md) | Agent 架构、通道、Document Stage |
+| [docs/experts.md](docs/experts.md) | 专家使用说明与内置清单 |
 | [docs/demo/README.md](docs/demo/README.md) | 产品演示 HTML / GIF / MP4 |
 | [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor Terminal-Bench 2.0 |
 | [AGENTS.md](AGENTS.md) | 贡献者速查 |
