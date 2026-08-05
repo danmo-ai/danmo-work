@@ -6,13 +6,15 @@ import { useProjectsStore } from '@/stores/projects'
 import { useLLMStore } from '@/stores/llm'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import ComposerAttachmentTray from '@/components/composer/ComposerAttachmentTray.vue'
+import ComposerExpertChips from '@/components/composer/ComposerExpertChips.vue'
+import ComposerExpertPicker from '@/components/composer/ComposerExpertPicker.vue'
 import ComposerSkillChips from '@/components/composer/ComposerSkillChips.vue'
 import ComposerSkillPicker from '@/components/composer/ComposerSkillPicker.vue'
 import ComposerSlashPicker from '@/components/composer/ComposerSlashPicker.vue'
 import ContextUsageBar from '@/components/center/ContextUsageBar.vue'
 import { asArray, fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
-import type { AvailableSkill } from '@/types'
+import type { Agent, AvailableSkill } from '@/types'
 import type { LLMModel } from '@/types/mission'
 import type { ElementAttachment } from '@/types/element-attachment'
 import {
@@ -36,6 +38,11 @@ import {
   removeAtSkillQuery,
 } from '@/types/composer-skills'
 import {
+  filterSummonableExperts,
+  listSummonableExperts,
+  prependExpertSummon,
+} from '@/types/composer-experts'
+import {
   COMPOSER_SLASH_COMMANDS,
   detectSlashQuery,
   removeSlashQuery,
@@ -55,7 +62,9 @@ const gitError = ref('')
 const availableSkills = ref<AvailableSkill[]>([])
 const availableSkillsLoading = ref(false)
 const selectedSkillIds = ref<string[]>([])
+const selectedExpertIds = ref<string[]>([])
 const buttonPickerOpen = ref(false)
+const expertButtonPickerOpen = ref(false)
 const atMenuOpen = ref(false)
 const atQuery = ref('')
 const atStart = ref(-1)
@@ -63,6 +72,10 @@ const slashMenuOpen = ref(false)
 const slashQuery = ref('')
 const slashStart = ref(-1)
 const skillPickerRef = ref<{ onKeydown: (e: KeyboardEvent) => void } | null>(null)
+const expertPickerRef = ref<{
+  onKeydown: (e: KeyboardEvent) => void
+  filtered?: { value: Agent[] }
+} | null>(null)
 const slashPickerRef = ref<{ onKeydown: (e: KeyboardEvent) => void } | null>(null)
 const sessions = useSessionsStore()
 const projects = useProjectsStore()
@@ -136,13 +149,48 @@ const selectedSkills = computed(() => {
     .filter((s): s is AvailableSkill => Boolean(s))
 })
 
+const selectedLead = computed(() =>
+  sessions.agents.find((a) => a.id === sessions.selectedAgentId) ?? null,
+)
+
+/** Lead must have canDelegate to summon sub-experts. */
+const canDelegateExperts = computed(() => Boolean(selectedLead.value?.canDelegate))
+
+const summonableExperts = computed(() =>
+  listSummonableExperts(sessions.agents, sessions.selectedAgentId),
+)
+
+const selectedExperts = computed(() => {
+  const map = new Map(summonableExperts.value.map((a) => [a.id, a]))
+  return selectedExpertIds.value
+    .map((id) => map.get(id))
+    .filter((a): a is Agent => Boolean(a))
+})
+
+const atExpertMatches = computed(() =>
+  canDelegateExperts.value
+    ? filterSummonableExperts(sessions.agents, atQuery.value, sessions.selectedAgentId)
+    : [],
+)
+
 const skillPickerOpen = computed(() => buttonPickerOpen.value || atMenuOpen.value)
-const anyPickerOpen = computed(() => skillPickerOpen.value || slashMenuOpen.value)
+const expertPickerOpen = computed(
+  () => expertButtonPickerOpen.value || (atMenuOpen.value && canDelegateExperts.value),
+)
+const anyPickerOpen = computed(
+  () => skillPickerOpen.value || expertPickerOpen.value || slashMenuOpen.value,
+)
 
 const hasPendingApproval = computed(() => workspaceUi.pendingApprovals > 0)
 
 const hasDraft = computed(
-  () => Boolean(content.value.trim() || attachments.value.length || selectedSkillIds.value.length),
+  () =>
+    Boolean(
+      content.value.trim() ||
+        attachments.value.length ||
+        selectedSkillIds.value.length ||
+        selectedExpertIds.value.length,
+    ),
 )
 
 const isTurnRunning = computed(
@@ -412,6 +460,7 @@ function clearComposer() {
   editingId.value = null
   editingAnnotation.value = ''
   selectedSkillIds.value = []
+  selectedExpertIds.value = []
   closeAllPickers()
 }
 
@@ -440,6 +489,10 @@ function closeSkillPickers() {
   atStart.value = -1
 }
 
+function closeExpertButtonPicker() {
+  expertButtonPickerOpen.value = false
+}
+
 function closeSlashPicker() {
   slashMenuOpen.value = false
   slashQuery.value = ''
@@ -448,16 +501,30 @@ function closeSlashPicker() {
 
 function closeAllPickers() {
   closeSkillPickers()
+  closeExpertButtonPicker()
   closeSlashPicker()
 }
 
 function onDocPointerDown(e: MouseEvent) {
   if (!anyPickerOpen.value) return
   const root = (e.target as HTMLElement | null)?.closest?.(
-    '.composer-skill-pop, .composer-tool-btn--skill, .composer-slash-pop',
+    '.composer-skill-pop, .composer-expert-pop, .composer-at-pop, .composer-tool-btn--skill, .composer-tool-btn--expert, .composer-slash-pop',
   )
   if (!root) closeAllPickers()
 }
+
+watch(
+  () => [sessions.selectedAgentId, canDelegateExperts.value] as const,
+  () => {
+    if (!canDelegateExperts.value) {
+      selectedExpertIds.value = []
+      expertButtonPickerOpen.value = false
+      return
+    }
+    const allowed = new Set(summonableExperts.value.map((a) => a.id))
+    selectedExpertIds.value = selectedExpertIds.value.filter((id) => allowed.has(id))
+  },
+)
 
 watch(
   () => workspaceUi.composerPrefillToken,
@@ -507,6 +574,7 @@ function syncAtMenuFromCaret() {
   const at = detectAtSkillQuery(content.value, caret)
   if (at) {
     buttonPickerOpen.value = false
+    closeExpertButtonPicker()
     closeSlashPicker()
     atMenuOpen.value = true
     atQuery.value = at.query
@@ -520,6 +588,7 @@ function syncAtMenuFromCaret() {
   const slash = detectSlashQuery(content.value, caret)
   if (slash) {
     buttonPickerOpen.value = false
+    closeExpertButtonPicker()
     slashMenuOpen.value = true
     slashQuery.value = slash.query
     slashStart.value = slash.start
@@ -535,8 +604,21 @@ watch(content, () => {
 function toggleButtonSkillPicker() {
   if (hasPendingApproval.value || isTurnRunning.value) return
   closeSlashPicker()
+  closeExpertButtonPicker()
   atMenuOpen.value = false
   buttonPickerOpen.value = !buttonPickerOpen.value
+}
+
+function toggleButtonExpertPicker() {
+  if (hasPendingApproval.value || isTurnRunning.value) return
+  if (!canDelegateExperts.value) {
+    toast.warning(t('composer.expertNeedDelegate'))
+    return
+  }
+  closeSlashPicker()
+  buttonPickerOpen.value = false
+  atMenuOpen.value = false
+  expertButtonPickerOpen.value = !expertButtonPickerOpen.value
 }
 
 function onPickSkill(sk: AvailableSkill) {
@@ -557,6 +639,31 @@ function onPickSkill(sk: AvailableSkill) {
     selectedSkillIds.value = selectedSkillIds.value.filter((id) => id !== sk.id)
   } else {
     selectedSkillIds.value = [...selectedSkillIds.value, sk.id]
+  }
+}
+
+function onPickExpert(agent: Agent) {
+  if (!canDelegateExperts.value) {
+    toast.warning(t('composer.expertNeedDelegate'))
+    return
+  }
+  if (atMenuOpen.value && atStart.value >= 0) {
+    const ta = getTextarea()
+    const caret = ta?.selectionStart ?? content.value.length
+    content.value = removeAtSkillQuery(content.value, atStart.value, caret)
+    atMenuOpen.value = false
+    atQuery.value = ''
+    atStart.value = -1
+    if (!selectedExpertIds.value.includes(agent.id)) {
+      selectedExpertIds.value = [...selectedExpertIds.value, agent.id]
+    }
+    void nextTick(() => focusInput())
+    return
+  }
+  if (selectedExpertIds.value.includes(agent.id)) {
+    selectedExpertIds.value = selectedExpertIds.value.filter((id) => id !== agent.id)
+  } else {
+    selectedExpertIds.value = [...selectedExpertIds.value, agent.id]
   }
 }
 
@@ -605,6 +712,10 @@ function removeSelectedSkill(id: string) {
   selectedSkillIds.value = selectedSkillIds.value.filter((x) => x !== id)
 }
 
+function removeSelectedExpert(id: string) {
+  selectedExpertIds.value = selectedExpertIds.value.filter((x) => x !== id)
+}
+
 function openFilePicker() {
   fileInputRef.value?.click()
 }
@@ -639,6 +750,15 @@ function addLocalFile(file: File) {
 
 async function buildOutgoing() {
   let text = buildComposerUserInput(content.value, attachments.value)
+  // Experts first (collaboration), then skills, then user body.
+  if (canDelegateExperts.value && selectedExperts.value.length) {
+    text = prependExpertSummon(
+      text,
+      selectedExperts.value,
+      (name, id) => t('composer.useExpertLine', { name, id }),
+      t('composer.delegateExpertHint'),
+    )
+  }
   text = prependSkillSummon(
     text,
     selectedSkills.value,
@@ -747,6 +867,35 @@ function onKeydown(e: KeyboardEvent) {
     slashPickerRef.value?.onKeydown(e)
     return
   }
+  // @ menu: prefer skills when they match; otherwise route keys to experts.
+  if (atMenuOpen.value) {
+    const preferExperts =
+      canDelegateExperts.value &&
+      atExpertMatches.value.length > 0 &&
+      availableSkills.value.filter((s) => {
+        const q = atQuery.value.trim().toLowerCase()
+        if (!q) return true
+        const hay = [s.id, s.name, s.description ?? ''].join('\n').toLowerCase()
+        return hay.includes(q)
+      }).length === 0
+    const target = preferExperts ? expertPickerRef.value : skillPickerRef.value
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape') {
+      target?.onKeydown(e)
+      return
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      target?.onKeydown(e)
+      return
+    }
+  }
+  if (expertButtonPickerOpen.value && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape')) {
+    expertPickerRef.value?.onKeydown(e)
+    return
+  }
+  if (expertButtonPickerOpen.value && e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+    expertPickerRef.value?.onKeydown(e)
+    return
+  }
   if (skillPickerOpen.value && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape')) {
     skillPickerRef.value?.onKeydown(e)
     return
@@ -835,7 +984,7 @@ defineExpose({
     :class="{
       'is-dragover': dragOver,
       'is-compose': sessions.composingNew,
-      'is-skill-picker-open': skillPickerOpen,
+      'is-skill-picker-open': skillPickerOpen || expertPickerOpen,
       'is-slash-picker-open': slashMenuOpen,
     }"
     role="form"
@@ -846,19 +995,59 @@ defineExpose({
   >
     <!-- Outside the glass card: card has overflow:hidden and would clip this popover. -->
     <div
-      v-if="skillPickerOpen"
-      class="composer-skill-pop"
-      :class="{ 'composer-skill-pop--button': buttonPickerOpen }"
+      v-if="atMenuOpen"
+      class="composer-at-pop"
     >
       <ComposerSkillPicker
         ref="skillPickerRef"
         :skills="availableSkills"
         :selected-ids="selectedSkillIds"
-        :query="atMenuOpen ? atQuery : ''"
-        :show-search="buttonPickerOpen"
+        :query="atQuery"
+        :show-search="false"
+        :loading="availableSkillsLoading"
+        @select="onPickSkill"
+        @close="closeAllPickers"
+      />
+      <ComposerExpertPicker
+        v-if="canDelegateExperts"
+        ref="expertPickerRef"
+        :agents="sessions.agents"
+        :selected-ids="selectedExpertIds"
+        :exclude-agent-id="sessions.selectedAgentId"
+        :query="atQuery"
+        :show-search="false"
+        hide-close
+        @select="onPickExpert"
+        @close="closeAllPickers"
+      />
+    </div>
+    <div
+      v-else-if="buttonPickerOpen"
+      class="composer-skill-pop composer-skill-pop--button"
+    >
+      <ComposerSkillPicker
+        ref="skillPickerRef"
+        :skills="availableSkills"
+        :selected-ids="selectedSkillIds"
+        :query="''"
+        :show-search="true"
         :loading="availableSkillsLoading"
         @select="onPickSkill"
         @close="closeSkillPickers"
+      />
+    </div>
+    <div
+      v-else-if="expertButtonPickerOpen && canDelegateExperts"
+      class="composer-expert-pop composer-expert-pop--button"
+    >
+      <ComposerExpertPicker
+        ref="expertPickerRef"
+        :agents="sessions.agents"
+        :selected-ids="selectedExpertIds"
+        :exclude-agent-id="sessions.selectedAgentId"
+        :show-search="true"
+        @select="onPickExpert"
+        @close="closeExpertButtonPicker"
       />
     </div>
     <div v-if="slashMenuOpen" class="composer-slash-pop">
@@ -904,6 +1093,11 @@ defineExpose({
         @edit-save="saveEditAnnotation"
         @edit-cancel="cancelEditAnnotation"
         @update:editing-annotation="editingAnnotation = $event"
+      />
+
+      <ComposerExpertChips
+        :experts="selectedExperts"
+        @remove="removeSelectedExpert"
       />
 
       <ComposerSkillChips
@@ -962,6 +1156,26 @@ defineExpose({
           >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M12 3l1.8 4.8L19 9.5l-4 3.2L16.2 18 12 15.2 7.8 18l1.2-5.3-4-3.2 5.2-1.7L12 3z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="composer-tool-btn composer-tool-btn--expert"
+            :class="{
+              'is-active': expertButtonPickerOpen || selectedExpertIds.length,
+              'is-disabled-hint': !canDelegateExperts,
+            }"
+            :title="canDelegateExperts ? t('composer.selectExpert') : t('composer.expertNeedDelegate')"
+            :aria-label="t('composer.selectExpert')"
+            :aria-expanded="expertButtonPickerOpen"
+            :disabled="isTurnRunning"
+            @click="toggleButtonExpertPicker"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
           </button>
           <span
@@ -1520,7 +1734,9 @@ defineExpose({
   position: relative;
 }
 
-.composer-skill-pop {
+.composer-skill-pop,
+.composer-expert-pop,
+.composer-at-pop {
   position: absolute;
   left: 10px;
   right: 10px;
@@ -1530,6 +1746,14 @@ defineExpose({
   display: flex;
   justify-content: flex-start;
   pointer-events: none;
+}
+
+.composer-at-pop {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  max-height: min(520px, 70vh);
+  overflow: auto;
 }
 
 .composer-slash-pop {
@@ -1543,18 +1767,22 @@ defineExpose({
   pointer-events: none;
 }
 
-.composer-slash-pop > * {
+.composer-slash-pop > *,
+.composer-skill-pop > *,
+.composer-expert-pop > *,
+.composer-at-pop > * {
   pointer-events: auto;
 }
 
-.composer-skill-pop > * {
-  pointer-events: auto;
-}
-
-.composer-skill-pop--button {
+.composer-skill-pop--button,
+.composer-expert-pop--button {
   left: 10px;
   right: auto;
   width: min(320px, calc(100% - 20px));
+}
+
+.composer-tool-btn--expert.is-disabled-hint {
+  opacity: 0.45;
 }
 
 .composer-send {

@@ -10,6 +10,7 @@
     "test:slides": "node --import ./scripts/register-ts-resolve.mjs --experimental-strip-types scripts/test-slides-render.mjs",
     "test:code-route": "node --experimental-strip-types scripts/test-code-route.mjs",
     "test:composer-slash": "node --experimental-strip-types scripts/test-composer-slash.mjs",
+    "test:composer-experts": "node --experimental-strip-types scripts/test-composer-experts.mjs",
     "check-i18n": "NODE_ENV=production node --experimental-strip-types scripts/check-i18n.mjs",
     "preview": "vite preview"
   },

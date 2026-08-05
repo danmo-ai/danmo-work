@@ -95,13 +95,17 @@ In Preview, click a DOM element, annotate, send to Composer — the model gets e
 
 System prompts and tool schemas ride every model call. Builtin expert packs (skill + bound-only MCP when needed) are **not** ambient on the main chain — the lead agent summons them with `delegate_agent`, so specialist context stays isolated and the stable prefix stays KV-cache friendly.
 
+How to summon (Composer `@` / expert icon, collaboration gate, full roster): **[Expert usage](docs/experts.md)**.
+
 | Expert | Role |
 |--------|------|
-| **CodeGraph** | Local code intelligence via [CodeGraph-Rust](https://github.com/sunerpy/codegraph-rust). Install from **Market** (expert pulls skill + connector; connector **deps script** fetches ~10 MB CLI). First `delegate_agent` inits the index; degrades to `read_file` / `grep` until ready. |
+| **Document** | Workplace reports, slides, and sheets (Markdown source for Office Stage) |
+| **Novel** | Long-form / webnovel production (contract → draft → review → commit; when `novel` is builtin or installed) |
 | **GitHub** | GitHub platform work — issues, pull requests, Actions, releases, and related hosting tasks |
 | **Danmo Make** | Local image / video / audio generation (separate app) |
+| **CodeGraph** | Local code intelligence via [CodeGraph-Rust](https://github.com/sunerpy/codegraph-rust). Install from **Market** (expert pulls skill + connector; connector **deps script** fetches ~10 MB CLI). First `delegate_agent` inits the index; degrades to `read_file` / `grep` until ready. |
 
-Also: Skills (`@` in Composer), MCP connectors, Memory (`memory_*`), Table Store (`table_*`), cron/webhook Automations. Configure in the UI — capability units, not a workflow graph.
+Also: Skills and experts (`@` in Composer), MCP connectors, Memory (`memory_*`), Table Store (`table_*`), cron/webhook Automations. Configure in the UI — capability units, not a workflow graph.
 
 ---
 
@@ -124,6 +128,7 @@ Build, pack, test, env vars, and CI: see [`AGENTS.md`](AGENTS.md). Architecture:
 | Doc | Description |
 |-----|-------------|
 | [docs/core-design.md](docs/core-design.md) | Agent architecture, channels, Document Stage |
+| [docs/experts.md](docs/experts.md) | Expert usage guide and builtin roster |
 | [docs/demo/README.md](docs/demo/README.md) | Product tour HTML / GIF / MP4 |
 | [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Harbor Terminal-Bench 2.0 |
 | [AGENTS.md](AGENTS.md) | Contributor quick reference |
