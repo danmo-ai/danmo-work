@@ -163,3 +163,55 @@ func TestEnsureDefaultBase(t *testing.T) {
 		t.Fatalf("expected default recreated, got %#v", list)
 	}
 }
+
+func TestEnsureNovelCraftKnowledge(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "work.db")
+	st, err := sqlitestore.New(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgr := service.NewKnowledgeManager(
+		st.KnowledgeBases(),
+		st.KnowledgeDocs(),
+		st.KnowledgeIndex(),
+		filepath.Join(dir, "knowledge"),
+		nil,
+	)
+	ctx := context.Background()
+	seeds := []service.NovelCraftSeedDoc{
+		{SeedKey: "01-pacing-structure", Title: "节奏与结构", Content: "# 节奏与结构\n\n黄金开篇与断章钩子。\n"},
+		{SeedKey: "07-anti-ai-prose", Title: "去 AI 味（P0 / P1）", Content: "# 去 AI 味（P0 / P1）\n\nP0 阻断套话。\n"},
+	}
+	b, err := mgr.EnsureNovelCraftKnowledge(ctx, seeds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.ID != service.NovelCraftKnowledgeBaseID {
+		t.Fatalf("id=%s", b.ID)
+	}
+	if b.DocumentCount < 2 {
+		t.Fatalf("docs=%d", b.DocumentCount)
+	}
+	// Seed-if-missing: second call must not duplicate.
+	again, err := mgr.EnsureNovelCraftKnowledge(ctx, seeds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.DocumentCount != b.DocumentCount {
+		t.Fatalf("doc count changed on re-seed: %d → %d", b.DocumentCount, again.DocumentCount)
+	}
+	hits := mgr.Search([]string{service.NovelCraftKnowledgeBaseID}, "断章钩子", 5)
+	if len(hits) == 0 {
+		t.Fatal("expected search hits in novel craft KB")
+	}
+	docs, err := mgr.ListDocs(ctx, service.NovelCraftKnowledgeBaseID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range docs {
+		if !strings.HasPrefix(d.ID, "doc-novel-craft-") {
+			t.Fatalf("unexpected doc id %q", d.ID)
+		}
+	}
+}

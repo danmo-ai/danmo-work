@@ -168,6 +168,7 @@ func New(cfg Config) *Core {
 	if _, err := knowledgeMgr.EnsureDefaultBase(context.Background()); err != nil {
 		log.Printf("[bootstrap] knowledge default base: %v", err)
 	}
+	ensureNovelCraftKnowledge(knowledgeMgr)
 	if err := knowledgeMgr.ReindexAll(context.Background()); err != nil {
 		log.Printf("[bootstrap] knowledge reindex: %v", err)
 	}
@@ -437,6 +438,25 @@ func ensureDefaultProject(pm *service.ProjectManager) {
 	pm.Create(ctx, domain.CreateProjectRequest{Name: "默认项目"})
 }
 
+func ensureNovelCraftKnowledge(knowledgeMgr *service.KnowledgeManager) {
+	docs, err := prompt.LoadNovelCraftDocs()
+	if err != nil {
+		log.Printf("[bootstrap] load novel craft KB: %v", err)
+		return
+	}
+	seeds := make([]service.NovelCraftSeedDoc, 0, len(docs))
+	for _, d := range docs {
+		seeds = append(seeds, service.NovelCraftSeedDoc{
+			SeedKey: d.SeedKey,
+			Title:   d.Title,
+			Content: d.Content,
+		})
+	}
+	if _, err := knowledgeMgr.EnsureNovelCraftKnowledge(context.Background(), seeds); err != nil {
+		log.Printf("[bootstrap] seed novel craft KB: %v", err)
+	}
+}
+
 func ensureBuiltinAgents(agents *service.AgentManager) {
 	ctx := context.Background()
 	templates, err := prompt.LoadTemplates()
@@ -459,6 +479,10 @@ func ensureBuiltinAgents(agents *service.AgentManager) {
 		changed := false
 		if len(existing.SkillIDs) == 0 && len(tmpl.Agent.SkillIDs) > 0 {
 			existing.SkillIDs = append([]string(nil), tmpl.Agent.SkillIDs...)
+			changed = true
+		}
+		if len(existing.KnowledgeIDs) == 0 && len(tmpl.Agent.KnowledgeIDs) > 0 {
+			existing.KnowledgeIDs = append([]string(nil), tmpl.Agent.KnowledgeIDs...)
 			changed = true
 		}
 		if len(existing.MCPServers) == 0 && len(tmpl.Agent.MCPServers) > 0 {

@@ -23,6 +23,116 @@ func TestBuiltinAgentsDoNotBindCoreTools(t *testing.T) {
 	}
 }
 
+func TestBuiltinNovelExpertAggregatesSkillAndCraftKB(t *testing.T) {
+	templates, err := LoadTemplates()
+	if err != nil {
+		t.Fatalf("LoadTemplates: %v", err)
+	}
+	var novel *AgentTemplate
+	for i := range templates {
+		if templates[i].Agent.ID == "novel" {
+			novel = &templates[i]
+			break
+		}
+	}
+	if novel == nil {
+		t.Fatal("missing builtin novel agent template")
+	}
+	if novel.Agent.Mode != domain.AgentModePrimary {
+		t.Fatalf("novel mode=%s, want primary", novel.Agent.Mode)
+	}
+	hasNovelSkill, hasBrainstorm := false, false
+	for _, id := range novel.Agent.SkillIDs {
+		switch id {
+		case "novel-writing":
+			hasNovelSkill = true
+		case "brainstorming":
+			hasBrainstorm = true
+		}
+	}
+	if !hasNovelSkill || !hasBrainstorm {
+		t.Fatalf("novel skills=%v, want novel-writing + brainstorming", novel.Agent.SkillIDs)
+	}
+	if len(novel.Agent.KnowledgeIDs) != 1 || novel.Agent.KnowledgeIDs[0] != NovelCraftKnowledgeBaseID {
+		t.Fatalf("novel knowledge=%v, want [%s]", novel.Agent.KnowledgeIDs, NovelCraftKnowledgeBaseID)
+	}
+	need := map[string]bool{
+		"read_file": false, "write": false, "edit": false,
+		"web_search": false, "todowrite": false,
+	}
+	for _, b := range novel.Agent.Tools {
+		if _, ok := need[b.ToolID]; ok {
+			need[b.ToolID] = true
+		}
+		if b.ToolID == "exec_shell" {
+			t.Fatal("novel expert must not bind exec_shell")
+		}
+	}
+	for id, ok := range need {
+		if !ok {
+			t.Fatalf("novel expert missing tool %q; tools=%v", id, novel.Agent.Tools)
+		}
+	}
+	if novel.Agent.CanDelegate {
+		t.Fatal("novel expert should not can_delegate in MVP")
+	}
+}
+
+func TestBuiltinNovelWritingSkillHasReferences(t *testing.T) {
+	sk, err := LoadSkillTemplateByID("novel-writing")
+	if err != nil {
+		t.Fatalf("LoadSkillTemplateByID: %v", err)
+	}
+	if sk.ID != "novel-writing" || sk.Description == "" {
+		t.Fatalf("unexpected skill: %+v", sk)
+	}
+	files, err := LoadBuiltinSkillFiles("novel-writing")
+	if err != nil {
+		t.Fatalf("LoadBuiltinSkillFiles: %v", err)
+	}
+	want := map[string]bool{
+		"references/routes.md":                 false,
+		"references/init.md":                   false,
+		"references/chapter-contract.md":       false,
+		"references/chapter-write.md":          false,
+		"references/review-gates.md":           false,
+		"references/continuity-commit.md":      false,
+		"references/table-schema.md":           false,
+		"assets/templates/novel-state.yaml":    false,
+		"assets/templates/chapter-contract.yaml": false,
+	}
+	for _, f := range files {
+		if _, ok := want[f.Path]; ok {
+			want[f.Path] = true
+		}
+	}
+	for path, ok := range want {
+		if !ok {
+			t.Fatalf("missing skill file %q (got %d files)", path, len(files))
+		}
+	}
+}
+
+func TestLoadNovelCraftDocs(t *testing.T) {
+	docs, err := LoadNovelCraftDocs()
+	if err != nil {
+		t.Fatalf("LoadNovelCraftDocs: %v", err)
+	}
+	if len(docs) < 9 {
+		t.Fatalf("expected >=9 craft docs, got %d", len(docs))
+	}
+	seen := map[string]bool{}
+	for _, d := range docs {
+		if d.SeedKey == "" || d.Title == "" || d.Content == "" {
+			t.Fatalf("incomplete craft doc: %+v", d)
+		}
+		if seen[d.SeedKey] {
+			t.Fatalf("duplicate seed key %q", d.SeedKey)
+		}
+		seen[d.SeedKey] = true
+	}
+}
+
 func TestBuiltinGitHubExpertOwnsConnectorAndGh(t *testing.T) {
 	templates, err := LoadTemplates()
 	if err != nil {

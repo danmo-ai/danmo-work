@@ -68,6 +68,112 @@ func (m *KnowledgeManager) ReindexAll(ctx context.Context) error {
 // DefaultKnowledgeBaseID is the stable id for the auto-created default KB.
 const DefaultKnowledgeBaseID = "kb-default"
 
+// NovelCraftKnowledgeBaseID is the stable id for the builtin novel craft KB.
+const NovelCraftKnowledgeBaseID = "kb-novel-craft"
+
+// NovelCraftSeedDoc is a Markdown document seeded into kb-novel-craft.
+type NovelCraftSeedDoc struct {
+	SeedKey string
+	Title   string
+	Content string
+}
+
+// EnsureNovelCraftKnowledge creates kb-novel-craft (if missing) and seeds documents
+// that are not yet present. Existing docs are never overwritten (seed-if-missing).
+func (m *KnowledgeManager) EnsureNovelCraftKnowledge(ctx context.Context, seeds []NovelCraftSeedDoc) (domain.KnowledgeBase, error) {
+	b, err := m.ensureBaseWithID(ctx, NovelCraftKnowledgeBaseID, "小说创作技法", "跨书可复用的小说/网文创作技法（节奏、爽点、人设、世界观、去AI味等）")
+	if err != nil {
+		return domain.KnowledgeBase{}, err
+	}
+	existing, err := m.docs.ListByKB(ctx, b.ID)
+	if err != nil {
+		return domain.KnowledgeBase{}, err
+	}
+	byID := make(map[string]domain.KnowledgeDoc, len(existing))
+	byTitle := make(map[string]domain.KnowledgeDoc, len(existing))
+	for _, d := range existing {
+		byID[d.ID] = d
+		byTitle[strings.TrimSpace(d.Title)] = d
+	}
+	for _, seed := range seeds {
+		seedKey := strings.TrimSpace(seed.SeedKey)
+		title := strings.TrimSpace(seed.Title)
+		if seedKey == "" || title == "" {
+			continue
+		}
+		docID := "doc-novel-craft-" + seedKey
+		if _, ok := byID[docID]; ok {
+			continue
+		}
+		if _, ok := byTitle[title]; ok {
+			continue
+		}
+		if _, err := m.createDocWithID(ctx, b.ID, docID, domain.UpsertKnowledgeDocRequest{
+			Title:   title,
+			Content: seed.Content,
+		}); err != nil {
+			return domain.KnowledgeBase{}, err
+		}
+	}
+	b.DocumentCount, _ = m.docs.CountByKB(ctx, b.ID)
+	return b, nil
+}
+
+func (m *KnowledgeManager) ensureBaseWithID(ctx context.Context, id, name, description string) (domain.KnowledgeBase, error) {
+	if existing, err := m.bases.Get(ctx, id); err == nil {
+		existing.DocumentCount, _ = m.docs.CountByKB(ctx, id)
+		return existing, nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	b := domain.KnowledgeBase{
+		ID:          id,
+		Name:        name,
+		Description: description,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := os.MkdirAll(filepath.Join(m.rootDir, b.ID), 0o755); err != nil {
+		return domain.KnowledgeBase{}, err
+	}
+	if err := m.bases.Upsert(ctx, b); err != nil {
+		return domain.KnowledgeBase{}, err
+	}
+	return b, nil
+}
+
+func (m *KnowledgeManager) createDocWithID(ctx context.Context, kbID, docID string, req domain.UpsertKnowledgeDocRequest) (domain.KnowledgeDoc, error) {
+	if _, err := m.bases.Get(ctx, kbID); err != nil {
+		return domain.KnowledgeDoc{}, err
+	}
+	title := strings.TrimSpace(req.Title)
+	if title == "" {
+		return domain.KnowledgeDoc{}, fmt.Errorf("title required")
+	}
+	docID = strings.TrimSpace(docID)
+	if docID == "" {
+		return domain.KnowledgeDoc{}, fmt.Errorf("doc id required")
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	rel := filepath.ToSlash(filepath.Join(kbID, docID+".md"))
+	d := domain.KnowledgeDoc{
+		ID: docID, KBID: kbID, Title: title, Path: rel,
+		Content: req.Content, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := m.writeFile(d, req.Content); err != nil {
+		return domain.KnowledgeDoc{}, err
+	}
+	meta := d
+	meta.Content = ""
+	if err := m.docs.Upsert(ctx, meta); err != nil {
+		return domain.KnowledgeDoc{}, err
+	}
+	if err := m.indexDoc(ctx, d, req.Content); err != nil {
+		return domain.KnowledgeDoc{}, err
+	}
+	_ = m.touchBase(ctx, kbID)
+	return d, nil
+}
+
 // EnsureDefaultBase creates the default knowledge base when none exist.
 // If bases already exist, returns the default id when present, otherwise the first base.
 func (m *KnowledgeManager) EnsureDefaultBase(ctx context.Context) (domain.KnowledgeBase, error) {
