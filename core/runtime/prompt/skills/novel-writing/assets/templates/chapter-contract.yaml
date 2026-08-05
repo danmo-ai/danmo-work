@@ -1,0 +1,20 @@
+chapter: 1
+title_working: ""
+pov: ""
+time: ""
+location: ""
+purpose: ""
+must_happen: []
+must_not_happen: []
+character_state_in: {}
+character_state_out: {}
+reveals: []
+secrets_preserved: []
+foreshadowing: []
+hook_out: ""
+continuity_risks: []
+tension_curve:
+  - { position: 0, value: 3 }
+  - { position: 50, value: 7 }
+  - { position: 100, value: 5 }
+status: proposed  # proposed|accepted|drafted|reviewed

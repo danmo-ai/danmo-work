@@ -1,0 +1,11 @@
+book_id: ""
+title: ""
+stage: init  # init|outline|contract|write|review|polish|idle
+next_action: ""
+last_committed_ch: 0
+artifacts:
+  book_bible: missing  # missing|in_progress|ready|stale|blocked
+  world_canon: missing
+  cast_registry: missing
+  volume_outline: missing
+notes: ""
