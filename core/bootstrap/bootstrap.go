@@ -497,11 +497,6 @@ func ensureBuiltinAgents(agents *service.AgentManager) {
 			existing.Mode = tmpl.Agent.Mode
 			changed = true
 		}
-		// novel shipped as primary in early MVP; realign to template (Team-summonable subagent).
-		if existing.ID == "novel" && tmpl.Agent.Mode != "" && existing.Mode != tmpl.Agent.Mode {
-			existing.Mode = tmpl.Agent.Mode
-			changed = true
-		}
 		if changed {
 			if err := agents.Upsert(ctx, *existing); err != nil {
 				log.Printf("[bootstrap] backfill builtin agent %q: %v", tmpl.Agent.ID, err)
