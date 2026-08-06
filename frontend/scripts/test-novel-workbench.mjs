@@ -44,11 +44,13 @@ assert.equal(
 )
 
 const init = buildNovelStagePrefill('init', {})
-assert.ok(init.includes('delegate_agent'))
-assert.ok(init.includes('novel'))
+assert.ok(init.includes('开一本新书'))
+assert.ok(!init.includes('delegate_agent'))
+assert.ok(!init.includes('请委派'))
 
 const cont = buildNovelStagePrefill('continue', { bookId: 'star-inn' })
 assert.ok(cont.includes('novel/star-inn/novel-state.yaml'))
+assert.ok(!cont.includes('delegate_agent'))
 
 const write = buildNovelStagePrefill('write', { bookId: 'star-inn', chapter: 4 })
 assert.ok(write.includes('ch004.md'))
@@ -59,5 +61,6 @@ const review = buildNovelStagePrefill('review', {
 })
 assert.ok(review.includes('novel/star-inn/chapters/ch003.md'))
 assert.ok(review.includes('reviews/'))
+assert.ok(!review.includes('请委派'))
 
 console.log('novel-workbench helpers ok')

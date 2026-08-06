@@ -1148,9 +1148,8 @@ export default {
     expertBuiltin: '内置',
     expertCustom: '自定义',
     expertMarket: '市场',
-    useExpertLine: '请委派「{name}」专家（agent_id={id}）完成以下任务。',
-    delegateExpertHint:
-      '请使用 delegate_agent(agent_id=..., goal=...) 召集上述专家；goal 写清用户意图与必要上下文，不要自行代做其职责范围内的工作。',
+    useExpertLine: '请用 delegate_agent(agent_id={id}) 委派「{name}」；goal 写清意图，勿代做。',
+    delegateExpertHint: '',
     expertNeedDelegate: '当前主专家未启用专家协作。请切换到 Team，或在 Teams 中为主专家开启「启用专家协作」。',
     needLlm: '请先配置 LLM 提供商',
     needProject: '请选择项目',

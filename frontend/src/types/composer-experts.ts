@@ -31,7 +31,9 @@ export function buildExpertSummonPrefix(
 ): string {
   if (!experts.length) return ''
   const lines = experts.map((a) => useExpertLine(a.name || a.id, a.id))
-  return `${lines.join('\n')}\n${delegateHint}\n\n`
+  const hint = delegateHint.trim()
+  if (hint) return `${lines.join('\n')}\n${hint}\n\n`
+  return `${lines.join('\n')}\n\n`
 }
 
 export function prependExpertSummon(

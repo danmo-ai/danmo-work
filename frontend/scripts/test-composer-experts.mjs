@@ -26,18 +26,22 @@ assert.equal(hits[0].id, 'github')
 const prefix = buildExpertSummonPrefix(
   [agents[1]],
   (name, id) => `Delegate ${name} (${id})`,
-  'Use delegate_agent.',
+  '',
 )
-assert.ok(prefix.includes('Delegate Document (document)'))
-assert.ok(prefix.includes('Use delegate_agent.'))
+assert.equal(prefix, 'Delegate Document (document)\n\n')
+assert.equal(
+  buildExpertSummonPrefix([agents[1]], (name, id) => `Delegate ${name} (${id})`, '  Use tool.  '),
+  'Delegate Document (document)\nUse tool.\n\n',
+)
 
 const out = prependExpertSummon(
   'Write a report',
   [agents[1]],
-  (name, id) => `请委派「${name}」专家（agent_id=${id}）完成以下任务。`,
-  '请使用 delegate_agent。',
+  (name, id) => `请用 delegate_agent(agent_id=${id}) 委派「${name}」；goal 写清意图，勿代做。`,
+  '',
 )
-assert.ok(out.startsWith('请委派「Document」'))
+assert.ok(out.startsWith('请用 delegate_agent(agent_id=document) 委派「Document」'))
 assert.ok(out.endsWith('Write a report'))
+assert.ok(!out.includes('召集上述专家'))
 
 console.log('composer-experts helpers ok')

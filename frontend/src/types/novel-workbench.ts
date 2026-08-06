@@ -94,9 +94,6 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
   switch (action) {
     case 'init':
       return [
-        '请委派「小说创作」专家（agent_id=novel）完成立项开书。',
-        '请使用 delegate_agent(agent_id=novel, goal=...) 召集；goal 写清下列意图。',
-        '',
         '开一本新书并立项：',
         '- 先用 ask_user 澄清题材、读者承诺、篇幅/平台、禁忌（一次一问即可）。',
         '- 创建 novel/<book-id>/（含 novel-state.yaml、book-bible.md、canon/、outline/、chapters/、reviews/、continuity/）。',
@@ -105,35 +102,23 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       ].join('\n')
     case 'outline':
       return [
-        '请委派「小说创作」专家（agent_id=novel）完成大纲。',
-        '请使用 delegate_agent(agent_id=novel, goal=...) 召集。',
-        '',
         `书目录：novel/${bookId}/`,
         '基于现有 book-bible / canon，写出：一句话梗概 + 分卷大纲 + 前若干章一句话章纲（含钩子）。',
         '先不要写章节正文；大纲写完停下来等我确认。',
       ].join('\n')
     case 'write':
       return [
-        '请委派「小说创作」专家（agent_id=novel）写指定章节。',
-        '请使用 delegate_agent(agent_id=novel, goal=...) 召集。',
-        '',
         `写第 ${ch || 'N'} 章到 ${chPath}。`,
         '流程：章合同 → 草稿 → 审一轮 → Commit（更新伏笔表、timeline、章摘要与 novel-state）。',
         'P0 审稿不过不得定稿；不要只在对话里贴正文。',
       ].join('\n')
     case 'continue':
       return [
-        '请委派「小说创作」专家（agent_id=novel）续写下一章。',
-        '请使用 delegate_agent(agent_id=novel, goal=...) 召集。',
-        '',
         `接着写下一章。先读 novel/${bookId}/novel-state.yaml 与近 3 章摘要、未回收伏笔，补章合同后写正文；`,
         '审一轮，P0 不过不得定稿；Commit 落盘并更新 novel-state。不要只在对话里贴正文。',
       ].join('\n')
     case 'review':
       return [
-        '请委派「小说创作」专家（agent_id=novel）审稿。',
-        '请使用 delegate_agent(agent_id=novel, goal=...) 召集。',
-        '',
         `审阅 ${chPath}：按六透镜 + 去 AI 味 P0/P1 出审查报告，写入 novel/${bookId}/reviews/，`,
         'blocking 记入 continuity_issues；需要修订则直接改章节文件后再 Commit。',
       ].join('\n')

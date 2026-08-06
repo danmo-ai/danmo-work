@@ -1149,9 +1149,9 @@ export default {
     expertBuiltin: 'Built-in',
     expertCustom: 'Custom',
     expertMarket: 'Market',
-    useExpertLine: 'Delegate to the "{name}" expert (agent_id={id}) for the following task.',
-    delegateExpertHint:
-      'Summon the experts above with delegate_agent(agent_id=..., goal=...). Put the user intent and needed context in goal; do not do their scoped work yourself.',
+    useExpertLine:
+      'Use delegate_agent(agent_id={id}) for "{name}"; put intent in goal — do not do their work yourself.',
+    delegateExpertHint: '',
     expertNeedDelegate:
       'This lead expert cannot collaborate. Switch to Team, or enable expert collaboration on the lead in Teams.',
     needLlm: 'Configure an LLM provider first',
