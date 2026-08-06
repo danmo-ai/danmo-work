@@ -22,6 +22,7 @@ import AskUserBlock, { type AskUserFormField } from '@/components/center/AskUser
 import { countFoldableProcessEvents, filterCollapsedTimelineEvents, groupConsecutiveToolCards, hasFoldableProcess, useTurnCollapse, type StreamTurn, type ToolCard, type UserImageAttachment } from '@/composables/useStreamTurns'
 import RightWorkspacePanel from '@/components/center/RightWorkspacePanel.vue'
 import DocumentStage from '@/components/office/DocumentStage.vue'
+import WorkbenchHost from '@/components/workbench/WorkbenchHost.vue'
 import {
   DqDrawer,
   Document,
@@ -49,7 +50,8 @@ const { t } = useI18n()
 const sessions = useSessionsStore()
 const workspaceUi = useWorkspaceUiStore()
 const sessionActivity = useSessionActivityStore()
-const { rightTab, rightDrawerOpen, stage, layoutMode, changesCount, memoryCount } = storeToRefs(workspaceUi)
+const { rightTab, rightDrawerOpen, stage, layoutMode, changesCount, memoryCount, workbenchOpen } =
+  storeToRefs(workspaceUi)
 const rightPanelRef = ref<InstanceType<typeof RightWorkspacePanel> | null>(null)
 const { tokensForTurn } = useSessionContextUsage()
 const isEditingTitle = ref(false)
@@ -58,9 +60,9 @@ const composerRef = ref<InstanceType<typeof FloatingComposer> | null>(null)
 
 const bodyRef = ref<HTMLElement | null>(null)
 
-const isStageLayout = computed(() => layoutMode.value === 'stage' && !!stage.value)
+const isStageLayout = computed(() => !!stage.value || workbenchOpen.value)
 
-/** Grid columns for chat / stage; immersive leaves layout to CSS. */
+/** Grid columns for chat / stage / workbench; immersive leaves layout to CSS. */
 const bodyGridStyle = computed(() => {
   if (layoutMode.value === 'immersive' && stage.value) return undefined
   if (isStageLayout.value) {
@@ -110,6 +112,10 @@ const rightIconItems = computed(() => {
 
 function onRightIconClick(tab: RightWorkspaceTab) {
   workspaceUi.toggleRightDrawer(tab)
+}
+
+function onWorkbenchIconClick() {
+  workspaceUi.toggleWorkbench()
 }
 
 async function openFileInOffice(filePath: string) {
@@ -276,6 +282,7 @@ function syncComposerLayout() {
 
 watch(layoutMode, () => { nextTick(syncComposerLayout) })
 watch(rightDrawerOpen, () => { nextTick(syncComposerLayout) })
+watch(workbenchOpen, () => { nextTick(syncComposerLayout) })
 watch(
   () => workspaceUi.pendingApprovals,
   () => { nextTick(syncComposerLayout) },
@@ -1635,6 +1642,32 @@ function onTitleKeydown(e: KeyboardEvent) {
               class="session-workspace__tool-badge"
             >{{ item.badge }}</span>
           </button>
+          <button
+            type="button"
+            class="session-workspace__tool"
+            :class="{ 'is-active': workbenchOpen }"
+            :aria-label="t('workbench.title')"
+            :title="t('workbench.title')"
+            :aria-pressed="workbenchOpen"
+            @click="onWorkbenchIconClick"
+          >
+            <svg
+              class="session-workspace__tool-icon"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="3" width="7" height="18" rx="1" />
+              <rect x="14" y="3" width="7" height="18" rx="1" />
+            </svg>
+            <span class="session-workspace__tool-label">{{ t('workbench.title') }}</span>
+          </button>
         </div>
       </div>
     </header>
@@ -1839,6 +1872,10 @@ function onTitleKeydown(e: KeyboardEvent) {
         @attach-element="onStageAttachElement"
         @attach-code-selection="onStageAttachCodeSelection"
         @attach-office-edit="onStageAttachOfficeEdit"
+      />
+      <WorkbenchHost
+        v-else-if="workbenchOpen"
+        class="session-workspace__stage"
       />
     </div>
 

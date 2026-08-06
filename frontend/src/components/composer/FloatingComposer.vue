@@ -534,6 +534,23 @@ watch(
   },
 )
 
+watch(
+  () => workspaceUi.composerSelectExpertToken,
+  () => {
+    const ids = workspaceUi.consumeComposerSelectExperts()
+    if (!ids.length) return
+    if (!canDelegateExperts.value) return
+    const allowed = new Set(summonableExperts.value.map((a) => a.id))
+    for (const id of ids) {
+      if (!allowed.has(id)) continue
+      if (!selectedExpertIds.value.includes(id)) {
+        selectedExpertIds.value = [...selectedExpertIds.value, id]
+      }
+    }
+    void nextTick(() => focusInput())
+  },
+)
+
 async function loadAvailableSkills() {
   const agentId = sessions.selectedAgentId
   if (!agentId) {
@@ -701,6 +718,9 @@ async function onPickSlash(cmd: ComposerSlashCommand) {
       break
     case 'new':
       sessions.startCompose(sessions.selectedProjectId)
+      break
+    case 'novel':
+      workspaceUi.openWorkbench('novel')
       break
     default:
       break
