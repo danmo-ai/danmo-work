@@ -952,6 +952,7 @@ export default {
     memoryLoadFailed: '加载记忆失败',
     memoryDeleteFailed: '删除记忆失败',
     noProjectLinked: '未关联项目',
+    filesEmpty: '暂无文件',
     cancelRunning: '取消运行',
     copyLink: '复制链接',
     copySessionId: '复制会话 ID',

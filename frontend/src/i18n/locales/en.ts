@@ -953,6 +953,7 @@ export default {
     memoryLoadFailed: 'Failed to load memories',
     memoryDeleteFailed: 'Failed to delete memory',
     noProjectLinked: 'No project linked',
+    filesEmpty: 'No files yet',
     cancelRunning: 'Cancel run',
     copyLink: 'Copy link',
     copySessionId: 'Copy session ID',
