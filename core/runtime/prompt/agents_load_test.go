@@ -38,8 +38,8 @@ func TestBuiltinNovelExpertAggregatesSkillAndCraftKB(t *testing.T) {
 	if novel == nil {
 		t.Fatal("missing builtin novel agent template")
 	}
-	if novel.Agent.Mode != domain.AgentModePrimary {
-		t.Fatalf("novel mode=%s, want primary", novel.Agent.Mode)
+	if novel.Agent.Mode != domain.AgentModeSubagent {
+		t.Fatalf("novel mode=%s, want subagent", novel.Agent.Mode)
 	}
 	hasNovelSkill, hasBrainstorm := false, false
 	for _, id := range novel.Agent.SkillIDs {

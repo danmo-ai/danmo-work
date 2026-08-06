@@ -72,7 +72,7 @@ delegate_agent(agent_id="<id>", goal="...")
 | `data` | Data | CSV/JSON 分析与报表 | shell 等 |
 | `github` | GitHub | Issue / PR / Actions 等 | skill `github` + MCP `github` |
 | `danmo-make` | Danmo Make | 本机图片/视频/音频生成 | skill + MCP `danmo-make`（需单独安装 Make） |
-| `novel` | 小说创作 | 长篇/网文：章合同→草稿→审稿→Commit（若已内置或已安装） | `novel-writing`, craft KB `kb-novel-craft` |
+| `novel` | 小说创作 | 长篇/网文：章合同→草稿→审稿→Commit（内置子专家，Team 召唤） | `novel-writing`, craft KB `kb-novel-craft` |
 
 市场安装的专家（如 **CodeGraph**）同样会出现在可召唤列表中（`mode=subagent` 且带 `marketSource`）。
 
