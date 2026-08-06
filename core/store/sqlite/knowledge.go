@@ -62,6 +62,9 @@ func migrateKnowledgeSchema(db *gorm.DB) error {
 	if err := rewriteLegacyKnowledgeDocsTable(db); err != nil {
 		return err
 	}
+	if err := resetBrokenKnowledgeChapters(db); err != nil {
+		return err
+	}
 	if err := db.AutoMigrate(&knowledgeBaseModel{}, &knowledgeDocMetaModel{}, &knowledgeChapterModel{}); err != nil {
 		return err
 	}
@@ -69,6 +72,50 @@ func migrateKnowledgeSchema(db *gorm.DB) error {
 		return err
 	}
 	return migrateLegacyKnowledgeDocs(db)
+}
+
+// resetBrokenKnowledgeChapters drops aborted WIP leftovers so AutoMigrate can
+// recreate a clean path-PK table (SQLite index names are DB-global).
+func resetBrokenKnowledgeChapters(db *gorm.DB) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	if _, err := sqlDB.Exec(`DROP TABLE IF EXISTS knowledge_chapters_legacy`); err != nil {
+		return err
+	}
+	if !db.Migrator().HasTable("knowledge_chapters") {
+		return nil
+	}
+	rows, err := sqlDB.Query(`PRAGMA table_info(knowledge_chapters)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	hasFullPath := false
+	pathIsPK := false
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			return err
+		}
+		lower := strings.ToLower(name)
+		if lower == "full_path" {
+			hasFullPath = true
+		}
+		if lower == "path" && pk > 0 {
+			pathIsPK = true
+		}
+	}
+	if hasFullPath || !pathIsPK {
+		if _, err := sqlDB.Exec(`DROP TABLE IF EXISTS knowledge_chapters`); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func rewriteLegacyKnowledgeDocsTable(db *gorm.DB) error {
