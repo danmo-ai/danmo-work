@@ -113,4 +113,8 @@ delegate_agent(agent_id="<id>", goal="...")
 - **右**：工作台宿主（当前仅「小说」；以后可扩展其它工作台）  
 - **底**：Composer 通栏  
 
-小说工作台自包含：书架 → 书内章列表 → 章/bible **内嵌阅读**，以及立项 / 大纲 / 续写 / 审章等动作（Prefill 进 Composer，可自动勾选 `novel` 专家 chip）。**不跳转** Files / Doc Stage 其它页面。书仍落在项目目录 `novel/<book-id>/`。
+小说工作台自包含，按技能流水线分组：
+
+`立项 → 大纲/资产/金手指 → 章合同 → 写/续写 →（读章）审稿/润色 → Commit`
+
+并内嵌阅读 bible / state / canon / outline / continuity / reviews / 章节。动作只 Prefill Composer（可勾选 `novel` chip），**不跳转** Files / Doc Stage。书仍落在 `novel/<book-id>/`。

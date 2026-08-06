@@ -9,22 +9,29 @@ import { renderMarkdown } from '@/utils/markdown-render'
 import {
   buildNovelStagePrefill,
   chapterNumFromName,
+  isNovelChapterPath,
   nextChapterNumber,
   novelBiblePath,
   novelBookDir,
+  novelCanonDir,
+  novelChapterSummariesPath,
   novelChaptersDir,
+  novelContinuityDir,
+  novelOutlineDir,
+  novelReviewsDir,
   novelStatePath,
   parseNovelStateYaml,
   sortChapterNodes,
+  sortMdNodes,
   type NovelFileNode,
   type NovelStageAction,
   type NovelStateSummary,
 } from '@/types/novel-workbench'
 
-function chapterPath(bookId: string, node: NovelFileNode): string {
+function nodePath(bookId: string, dir: string, node: NovelFileNode): string {
   const p = (node.path || '').replace(/\\/g, '/')
   if (p) return p
-  return `${novelChaptersDir(bookId)}/${node.name}`
+  return `${dir}/${node.name}`
 }
 
 type View = 'shelf' | 'book' | 'read'
@@ -38,6 +45,10 @@ const loading = ref(false)
 const books = ref<{ id: string; path: string; state: NovelStateSummary | null }[]>([])
 const selectedBookId = ref<string | null>(null)
 const chapters = ref<NovelFileNode[]>([])
+const continuityFiles = ref<NovelFileNode[]>([])
+const outlineFiles = ref<NovelFileNode[]>([])
+const reviewFiles = ref<NovelFileNode[]>([])
+const canonFiles = ref<NovelFileNode[]>([])
 const bookState = ref<NovelStateSummary | null>(null)
 const readPath = ref<string | null>(null)
 const readTitle = ref('')
@@ -58,6 +69,11 @@ const nextCh = computed(() =>
   nextChapterNumber(bookState.value?.lastCommittedCh ?? 0, chapters.value),
 )
 
+const readingChapter = computed(() => {
+  if (!readPath.value || !isNovelChapterPath(readPath.value)) return null
+  return chapterNumFromName(readTitle.value)
+})
+
 watch(projectId, () => {
   view.value = 'shelf'
   selectedBookId.value = null
@@ -70,6 +86,14 @@ async function listDir(path: string): Promise<NovelFileNode[]> {
   return asArray(
     await fetchJSON<NovelFileNode[]>(`/projects/${projectId.value}/files${q}`),
   )
+}
+
+async function listDirSoft(path: string): Promise<NovelFileNode[]> {
+  try {
+    return await listDir(path)
+  } catch {
+    return []
+  }
 }
 
 async function readFile(path: string): Promise<string> {
@@ -126,10 +150,24 @@ async function openBook(bookId: string) {
   loading.value = true
   try {
     bookState.value = await loadState(bookId)
-    const nodes = await listDir(novelChaptersDir(bookId))
-    chapters.value = sortChapterNodes(nodes)
+    const [chNodes, contNodes, outNodes, revNodes, canonNodes] = await Promise.all([
+      listDirSoft(novelChaptersDir(bookId)),
+      listDirSoft(novelContinuityDir(bookId)),
+      listDirSoft(novelOutlineDir(bookId)),
+      listDirSoft(novelReviewsDir(bookId)),
+      listDirSoft(novelCanonDir(bookId)),
+    ])
+    chapters.value = sortChapterNodes(chNodes)
+    continuityFiles.value = sortMdNodes(contNodes)
+    outlineFiles.value = sortMdNodes(outNodes)
+    reviewFiles.value = sortMdNodes(revNodes)
+    canonFiles.value = sortMdNodes(canonNodes)
   } catch {
     chapters.value = []
+    continuityFiles.value = []
+    outlineFiles.value = []
+    reviewFiles.value = []
+    canonFiles.value = []
     bookState.value = null
   } finally {
     loading.value = false
@@ -252,78 +290,200 @@ function escapeHtml(s: string) {
     </template>
 
     <template v-else-if="view === 'book' && selectedBookId">
-      <div v-if="bookState" class="novel-wb__state">
-        <div>{{ bookState.title || selectedBookId }}</div>
-        <div class="novel-wb__row-meta">
-          stage={{ bookState.stage || '—' }}
-          · last=ch{{ bookState.lastCommittedCh }}
-          <template v-if="bookState.nextAction"> · {{ bookState.nextAction }}</template>
+      <div class="novel-wb__scroll">
+        <div v-if="bookState" class="novel-wb__state">
+          <div>{{ bookState.title || selectedBookId }}</div>
+          <div class="novel-wb__row-meta">
+            stage={{ bookState.stage || '—' }}
+            · last=ch{{ bookState.lastCommittedCh }}
+            <template v-if="bookState.nextAction"> · {{ bookState.nextAction }}</template>
+          </div>
+        </div>
+
+        <div class="novel-wb__group">
+          <div class="novel-wb__group-label">{{ t('novelWorkbench.groupSetup') }}</div>
+          <div class="novel-wb__actions novel-wb__actions--tight">
+            <button type="button" class="novel-wb__btn novel-wb__btn--ghost" @click="runAction('outline')">
+              {{ t('novelWorkbench.actionOutline') }}
+            </button>
+            <button type="button" class="novel-wb__btn novel-wb__btn--ghost" @click="runAction('assets')">
+              {{ t('novelWorkbench.actionAssets') }}
+            </button>
+            <button type="button" class="novel-wb__btn novel-wb__btn--ghost" @click="runAction('goldfinger')">
+              {{ t('novelWorkbench.actionGoldfinger') }}
+            </button>
+          </div>
+        </div>
+
+        <div class="novel-wb__group">
+          <div class="novel-wb__group-label">{{ t('novelWorkbench.groupChapter') }}</div>
+          <div class="novel-wb__actions novel-wb__actions--tight">
+            <button type="button" class="novel-wb__btn" @click="runAction('continue')">
+              {{ t('novelWorkbench.actionContinue') }}
+            </button>
+            <button
+              type="button"
+              class="novel-wb__btn novel-wb__btn--ghost"
+              @click="runAction('contract', nextCh)"
+            >
+              {{ t('novelWorkbench.actionContract', { n: nextCh }) }}
+            </button>
+            <button
+              type="button"
+              class="novel-wb__btn novel-wb__btn--ghost"
+              @click="runAction('write', nextCh)"
+            >
+              {{ t('novelWorkbench.actionWrite', { n: nextCh }) }}
+            </button>
+          </div>
+        </div>
+
+        <div class="novel-wb__group">
+          <div class="novel-wb__group-label">{{ t('novelWorkbench.groupQuality') }}</div>
+          <div class="novel-wb__actions novel-wb__actions--tight">
+            <button
+              type="button"
+              class="novel-wb__btn novel-wb__btn--ghost"
+              @click="runAction('commit')"
+            >
+              {{ t('novelWorkbench.actionCommit') }}
+            </button>
+          </div>
+          <p class="novel-wb__hint novel-wb__hint--pad">{{ t('novelWorkbench.qualityHint') }}</p>
+        </div>
+
+        <div class="novel-wb__group">
+          <div class="novel-wb__group-label">{{ t('novelWorkbench.groupFiles') }}</div>
+          <div class="novel-wb__quick">
+            <button
+              type="button"
+              class="novel-wb__chip"
+              @click="openRead(novelBiblePath(selectedBookId), 'book-bible.md')"
+            >
+              bible
+            </button>
+            <button
+              type="button"
+              class="novel-wb__chip"
+              @click="openRead(novelStatePath(selectedBookId), 'novel-state.yaml')"
+            >
+              state
+            </button>
+            <button
+              type="button"
+              class="novel-wb__chip"
+              @click="openRead(novelChapterSummariesPath(selectedBookId), 'chapter_summaries.md')"
+            >
+              summaries
+            </button>
+          </div>
+          <div v-if="canonFiles.length" class="novel-wb__quick">
+            <button
+              v-for="f in canonFiles"
+              :key="nodePath(selectedBookId, novelCanonDir(selectedBookId), f)"
+              type="button"
+              class="novel-wb__chip"
+              @click="openRead(nodePath(selectedBookId, novelCanonDir(selectedBookId), f), f.name)"
+            >
+              canon/{{ f.name }}
+            </button>
+          </div>
+          <div v-if="outlineFiles.length" class="novel-wb__quick">
+            <button
+              v-for="f in outlineFiles"
+              :key="nodePath(selectedBookId, novelOutlineDir(selectedBookId), f)"
+              type="button"
+              class="novel-wb__chip"
+              @click="openRead(nodePath(selectedBookId, novelOutlineDir(selectedBookId), f), f.name)"
+            >
+              outline/{{ f.name }}
+            </button>
+          </div>
+          <div v-if="continuityFiles.length" class="novel-wb__quick">
+            <button
+              v-for="f in continuityFiles"
+              :key="nodePath(selectedBookId, novelContinuityDir(selectedBookId), f)"
+              type="button"
+              class="novel-wb__chip"
+              @click="openRead(nodePath(selectedBookId, novelContinuityDir(selectedBookId), f), f.name)"
+            >
+              continuity/{{ f.name }}
+            </button>
+          </div>
+          <div v-if="reviewFiles.length" class="novel-wb__quick">
+            <button
+              v-for="f in reviewFiles.slice(-6)"
+              :key="nodePath(selectedBookId, novelReviewsDir(selectedBookId), f)"
+              type="button"
+              class="novel-wb__chip"
+              @click="openRead(nodePath(selectedBookId, novelReviewsDir(selectedBookId), f), f.name)"
+            >
+              reviews/{{ f.name }}
+            </button>
+          </div>
+        </div>
+
+        <div class="novel-wb__group">
+          <div class="novel-wb__group-label">{{ t('novelWorkbench.chapters') }}</div>
+          <div v-if="loading" class="novel-wb__empty">{{ t('novelWorkbench.loading') }}</div>
+          <ul v-else-if="chapters.length" class="novel-wb__list novel-wb__list--embedded">
+            <li v-for="ch in chapters" :key="nodePath(selectedBookId, novelChaptersDir(selectedBookId), ch)">
+              <button
+                type="button"
+                class="novel-wb__row"
+                @click="openRead(nodePath(selectedBookId, novelChaptersDir(selectedBookId), ch), ch.name)"
+              >
+                <span class="novel-wb__row-title">{{ ch.name }}</span>
+                <span class="novel-wb__row-meta">{{
+                  nodePath(selectedBookId, novelChaptersDir(selectedBookId), ch)
+                }}</span>
+              </button>
+            </li>
+          </ul>
+          <div v-else class="novel-wb__empty">{{ t('novelWorkbench.noChapters') }}</div>
         </div>
       </div>
-      <div class="novel-wb__actions">
-        <button type="button" class="novel-wb__btn" @click="runAction('continue')">
-          {{ t('novelWorkbench.actionContinue') }}
-        </button>
-        <button
-          type="button"
-          class="novel-wb__btn novel-wb__btn--ghost"
-          @click="runAction('write', nextCh)"
-        >
-          {{ t('novelWorkbench.actionWrite', { n: nextCh }) }}
-        </button>
-        <button type="button" class="novel-wb__btn novel-wb__btn--ghost" @click="runAction('outline')">
-          {{ t('novelWorkbench.actionOutline') }}
-        </button>
-      </div>
-      <div class="novel-wb__quick">
-        <button
-          type="button"
-          class="novel-wb__chip"
-          @click="openRead(novelBiblePath(selectedBookId), 'book-bible.md')"
-        >
-          bible
-        </button>
-        <button
-          type="button"
-          class="novel-wb__chip"
-          @click="openRead(novelStatePath(selectedBookId), 'novel-state.yaml')"
-        >
-          state
-        </button>
-      </div>
-      <div v-if="loading" class="novel-wb__empty">{{ t('novelWorkbench.loading') }}</div>
-      <ul v-else-if="chapters.length" class="novel-wb__list">
-        <li v-for="ch in chapters" :key="chapterPath(selectedBookId, ch)">
-          <button
-            type="button"
-            class="novel-wb__row"
-            @click="openRead(chapterPath(selectedBookId, ch), ch.name)"
-          >
-            <span class="novel-wb__row-title">{{ ch.name }}</span>
-            <span class="novel-wb__row-meta">{{ chapterPath(selectedBookId, ch) }}</span>
-          </button>
-        </li>
-      </ul>
-      <div v-else class="novel-wb__empty">{{ t('novelWorkbench.noChapters') }}</div>
     </template>
 
     <template v-else-if="view === 'read'">
       <div class="novel-wb__actions">
+        <template v-if="readingChapter != null && readPath">
+          <button
+            type="button"
+            class="novel-wb__btn novel-wb__btn--ghost"
+            @click="runAction('contract', readingChapter, readPath)"
+          >
+            {{ t('novelWorkbench.actionContract', { n: readingChapter }) }}
+          </button>
+          <button
+            type="button"
+            class="novel-wb__btn novel-wb__btn--ghost"
+            @click="runAction('review', readingChapter, readPath)"
+          >
+            {{ t('novelWorkbench.actionReview') }}
+          </button>
+          <button
+            type="button"
+            class="novel-wb__btn novel-wb__btn--ghost"
+            @click="runAction('polish', readingChapter, readPath)"
+          >
+            {{ t('novelWorkbench.actionPolish') }}
+          </button>
+          <button
+            type="button"
+            class="novel-wb__btn"
+            @click="runAction('commit', readingChapter, readPath)"
+          >
+            {{ t('novelWorkbench.actionCommit') }}
+          </button>
+        </template>
         <button
           v-if="selectedBookId"
           type="button"
-          class="novel-wb__btn"
+          class="novel-wb__btn novel-wb__btn--ghost"
           @click="runAction('continue')"
         >
           {{ t('novelWorkbench.actionContinue') }}
-        </button>
-        <button
-          v-if="readPath"
-          type="button"
-          class="novel-wb__btn novel-wb__btn--ghost"
-          @click="runAction('review', chapterNumFromName(readTitle) ?? undefined, readPath)"
-        >
-          {{ t('novelWorkbench.actionReview') }}
         </button>
       </div>
       <div v-if="readLoading" class="novel-wb__empty">{{ t('novelWorkbench.loading') }}</div>
@@ -378,6 +538,14 @@ function escapeHtml(s: string) {
   cursor: not-allowed;
 }
 
+.novel-wb__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
 .novel-wb__empty {
   padding: 20px 14px;
   font-size: var(--dq-font-size-body);
@@ -391,6 +559,23 @@ function escapeHtml(s: string) {
   opacity: 0.85;
 }
 
+.novel-wb__hint--pad {
+  margin: 0;
+  padding: 0 12px 8px;
+}
+
+.novel-wb__group {
+  padding-top: 4px;
+}
+
+.novel-wb__group-label {
+  padding: 10px 12px 0;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 650;
+  opacity: 0.65;
+  letter-spacing: 0.02em;
+}
+
 .novel-wb__list {
   list-style: none;
   margin: 0;
@@ -398,6 +583,12 @@ function escapeHtml(s: string) {
   overflow: auto;
   flex: 1;
   min-height: 0;
+}
+
+.novel-wb__list--embedded {
+  flex: none;
+  max-height: none;
+  overflow: visible;
 }
 
 .novel-wb__row {
@@ -445,6 +636,11 @@ function escapeHtml(s: string) {
   padding: 10px 12px;
 }
 
+.novel-wb__actions--tight {
+  padding-top: 6px;
+  padding-bottom: 4px;
+}
+
 .novel-wb__btn {
   margin: 0;
   padding: 6px 10px;
@@ -467,7 +663,7 @@ function escapeHtml(s: string) {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 12px 8px;
+  padding: 6px 12px 8px;
 }
 
 .novel-wb__chip {
