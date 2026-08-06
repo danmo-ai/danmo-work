@@ -1762,7 +1762,7 @@ defineExpose({
   right: 10px;
   /* Sit above the whole composer (card + tray), not inside the clipped card. */
   bottom: calc(100% + 8px);
-  z-index: 40;
+  z-index: 60;
   display: flex;
   justify-content: flex-start;
   pointer-events: none;

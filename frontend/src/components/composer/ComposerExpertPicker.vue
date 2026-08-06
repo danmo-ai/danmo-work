@@ -168,9 +168,11 @@ defineExpose({ onKeydown, confirmActive, move, filtered })
   overflow: hidden;
   border: 1px solid var(--dq-border-subtle, rgba(0, 0, 0, 0.08));
   border-radius: 10px;
-  background: var(--dq-glass-popover-bg, #fff);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
-  color: var(--dq-text-primary, inherit);
+  /* Opaque sheet — glass popover-bg is ~24% in dark and lets stream bleed through. */
+  background: var(--dq-bg-elevated, #fff);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  color: var(--dq-label-primary, inherit);
+  isolation: isolate;
 }
 
 .expert-picker__head {
