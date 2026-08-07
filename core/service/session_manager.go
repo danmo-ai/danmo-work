@@ -109,7 +109,7 @@ func (m *SessionManager) StartTurn(ctx context.Context, sessionID string, req do
 	if len(req.SnapshotPaths) > 0 {
 		ctx = WithSnapshotPaths(ctx, req.SnapshotPaths)
 	}
-	return m.engine.StartTurn(ctx, sessionID, userInput, req.AgentID, req.ModelID, atts)
+	return m.engine.StartTurn(ctx, sessionID, userInput, req.AgentID, req.ModelID, atts, req.ContinueFromTurnID)
 }
 
 func (m *SessionManager) CancelTurn(ctx context.Context, turnID string) {
@@ -400,7 +400,7 @@ func (m *SessionManager) DrainPendingQueue(ctx context.Context, sessionID string
 	if !ok {
 		return
 	}
-	turnID, err := m.engine.StartTurn(ctx, sessionID, msg.Content, msg.AgentID, msg.ModelID, msg.Attachments)
+	turnID, err := m.engine.StartTurn(ctx, sessionID, msg.Content, msg.AgentID, msg.ModelID, msg.Attachments, "")
 	if err != nil {
 		log.Printf("[pending] start turn session %s: %v", sessionID, err)
 		msg.Status = domain.PendingQueued

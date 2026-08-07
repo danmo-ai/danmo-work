@@ -456,6 +456,7 @@ const turnMap = computed(() => {
       map[turnId].goal = String(payload?.goal ?? map[turnId].goal)
       map[turnId].agentId = String(payload?.agentId ?? map[turnId].agentId)
       map[turnId].agentName = String(payload?.agentName ?? payload?.agentId ?? map[turnId].agentName ?? 'AI')
+      map[turnId].status = 'running'
       map[turnId].events.push(ev)
       activeTurnId = turnId
       continue
@@ -639,24 +640,47 @@ const {
   clearCollapseOverrides,
 } = useTurnCollapse(() => visibleTurns.value)
 
+/** Drill-in crumbs are always two levels: 全部 Turn / current turn.
+ *  Do not walk parentTurnId into the trail (that made parent→sub look like three). */
 const breadcrumbs = computed(() => {
   const path: { id: string | null; label: string }[] = [{ id: null, label: '全部 Turn' }]
   if (!currentTurnId.value) return path
-
-  const stack: { id: string; label: string }[] = []
-  let id: string | null = currentTurnId.value
-  while (id) {
-    const turn: Turn | undefined = turnMap.value[id]
-    if (!turn) break
-    stack.unshift({ id, label: formatTurnGoal(turn.goal) || turn.id })
-    id = turn.parentTurnId ?? null
-  }
-  return [...path, ...stack]
+  const turn = turnMap.value[currentTurnId.value]
+  if (!turn) return path
+  return [...path, { id: turn.id, label: formatTurnGoal(turn.goal) || turn.id }]
 })
 
 function navigateToTurn(turnId: string | null) {
   currentTurnId.value = turnId
 }
+
+const TERMINAL_TURN_STATUSES = new Set(['completed', 'failed', 'cancelled', 'timeout'])
+
+function resolveTurnStatus(turnId: string): string {
+  const fromDb = sessions.turns.find((t) => t.id === turnId)?.status
+  if (fromDb) return String(fromDb)
+  return String(turnMap.value[turnId]?.status ?? '')
+}
+
+/** Drill into a child turn → Composer continue-sub context (ready only when both ends). */
+const continueSubContext = computed(() => {
+  const id = currentTurnId.value
+  if (!id) return null
+  const turn = turnMap.value[id]
+  if (!turn?.parentTurnId) return null
+  const agentId = String(turn.agentId ?? '')
+  const agent = agentId ? sessions.agents.find((a) => a.id === agentId) : undefined
+  const agentName = agent?.name?.trim() || String(turn.agentName ?? '') || agentId
+  const childTerminal = TERMINAL_TURN_STATUSES.has(resolveTurnStatus(id))
+  const parentTerminal = TERMINAL_TURN_STATUSES.has(resolveTurnStatus(turn.parentTurnId))
+  const idle = sessions.runningTurnId === null
+  return {
+    turnId: id,
+    agentId,
+    agentName,
+    ready: Boolean(agentId && childTerminal && parentTerminal && idle),
+  }
+})
 
 function childTurnIdFromDelegate(ev: StreamEvent): string | null {
   if (ev.type !== 'delegate.started') return null
@@ -1907,7 +1931,11 @@ function onTitleKeydown(e: KeyboardEvent) {
         @resolve="onAskUserResolve"
       />
       <ComposerPendingQueue />
-      <FloatingComposer ref="composerRef" @jump-pending="jumpToFirstPendingApproval" />
+      <FloatingComposer
+        ref="composerRef"
+        :continue-sub="continueSubContext"
+        @jump-pending="jumpToFirstPendingApproval"
+      />
     </div>
   </div>
 </template>
