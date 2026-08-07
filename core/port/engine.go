@@ -11,7 +11,7 @@ var ErrSessionTurnRunning = errors.New("session already has a running turn")
 
 type Engine interface {
 	StartSession(ctx context.Context, s domain.Session, attachments []domain.UserAttachment)
-	StartTurn(ctx context.Context, sessionID, userInput, agentID, modelID string, attachments []domain.UserAttachment, continueFromTurnID string) (string, error)
+	StartTurn(ctx context.Context, sessionID, userInput, agentID, modelID string, attachments []domain.UserAttachment) (string, error)
 	ResumeTurn(ctx context.Context, sessionID, turnID string) error
 	CancelTurn(ctx context.Context, turnID string)
 	// ActiveTurnID returns the in-flight turn for a session, if any.

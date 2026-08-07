@@ -430,22 +430,8 @@ func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments
 	}()
 }
 
-func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, modelID string, attachments []domain.UserAttachment, continueFromTurnID string) (string, error) {
-	bg := context.Background()
-	continueOnSub := strings.TrimSpace(continueFromTurnID) != ""
-	turnID := ""
-	if continueOnSub {
-		child, err := e.validateContinueFrom(bg, sessionID, continueFromTurnID)
-		if err != nil {
-			return "", err
-		}
-		turnID = child.ID
-		if agentID == "" {
-			agentID = child.AgentID
-		}
-	} else {
-		turnID = newRuntimeID("turn")
-	}
+func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, modelID string, attachments []domain.UserAttachment) (string, error) {
+	turnID := newRuntimeID("turn")
 	if err := e.reserveSessionTurn(sessionID, turnID); err != nil {
 		return "", err
 	}
@@ -456,6 +442,7 @@ func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, m
 	go func() {
 		defer e.finishSessionTurn(sessionID, turnID)
 		// Do not use the HTTP request ctx — it is cancelled when StartTurn returns.
+		bg := context.Background()
 		s, err := e.sessions.Get(bg, sessionID)
 		if err != nil {
 			return
@@ -486,76 +473,10 @@ func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, m
 		}()
 
 		reg, skills := e.setupRegistry(s, agentPtr)
-		var rep domain.Report
-		if continueOnSub {
-			rep, err = e.continueSubTurn(turnCtx, sessionID, turnID, userInput, targetModelID, s.ProjectID, agentPtr, reg, skills, atts, extraSnap)
-		} else {
-			rep, err = e.runTurn(turnCtx, sessionID, turnID, userInput, targetModelID, s.ProjectID, agentPtr, reg, skills, atts, extraSnap)
-		}
+		rep, err := e.runTurn(turnCtx, sessionID, turnID, userInput, targetModelID, s.ProjectID, agentPtr, reg, skills, atts, extraSnap)
 		e.turnLog.EndTurn(turnID, turnStatus(err, rep))
 	}()
 	return turnID, nil
-}
-
-func turnStatusTerminal(st domain.TurnStatus) bool {
-	switch st {
-	case domain.TurnCompleted, domain.TurnFailed, domain.TurnCancelled, domain.TurnTimeout:
-		return true
-	default:
-		return false
-	}
-}
-
-// validateContinueFrom ensures continueFromTurnID is a nested child turn whose
-// own status and parent turn status are both terminal.
-func (e *Engine) validateContinueFrom(ctx context.Context, sessionID, continueFromTurnID string) (domain.TurnLog, error) {
-	if e.turns == nil || e.turnLog == nil {
-		return domain.TurnLog{}, fmt.Errorf("continueFromTurnId: turn store unavailable")
-	}
-	child, err := e.turns.Get(ctx, continueFromTurnID)
-	if err != nil {
-		return domain.TurnLog{}, fmt.Errorf("continueFromTurnId: turn not found")
-	}
-	if child.SessionID != sessionID {
-		return domain.TurnLog{}, fmt.Errorf("continueFromTurnId: turn belongs to another session")
-	}
-	if !e.turnLog.IsNestedToolRun(continueFromTurnID) {
-		return domain.TurnLog{}, fmt.Errorf("continueFromTurnId: not a nested sub-turn")
-	}
-	if !turnStatusTerminal(child.Status) {
-		return domain.TurnLog{}, fmt.Errorf("continueFromTurnId: sub-turn is still %s", child.Status)
-	}
-	parentID := e.parentTurnIDForChild(sessionID, continueFromTurnID)
-	if parentID == "" {
-		return domain.TurnLog{}, fmt.Errorf("continueFromTurnId: parent turn not found")
-	}
-	parent, err := e.turns.Get(ctx, parentID)
-	if err != nil {
-		return domain.TurnLog{}, fmt.Errorf("continueFromTurnId: parent turn not found")
-	}
-	if !turnStatusTerminal(parent.Status) {
-		return domain.TurnLog{}, fmt.Errorf("continueFromTurnId: parent turn is still %s", parent.Status)
-	}
-	return child, nil
-}
-
-func (e *Engine) parentTurnIDForChild(sessionID, childTurnID string) string {
-	if e.stream == nil || childTurnID == "" {
-		return ""
-	}
-	for _, ev := range e.stream.ListSince(sessionID, 0) {
-		if ev.Type != domain.EventDelegateStarted {
-			continue
-		}
-		var p domain.DelegateStartedPayload
-		if err := json.Unmarshal(ev.Payload, &p); err != nil {
-			continue
-		}
-		if p.ChildTurnID == childTurnID {
-			return ev.TurnID
-		}
-	}
-	return ""
 }
 
 func (e *Engine) CancelTurn(ctx context.Context, turnID string) {
@@ -1376,60 +1297,6 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 	_ = turnMsgs
 	_ = userIdx
 
-	e.afterTurn(sessionID, turnID, agent.ID, rep, err, nil, modelID)
-	return rep, err
-}
-
-// continueSubTurn resumes a completed nested sub-turn in place (same turn id).
-// Events and JSONL stay on that child turn — no new root turn is created.
-func (e *Engine) continueSubTurn(ctx context.Context, sessionID, turnID, goal, modelID, projectID string, agent domain.Agent, reg *tool.Registry, skills []domain.Skill, attachments []domain.UserAttachment, extraSnapshotPaths []string) (domain.Report, error) {
-	cfg := e.loadRunCfg(ctx)
-
-	runner := e.spawnTurnRunner(turnID, reg, skills, agent.Tools)
-	e.stream.Publish(ctx, sessionID, turnID, domain.EventTurnStarted, domain.TurnStartedPayload{
-		TurnID: turnID, AgentID: agent.ID, Goal: goal,
-	})
-	e.stream.Publish(ctx, sessionID, turnID, domain.EventUserMessage, userMessagePayload(goal, attachments))
-
-	// Reopen nested JSONL for append (CreateNested is idempotent when file exists).
-	_ = e.turnLog.CreateNested(turnID, sessionID, projectID, agent.ID, goal)
-	_ = e.turns.UpdateStatus(ctx, turnID, domain.TurnRunning)
-
-	if e.preTurnSnapshot != nil {
-		e.preTurnSnapshot(ctx, projectID, sessionID, turnID, goal, extraSnapshotPaths)
-	}
-
-	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, "", "", "", e.sandboxStatus())
-	messages := []Message{
-		{Role: RoleSystem, Content: sys},
-	}
-	if hits := e.knowledge.Search(agent.KnowledgeIDs, goal, cfg.knowledgeSearchTopK); len(hits) > 0 {
-		content := ""
-		for _, h := range hits {
-			content += h + "\n"
-		}
-		messages = append(messages, Message{Role: RoleSystem, Content: content})
-	}
-	messages = append(messages, chatMessagesToRuntime(e.turnLog.LoadTurnMessages(turnID))...)
-
-	userMsg := userMessageFromAttachments(goal, attachments)
-	e.turnLog.Append(turnID, "user", userMessageLogData(userMsg))
-	messages = append(messages, userMsg)
-
-	workDir := e.resolveWorkDir(ctx, projectID)
-	rep, _, err := runner.Run(ctx, TurnContext{
-		SessionID: sessionID,
-		TurnID:    turnID,
-		Agent:     agent,
-		Model:     modelID,
-		MaxSteps:  agent.Steps,
-		WorkDir:   workDir,
-		ProjectID: projectID,
-		Messages:  messages,
-		Path:      []domain.TurnPathEntry{{TurnID: turnID, AgentID: agent.ID}},
-	})
-
-	e.clearSessionTurnMessages(sessionID)
 	e.afterTurn(sessionID, turnID, agent.ID, rep, err, nil, modelID)
 	return rep, err
 }

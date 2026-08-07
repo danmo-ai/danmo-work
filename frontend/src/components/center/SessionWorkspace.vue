@@ -654,34 +654,6 @@ function navigateToTurn(turnId: string | null) {
   currentTurnId.value = turnId
 }
 
-const TERMINAL_TURN_STATUSES = new Set(['completed', 'failed', 'cancelled', 'timeout'])
-
-function resolveTurnStatus(turnId: string): string {
-  const fromDb = sessions.turns.find((t) => t.id === turnId)?.status
-  if (fromDb) return String(fromDb)
-  return String(turnMap.value[turnId]?.status ?? '')
-}
-
-/** Drill into a child turn → Composer continue-sub context (ready only when both ends). */
-const continueSubContext = computed(() => {
-  const id = currentTurnId.value
-  if (!id) return null
-  const turn = turnMap.value[id]
-  if (!turn?.parentTurnId) return null
-  const agentId = String(turn.agentId ?? '')
-  const agent = agentId ? sessions.agents.find((a) => a.id === agentId) : undefined
-  const agentName = agent?.name?.trim() || String(turn.agentName ?? '') || agentId
-  const childTerminal = TERMINAL_TURN_STATUSES.has(resolveTurnStatus(id))
-  const parentTerminal = TERMINAL_TURN_STATUSES.has(resolveTurnStatus(turn.parentTurnId))
-  const idle = sessions.runningTurnId === null
-  return {
-    turnId: id,
-    agentId,
-    agentName,
-    ready: Boolean(agentId && childTerminal && parentTerminal && idle),
-  }
-})
-
 function childTurnIdFromDelegate(ev: StreamEvent): string | null {
   if (ev.type !== 'delegate.started') return null
   const p = asRecord(ev.payload)
@@ -1931,11 +1903,7 @@ function onTitleKeydown(e: KeyboardEvent) {
         @resolve="onAskUserResolve"
       />
       <ComposerPendingQueue />
-      <FloatingComposer
-        ref="composerRef"
-        :continue-sub="continueSubContext"
-        @jump-pending="jumpToFirstPendingApproval"
-      />
+      <FloatingComposer ref="composerRef" @jump-pending="jumpToFirstPendingApproval" />
     </div>
   </div>
 </template>

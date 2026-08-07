@@ -1118,11 +1118,6 @@ export default {
   composer: {
     placeholderNew: "Describe the goal, or type {'@'} for skills/experts / {'/'} for commands…",
     placeholderContinue: "Continue, or type {'@'} for skills/experts / {'/'} for commands…",
-    placeholderContinueSub: 'Continue with {name}…',
-    placeholderContinueSubWait: 'Wait until parent and child turns finish to continue…',
-    continueSubHint: 'Continuing with {name}',
-    continueSubNotReady: 'Parent and child turns must both finish before continuing',
-    continueSubLockedAgent: 'Continuing sub-turn: lead expert locked',
     selectProject: 'Project',
     selectAgent: 'Select lead expert',
     selectModel: 'Model',

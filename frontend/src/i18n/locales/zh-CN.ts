@@ -1117,11 +1117,6 @@ export default {
   composer: {
     placeholderNew: "输入会话目标，或键入 {'@'} 召唤技能/专家、{'/'} 打开命令…",
     placeholderContinue: "继续输入，或键入 {'@'} 召唤技能/专家、{'/'} 打开命令…",
-    placeholderContinueSub: '继续与 {name} 对话…',
-    placeholderContinueSubWait: '等待父/子 turn 结束后可续聊…',
-    continueSubHint: '继续与 {name}',
-    continueSubNotReady: '需父 turn 与子 turn 都结束后才能续聊',
-    continueSubLockedAgent: '续聊子 turn：主专家已锁定',
     selectProject: '项目',
     selectAgent: '选择主专家',
     selectModel: '模型',

@@ -49,10 +49,6 @@ type SendMessageRequest struct {
 	Attachments []UserAttachment `json:"attachments,omitempty"`
 	// SnapshotPaths are project-relative files to snapshot before tools run (AI review).
 	SnapshotPaths []string `json:"snapshotPaths,omitempty"`
-	// ContinueFromTurnID continues a completed nested (delegate) sub-turn in
-	// place: same turn id, append to its JSONL / stream. Parent and child must
-	// both be terminal. Empty means start a normal new root turn.
-	ContinueFromTurnID string `json:"continueFromTurnId,omitempty"`
 }
 
 type UpdateSessionRequest struct {

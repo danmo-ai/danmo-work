@@ -379,19 +379,17 @@ export const useSessionsStore = defineStore('sessions', () => {
       mimeType?: string
       data: string
     }>,
-    opts?: { snapshotPaths?: string[]; agentId?: string; continueFromTurnId?: string },
+    opts?: { snapshotPaths?: string[] },
   ) {
     const hasAtts = Boolean(attachments?.length)
     if (!currentSessionId.value || (!userInput.trim() && !hasAtts) || loading.value) return
     loading.value = true
     try {
       const body: Record<string, unknown> = { userInput: userInput.trim() }
-      const agentId = opts?.agentId || selectedAgentId.value
-      if (agentId) body.agentId = agentId
+      if (selectedAgentId.value) body.agentId = selectedAgentId.value
       body.modelId = selectedModelId.value
       if (hasAtts) body.attachments = attachments
       if (opts?.snapshotPaths?.length) body.snapshotPaths = opts.snapshotPaths
-      if (opts?.continueFromTurnId) body.continueFromTurnId = opts.continueFromTurnId
       await fetchJSON(`/sessions/${currentSessionId.value}/turns`, {
         method: 'POST',
         body: JSON.stringify(body),
