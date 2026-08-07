@@ -72,7 +72,7 @@ delegate_agent(agent_id="<id>", goal="...")
 | `data` | Data | CSV/JSON 分析与报表 | shell 等 |
 | `github` | GitHub | Issue / PR / Actions 等 | skill `github` + MCP `github` |
 | `danmo-make` | Danmo Make | 本机图片/视频/音频生成 | skill + MCP `danmo-make`（需单独安装 Make） |
-| `novel` | 小说创作 | 长篇/网文：章合同→草稿→审稿→Commit（若已内置或已安装） | `novel-writing`, craft KB `kb-novel-craft` |
+| `novel` | 小说创作 | 长篇/网文：章合同→草稿→审稿→Commit（内置子专家，Team 召唤） | `novel-writing`, craft KB `kb-novel-craft` |
 
 市场安装的专家（如 **CodeGraph**）同样会出现在可召唤列表中（`mode=subagent` 且带 `marketSource`）。
 
@@ -102,3 +102,19 @@ delegate_agent(agent_id="<id>", goal="...")
 ## 6. 界面与工具展示
 
 会话时间线里，`delegate_agent` 工具卡片会显示为「召唤专家 / Summon expert」。完成与否以工具结果与子专家产出文件为准，而不是主专家的口头声明。
+
+---
+
+## 7. 彩蛋：会话「工作台」（小说书架）
+
+会话顶栏右侧有 **工作台** 图标（也可 Composer 输入 `/novel`）。打开后与 Office 相同布局：
+
+- **左**：事件流  
+- **右**：工作台宿主（当前仅「小说」；以后可扩展其它工作台）  
+- **底**：Composer 通栏  
+
+小说工作台自包含，按技能流水线分组：
+
+`立项 → 大纲/资产/金手指 → 章合同 → 写/续写 →（读章）审稿/润色 → Commit`
+
+并内嵌阅读 bible / state / canon / outline / continuity / reviews / 章节。动作只 Prefill Composer（可勾选 `novel` chip），**不跳转** Files / Doc Stage。书仍落在 `novel/<book-id>/`。

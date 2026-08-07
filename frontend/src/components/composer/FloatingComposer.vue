@@ -49,6 +49,18 @@ import {
   type ComposerSlashCommand,
 } from '@/types/composer-slash'
 
+export type ContinueSubContext = {
+  turnId: string
+  agentId: string
+  agentName: string
+  /** Child + parent terminal and session idle. */
+  ready: boolean
+}
+
+const props = defineProps<{
+  continueSub?: ContinueSubContext | null
+}>()
+
 const { t } = useI18n()
 const content = ref('')
 const attachments = ref<ComposerAttachment[]>([])
@@ -86,6 +98,11 @@ const emit = defineEmits<{
   'jump-pending': []
   queued: []
 }>()
+
+const isContinueSubView = computed(() => Boolean(props.continueSub?.turnId))
+const isContinueSubReady = computed(
+  () => Boolean(props.continueSub?.ready && props.continueSub.agentId && props.continueSub.turnId),
+)
 
 const isMac =
   typeof navigator !== 'undefined' &&
@@ -138,9 +155,16 @@ const primaryAgents = computed(() =>
   ),
 )
 
-const placeholder = computed(() =>
-  sessions.composingNew ? t('composer.placeholderNew') : t('composer.placeholderContinue'),
-)
+const placeholder = computed(() => {
+  if (sessions.composingNew) return t('composer.placeholderNew')
+  if (isContinueSubReady.value) {
+    return t('composer.placeholderContinueSub', {
+      name: props.continueSub?.agentName || props.continueSub?.agentId || '',
+    })
+  }
+  if (isContinueSubView.value) return t('composer.placeholderContinueSubWait')
+  return t('composer.placeholderContinue')
+})
 
 const selectedSkills = computed(() => {
   const map = new Map(availableSkills.value.map((s) => [s.id, s]))
@@ -202,14 +226,20 @@ const canSubmit = computed(
   () => hasDraft.value && !sessions.loading && !sessions.composingNew,
 )
 
-const canSend = computed(
-  () => hasDraft.value && !sessions.loading && !hasPendingApproval.value && !isTurnRunning.value,
-)
+const canSend = computed(() => {
+  if (!hasDraft.value || sessions.loading || hasPendingApproval.value || isTurnRunning.value) {
+    return false
+  }
+  // Drilled into a sub-turn: only send when continue-sub is ready (never mis-send as root).
+  if (isContinueSubView.value) return isContinueSubReady.value
+  return true
+})
 
 const canQueue = computed(
   () =>
     canSubmit.value &&
     Boolean(sessions.currentSessionId) &&
+    !isContinueSubView.value &&
     (isTurnRunning.value || hasPendingApproval.value),
 )
 
@@ -220,7 +250,10 @@ const primaryAction = computed<'send' | 'queue' | 'stop'>(() => {
 })
 
 const showAgentSelect = computed(
-  () => (sessions.composingNew || sessions.currentSessionId) && primaryAgents.value.length > 0,
+  () =>
+    !isContinueSubView.value &&
+    (sessions.composingNew || sessions.currentSessionId) &&
+    primaryAgents.value.length > 0,
 )
 
 const gitDisplay = computed(() => gitBranch.value || gitError.value)
@@ -534,6 +567,23 @@ watch(
   },
 )
 
+watch(
+  () => workspaceUi.composerSelectExpertToken,
+  () => {
+    const ids = workspaceUi.consumeComposerSelectExperts()
+    if (!ids.length) return
+    if (!canDelegateExperts.value) return
+    const allowed = new Set(summonableExperts.value.map((a) => a.id))
+    for (const id of ids) {
+      if (!allowed.has(id)) continue
+      if (!selectedExpertIds.value.includes(id)) {
+        selectedExpertIds.value = [...selectedExpertIds.value, id]
+      }
+    }
+    void nextTick(() => focusInput())
+  },
+)
+
 async function loadAvailableSkills() {
   const agentId = sessions.selectedAgentId
   if (!agentId) {
@@ -702,6 +752,9 @@ async function onPickSlash(cmd: ComposerSlashCommand) {
     case 'new':
       sessions.startCompose(sessions.selectedProjectId)
       break
+    case 'novel':
+      workspaceUi.openWorkbench('novel')
+      break
     default:
       break
   }
@@ -778,6 +831,10 @@ async function send() {
     await queue()
     return
   }
+  if (isContinueSubView.value && !isContinueSubReady.value) {
+    toast.warning(t('composer.continueSubNotReady'))
+    return
+  }
   if (hasPendingApproval.value) {
     toast.warning(t('sessions.pendingApprovalHint'))
     return
@@ -818,7 +875,17 @@ async function send() {
       paths.add(stagePath)
     }
     const snapshotPaths = paths.size ? [...paths] : undefined
-    await sessions.sendTurn(text, imageAtts, snapshotPaths ? { snapshotPaths } : undefined)
+    const continueOpts =
+      isContinueSubReady.value && props.continueSub
+        ? {
+            agentId: props.continueSub.agentId,
+            continueFromTurnId: props.continueSub.turnId,
+          }
+        : undefined
+    await sessions.sendTurn(text, imageAtts, {
+      ...(snapshotPaths ? { snapshotPaths } : {}),
+      ...continueOpts,
+    })
     clearComposer()
     focusInput()
   } catch (e) {
@@ -1083,6 +1150,22 @@ defineExpose({
           t('sessions.pendingApprovalHintCount', { n: workspaceUi.pendingApprovals })
         }}</span>
       </div>
+      <div
+        v-else-if="isContinueSubReady"
+        class="composer-float__banner composer-float__banner--sub"
+      >
+        <span class="composer-float__banner-text">{{
+          t('composer.continueSubHint', {
+            name: continueSub?.agentName || continueSub?.agentId || '',
+          })
+        }}</span>
+      </div>
+      <div
+        v-else-if="isContinueSubView"
+        class="composer-float__banner composer-float__banner--warn"
+      >
+        <span class="composer-float__banner-text">{{ t('composer.continueSubNotReady') }}</span>
+      </div>
 
       <ComposerAttachmentTray
         :attachments="attachments"
@@ -1285,7 +1368,15 @@ defineExpose({
           </div>
 
           <div
-            v-if="showAgentSelect"
+            v-if="isContinueSubView"
+            class="composer-meta-chip"
+            :title="t('composer.continueSubLockedAgent')"
+          >
+            {{ continueSub?.agentName || continueSub?.agentId }}
+          </div>
+
+          <div
+            v-else-if="showAgentSelect"
             class="composer-agent-picker"
           >
             <DqSegmented
@@ -1433,6 +1524,11 @@ defineExpose({
 .composer-float__banner--warn {
   color: var(--dq-system-orange);
   background: color-mix(in srgb, var(--dq-system-orange) 8%, transparent);
+}
+
+.composer-float__banner--sub {
+  color: var(--dq-label-primary);
+  background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
 }
 
 .composer-float__banner--run {
@@ -1742,7 +1838,7 @@ defineExpose({
   right: 10px;
   /* Sit above the whole composer (card + tray), not inside the clipped card. */
   bottom: calc(100% + 8px);
-  z-index: 40;
+  z-index: 60;
   display: flex;
   justify-content: flex-start;
   pointer-events: none;
@@ -1761,7 +1857,7 @@ defineExpose({
   left: 10px;
   right: 10px;
   bottom: calc(100% + 8px);
-  z-index: 41;
+  z-index: 61;
   display: flex;
   justify-content: flex-start;
   pointer-events: none;

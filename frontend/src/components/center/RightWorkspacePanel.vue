@@ -48,6 +48,10 @@ watch(rightTab, async (tab) => {
     await nextTick()
     requestAnimationFrame(() => terminalPanelRef.value?.refit?.())
   }
+  if (tab === 'files') {
+    await nextTick()
+    fileTreeRef.value?.refresh?.()
+  }
   if (tab === 'changes') changesPanelRef.value?.refresh?.()
   if (tab === 'memory') memoryPanelRef.value?.refresh?.()
   if (tab === 'tables') tablesPanelRef.value?.refresh?.()

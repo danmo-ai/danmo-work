@@ -72,6 +72,13 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     descriptionKey: 'composer.slash.newDesc',
     keywords: ['compose', '新会话'],
   },
+  {
+    id: 'novel',
+    trigger: 'novel',
+    labelKey: 'composer.slash.novel',
+    descriptionKey: 'composer.slash.novelDesc',
+    keywords: ['小说', '书架', 'workbench', '工作台'],
+  },
 ]
 
 /** Detect `/query` immediately before the caret (start of line or after whitespace). */

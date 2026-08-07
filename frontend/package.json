@@ -11,6 +11,7 @@
     "test:code-route": "node --experimental-strip-types scripts/test-code-route.mjs",
     "test:composer-slash": "node --experimental-strip-types scripts/test-composer-slash.mjs",
     "test:composer-experts": "node --experimental-strip-types scripts/test-composer-experts.mjs",
+    "test:novel-workbench": "node --experimental-strip-types scripts/test-novel-workbench.mjs",
     "check-i18n": "NODE_ENV=production node --experimental-strip-types scripts/check-i18n.mjs",
     "preview": "vite preview"
   },

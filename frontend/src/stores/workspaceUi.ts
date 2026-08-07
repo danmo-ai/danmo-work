@@ -1,9 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { OfficeKind, OfficeMode } from '@/utils/office-route'
+import { isWorkbenchId, type WorkbenchId } from '@/types/workbench'
 
 export type RightWorkspaceTab = 'plan' | 'files' | 'memory' | 'tables' | 'changes' | 'terminal'
 export type LayoutMode = 'chat' | 'stage' | 'immersive'
+
+const ACTIVE_WORKBENCH_KEY = 'app-active-workbench'
 
 export interface OfficeStageState {
   kind: OfficeKind
@@ -63,6 +66,16 @@ function writePersistedRightDrawerOpen(open: boolean) {
   }
 }
 
+function readPersistedWorkbenchId(): WorkbenchId {
+  try {
+    const raw = localStorage.getItem(ACTIVE_WORKBENCH_KEY) ?? ''
+    if (isWorkbenchId(raw)) return raw
+  } catch {
+    /* ignore */
+  }
+  return 'novel'
+}
+
 export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   const rightTab = ref<RightWorkspaceTab>('plan')
   const changesCount = ref(0)
@@ -76,6 +89,13 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   /** One-shot composer prefill (Changes / Diff “ask about this”). */
   const composerPrefill = ref<string | null>(null)
   const composerPrefillToken = ref(0)
+  /** One-shot expert ids to select in Composer (e.g. novel workbench actions). */
+  const composerSelectExpertIds = ref<string[] | null>(null)
+  const composerSelectExpertToken = ref(0)
+
+  /** Session split-pane workbench host (Office-style left stream | right workbench). */
+  const workbenchOpen = ref(false)
+  const activeWorkbenchId = ref<WorkbenchId>(readPersistedWorkbenchId())
 
   /** Left rail collapsed UI state (may be temporary while Stage is open). */
   const leftRailCollapsed = ref(readPersistedLeftRailCollapsed())
@@ -159,6 +179,7 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   }
 
   function openStage(next: OfficeStageState) {
+    workbenchOpen.value = false
     stage.value = { ...next }
     layoutMode.value = next.mode === 'present' ? 'immersive' : 'stage'
     collapseLeftRailForStage()
@@ -167,9 +188,47 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
 
   function closeStage() {
     stage.value = null
-    layoutMode.value = 'chat'
-    restoreLeftRailAfterStage()
-    restoreRightDrawerAfterStage()
+    if (!workbenchOpen.value) {
+      layoutMode.value = 'chat'
+      restoreLeftRailAfterStage()
+      restoreRightDrawerAfterStage()
+    }
+  }
+
+  function setActiveWorkbenchId(id: WorkbenchId) {
+    activeWorkbenchId.value = id
+    try {
+      localStorage.setItem(ACTIVE_WORKBENCH_KEY, id)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function openWorkbench(id?: WorkbenchId) {
+    if (id) setActiveWorkbenchId(id)
+    stage.value = null
+    closeRightDrawer()
+    workbenchOpen.value = true
+    layoutMode.value = 'stage'
+    collapseLeftRailForStage()
+  }
+
+  function closeWorkbench() {
+    if (!workbenchOpen.value) return
+    workbenchOpen.value = false
+    if (!stage.value) {
+      layoutMode.value = 'chat'
+      restoreLeftRailAfterStage()
+      restoreRightDrawerAfterStage()
+    }
+  }
+
+  function toggleWorkbench(id?: WorkbenchId) {
+    if (workbenchOpen.value && (!id || activeWorkbenchId.value === id)) {
+      closeWorkbench()
+      return
+    }
+    openWorkbench(id ?? activeWorkbenchId.value)
   }
 
   function setStageMode(mode: OfficeMode) {
@@ -226,6 +285,19 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     return text
   }
 
+  function requestComposerSelectExperts(ids: string[]) {
+    const cleaned = ids.map((id) => id.trim()).filter(Boolean)
+    if (!cleaned.length) return
+    composerSelectExpertIds.value = cleaned
+    composerSelectExpertToken.value++
+  }
+
+  function consumeComposerSelectExperts(): string[] {
+    const ids = composerSelectExpertIds.value ?? []
+    composerSelectExpertIds.value = null
+    return ids
+  }
+
   return {
     rightTab,
     changesCount,
@@ -237,6 +309,10 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     stageReloadToken,
     composerPrefill,
     composerPrefillToken,
+    composerSelectExpertIds,
+    composerSelectExpertToken,
+    workbenchOpen,
+    activeWorkbenchId,
     leftRailCollapsed,
     leftRailCollapsedBeforeStage,
     rightDrawerOpen,
@@ -249,6 +325,10 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     toggleRightDrawer,
     openStage,
     closeStage,
+    openWorkbench,
+    closeWorkbench,
+    toggleWorkbench,
+    setActiveWorkbenchId,
     setStageMode,
     setStageKind,
     setStagePath,
@@ -259,5 +339,7 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     togglePalette,
     prefillComposer,
     consumeComposerPrefill,
+    requestComposerSelectExperts,
+    consumeComposerSelectExperts,
   }
 })
