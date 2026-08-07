@@ -22,14 +22,18 @@ export interface ImageComposerAttachment {
   dataUrl: string
 }
 
+export type FileAttachStatus = 'uploading' | 'ready' | 'error'
+
 export interface FileComposerAttachment {
   id: string
   kind: 'file'
   name: string
   mime: string
   size: number
-  /** Placeholder until file upload pipeline exists. */
-  placeholder: true
+  status: FileAttachStatus
+  /** Project-relative path after successful upload (e.g. uploads/notes.pdf). */
+  remotePath?: string
+  error?: string
 }
 
 export interface ElementComposerAttachment {
@@ -66,6 +70,7 @@ export interface ApiUserAttachment {
 }
 
 export const MAX_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024
+export const MAX_FILE_ATTACHMENT_BYTES = 50 * 1024 * 1024
 
 export function createComposerAttachmentId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
@@ -77,7 +82,7 @@ export function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
-/** Text + element/code/file placeholders; images are sent as structured attachments. */
+/** Text + element/code/file references; images are sent as structured attachments. */
 export function buildComposerUserInput(
   text: string,
   atts: ComposerAttachment[],
@@ -107,7 +112,15 @@ export function buildComposerUserInput(
 
   if (files.length) {
     const blocks = files
-      .map((f) => `[Attached file (pending upload): ${f.name} · ${f.mime} · ${formatBytes(f.size)}]`)
+      .map((f) => {
+        if (f.status === 'ready' && f.remotePath) {
+          return `[Attached file: ${f.remotePath} · ${f.name} · ${f.mime} · ${formatBytes(f.size)}]`
+        }
+        if (f.status === 'uploading') {
+          return `[Attached file (uploading): ${f.name} · ${f.mime} · ${formatBytes(f.size)}]`
+        }
+        return `[Attached file (upload failed): ${f.name} · ${f.mime} · ${formatBytes(f.size)}]`
+      })
       .join('\n')
     body = body ? `${body}\n\n${blocks}` : blocks
   }

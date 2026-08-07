@@ -22,7 +22,7 @@ See `assets/templates/chapter-contract.yaml`. Minimum:
 
 ## Process
 
-1. Draft contract (file under `outline/` or `table_upsert` `chapter_contracts`).  
+1. Draft contract (`chapters/chNNN-contract.yaml`, or `outline/`, or `table_upsert` `chapter_contracts`).  
 2. `ask_user` to accept if this is a milestone chapter or first chapter of a batch.  
 3. Only then proceed to `chapter-write.md`.
 

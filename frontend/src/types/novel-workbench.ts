@@ -94,13 +94,35 @@ export function novelChapterFilePath(bookId: string, chapter: number): string {
   return `novel/${bookId}/chapters/ch${pad}.md`
 }
 
+export function novelChapterContractPath(bookId: string, chapter: number): string {
+  const pad = String(chapter).padStart(3, '0')
+  return `novel/${bookId}/chapters/ch${pad}-contract.yaml`
+}
+
 export function isNovelChapterPath(path: string): boolean {
-  return /\/chapters\/[^/]+\.md$/i.test(path.replace(/\\/g, '/'))
+  const p = path.replace(/\\/g, '/')
+  return /\/chapters\/[^/]+\.md$/i.test(p) && !/contract\.md$/i.test(p)
+}
+
+export function isNovelContractName(name: string): boolean {
+  return /contract\.(ya?ml)$/i.test(name)
+}
+
+export function isNovelContractPath(path: string): boolean {
+  return /contract\.(ya?ml)$/i.test(path.replace(/\\/g, '/'))
+}
+
+/** One numbered chapter slot: optional prose (.md) + optional contract (.yaml). */
+export interface NovelChapterEntry {
+  chapter: number
+  label: string
+  prose: NovelFileNode | null
+  contract: NovelFileNode | null
 }
 
 /** Sort chapter filenames like ch001.md, ch10.md naturally. */
 export function sortChapterNodes(nodes: NovelFileNode[]): NovelFileNode[] {
-  const files = nodes.filter((n) => !n.isDir && /\.md$/i.test(n.name))
+  const files = nodes.filter((n) => !n.isDir && /\.md$/i.test(n.name) && !isNovelContractName(n.name))
   return files.slice().sort((a, b) => {
     const na = chapterNumFromName(a.name)
     const nb = chapterNumFromName(b.name)
@@ -109,9 +131,52 @@ export function sortChapterNodes(nodes: NovelFileNode[]): NovelFileNode[] {
   })
 }
 
+/** Merge chapters/*.md prose and *contract.yaml (chapters/ and/or outline/) into numbered rows. */
+export function buildChapterEntries(...nodeLists: NovelFileNode[][]): NovelChapterEntry[] {
+  const byCh = new Map<number, NovelChapterEntry>()
+  const ensure = (n: number): NovelChapterEntry => {
+    let e = byCh.get(n)
+    if (!e) {
+      e = {
+        chapter: n,
+        label: `ch${String(n).padStart(3, '0')}`,
+        prose: null,
+        contract: null,
+      }
+      byCh.set(n, e)
+    }
+    return e
+  }
+  for (const nodes of nodeLists) {
+    for (const node of nodes) {
+      if (node.isDir) continue
+      const n = chapterNumFromName(node.name)
+      if (n == null) continue
+      if (isNovelContractName(node.name)) {
+        const e = ensure(n)
+        if (!e.contract) e.contract = node
+      } else if (/\.md$/i.test(node.name)) {
+        // Only treat chapters-dir prose as body; outline/*.md is not chapter prose.
+        const p = (node.path || '').replace(/\\/g, '/')
+        if (p.includes('/outline/')) continue
+        ensure(n).prose = node
+      }
+    }
+  }
+  return [...byCh.values()].sort((a, b) => a.chapter - b.chapter)
+}
+
 export function sortMdNodes(nodes: NovelFileNode[]): NovelFileNode[] {
   return nodes
     .filter((n) => !n.isDir && /\.md$/i.test(n.name))
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+}
+
+/** Outline / misc: markdown plus contract yaml so contracts under outline/ also surface. */
+export function sortWorkbenchDocNodes(nodes: NovelFileNode[]): NovelFileNode[] {
+  return nodes
+    .filter((n) => !n.isDir && (/\.md$/i.test(n.name) || isNovelContractName(n.name)))
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
 }
@@ -123,13 +188,52 @@ export function chapterNumFromName(name: string): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-export function nextChapterNumber(lastCommitted: number, chapterFiles: NovelFileNode[]): number {
+export function nextChapterNumber(
+  lastCommitted: number,
+  chapterFiles: NovelFileNode[] | NovelChapterEntry[],
+): number {
   let maxFile = 0
   for (const f of chapterFiles) {
-    const n = chapterNumFromName(f.name)
+    if ('chapter' in f && typeof (f as NovelChapterEntry).chapter === 'number') {
+      const n = (f as NovelChapterEntry).chapter
+      if (n > maxFile) maxFile = n
+      continue
+    }
+    const n = chapterNumFromName((f as NovelFileNode).name)
     if (n != null && n > maxFile) maxFile = n
   }
   return Math.max(lastCommitted, maxFile) + 1
+}
+
+/** Book-page primary CTA from files on disk (not max chapter index alone). */
+export type NovelBookNextStep = {
+  action: 'write' | 'contract' | 'continue'
+  chapter: number
+}
+
+export function inferNovelBookNextStep(
+  lastCommitted: number,
+  entries: NovelChapterEntry[],
+): NovelBookNextStep {
+  const sorted = [...entries].sort((a, b) => a.chapter - b.chapter)
+  for (const e of sorted) {
+    if (e.contract && !e.prose) {
+      return { action: 'write', chapter: e.chapter }
+    }
+  }
+  if (sorted.length) {
+    const max = Math.max(lastCommitted, ...sorted.map((e) => e.chapter))
+    for (let n = Math.max(1, lastCommitted + 1); n <= max; n++) {
+      const e = sorted.find((x) => x.chapter === n)
+      if (!e?.contract) return { action: 'contract', chapter: n }
+      if (!e.prose) return { action: 'write', chapter: n }
+    }
+  }
+  const next = nextChapterNumber(lastCommitted, entries)
+  if (sorted.some((e) => e.prose)) {
+    return { action: 'continue', chapter: next }
+  }
+  return { action: 'contract', chapter: next }
 }
 
 export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStagePrefillCtx): string {
@@ -173,10 +277,10 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
     case 'contract':
       return [
         `为第 ${ch || 'N'} 章写章合同（尚不写正文）。`,
-        `落盘到 ${root}/outline/ 或 table_upsert chapter_contracts（book_id=${bookId}）。`,
+        `落盘到 ${root}/chapters/ch${chPad}-contract.yaml（YAML；也可 outline/ 或 table_upsert chapter_contracts，book_id=${bookId}）。`,
         '含：目的、must_happen / must_not、进出状态、伏笔、章末钩子、连续性风险；status=proposed。',
         '里程碑章或本批首章需 ask_user 接受后再进入写作。',
-        '按 read_skill novel-writing/references/chapter-contract.md 执行。',
+        '按 read_skill novel-writing/references/chapter-contract.md 与 assets/templates/chapter-contract.yaml 执行。',
       ].join('\n')
     case 'write':
       return [

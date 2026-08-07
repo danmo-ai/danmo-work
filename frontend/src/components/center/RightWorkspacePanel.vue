@@ -57,6 +57,15 @@ watch(rightTab, async (tab) => {
   if (tab === 'tables') tablesPanelRef.value?.refresh?.()
 })
 
+watch(
+  () => workspaceUi.filesReloadToken,
+  async () => {
+    if (!props.projectId) return
+    await nextTick()
+    fileTreeRef.value?.refresh?.()
+  },
+)
+
 const tabTitle = computed(() => {
   const map: Record<RightTab, string> = {
     plan: t('sessions.tabPlan'),

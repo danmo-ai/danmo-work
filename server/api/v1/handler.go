@@ -117,6 +117,7 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/projects/:id/files", listProjectFiles(h))
 	api.GET("/projects/:id/files/content", readProjectFile(h))
 	api.PUT("/projects/:id/files/content", writeProjectFile(h))
+	api.POST("/projects/:id/files/upload", uploadProjectFile(h))
 	api.GET("/projects/:id/raw/*filepath", serveProjectFile(h))
 	api.GET("/proxy/*target", proxyDevServer(h))
 	api.GET("/projects/:id/git-changes", getProjectGitChanges(h))
@@ -1447,6 +1448,46 @@ func writeProjectFile(h *Handler) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"ok": true, "path": req.Path})
+	}
+}
+
+const maxProjectUploadBytes = 50 << 20 // 50 MiB
+
+func uploadProjectFile(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		file, err := c.FormFile("file")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "file is required"})
+			return
+		}
+		if file.Size > maxProjectUploadBytes {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "file exceeds 50 MB limit"})
+			return
+		}
+
+		src, err := file.Open()
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot open upload"})
+			return
+		}
+		defer src.Close()
+
+		data, err := io.ReadAll(io.LimitReader(src, maxProjectUploadBytes+1))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot read upload"})
+			return
+		}
+		if len(data) > maxProjectUploadBytes {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "file exceeds 50 MB limit"})
+			return
+		}
+
+		path, err := h.Projects.UploadFile(c, c.Param("id"), file.Filename, data)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true, "path": path, "size": len(data)})
 	}
 }
 

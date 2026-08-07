@@ -12,7 +12,7 @@ import ComposerSkillChips from '@/components/composer/ComposerSkillChips.vue'
 import ComposerSkillPicker from '@/components/composer/ComposerSkillPicker.vue'
 import ComposerSlashPicker from '@/components/composer/ComposerSlashPicker.vue'
 import ContextUsageBar from '@/components/center/ContextUsageBar.vue'
-import { asArray, fetchJSON } from '@/api/client'
+import { asArray, fetchJSON, uploadProjectFile } from '@/api/client'
 import { toast } from '@/utils/feedback'
 import type { Agent, AvailableSkill } from '@/types'
 import type { LLMModel } from '@/types/mission'
@@ -20,11 +20,13 @@ import type { ElementAttachment } from '@/types/element-attachment'
 import {
   buildComposerUserInput,
   createComposerAttachmentId,
+  MAX_FILE_ATTACHMENT_BYTES,
   MAX_IMAGE_ATTACHMENT_BYTES,
   toApiImageAttachments,
   type ComposerAttachment,
   type CodeComposerAttachment,
   type ElementComposerAttachment,
+  type FileComposerAttachment,
   type OfficeComposerAttachment,
 } from '@/types/composer-attachment'
 import type { CodeSelectionAttachment } from '@/types/code-attachment'
@@ -747,25 +749,64 @@ function onFilePicked(e: Event) {
   for (const f of files) addLocalFile(f)
 }
 
-function addLocalFile(file: File) {
+function updateFileAttachment(id: string, patch: Partial<FileComposerAttachment>) {
+  attachments.value = attachments.value.map((a): ComposerAttachment => {
+    if (a.kind === 'file' && a.id === id) return { ...a, ...patch }
+    return a
+  })
+}
+
+async function addLocalFile(file: File) {
   if (file.type.startsWith('image/')) {
     addImageFile(file)
     return
   }
-  // Non-image: placeholder chip until upload pipeline exists
+  const projectId = sessions.selectedProjectId
+  if (!projectId) {
+    toast.warning(t('composer.needProject'))
+    return
+  }
+  if (file.size > MAX_FILE_ATTACHMENT_BYTES) {
+    toast.warning(t('composer.attachFileTooLarge', { max: '50 MB' }))
+    return
+  }
+  const id = createComposerAttachmentId('file')
   attachments.value = [
     ...attachments.value,
     {
-      id: createComposerAttachmentId('file'),
+      id,
       kind: 'file',
       name: file.name,
       mime: file.type || 'application/octet-stream',
       size: file.size,
-      placeholder: true,
+      status: 'uploading',
     },
   ]
-  toast.info(t('composer.attachFilePlaceholder'))
   focusInput()
+  try {
+    const res = await uploadProjectFile(projectId, file)
+    updateFileAttachment(id, { status: 'ready', remotePath: res.path, error: undefined })
+    workspaceUi.requestFilesReload()
+    toast.success(t('composer.attachFileUploaded', { path: res.path }))
+  } catch (e) {
+    const message = e instanceof Error ? e.message : t('composer.attachFileUploadFailed')
+    updateFileAttachment(id, { status: 'error', error: message })
+    toast.error(message)
+  }
+}
+
+function fileAttachmentsReady(): boolean {
+  const files = attachments.value.filter((a): a is FileComposerAttachment => a.kind === 'file')
+  if (!files.length) return true
+  if (files.some((f) => f.status === 'uploading')) {
+    toast.warning(t('composer.attachStillUploading'))
+    return false
+  }
+  if (files.some((f) => f.status !== 'ready' || !f.remotePath)) {
+    toast.warning(t('composer.attachUploadIncomplete'))
+    return false
+  }
+  return true
 }
 
 async function buildOutgoing() {
@@ -809,6 +850,7 @@ async function send() {
   if (anyPickerOpen.value) {
     closeAllPickers()
   }
+  if (!fileAttachmentsReady()) return
   const { text, imageAtts } = await buildOutgoing()
   if ((!text.trim() && !imageAtts.length) || sessions.loading) return
 
@@ -856,6 +898,7 @@ async function queue() {
   if (anyPickerOpen.value) {
     closeAllPickers()
   }
+  if (!fileAttachmentsReady()) return
   const { text, imageAtts } = await buildOutgoing()
   if (!text.trim() && !imageAtts.length) return
   try {

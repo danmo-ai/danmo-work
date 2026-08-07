@@ -86,6 +86,8 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   const stage = ref<OfficeStageState | null>(null)
   /** Bumped when Stage should reload file from disk (e.g. after AI turn). */
   const stageReloadToken = ref(0)
+  /** Bumped when the Files tree should reload (e.g. after composer upload). */
+  const filesReloadToken = ref(0)
   /** One-shot composer prefill (Changes / Diff “ask about this”). */
   const composerPrefill = ref<string | null>(null)
   const composerPrefillToken = ref(0)
@@ -260,6 +262,10 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     stageReloadToken.value++
   }
 
+  function requestFilesReload() {
+    filesReloadToken.value++
+  }
+
   function openPalette() {
     paletteOpen.value = true
   }
@@ -307,6 +313,7 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     layoutMode,
     stage,
     stageReloadToken,
+    filesReloadToken,
     composerPrefill,
     composerPrefillToken,
     composerSelectExpertIds,
@@ -334,6 +341,7 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     setStagePath,
     setStageUrl,
     requestStageReload,
+    requestFilesReload,
     openPalette,
     closePalette,
     togglePalette,

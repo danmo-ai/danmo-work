@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict'
 import {
+  buildChapterEntries,
   buildNovelStagePrefill,
   chapterNumFromName,
+  inferNovelBookNextStep,
   isNovelChapterPath,
+  isNovelContractName,
+  isNovelContractPath,
   nextChapterNumber,
   parseNovelStateYaml,
   sortChapterNodes,
@@ -26,18 +30,48 @@ assert.equal(parseNovelStateYaml('last_committed_ch: abc').lastCommittedCh, 0)
 
 assert.equal(chapterNumFromName('ch001.md'), 1)
 assert.equal(chapterNumFromName('ch12.md'), 12)
+assert.equal(chapterNumFromName('ch013-contract.yaml'), 13)
 assert.equal(chapterNumFromName('notes.md'), null)
 
 assert.equal(isNovelChapterPath('novel/b/chapters/ch003.md'), true)
 assert.equal(isNovelChapterPath('novel/b/book-bible.md'), false)
+assert.equal(isNovelContractName('ch001-contract.yaml'), true)
+assert.equal(isNovelContractName('ch001.yml'), false)
+assert.equal(isNovelContractPath('novel/juanzong/chapters/ch001-contract.yaml'), true)
+assert.equal(isNovelContractPath('novel/juanzong/chapters/ch001.md'), false)
 
 const sorted = sortChapterNodes([
   { name: 'ch10.md', path: 'novel/b/chapters/ch10.md', isDir: false },
   { name: 'ch2.md', path: 'novel/b/chapters/ch2.md', isDir: false },
   { name: 'drafts', path: 'novel/b/chapters/drafts', isDir: true },
   { name: 'readme.txt', path: 'novel/b/chapters/readme.txt', isDir: false },
+  { name: 'ch001-contract.yaml', path: 'novel/b/chapters/ch001-contract.yaml', isDir: false },
 ])
 assert.deepEqual(sorted.map((n) => n.name), ['ch2.md', 'ch10.md'])
+
+const entries = buildChapterEntries(
+  [
+    { name: 'ch001-contract.yaml', path: 'novel/b/chapters/ch001-contract.yaml', isDir: false },
+    { name: 'ch002-contract.yaml', path: 'novel/b/chapters/ch002-contract.yaml', isDir: false },
+    { name: 'ch002.md', path: 'novel/b/chapters/ch002.md', isDir: false },
+  ],
+  [
+    { name: 'book_outline.md', path: 'novel/b/outline/book_outline.md', isDir: false },
+    { name: 'ch003-contract.yaml', path: 'novel/b/outline/ch003-contract.yaml', isDir: false },
+  ],
+)
+assert.deepEqual(
+  entries.map((e) => ({
+    ch: e.chapter,
+    prose: e.prose?.name ?? null,
+    contract: e.contract?.name ?? null,
+  })),
+  [
+    { ch: 1, prose: null, contract: 'ch001-contract.yaml' },
+    { ch: 2, prose: 'ch002.md', contract: 'ch002-contract.yaml' },
+    { ch: 3, prose: null, contract: 'ch003-contract.yaml' },
+  ],
+)
 
 assert.equal(
   nextChapterNumber(3, [
@@ -46,6 +80,26 @@ assert.equal(
   ]),
   6,
 )
+assert.equal(nextChapterNumber(0, entries), 4)
+
+const juanzongLike = buildChapterEntries([
+  { name: 'ch001-contract.yaml', path: 'a', isDir: false },
+  { name: 'ch002-contract.yaml', path: 'b', isDir: false },
+  { name: 'ch013-contract.yaml', path: 'c', isDir: false },
+])
+assert.deepEqual(inferNovelBookNextStep(0, juanzongLike), { action: 'write', chapter: 1 })
+assert.deepEqual(
+  inferNovelBookNextStep(0, [
+    {
+      chapter: 1,
+      label: 'ch001',
+      contract: { name: 'ch001-contract.yaml', path: 'a', isDir: false },
+      prose: { name: 'ch001.md', path: 'b', isDir: false },
+    },
+  ]),
+  { action: 'contract', chapter: 2 },
+)
+assert.deepEqual(inferNovelBookNextStep(0, []), { action: 'contract', chapter: 1 })
 
 const stages = [
   'init',
@@ -73,6 +127,7 @@ for (const action of stages) {
 const contract = buildNovelStagePrefill('contract', { bookId: 'star-inn', chapter: 4 })
 assert.ok(contract.includes('章合同'))
 assert.ok(contract.includes('chapter-contract.md'))
+assert.ok(contract.includes('ch004-contract.yaml'))
 
 const polish = buildNovelStagePrefill('polish', {
   bookId: 'star-inn',

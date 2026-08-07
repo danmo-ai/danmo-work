@@ -46,7 +46,7 @@ const { t } = useI18n()
           </div>
         </template>
 
-        <!-- File placeholder -->
+        <!-- Project file upload -->
         <template v-else-if="att.kind === 'file'">
           <div class="att-card__icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
@@ -55,10 +55,12 @@ const { t } = useI18n()
             </svg>
           </div>
           <div class="att-card__meta">
-            <span class="att-card__name" :title="att.name">{{ att.name }}</span>
+            <span class="att-card__name" :title="att.remotePath || att.name">{{ att.name }}</span>
             <span class="att-card__sub">
               {{ formatBytes(att.size) }}
-              <span class="att-card__badge">{{ t('composer.attachPending') }}</span>
+              <span v-if="att.status === 'uploading'" class="att-card__badge">{{ t('composer.attachUploading') }}</span>
+              <span v-else-if="att.status === 'error'" class="att-card__badge att-card__badge--error">{{ t('composer.attachUploadFailed') }}</span>
+              <span v-else-if="att.remotePath" class="att-card__badge" :title="att.remotePath">{{ att.remotePath }}</span>
             </span>
           </div>
         </template>
@@ -263,6 +265,11 @@ const { t } = useI18n()
   margin-left: 4px;
   font-size: var(--dq-font-size-caption);
   opacity: 0.8;
+}
+
+.att-card__badge--error {
+  color: var(--dq-danger, #c0392b);
+  opacity: 1;
 }
 
 .att-card__action,

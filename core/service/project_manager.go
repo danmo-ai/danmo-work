@@ -339,6 +339,12 @@ func (m *ProjectManager) ReadFileContent(ctx context.Context, projectID, subPath
 // WriteFileContent writes UTF-8 text content to a project-relative path.
 // Parent directories are created as needed. Path must stay inside the project root.
 func (m *ProjectManager) WriteFileContent(ctx context.Context, projectID, subPath, content string) error {
+	return m.WriteFileBytes(ctx, projectID, subPath, []byte(content))
+}
+
+// WriteFileBytes writes raw bytes to a project-relative path.
+// Parent directories are created as needed. Path must stay inside the project root.
+func (m *ProjectManager) WriteFileBytes(ctx context.Context, projectID, subPath string, data []byte) error {
 	root, err := m.resolveFilesRoot(ctx, projectID)
 	if err != nil {
 		return err
@@ -362,7 +368,73 @@ func (m *ProjectManager) WriteFileContent(ctx context.Context, projectID, subPat
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(target, []byte(content), 0o644)
+	return os.WriteFile(target, data, 0o644)
+}
+
+// SanitizeUploadFilename returns a safe base filename for composer uploads.
+func SanitizeUploadFilename(name string) string {
+	name = filepath.Base(strings.TrimSpace(name))
+	name = strings.ReplaceAll(name, "\x00", "")
+	name = strings.ReplaceAll(name, "/", "_")
+	name = strings.ReplaceAll(name, "\\", "_")
+	if name == "" || name == "." || name == ".." {
+		return "file"
+	}
+	const maxLen = 180
+	if len(name) > maxLen {
+		ext := filepath.Ext(name)
+		if len(ext) > 40 {
+			ext = ext[:40]
+		}
+		base := strings.TrimSuffix(name, filepath.Ext(name))
+		maxBase := maxLen - len(ext)
+		if maxBase < 1 {
+			maxBase = 1
+		}
+		if len(base) > maxBase {
+			base = base[:maxBase]
+		}
+		name = base + ext
+	}
+	return name
+}
+
+// UploadFile writes data under uploads/<filename>, allocating a unique name if needed.
+// Returns the project-relative path (slash-normalized).
+func (m *ProjectManager) UploadFile(ctx context.Context, projectID, filename string, data []byte) (string, error) {
+	name := SanitizeUploadFilename(filename)
+	rel, err := m.uniqueUploadPath(ctx, projectID, name)
+	if err != nil {
+		return "", err
+	}
+	if err := m.WriteFileBytes(ctx, projectID, rel, data); err != nil {
+		return "", err
+	}
+	return filepath.ToSlash(rel), nil
+}
+
+func (m *ProjectManager) uniqueUploadPath(ctx context.Context, projectID, name string) (string, error) {
+	root, err := m.resolveFilesRoot(ctx, projectID)
+	if err != nil {
+		return "", err
+	}
+	ext := filepath.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+	for i := 0; i < 1000; i++ {
+		candidate := name
+		if i > 0 {
+			candidate = fmt.Sprintf("%s_%d%s", base, i, ext)
+		}
+		rel := filepath.Join("uploads", candidate)
+		target := filepath.Join(root, rel)
+		if _, err := os.Stat(target); err != nil {
+			if os.IsNotExist(err) {
+				return rel, nil
+			}
+			return "", err
+		}
+	}
+	return "", fmt.Errorf("could not allocate unique upload path")
 }
 
 type GitFileChange struct {
