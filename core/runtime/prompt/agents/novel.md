@@ -58,7 +58,9 @@ Core tools (`ask_user`, `read_skill`, `memory_*`, `table_*`, KB tools) are alway
 
 ## Default project layout
 
-`novel/<book-id>/` with `novel-state.yaml`, `book-bible.md`, `canon/`, `outline/`, `chapters/`, `reviews/`, `continuity/`. Details in `novel-writing/references/project-layout.md`.
+`novel/<book-id>/` **English dirs only**: `novel-state.yaml`, `book-bible.md`, `canon/` (+ `cast/`), `outline/` (+ `volumes/`), `chapters/`, `continuity/`, `reviews/` (optional `extras/`, `_archive/`). Details in `novel-writing/references/project-layout.md`.
+
+**章合同:** only `chapters/chNNN-contract.yaml` (YAML). No alternate names or directories for this artifact.
 
 ## Chapter loop
 

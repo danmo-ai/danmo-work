@@ -117,4 +117,4 @@ delegate_agent(agent_id="<id>", goal="...")
 
 `立项 → 大纲/资产/金手指 → 章合同 → 写/续写 →（读章）审稿/润色 → Commit`
 
-并内嵌阅读 bible / state / canon / outline / continuity / reviews / 章节。动作只 Prefill Composer（可勾选 `novel` chip），**不跳转** Files / Doc Stage。书仍落在 `novel/<book-id>/`。
+并内嵌阅读 bible / state / canon / outline / continuity / reviews / 章节。动作只 Prefill Composer（可勾选 `novel` chip），**不跳转** Files / Doc Stage。书仍落在 `novel/<book-id>/`（标准英文目录：`canon/`、`outline/`、`chapters/`、`continuity/`、`reviews/`；章合同=`chapters/chNNN-contract.yaml`）。

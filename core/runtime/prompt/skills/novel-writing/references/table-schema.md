@@ -34,7 +34,10 @@ Suggested collections (names are conventions — be consistent within a book):
 
 ## `chapter_contracts`
 
-`id`, `book_id`, `chapter`, `purpose`, `must_happen`, `must_not_happen`, `hook_out`, `pov`, `status`
+`id`, `book_id`, `chapter`, `purpose`, `must_happen`, `must_not_happen`, `hook_out`, `pov`, `status`, `file`
+
+Mirror/index only. Authoritative contract body is always
+`novel/<book-id>/chapters/chNNN-contract.yaml`. Prefer `file: chapters/chNNN-contract.yaml`.
 
 ## `continuity_issues`
 

@@ -97,7 +97,7 @@ assert.deepEqual(
       prose: { name: 'ch001.md', path: 'b', isDir: false },
     },
   ]),
-  { action: 'contract', chapter: 2 },
+  { action: 'continue', chapter: 2 },
 )
 assert.deepEqual(inferNovelBookNextStep(0, []), { action: 'contract', chapter: 1 })
 
@@ -128,6 +128,8 @@ const contract = buildNovelStagePrefill('contract', { bookId: 'star-inn', chapte
 assert.ok(contract.includes('章合同'))
 assert.ok(contract.includes('chapter-contract.md'))
 assert.ok(contract.includes('ch004-contract.yaml'))
+assert.ok(contract.includes('唯一落盘'))
+assert.ok(!contract.includes('也可 outline'))
 
 const polish = buildNovelStagePrefill('polish', {
   bookId: 'star-inn',

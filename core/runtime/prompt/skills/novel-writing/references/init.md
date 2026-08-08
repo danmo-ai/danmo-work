@@ -17,14 +17,17 @@ Optional: platform tone (番茄/起点等) as **preference**, not hard rules.
 
 1. `read_skill` → `project-layout.md`, `table-schema.md`, templates.  
 2. `search_kb` 题材速览 + 人设（knowledge_gate）.  
-3. `write` `novel/<book-id>/book-bible.md` and `novel-state.yaml` (stage=`init`, status fields).  
-4. Seed tables with `book_id` (characters may start as `candidate`).  
-5. `memory_update` project: promise, genre, taboos; user: language/style prefs if stated.  
-6. Stop for human confirmation before mass outlining if bible is still thin.
+3. Create the **standard English tree** under `novel/<book-id>/`:  
+   `canon/` (+ `cast/`), `outline/` (+ `volumes/`), `chapters/`, `continuity/`, `reviews/`  
+   (optional later: `extras/`, `_archive/`).  
+4. `write` `book-bible.md` and `novel-state.yaml` (stage=`init`, status fields).  
+5. Seed tables with `book_id` (characters may start as `candidate`).  
+6. `memory_update` project: promise, genre, taboos; user: language/style prefs if stated.  
+7. Stop for human confirmation before mass outlining if bible is still thin.
 
 ## Done when
 
-- Layout exists on disk  
+- Standard layout exists on disk (see `project-layout.md`)  
 - `novel-state.yaml` points at next action  
 - At least framing + promise written  
 - Tables seeded (even if empty cast with schema understood)

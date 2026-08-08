@@ -19,8 +19,8 @@ After review PASS (and optional polish), before starting the next chapter.
 ## Tool actions
 
 1. Ensure final text in `chapters/chNNN.md`.  
-2. `table_upsert` timeline_events, foreshadows, characters, resources, chapter_contracts (`status=reviewed` / committed).  
-3. Append `continuity/chapter_summaries.md` (5–10 lines).  
+2. Set `chapters/chNNN-contract.yaml` `status=reviewed`; `table_upsert` timeline_events, foreshadows, characters, resources, chapter_contracts mirror.  
+3. Append `continuity/chapter_summaries.md` (5–10 lines); update `continuity/foreshadow-tracker.md` / `decision-log.md` as needed.  
 4. `memory_update` agent: `last_committed_ch`, rolling summary pointer; project if promise changed.  
 5. Update `novel-state.yaml` next chapter / stage.  
 6. Close fixed `continuity_issues`.

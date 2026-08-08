@@ -131,7 +131,7 @@ export function sortChapterNodes(nodes: NovelFileNode[]): NovelFileNode[] {
   })
 }
 
-/** Merge chapters/*.md prose and *contract.yaml (chapters/ and/or outline/) into numbered rows. */
+/** Merge chapters/*.md prose and *contract.yaml under chapters/ (legacy outline/ contracts still merged if present). */
 export function buildChapterEntries(...nodeLists: NovelFileNode[][]): NovelChapterEntry[] {
   const byCh = new Map<number, NovelChapterEntry>()
   const ensure = (n: number): NovelChapterEntry => {
@@ -248,7 +248,7 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       return [
         '开一本新书并立项：',
         '- 先用 ask_user 澄清题材、读者承诺、篇幅/平台、禁忌（一次一问即可）。',
-        '- 创建 novel/<book-id>/（含 novel-state.yaml、book-bible.md、canon/、outline/、chapters/、reviews/、continuity/）。',
+        '- 创建 novel/<book-id>/ 标准英文树：novel-state.yaml、book-bible.md、canon/(+cast/)、outline/(+volumes/)、chapters/、continuity/、reviews/（可选 extras/、_archive/）。',
         '- 角色先 status=candidate，经我确认后再变 canon；确认前不要写正文。',
         '- 落盘后更新 novel-state（stage=init 或 outline）。',
         '- 按 read_skill novel-writing/references/init.md 与 project-layout.md 执行。',
@@ -277,10 +277,11 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
     case 'contract':
       return [
         `为第 ${ch || 'N'} 章写章合同（尚不写正文）。`,
-        `落盘到 ${root}/chapters/ch${chPad}-contract.yaml（YAML；也可 outline/ 或 table_upsert chapter_contracts，book_id=${bookId}）。`,
+        `唯一落盘：${root}/chapters/ch${chPad}-contract.yaml（YAML；模板 chapter-contract.yaml）。`,
+        `可选 table_upsert chapter_contracts 作索引（book_id=${bookId}，file 指向该 yaml），不能代替文件。`,
         '含：目的、must_happen / must_not、进出状态、伏笔、章末钩子、连续性风险；status=proposed。',
         '里程碑章或本批首章需 ask_user 接受后再进入写作。',
-        '按 read_skill novel-writing/references/chapter-contract.md 与 assets/templates/chapter-contract.yaml 执行。',
+        '按 read_skill novel-writing/references/chapter-contract.md 执行。',
       ].join('\n')
     case 'write':
       return [
