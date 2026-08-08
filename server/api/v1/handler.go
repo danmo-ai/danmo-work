@@ -14,6 +14,7 @@ import (
 	"danmo-work/core/adapter/config"
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
+	"danmo-work/core/remote/connector"
 	"danmo-work/core/service"
 
 	"github.com/gin-gonic/gin"
@@ -48,6 +49,7 @@ type Handler struct {
 	Store         port.Repository
 	TableStore    port.TableStoreRepo
 	AIReview      *service.AIReviewManager
+	Remote        *connector.Connector
 }
 
 type RouterConfig struct {
@@ -137,6 +139,10 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.POST("/approvals/:id/decide", decideApproval(h))
 	api.POST("/asks/:id/resolve", resolveAskUser(h))
 	api.GET("/config", getConfig(h))
+	api.GET("/remote/status", remoteStatus(h))
+	api.PUT("/remote", remoteConfigure(h))
+	api.POST("/remote/pair/code", remotePairCode(h))
+	api.POST("/remote/pair/revoke", remoteRevoke(h))
 	api.PUT("/config", updateConfig(h))
 	api.GET("/channels/weixin/status", weixinStatus(h))
 	api.PUT("/channels/weixin", weixinConfigure(h))
@@ -1283,6 +1289,17 @@ func updateConfig(h *Handler) gin.HandlerFunc {
 		}
 		if h.Browser != nil && req.Runtime != nil {
 			h.Browser.Configure(cfg.Runtime.Browser)
+		}
+		if h.Remote != nil && req.Remote != nil {
+			cur := h.Remote.Config()
+			h.Remote.Apply(connector.Config{
+				Enabled:      cfg.Remote.Enabled,
+				HubURL:       cfg.Remote.HubURL,
+				LocalBase:    cfg.Remote.LocalBase,
+				TLSInsecure:  cfg.Remote.TLSInsecure,
+				AppVersion:   cur.AppVersion,
+				IdentityPath: cur.IdentityPath,
+			})
 		}
 		c.JSON(http.StatusOK, cfg)
 	}

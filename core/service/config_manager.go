@@ -80,6 +80,9 @@ func (m *ConfigManager) Update(ctx context.Context, req domain.UpdateConfigFileR
 	if req.Channels != nil {
 		cfg.Channels = *req.Channels
 	}
+	if req.Remote != nil {
+		cfg.Remote = *req.Remote
+	}
 
 	if err := m.store.Save(ctx, cfg); err != nil {
 		return nil, fmt.Errorf("save config: %w", err)

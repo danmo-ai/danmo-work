@@ -12,6 +12,15 @@ type ConfigFile struct {
 	LLM      ConfigLLMSection      `json:"llm" mapstructure:"llm"`
 	Market   ConfigMarketSection   `json:"market" mapstructure:"market"`
 	Channels ConfigChannelsSection `json:"channels" mapstructure:"channels"`
+	Remote   ConfigRemoteSection   `json:"remote" mapstructure:"remote"`
+}
+
+// ConfigRemoteSection enables the PC → danmo-hub outbound connector.
+type ConfigRemoteSection struct {
+	Enabled     bool   `json:"enabled" mapstructure:"enabled"`
+	HubURL      string `json:"hubUrl" mapstructure:"hub_url"`
+	LocalBase   string `json:"localBase" mapstructure:"local_base"`
+	TLSInsecure bool   `json:"tlsInsecure" mapstructure:"tls_insecure"`
 }
 
 type ConfigLLMSection struct {
@@ -116,4 +125,5 @@ type UpdateConfigFileRequest struct {
 	LLM      *ConfigLLMSection          `json:"llm,omitempty"`
 	Market   *ConfigMarketSection       `json:"market,omitempty"`
 	Channels *ConfigChannelsSection     `json:"channels,omitempty"`
+	Remote   *ConfigRemoteSection       `json:"remote,omitempty"`
 }

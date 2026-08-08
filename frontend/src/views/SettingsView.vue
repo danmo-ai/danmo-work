@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Setting, Cpu, Search, Brush, Monitor } from '@danqing/dq-shell'
 import { useLLMStore } from '@/stores/llm'
@@ -11,6 +11,7 @@ import { useWeixinStore } from '@/stores/weixin'
 import { useFeishuStore } from '@/stores/feishu'
 import { useWecomStore } from '@/stores/wecom'
 import { useQQStore } from '@/stores/qq'
+import { useRemoteStore } from '@/stores/remote'
 import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
 import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
@@ -22,7 +23,7 @@ import { useAppUpdater } from '@/composables/useAppUpdater'
 import { isTauriRuntime } from '@/utils/desktop'
 import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider, ModelConfig, ConfigMarketSection, MarketSourceConfig } from '@/types/mission'
 
-type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'market' | 'weixin' | 'feishu' | 'wecom' | 'qq' | 'appearance' | 'about'
+type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'market' | 'weixin' | 'feishu' | 'wecom' | 'qq' | 'hub' | 'appearance' | 'about'
 
 const { t } = useI18n()
 const activeTab = ref<SettingsTab>('models')
@@ -35,6 +36,7 @@ const weixin = useWeixinStore()
 const feishu = useFeishuStore()
 const wecom = useWecomStore()
 const qq = useQQStore()
+const remote = useRemoteStore()
 const sessions = useSessionsStore()
 const projects = useProjectsStore()
 const themeStore = useThemeStore()
@@ -82,6 +84,13 @@ const qqForm = ref({
   requireMention: true,
   nativeC2cStream: true,
 })
+const hubForm = ref({
+  enabled: false,
+  hubUrl: '',
+  localBase: 'http://127.0.0.1:7801',
+  tlsInsecure: false,
+})
+let hubStatusTimer: ReturnType<typeof setInterval> | null = null
 const {
   appVersion,
   status: updaterStatus,
@@ -441,7 +450,16 @@ onMounted(async () => {
     feishu.refreshStatus(),
     wecom.refreshStatus(),
     qq.refreshStatus(),
+    remote.refreshStatus(),
   ])
+  if (remote.status) {
+    hubForm.value = {
+      enabled: !!remote.status.enabled,
+      hubUrl: remote.status.hubUrl || '',
+      localBase: remote.status.localBase || 'http://127.0.0.1:7801',
+      tlsInsecure: !!remote.status.tlsInsecure,
+    }
+  }
   if (!weixinLoginProjectId.value && projects.sortedProjects.length) {
     weixinLoginProjectId.value = projects.sortedProjects[0].id
   }
@@ -676,6 +694,66 @@ async function handleSaveQQ() {
     toast.success(t('settings.qqSaved'))
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('settings.qqSaveFailed'))
+  }
+}
+
+async function handleSaveHub() {
+  if (hubForm.value.enabled && !hubForm.value.hubUrl.trim()) {
+    toast.warning(t('settings.hubUrlRequired'))
+    return
+  }
+  try {
+    await remote.configure({
+      enabled: hubForm.value.enabled,
+      hubUrl: hubForm.value.hubUrl.trim(),
+      localBase: hubForm.value.localBase.trim() || 'http://127.0.0.1:7801',
+      tlsInsecure: hubForm.value.tlsInsecure,
+    })
+    if (remote.status) {
+      hubForm.value = {
+        enabled: !!remote.status.enabled,
+        hubUrl: remote.status.hubUrl || '',
+        localBase: remote.status.localBase || 'http://127.0.0.1:7801',
+        tlsInsecure: !!remote.status.tlsInsecure,
+      }
+    }
+    toast.success(t('settings.hubSaved'))
+    // Poll briefly so Connected flips after dial.
+    void remote.refreshStatus()
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('settings.hubSaveFailed'))
+  }
+}
+
+async function handleHubPair() {
+  try {
+    await remote.requestPairCode()
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('settings.hubPairFailed'))
+  }
+}
+
+async function handleHubCopyPair() {
+  if (!remote.pairCode) return
+  try {
+    await navigator.clipboard.writeText(remote.pairCode)
+    toast.success(t('settings.hubPairCopied'))
+  } catch {
+    toast.error(t('settings.hubPairFailed'))
+  }
+}
+
+async function handleHubRevoke() {
+  try {
+    await confirm(t('settings.hubRevokeConfirm'), t('settings.hubRevoke'), { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await remote.revokeTokens()
+    toast.success(t('settings.hubRevoked'))
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : t('settings.hubRevokeFailed'))
   }
 }
 
@@ -1096,6 +1174,7 @@ const menuItems = computed(() => [
   { id: 'feishu' as SettingsTab, label: t('settings.feishu'), icon: Monitor },
   { id: 'wecom' as SettingsTab, label: t('settings.wecom'), icon: Monitor },
   { id: 'qq' as SettingsTab, label: t('settings.qq'), icon: Monitor },
+  { id: 'hub' as SettingsTab, label: t('settings.hub'), icon: Monitor },
   { id: 'market' as SettingsTab, label: t('settings.market'), icon: Search },
   { id: 'appearance' as SettingsTab, label: t('settings.appearance'), icon: Brush },
   { id: 'about' as SettingsTab, label: t('settings.about'), icon: Monitor },
@@ -1135,7 +1214,27 @@ const updaterStatusText = computed(() => {
 })
 
 const hasFooterActions = computed(() => {
-  return ['runtime', 'search', 'market', 'models', 'modelConfig', 'weixin', 'feishu', 'wecom', 'qq'].includes(activeTab.value)
+  return ['runtime', 'search', 'market', 'models', 'modelConfig', 'weixin', 'feishu', 'wecom', 'qq', 'hub'].includes(activeTab.value)
+})
+
+watch(activeTab, (tab) => {
+  if (hubStatusTimer) {
+    clearInterval(hubStatusTimer)
+    hubStatusTimer = null
+  }
+  if (tab === 'hub') {
+    void remote.refreshStatus()
+    hubStatusTimer = setInterval(() => {
+      void remote.refreshStatus()
+    }, 3000)
+  }
+})
+
+onUnmounted(() => {
+  if (hubStatusTimer) {
+    clearInterval(hubStatusTimer)
+    hubStatusTimer = null
+  }
 })
 </script>
 
@@ -1955,6 +2054,89 @@ const hasFooterActions = computed(() => {
         </div>
       </div>
 
+      <div v-else-if="activeTab === 'hub'" class="settings-section">
+        <header class="settings-section__head">
+          <h2>{{ $t('settings.hub') }}</h2>
+          <p>{{ $t('settings.hubDesc') }}</p>
+        </header>
+
+        <div v-if="remote.loading && !remote.status" class="settings-empty settings-empty--skeleton">
+          <Skeleton variant="title" width="30%" />
+          <Skeleton variant="card" width="100%" />
+        </div>
+
+        <div v-else class="settings-form">
+          <div class="settings-form-group">
+            <h3 class="settings-form-group__title">{{ $t('settings.hubChannel') }}</h3>
+            <p class="settings-form-group__desc">{{ $t('settings.hubChannelDesc') }}</p>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.hubEnable') }}</span>
+              <DqSwitch
+                :model-value="hubForm.enabled"
+                size="small"
+                @update:model-value="(v: boolean) => hubForm.enabled = v"
+              />
+            </label>
+            <div class="settings-sandbox-status">
+              <span class="settings-field__label">{{ $t('settings.hubConnected') }}</span>
+              <span class="settings-sandbox-status__value">{{ remote.status?.connected ? $t('common.yes') : $t('common.no') }}</span>
+            </div>
+            <label class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.hubUrl') }}</span>
+              <DqInput v-model="hubForm.hubUrl" :placeholder="$t('settings.hubUrlPlaceholder')" />
+            </label>
+            <p class="settings-form-group__desc">{{ $t('settings.hubUrlHint') }}</p>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.hubTlsInsecure') }}</span>
+              <DqSwitch
+                :model-value="hubForm.tlsInsecure"
+                size="small"
+                @update:model-value="(v: boolean) => hubForm.tlsInsecure = v"
+              />
+            </label>
+            <p class="settings-form-group__desc">{{ $t('settings.hubTlsInsecureHint') }}</p>
+            <label class="settings-field">
+              <span class="settings-field__label">{{ $t('settings.hubLocalBase') }}</span>
+              <DqInput v-model="hubForm.localBase" placeholder="http://127.0.0.1:7801" />
+            </label>
+            <p class="settings-form-group__desc">{{ $t('settings.hubLocalBaseHint') }}</p>
+            <div v-if="remote.status?.deviceId" class="settings-sandbox-status">
+              <span class="settings-field__label">{{ $t('settings.hubDeviceId') }}</span>
+              <span class="settings-sandbox-status__value" :title="remote.status.deviceId">{{ remote.status.deviceId }}</span>
+            </div>
+            <p class="settings-form-group__desc">{{ $t('settings.hubDeviceIdHint') }}</p>
+            <div v-if="remote.status?.lastError" class="settings-sandbox-status">
+              <span class="settings-field__label">{{ $t('settings.hubLastError') }}</span>
+              <span class="settings-sandbox-status__value">{{ remote.status.lastError }}</span>
+            </div>
+          </div>
+
+          <div class="settings-form-group">
+            <h3 class="settings-form-group__title">{{ $t('settings.hubPairing') }}</h3>
+            <p class="settings-form-group__desc">{{ $t('settings.hubPairingDesc') }}</p>
+            <div v-if="remote.pairCode" class="settings-sandbox-status">
+              <span class="settings-field__label">{{ $t('settings.hubPairCode') }}</span>
+              <span class="settings-sandbox-status__value">{{ remote.pairCode }}</span>
+            </div>
+            <div v-if="remote.pairCode" class="settings-sandbox-status">
+              <span class="settings-field__label">{{ $t('settings.hubPairExpire') }}</span>
+              <span class="settings-sandbox-status__value">{{ remote.pairExpiresIn }}</span>
+            </div>
+            <div class="settings-actions" style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+              <DqButton type="primary" size="sm" :disabled="remote.pairing || !remote.status?.connected" @click="handleHubPair">
+                {{ remote.pairing ? $t('common.saving') : $t('settings.hubRequestPair') }}
+              </DqButton>
+              <DqButton size="sm" :disabled="!remote.pairCode" @click="handleHubCopyPair">
+                {{ $t('settings.hubCopyPair') }}
+              </DqButton>
+              <DqButton type="danger" size="sm" :disabled="remote.revoking || !remote.status?.enabled" @click="handleHubRevoke">
+                {{ remote.revoking ? $t('common.saving') : $t('settings.hubRevoke') }}
+              </DqButton>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div v-else-if="activeTab === 'wecom'" class="settings-section">
         <header class="settings-section__head">
           <h2>{{ $t('settings.wecom') }}</h2>
@@ -2577,6 +2759,9 @@ const hasFooterActions = computed(() => {
           </DqButton>
           <DqButton v-else-if="activeTab === 'qq'" type="primary" :disabled="qq.saving" @click="handleSaveQQ">
             {{ qq.saving ? $t('common.saving') : $t('common.save') }}
+          </DqButton>
+          <DqButton v-else-if="activeTab === 'hub'" type="primary" :disabled="remote.saving" @click="handleSaveHub">
+            {{ remote.saving ? $t('common.saving') : $t('common.save') }}
           </DqButton>
           <DqButton v-else-if="activeTab === 'search'" type="primary" :disabled="searchConfig.saving" @click="handleSaveSearch">
             {{ searchConfig.saving ? $t('common.saving') : $t('common.save') }}

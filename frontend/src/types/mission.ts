@@ -305,6 +305,12 @@ export interface ConfigFile {
       wsUrl?: string
     }
   }
+  remote?: {
+    enabled: boolean
+    hubUrl?: string
+    localBase?: string
+    tlsInsecure?: boolean
+  }
 }
 
 export interface MarketSourceConfig {
@@ -388,6 +394,7 @@ export interface UpdateConfigFileRequest {
   search?: UpsertSearchConfigRequest
   market?: ConfigMarketSection
   channels?: ConfigFile['channels']
+  remote?: ConfigFile['remote']
 }
 
 export interface RuntimeConfigForm {
