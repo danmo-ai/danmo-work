@@ -219,7 +219,7 @@ llm:
       provider: openai
       base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
       icon: "\U0001F7E1"
-      description: "Qwen3.7 Max\u3001Plus\u3001Flash\u3001Coder"
+      description: "Qwen3.8 Max\u30013.7 Max\u3001Plus\u3001Flash\u3001Coder"
     - id: moonshot
       name: Moonshot (Kimi)
       provider: openai
@@ -579,6 +579,20 @@ llm:
       available_efforts:
       - 'off'
       - high
+    - model: qwen3.8-max
+      reasoning_dialect: qwen
+      vision: true
+      context_window: 1000000
+      max_output: 131072
+      available_efforts:
+      - 'off'
+      - low
+      - medium
+      - xhigh
+      effort_budget_tokens:
+        low: 4096
+        medium: 16384
+        xhigh: 262144
     - model: qwen3.7-max
       reasoning_dialect: qwen
       vision: true

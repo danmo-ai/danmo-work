@@ -318,6 +318,20 @@
   available_efforts:
   - 'off'
   - high
+- model: qwen3.8-max
+  reasoning_dialect: qwen
+  vision: true
+  context_window: 1000000
+  max_output: 131072
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - xhigh
+  effort_budget_tokens:
+    low: 4096
+    medium: 16384
+    xhigh: 262144
 - model: qwen3.7-max
   reasoning_dialect: qwen
   vision: true

@@ -57,6 +57,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("data.database", paths.DatabaseFile())
 	v.SetDefault("data.store", "sqlite")
 	v.SetDefault("server.listen_addr", "0.0.0.0:7801")
+	v.SetDefault("remote.enabled", false)
+	v.SetDefault("remote.hub_url", "")
+	v.SetDefault("remote.local_base", "http://127.0.0.1:7801")
+	v.SetDefault("remote.tls_insecure", false)
 	v.SetDefault("instance.id", "")
 	v.SetDefault("runtime.auto_approve", false)
 	v.SetDefault("runtime.sandbox.enabled", true)
@@ -321,7 +325,7 @@ func defaultLLMPresets() []domain.LLMProviderPreset {
 		{ID: "deepseek", Name: "DeepSeek", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.deepseek.com/v1", Description: "DeepSeek 系列"},
 		{ID: "google", Name: "Google Gemini", Provider: domain.LLMProviderOpenAI, BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", Description: "Gemini Pro、Flash"},
 		{ID: "zhipu", Name: "智谱 (Zhipu)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://open.bigmodel.cn/api/paas/v4", Description: "GLM-5.1、GLM-5、GLM-4.7"},
-		{ID: "qwen", Name: "通义千问 (Qwen)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", Description: "Qwen3.7 Max、Plus、Flash、Coder"},
+		{ID: "qwen", Name: "通义千问 (Qwen)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", Description: "Qwen3.8 Max、3.7 Max、Plus、Flash、Coder"},
 		{ID: "moonshot", Name: "Moonshot (Kimi)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.kimi.com/coding/v1", Description: "Kimi Code：k3、k3-256k、kimi-for-coding"},
 		{ID: "minimax", Name: "MiniMax", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.minimaxi.com/v1", Description: "MiniMax M3、M2.7"},
 		{ID: "ollama", Name: "Ollama (Local)", Provider: domain.LLMProviderOpenAI, BaseURL: "http://localhost:11434/v1", Description: "本地模型，通过 Ollama 运行"},
