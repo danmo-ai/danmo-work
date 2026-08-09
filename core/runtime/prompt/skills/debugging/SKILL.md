@@ -33,7 +33,7 @@ Stop Phase 1 only when you can state the root cause in one sentence with evidenc
 
 ### Phase 2 — Minimal fix
 
-- Prefer `edit` / `apply_patch` for targeted changes.
+- Prefer `apply_patch` (begin-patch) for multi-hunk fixes; `edit` for a single small replacement.
 - Do not “improve” unrelated code while fixing.
 - If the bug needs a regression test, write the failing test first when TDD skill applies.
 

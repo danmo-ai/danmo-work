@@ -62,3 +62,37 @@ func TestNormalizeAgentBindingsStripsCoreTools(t *testing.T) {
 		t.Fatal("IsCoreTool mismatch")
 	}
 }
+
+func TestNormalizeAgentBindingsPairsEditWithApplyPatch(t *testing.T) {
+	a := Agent{
+		Tools: []ToolBinding{
+			{ToolID: "read_file", RiskLevel: RiskLow},
+			{ToolID: "edit", RiskLevel: RiskMedium},
+		},
+	}
+	NormalizeAgentBindings(&a)
+	hasEdit, hasPatch := false, false
+	var patchRisk RiskLevel
+	for _, b := range a.Tools {
+		switch b.ToolID {
+		case "edit":
+			hasEdit = true
+		case "apply_patch":
+			hasPatch = true
+			patchRisk = b.RiskLevel
+		}
+	}
+	if !hasEdit || !hasPatch {
+		t.Fatalf("edit must imply apply_patch, got %+v", a.Tools)
+	}
+	if patchRisk != RiskMedium {
+		t.Fatalf("apply_patch risk=%q, want medium (match edit)", patchRisk)
+	}
+
+	// Idempotent when already paired.
+	before := len(a.Tools)
+	NormalizeAgentBindings(&a)
+	if len(a.Tools) != before {
+		t.Fatalf("re-normalize changed tool count: %d -> %d", before, len(a.Tools))
+	}
+}

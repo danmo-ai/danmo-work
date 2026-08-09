@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	defaultPatchFuzz = 3
-	maxPatchFuzz     = 50
+	defaultPatchFuzz = 40
+	maxPatchFuzz     = 200
 )
 
 type ApplyPatch struct{}
@@ -21,25 +21,59 @@ type ApplyPatch struct{}
 func (h *ApplyPatch) Name() string                { return "apply_patch" }
 func (h *ApplyPatch) RiskLevel() domain.RiskLevel { return domain.RiskMedium }
 func (h *ApplyPatch) Describe(args map[string]any) string {
+	patch, _ := args["patch"].(string)
+	n := strings.Count(patch, updateFileMarker) + strings.Count(patch, addFileMarker) + strings.Count(patch, deleteFileMarker)
+	if n == 0 {
+		n = strings.Count(patch, "+++ ")
+	}
+	if n > 0 {
+		return fmt.Sprintf("apply_patch (%d file op(s))", n)
+	}
 	return "apply_patch"
 }
 func (h *ApplyPatch) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
 		Name: "apply_patch",
-		Description: "Applies a unified diff patch to files. Preferred for multi-file or multi-hunk edits.\n\n" +
-			"**Important**: File paths in the patch must be relative to the project root directory (e.g., 'src/main.go', not '/absolute/path/src/main.go').\n\n" +
-			"- patch must be a valid unified diff string with ---/+++ file headers and @@ hunk headers.\n" +
-			"- Can apply multiple hunks across multiple files in a single call.\n" +
-			"- Supports file creation (--- /dev/null) and file deletion (+++ /dev/null).\n" +
-			"- Always read the target files first to understand the current state.\n" +
-			"- Use this instead of multiple edit calls when changing several locations at once.\n" +
-			"- Supports fuzz matching to tolerate line offsets (default: " + fmt.Sprintf("%d", defaultPatchFuzz) + ").",
+		Description: "Applies a patch to one or more files. **Preferred** for multi-hunk or multi-file edits (use instead of many edit calls).\n\n" +
+			"**Preferred format** (Codex-style begin-patch — easiest for models):\n" +
+			"```\n" +
+			"*** Begin Patch\n" +
+			"*** Update File: relative/path.go\n" +
+			"@@ optional_anchor_or_function_name\n" +
+			" context line\n" +
+			"-old line\n" +
+			"+new line\n" +
+			" context line\n" +
+			"*** Add File: relative/new.go\n" +
+			"+package main\n" +
+			"*** Delete File: relative/old.go\n" +
+			"*** End Patch\n" +
+			"```\n\n" +
+			"Rules:\n" +
+			"- Paths MUST be relative to the project root (never absolute).\n" +
+			"- Update hunks start with `@@` (optional anchor text after @@ helps locate the region).\n" +
+			"- Each hunk line MUST start with ` ` (context), `-` (remove), or `+` (add).\n" +
+			"- Add File lines are all `+` content. Delete File has no body.\n" +
+			"- Optional `*** Move to: new/path` may follow Update File.\n" +
+			"- Matching is search-based (no line numbers required) and tolerates small whitespace/indent drift.\n" +
+			"- Also accepts classic unified diffs (`---/`+++`/`@@ -l,s +l,s @@`) as a fallback.\n" +
+			"- Read target files first when updating existing content.\n" +
+			"- Prefer this over multiple edit calls when changing several places at once.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"patch":             map[string]any{"type": "string", "description": "A unified diff patch string to apply"},
-				"fuzz":              map[string]any{"type": "integer", "description": "Maximum lines to search for context match (default: " + fmt.Sprintf("%d", defaultPatchFuzz) + ", max: " + fmt.Sprintf("%d", maxPatchFuzz) + ")"},
-				"create_if_missing": map[string]any{"type": "boolean", "description": "Create the file if it doesn't exist (default: false)"},
+				"patch": map[string]any{
+					"type":        "string",
+					"description": "Begin-patch envelope (preferred) or unified diff string",
+				},
+				"fuzz": map[string]any{
+					"type":        "integer",
+					"description": "Max lines to search around an expected location (default: " + fmt.Sprintf("%d", defaultPatchFuzz) + ", max: " + fmt.Sprintf("%d", maxPatchFuzz) + ")",
+				},
+				"create_if_missing": map[string]any{
+					"type":        "boolean",
+					"description": "For unified-diff creates: allow creating the file if missing (default: false). Begin-patch *** Add File always creates.",
+				},
 			},
 			"required": []string{"patch"},
 		},
@@ -56,6 +90,9 @@ type hunk struct {
 	oldStart, oldCount int
 	newStart, newCount int
 	lines              []hunkLine
+	anchor             string // @@ header text (begin-patch)
+	searchBased        bool   // locate by content, ignore oldStart when searching
+	endOfFile          bool
 }
 
 type hunkLine struct {
@@ -64,12 +101,14 @@ type hunkLine struct {
 }
 
 type filePatch struct {
-	path     string // absolute after resolve
-	relPath  string // project-relative path for Meta / tracking
-	hunks    []hunk
-	isCreate bool
-	isDelete bool
-	oldData  []byte
+	path        string // absolute after resolve
+	relPath     string // project-relative path for Meta / tracking
+	hunks       []hunk
+	isCreate    bool
+	isDelete    bool
+	moveTo      string // relative rename target (begin-patch)
+	searchBased bool
+	oldData     []byte
 }
 
 type pendingWrite struct {
@@ -95,15 +134,23 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 	createIfMissing := optionalBoolField(input, "create_if_missing", false)
 
 	workDir := workDirFromInput(input)
-	patches, err := parsePatch(patch)
-	if err != nil {
-		return domain.ToolResult{}, fmt.Errorf("invalid patch: %w", err)
+	var patches []filePatch
+	var err error
+	if looksLikeBeginPatch(patch) {
+		patches, err = parseBeginPatch(patch)
+		if err != nil {
+			return domain.ToolResult{}, fmt.Errorf("invalid begin-patch: %w\n\nExpected:\n*** Begin Patch\n*** Update File: relative/path\n@@\n context\n-old\n+new\n*** End Patch", err)
+		}
+	} else {
+		patches, err = parsePatch(patch)
+		if err != nil {
+			return domain.ToolResult{}, fmt.Errorf("invalid patch: %w\n\nPrefer begin-patch format:\n*** Begin Patch\n*** Update File: path\n@@\n context\n-old\n+new\n*** End Patch", err)
+		}
 	}
 	if len(patches) == 0 {
 		return domain.ToolResult{Content: "No files to patch"}, nil
 	}
 
-	// Preflight: resolve paths, detect create/delete, read files
 	var results []string
 	var writes []pendingWrite
 	var changeMeta []map[string]any
@@ -114,22 +161,28 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 
 		if fp.isCreate {
 			fp.path, err = resolvePath(workDir, fp.path)
-			if err != nil && !createIfMissing {
+			if err != nil {
 				return domain.ToolResult{}, fmt.Errorf("cannot create file %q: %w", fp.relPath, err)
 			}
-			if createIfMissing || err == nil {
-				if _, statErr := os.Stat(fp.path); statErr == nil && len(fp.hunks) > 0 {
-					return domain.ToolResult{}, fmt.Errorf("cannot create file %q: already exists. Use create_if_missing=true to overwrite", fp.relPath)
-				}
-				dir := filepath.Dir(fp.path)
-				if mkErr := os.MkdirAll(dir, 0755); mkErr != nil {
-					return domain.ToolResult{}, fmt.Errorf("cannot create parent dirs for %q: %w", fp.relPath, mkErr)
-				}
+			if _, statErr := os.Stat(fp.path); statErr == nil && !createIfMissing {
+				return domain.ToolResult{}, fmt.Errorf("cannot create file %q: already exists. Use *** Update File / edit, or create_if_missing=true to overwrite", fp.relPath)
+			}
+			if mkErr := os.MkdirAll(filepath.Dir(fp.path), 0755); mkErr != nil {
+				return domain.ToolResult{}, fmt.Errorf("cannot create parent dirs for %q: %w", fp.relPath, mkErr)
 			}
 		} else {
 			fp.path, err = resolvePath(workDir, fp.path)
 			if err != nil {
 				return domain.ToolResult{}, fmt.Errorf("cannot resolve path %q: %w", fp.relPath, err)
+			}
+		}
+		if fp.moveTo != "" {
+			if _, moveErr := resolvePath(workDir, fp.moveTo); moveErr != nil {
+				moveAbs := filepath.Clean(filepath.Join(workDir, fp.moveTo))
+				rel, relErr := filepath.Rel(workDir, moveAbs)
+				if relErr != nil || strings.HasPrefix(rel, "..") {
+					return domain.ToolResult{}, fmt.Errorf("Move to %q is outside project", fp.moveTo)
+				}
 			}
 		}
 	}
@@ -152,14 +205,13 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 		} else {
 			data, readErr := os.ReadFile(fp.path)
 			if readErr != nil {
-				return domain.ToolResult{}, fmt.Errorf("cannot read file %q: %w", fp.relPath, readErr)
+				return domain.ToolResult{}, fmt.Errorf("cannot read file %q: %w. Hint: use *** Add File for new files, or check the relative path", fp.relPath, readErr)
 			}
 			fp.oldData = data
 
-			lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
-			_, applyErr := applyHunks(lines, fp.hunks, fuzz)
-			if applyErr != nil {
-				return domain.ToolResult{}, fmt.Errorf("cannot apply patch to %q: %w", fp.relPath, applyErr)
+			lines := splitPatchFileLines(string(data))
+			if _, applyErr := applyHunks(lines, fp.hunks, fuzz); applyErr != nil {
+				return domain.ToolResult{}, fmt.Errorf("cannot apply patch to %q: %w\n\n%s", fp.relPath, applyErr, patchApplyHint(string(data), fp.hunks))
 			}
 		}
 	}
@@ -186,26 +238,51 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 			lines := ([]string)(nil)
 			newLines, _ = applyHunks(lines, fp.hunks, fuzz)
 		} else {
-			lines := strings.Split(strings.TrimSuffix(string(fp.oldData), "\n"), "\n")
+			lines := splitPatchFileLines(string(fp.oldData))
 			newLines, _ = applyHunks(lines, fp.hunks, fuzz)
 		}
 
-		newContent := strings.Join(newLines, "\n") + "\n"
+		newContent := joinPatchFileLines(newLines)
+		finalPath := fp.path
+		finalRel := fp.relPath
+		if fp.moveTo != "" {
+			finalPath = filepath.Clean(filepath.Join(workDir, fp.moveTo))
+			finalRel = fp.moveTo
+			if mkErr := os.MkdirAll(filepath.Dir(finalPath), 0755); mkErr != nil {
+				h.rollbackWrites(writes)
+				return domain.ToolResult{}, fmt.Errorf("cannot create parent dirs for Move to %q: %w", fp.moveTo, mkErr)
+			}
+		}
+
 		writes = append(writes, pendingWrite{
-			path:    fp.path,
+			path:    finalPath,
 			data:    []byte(newContent),
 			oldData: fp.oldData,
 		})
 
-		if err := os.WriteFile(fp.path, []byte(newContent), 0644); err != nil {
+		if err := os.WriteFile(finalPath, []byte(newContent), 0644); err != nil {
 			h.rollbackWrites(writes)
-			return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", fp.relPath, err)
+			return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", finalRel, err)
+		}
+		if fp.moveTo != "" && finalPath != fp.path {
+			if rmErr := os.Remove(fp.path); rmErr != nil && !os.IsNotExist(rmErr) {
+				h.rollbackWrites(writes)
+				return domain.ToolResult{}, fmt.Errorf("patched but failed to remove old path %q after Move to: %w", fp.relPath, rmErr)
+			}
 		}
 		// Own write updates the snapshot so a later edit/write in this turn does not
 		// fail with "changed since last read" unless something else touched the file.
-		noteReadFile(input, fp.path)
+		noteReadFile(input, finalPath)
 
-		results = append(results, fmt.Sprintf("Patched %q (%d hunks)", fp.relPath, len(fp.hunks)))
+		opLabel := "Patched"
+		if fp.isCreate {
+			opLabel = "Created"
+		}
+		msg := fmt.Sprintf("%s %q (%d hunks)", opLabel, finalRel, len(fp.hunks))
+		if fp.moveTo != "" {
+			msg = fmt.Sprintf("Patched %q → moved to %q (%d hunks)", fp.relPath, finalRel, len(fp.hunks))
+		}
+		results = append(results, msg)
 		op := "update"
 		oldStr := ""
 		if fp.isCreate {
@@ -213,9 +290,9 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 		} else {
 			oldStr = string(fp.oldData)
 		}
-		diff := generateUnifiedDiff(fp.relPath, oldStr, newContent)
+		diff := generateUnifiedDiff(finalRel, oldStr, newContent)
 		changeMeta = append(changeMeta, map[string]any{
-			"path": fp.relPath, "op": op, "diff": diff, "bytes_written": len(newContent),
+			"path": finalRel, "op": op, "diff": diff, "bytes_written": len(newContent),
 		})
 	}
 
@@ -237,6 +314,55 @@ func (h *ApplyPatch) rollbackWrites(writes []pendingWrite) {
 			os.WriteFile(w.path, w.oldData, 0644)
 		}
 	}
+}
+
+func splitPatchFileLines(data string) []string {
+	data = strings.ReplaceAll(data, "\r\n", "\n")
+	if data == "" {
+		return nil
+	}
+	// Preserve whether file ended with newline via joinPatchFileLines.
+	return strings.Split(strings.TrimSuffix(data, "\n"), "\n")
+}
+
+func joinPatchFileLines(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func patchApplyHint(content string, hunks []hunk) string {
+	var b strings.Builder
+	b.WriteString("Hints: re-read the file; ensure context/- lines match current content; use a unique @@ anchor; keep more surrounding context lines.")
+	for _, h := range hunks {
+		oldSide := hunkOldSide(h)
+		if len(oldSide) == 0 {
+			continue
+		}
+		needle := strings.Join(oldSide, "\n")
+		matches := findClosestContentMatches(content, needle, 1)
+		if len(matches) == 0 {
+			continue
+		}
+		m := matches[0]
+		fmt.Fprintf(&b, "\n\nClosest region for a failing hunk (lines %d-%d, similarity %.0f%%):\n", m.startLine, m.endLine, m.score*100)
+		for j, line := range strings.Split(m.snippet, "\n") {
+			fmt.Fprintf(&b, "%d| %s\n", m.startLine+j, truncateLine(line, 160))
+		}
+		break
+	}
+	return b.String()
+}
+
+func hunkOldSide(h hunk) []string {
+	var out []string
+	for _, hl := range h.lines {
+		if hl.op == ' ' || hl.op == '-' {
+			out = append(out, hl.text)
+		}
+	}
+	return out
 }
 
 func parsePatch(patch string) ([]filePatch, error) {
@@ -276,21 +402,23 @@ func parsePatch(patch string) ([]filePatch, error) {
 			if m == nil {
 				return nil, fmt.Errorf("invalid hunk header at line %d", i+1)
 			}
-			h := hunk{lines: make([]hunkLine, 0)}
-			h.oldStart = parseInt(m[1])
+			hh := hunk{lines: make([]hunkLine, 0)}
+			hh.oldStart = parseInt(m[1])
 			if m[2] != "" {
-				h.oldCount = parseInt(m[2])
+				hh.oldCount = parseInt(m[2])
 			} else {
-				h.oldCount = 1
+				hh.oldCount = 1
 			}
-			h.newStart = parseInt(m[3])
+			hh.newStart = parseInt(m[3])
 			if m[4] != "" {
-				h.newCount = parseInt(m[4])
+				hh.newCount = parseInt(m[4])
 			} else {
-				h.newCount = 1
+				hh.newCount = 1
 			}
-			curHunk = &h
-			cur.hunks = append(cur.hunks, h)
+			if len(m) > 5 {
+				hh.anchor = strings.TrimSpace(m[5])
+			}
+			cur.hunks = append(cur.hunks, hh)
 			curHunk = &cur.hunks[len(cur.hunks)-1]
 		case strings.HasPrefix(line, " "):
 			if curHunk != nil {
@@ -332,20 +460,24 @@ func extractHeaderPath(line string) string {
 }
 
 func applyHunks(lines []string, hunks []hunk, fuzz int) ([]string, error) {
+	// Search-based patches (begin-patch): apply sequentially by content locate.
+	if len(hunks) > 0 && hunks[0].searchBased {
+		return applySearchHunks(lines, hunks)
+	}
+
 	result := make([]string, 0, len(lines)+len(hunks)*10)
 	originalLen := len(lines)
 	offset := 0
 
-	for _, h := range hunks {
-		oldIdx := h.oldStart - 1 - offset
+	for hi, hh := range hunks {
+		oldIdx := hh.oldStart - 1 - offset
 		if oldIdx < 0 {
 			oldIdx = 0
 		}
 
-		// Fuzz matching: search within ±fuzz lines for context match
-		matchedIdx := findHunkMatch(lines, h, oldIdx, fuzz, offset)
+		matchedIdx := findHunkMatch(lines, hh, oldIdx, fuzz)
 		if matchedIdx < 0 {
-			return nil, fmt.Errorf("hunk mismatch: cannot find context around line %d", h.oldStart)
+			return nil, fmt.Errorf("hunk %d mismatch: cannot find context around line %d", hi+1, hh.oldStart)
 		}
 		oldIdx = matchedIdx
 
@@ -353,26 +485,15 @@ func applyHunks(lines []string, hunks []hunk, fuzz int) ([]string, error) {
 			result = append(result, lines[len(result)])
 		}
 
-		newIdx := oldIdx + h.oldCount
-		offset += h.oldCount - h.newCount
+		newIdx := oldIdx + hh.oldCount
+		offset += hh.oldCount - hh.newCount
 
-		for _, hl := range h.lines {
-			switch hl.op {
-			case ' ':
-				if oldIdx >= len(lines) || lines[oldIdx] != hl.text {
-					return nil, fmt.Errorf("context mismatch at line %d: expected %q, got %q", oldIdx+1, hl.text, safeGet(lines, oldIdx))
-				}
-				result = append(result, hl.text)
-				oldIdx++
-			case '-':
-				if oldIdx >= len(lines) || lines[oldIdx] != hl.text {
-					return nil, fmt.Errorf("removal mismatch at line %d: expected %q, got %q", oldIdx+1, hl.text, safeGet(lines, oldIdx))
-				}
-				oldIdx++
-			case '+':
-				result = append(result, hl.text)
-			}
+		applied, nextOld, err := applyHunkAt(lines, oldIdx, hh)
+		if err != nil {
+			return nil, fmt.Errorf("hunk %d: %w", hi+1, err)
 		}
+		result = append(result, applied...)
+		oldIdx = nextOld
 
 		for i := oldIdx; i < newIdx; i++ {
 			if i < len(lines) {
@@ -388,60 +509,263 @@ func applyHunks(lines []string, hunks []hunk, fuzz int) ([]string, error) {
 	return result, nil
 }
 
-func findHunkMatch(lines []string, h hunk, startIdx, fuzz, offset int) int {
+func applySearchHunks(lines []string, hunks []hunk) ([]string, error) {
+	cur := append([]string(nil), lines...)
+	cursor := 0
+	for hi, hh := range hunks {
+		if hh.isCreateOnly() {
+			// Pure additions with no old side — append (Add File path).
+			for _, hl := range hh.lines {
+				if hl.op == '+' {
+					cur = append(cur, hl.text)
+				}
+			}
+			continue
+		}
+
+		startFrom := cursor
+		if hh.anchor != "" {
+			anchorIdx := findAnchorLine(cur, hh.anchor, startFrom)
+			if anchorIdx < 0 {
+				anchorIdx = findAnchorLine(cur, hh.anchor, 0)
+			}
+			if anchorIdx >= 0 {
+				startFrom = anchorIdx
+			}
+		}
+		if hh.endOfFile {
+			// Prefer matching near EOF.
+			oldSide := hunkOldSide(hh)
+			if len(oldSide) > 0 && len(cur) >= len(oldSide) {
+				startFrom = len(cur) - len(oldSide)
+			}
+		}
+
+		matchIdx := findOldSideMatch(cur, hh, startFrom)
+		if matchIdx < 0 && startFrom > 0 {
+			matchIdx = findOldSideMatch(cur, hh, 0)
+		}
+		if matchIdx < 0 {
+			return nil, fmt.Errorf("hunk %d: cannot locate old context%s", hi+1, formatAnchor(hh.anchor))
+		}
+
+		// Verify old side still matches at matchIdx with fuzzy equality.
+		if !oldSideMatchesAt(cur, matchIdx, hh) {
+			return nil, fmt.Errorf("hunk %d: context/removal mismatch at line %d%s", hi+1, matchIdx+1, formatAnchor(hh.anchor))
+		}
+		replacement, oldLen := buildReplacementFromFile(cur, matchIdx, hh)
+		next := make([]string, 0, len(cur)-oldLen+len(replacement))
+		next = append(next, cur[:matchIdx]...)
+		next = append(next, replacement...)
+		next = append(next, cur[matchIdx+oldLen:]...)
+		cur = next
+		cursor = matchIdx + len(replacement)
+	}
+	return cur, nil
+}
+
+func (h hunk) isCreateOnly() bool {
+	if len(h.lines) == 0 {
+		return true
+	}
+	for _, hl := range h.lines {
+		if hl.op != '+' {
+			return false
+		}
+	}
+	return true
+}
+
+func formatAnchor(anchor string) string {
+	if anchor == "" {
+		return ""
+	}
+	return fmt.Sprintf(" (@@ %s)", anchor)
+}
+
+func findAnchorLine(lines []string, anchor string, from int) int {
+	anchor = strings.TrimSpace(anchor)
+	if anchor == "" {
+		return -1
+	}
+	normAnchor := normalizeWhitespace(anchor)
+	for i := from; i < len(lines); i++ {
+		if lines[i] == anchor || strings.Contains(lines[i], anchor) {
+			return i
+		}
+		if normalizeWhitespace(lines[i]) == normAnchor || strings.Contains(normalizeWhitespace(lines[i]), normAnchor) {
+			return i
+		}
+	}
+	return -1
+}
+
+func findOldSideMatch(lines []string, h hunk, from int) int {
+	oldSide := hunkOldSide(h)
+	if len(oldSide) == 0 {
+		// Pure insertion: place after anchor (from), or EOF.
+		if from < 0 {
+			return len(lines)
+		}
+		return from
+	}
+	for i := from; i+len(oldSide) <= len(lines); i++ {
+		if oldSideEquals(lines[i:i+len(oldSide)], oldSide, matchExact) ||
+			oldSideEquals(lines[i:i+len(oldSide)], oldSide, matchIndent) ||
+			oldSideEquals(lines[i:i+len(oldSide)], oldSide, matchWhitespace) {
+			return i
+		}
+	}
+	return -1
+}
+
+func oldSideMatchesAt(lines []string, idx int, h hunk) bool {
+	oldSide := hunkOldSide(h)
+	if len(oldSide) == 0 {
+		return true
+	}
+	if idx < 0 || idx+len(oldSide) > len(lines) {
+		return false
+	}
+	return oldSideEquals(lines[idx:idx+len(oldSide)], oldSide, matchExact) ||
+		oldSideEquals(lines[idx:idx+len(oldSide)], oldSide, matchIndent) ||
+		oldSideEquals(lines[idx:idx+len(oldSide)], oldSide, matchWhitespace)
+}
+
+type matchMode int
+
+const (
+	matchExact matchMode = iota
+	matchIndent
+	matchWhitespace
+)
+
+func oldSideEquals(have, want []string, mode matchMode) bool {
+	if len(have) != len(want) {
+		return false
+	}
+	for i := range have {
+		switch mode {
+		case matchExact:
+			if have[i] != want[i] {
+				return false
+			}
+		case matchIndent:
+			if stripLeadingWhitespace(have[i]) != stripLeadingWhitespace(want[i]) {
+				return false
+			}
+		case matchWhitespace:
+			if normalizeWhitespace(have[i]) != normalizeWhitespace(want[i]) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func buildReplacementFromFile(lines []string, idx int, h hunk) ([]string, int) {
+	oldLen := 0
+	var out []string
+	at := idx
+	for _, hl := range h.lines {
+		switch hl.op {
+		case ' ':
+			if at < len(lines) {
+				out = append(out, lines[at]) // keep file whitespace on fuzzy context match
+			} else {
+				out = append(out, hl.text)
+			}
+			oldLen++
+			at++
+		case '-':
+			oldLen++
+			at++
+		case '+':
+			out = append(out, hl.text)
+		}
+	}
+	return out, oldLen
+}
+
+func applyHunkAt(lines []string, oldIdx int, h hunk) ([]string, int, error) {
+	var out []string
+	for _, hl := range h.lines {
+		switch hl.op {
+		case ' ':
+			if oldIdx >= len(lines) || !lineMatchFuzzy(lines[oldIdx], hl.text) {
+				return nil, oldIdx, fmt.Errorf("context mismatch at line %d: expected %q, got %q", oldIdx+1, hl.text, safeGet(lines, oldIdx))
+			}
+			out = append(out, lines[oldIdx]) // keep file's original whitespace when fuzzy
+			oldIdx++
+		case '-':
+			if oldIdx >= len(lines) || !lineMatchFuzzy(lines[oldIdx], hl.text) {
+				return nil, oldIdx, fmt.Errorf("removal mismatch at line %d: expected %q, got %q", oldIdx+1, hl.text, safeGet(lines, oldIdx))
+			}
+			oldIdx++
+		case '+':
+			out = append(out, hl.text)
+		}
+	}
+	return out, oldIdx, nil
+}
+
+func lineMatchFuzzy(have, want string) bool {
+	if have == want {
+		return true
+	}
+	if stripLeadingWhitespace(have) == stripLeadingWhitespace(want) {
+		return true
+	}
+	return normalizeWhitespace(have) == normalizeWhitespace(want)
+}
+
+func findHunkMatch(lines []string, h hunk, startIdx, fuzz int) int {
 	if len(lines) == 0 {
 		return startIdx
 	}
 
-	contextLine := ""
-	for _, hl := range h.lines {
-		if hl.op == ' ' {
-			contextLine = hl.text
-			break
-		}
-	}
-	if contextLine == "" {
+	// Prefer first unique old-side match near startIdx.
+	oldSide := hunkOldSide(h)
+	if len(oldSide) == 0 {
 		return startIdx
 	}
 
-	// Search from startIdx-fuzz to startIdx+fuzz
-	for delta := -fuzz; delta <= fuzz; delta++ {
-		idx := startIdx + delta
-		if idx < 0 || idx >= len(lines) {
-			continue
-		}
-
-		if lines[idx] == contextLine {
-			cumulativeOffset := 0
-			match := true
-			lineIdx := idx
-
-			for _, hl := range h.lines {
-				switch hl.op {
-				case ' ':
-					if lineIdx >= len(lines) || lines[lineIdx] != hl.text {
-						match = false
-					}
-					lineIdx++
-				case '-':
-					if lineIdx >= len(lines) || lines[lineIdx] != hl.text {
-						match = false
-					}
-					lineIdx++
-					cumulativeOffset--
-				case '+':
-					cumulativeOffset++
-				}
-				if !match {
-					break
-				}
+	best := -1
+	bestDist := fuzz + 1
+	searchLo := startIdx - fuzz
+	if searchLo < 0 {
+		searchLo = 0
+	}
+	searchHi := startIdx + fuzz
+	if searchHi > len(lines) {
+		searchHi = len(lines)
+	}
+	for idx := searchLo; idx+len(oldSide) <= len(lines) && idx <= searchHi; idx++ {
+		if oldSideEquals(lines[idx:idx+len(oldSide)], oldSide, matchExact) ||
+			oldSideEquals(lines[idx:idx+len(oldSide)], oldSide, matchIndent) ||
+			oldSideEquals(lines[idx:idx+len(oldSide)], oldSide, matchWhitespace) {
+			dist := idx - startIdx
+			if dist < 0 {
+				dist = -dist
 			}
-			if match {
-				return idx
+			if dist < bestDist {
+				bestDist = dist
+				best = idx
 			}
 		}
 	}
+	if best >= 0 {
+		return best
+	}
 
+	// Fallback: search whole file when fuzz window failed (unified diffs with bad line numbers).
+	for idx := 0; idx+len(oldSide) <= len(lines); idx++ {
+		if oldSideEquals(lines[idx:idx+len(oldSide)], oldSide, matchExact) ||
+			oldSideEquals(lines[idx:idx+len(oldSide)], oldSide, matchIndent) ||
+			oldSideEquals(lines[idx:idx+len(oldSide)], oldSide, matchWhitespace) {
+			return idx
+		}
+	}
 	return -1
 }
 

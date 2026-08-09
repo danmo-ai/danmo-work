@@ -30,7 +30,7 @@ func (h *Write) Schema() domain.ToolSchema {
 			"- Auto-creates all parent directories -- do NOT use exec_shell mkdir beforehand.\n" +
 			"- This tool will overwrite the existing file if there is one at the provided path.\n" +
 			"- If the file already exists, you MUST use read_file first to read its contents.\n" +
-			"- ALWAYS prefer editing existing files with edit or apply_patch. NEVER write new files unless explicitly required.\n" +
+			"- ALWAYS prefer editing existing files with apply_patch (begin-patch) or edit. NEVER write new files unless explicitly required.\n" +
 			"- Do NOT use exec_shell with cat/echo/heredoc for writing files.\n" +
 			"- The result includes a unified diff when overwriting an existing file.",
 		Parameters: map[string]any{

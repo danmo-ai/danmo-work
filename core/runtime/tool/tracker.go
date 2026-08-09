@@ -46,7 +46,7 @@ func (t *FileTracker) RequireRead(path string) error {
 	snap, ok := t.files[path]
 	t.mu.RUnlock()
 	if !ok {
-		return fmt.Errorf("file %q has not been read yet in this turn. Use read_file first before modifying it", path)
+		return fmt.Errorf("file %q has not been read yet in this turn. Call read_file on this exact path before edit/write (reading a different file with a similar name does not count)", path)
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -56,7 +56,7 @@ func (t *FileTracker) RequireRead(path string) error {
 		return err
 	}
 	if info.Size() != snap.Size || !info.ModTime().Equal(snap.ModTime) {
-		return fmt.Errorf("file %q has changed since it was last read (size/modTime mismatch). Use read_file to re-read before editing", path)
+		return fmt.Errorf("file %q has changed since it was last read (size/modTime mismatch). Another tool or process updated it — call read_file again on this path, then retry the edit with fresh content", path)
 	}
 	return nil
 }

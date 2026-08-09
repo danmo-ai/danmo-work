@@ -146,7 +146,7 @@ func TestApplyPatchCreateFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(result.Content, "Patched") {
+	if !strings.Contains(result.Content, "Patched") && !strings.Contains(result.Content, "Created") {
 		t.Errorf("expected successful patch, got: %s", result.Content)
 	}
 
@@ -157,6 +157,93 @@ func TestApplyPatchCreateFile(t *testing.T) {
 	}
 	if !strings.Contains(string(saved), "hello world") {
 		t.Errorf("expected content in created file, got: %s", string(saved))
+	}
+}
+
+func TestApplyBeginPatchUpdate(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "src", "app.go")
+	os.MkdirAll(filepath.Dir(f), 0755)
+	os.WriteFile(f, []byte("package main\n\nfunc greet() {\n\tprintln(\"hi\")\n}\n"), 0644)
+
+	patch := "*** Begin Patch\n" +
+		"*** Update File: src/app.go\n" +
+		"@@ func greet()\n" +
+		" func greet() {\n" +
+		"-\tprintln(\"hi\")\n" +
+		"+\tprintln(\"hello\")\n" +
+		" }\n" +
+		"*** End Patch\n"
+
+	h := &ApplyPatch{}
+	result, err := h.Execute(nil, map[string]any{
+		"patch":      patch,
+		"__work_dir": dir,
+	})
+	if err != nil {
+		t.Fatalf("begin-patch update failed: %v", err)
+	}
+	if !strings.Contains(result.Content, "Patched") {
+		t.Fatalf("unexpected result: %s", result.Content)
+	}
+	saved, _ := os.ReadFile(f)
+	if !strings.Contains(string(saved), `println("hello")`) {
+		t.Fatalf("content not updated: %q", string(saved))
+	}
+}
+
+func TestApplyBeginPatchAddDelete(t *testing.T) {
+	dir := t.TempDir()
+	old := filepath.Join(dir, "old.txt")
+	os.WriteFile(old, []byte("bye\n"), 0644)
+
+	patch := "*** Begin Patch\n" +
+		"*** Add File: new.txt\n" +
+		"+hello\n" +
+		"*** Delete File: old.txt\n" +
+		"*** End Patch\n"
+
+	h := &ApplyPatch{}
+	if _, err := h.Execute(nil, map[string]any{"patch": patch, "__work_dir": dir}); err != nil {
+		t.Fatalf("add/delete failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "new.txt")); err != nil {
+		t.Fatalf("new.txt missing: %v", err)
+	}
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Fatal("old.txt should be deleted")
+	}
+}
+
+func TestApplyBeginPatchWhitespaceFuzzy(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "a.txt")
+	os.WriteFile(f, []byte("foo  bar\nbaz\n"), 0644)
+
+	patch := "*** Begin Patch\n*** Update File: a.txt\n@@\n-foo bar\n+foo qux\n baz\n*** End Patch\n"
+	h := &ApplyPatch{}
+	if _, err := h.Execute(nil, map[string]any{"patch": patch, "__work_dir": dir}); err != nil {
+		t.Fatalf("whitespace fuzzy begin-patch failed: %v", err)
+	}
+	saved, _ := os.ReadFile(f)
+	if string(saved) != "foo qux\nbaz\n" {
+		t.Fatalf("got %q", string(saved))
+	}
+}
+
+func TestApplyPatchErrorIncludesClosest(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "a.txt")
+	os.WriteFile(f, []byte("alpha\nbeta\ngamma\n"), 0644)
+
+	patch := "*** Begin Patch\n*** Update File: a.txt\n@@\n-betta\n+beta2\n*** End Patch\n"
+	h := &ApplyPatch{}
+	_, err := h.Execute(nil, map[string]any{"patch": patch, "__work_dir": dir})
+	if err == nil {
+		t.Fatal("expected mismatch error")
+	}
+	if !strings.Contains(err.Error(), "Closest region") && !strings.Contains(err.Error(), "cannot locate") {
+		t.Fatalf("expected helpful error, got: %v", err)
 	}
 }
 

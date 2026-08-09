@@ -25,7 +25,7 @@ Standard Git version control operations and best practices.
 
 1. Ensure you are on the correct branch: `git branch --show-current`
 2. Pull latest changes: `git pull --rebase` (or `git fetch && git rebase origin/main`)
-3. Make changes using the available file tools (`read_file`, `edit`, `write`)
+3. Make changes using the available file tools (`read_file`, `apply_patch`, `edit`, `write`)
 4. Stage changes: `git add <files>`
 5. Commit with a descriptive message: use `scripts/commit.sh` for standard format
 

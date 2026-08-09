@@ -188,6 +188,167 @@ func checkDisproportionateMatch(content, oldStr string) error {
 	return nil
 }
 
+type closestMatch struct {
+	startLine int // 1-based
+	endLine   int
+	snippet   string
+	score     float64 // 0..1, higher is closer
+}
+
+// findClosestContentMatches finds windows in content that most resemble oldStr.
+// Used only for actionable edit error messages (does not change match behavior).
+func findClosestContentMatches(content, oldStr string, maxCandidates int) []closestMatch {
+	if maxCandidates <= 0 {
+		maxCandidates = 2
+	}
+	oldLines := splitLines(oldStr)
+	if len(oldLines) == 0 {
+		return nil
+	}
+	contentLines := splitLines(content)
+	if len(contentLines) == 0 {
+		return nil
+	}
+
+	targetNorm := normalizeWhitespace(oldStr)
+	window := len(oldLines)
+	// Cap scan cost on huge files / huge oldString.
+	if window > 40 {
+		window = 40
+		oldLines = oldLines[:window]
+		targetNorm = normalizeWhitespace(strings.Join(oldLines, "\n"))
+	}
+	maxScan := len(contentLines)
+	if maxScan > 4000 {
+		maxScan = 4000
+	}
+
+	type cand struct {
+		m closestMatch
+	}
+	var best []cand
+	consider := func(start, size int) {
+		if start < 0 || size <= 0 || start+size > len(contentLines) || start >= maxScan {
+			return
+		}
+		snippetLines := contentLines[start : start+size]
+		snippet := strings.Join(snippetLines, "\n")
+		norm := normalizeWhitespace(snippet)
+		if norm == "" && targetNorm == "" {
+			return
+		}
+		dist := levenshtein(norm, targetNorm)
+		denom := len(norm)
+		if len(targetNorm) > denom {
+			denom = len(targetNorm)
+		}
+		if denom == 0 {
+			return
+		}
+		score := 1.0 - float64(dist)/float64(denom)
+		if score < 0.35 {
+			return
+		}
+		m := closestMatch{
+			startLine: start + 1,
+			endLine:   start + size,
+			snippet:   snippet,
+			score:     score,
+		}
+		best = append(best, cand{m: m})
+	}
+
+	for i := 0; i <= len(contentLines)-window && i < maxScan; i++ {
+		consider(i, window)
+	}
+	// Also try ±1 line windows when multi-line — models often drop/add a context line.
+	if window > 1 {
+		for i := 0; i <= len(contentLines)-(window-1) && i < maxScan; i++ {
+			consider(i, window-1)
+		}
+	}
+	if window+1 <= len(contentLines) {
+		for i := 0; i <= len(contentLines)-(window+1) && i < maxScan; i++ {
+			consider(i, window+1)
+		}
+	}
+
+	sort.Slice(best, func(i, j int) bool {
+		if best[i].m.score != best[j].m.score {
+			return best[i].m.score > best[j].m.score
+		}
+		return best[i].m.startLine < best[j].m.startLine
+	})
+
+	// Dedup overlapping windows; keep highest score.
+	out := make([]closestMatch, 0, maxCandidates)
+	for _, c := range best {
+		overlap := false
+		for _, kept := range out {
+			if c.m.startLine <= kept.endLine && c.m.endLine >= kept.startLine {
+				overlap = true
+				break
+			}
+		}
+		if overlap {
+			continue
+		}
+		out = append(out, c.m)
+		if len(out) >= maxCandidates {
+			break
+		}
+	}
+	return out
+}
+
+func looksLikeLineNumberPrefix(s string) bool {
+	lines := strings.Split(s, "\n")
+	prefixed := 0
+	checked := 0
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		checked++
+		i := 0
+		for i < len(line) && line[i] >= '0' && line[i] <= '9' {
+			i++
+		}
+		if i > 0 && i < len(line) && (line[i] == ':' || line[i] == '|') {
+			prefixed++
+		}
+		if checked >= 3 {
+			break
+		}
+	}
+	return checked > 0 && prefixed == checked
+}
+
+func formatEditNotFoundError(relPath, content, oldStr string) error {
+	var b strings.Builder
+	fmt.Fprintf(&b, "oldString not found in %q after exact and fuzzy matching.\n", relPath)
+
+	if looksLikeLineNumberPrefix(oldStr) {
+		b.WriteString("\nHint: oldString looks like it includes read_file line-number prefixes (e.g. \"12: \"). Those are NOT part of the file — strip them and retry.\n")
+	}
+
+	matches := findClosestContentMatches(content, oldStr, 2)
+	if len(matches) > 0 {
+		b.WriteString("\nClosest match(es) in the current file — compare carefully and retry with exact text from the file:\n")
+		for i, m := range matches {
+			fmt.Fprintf(&b, "\n[%d] lines %d-%d (similarity %.0f%%):\n", i+1, m.startLine, m.endLine, m.score*100)
+			for j, line := range strings.Split(m.snippet, "\n") {
+				fmt.Fprintf(&b, "%d| %s\n", m.startLine+j, truncateLine(line, 200))
+			}
+		}
+	} else {
+		b.WriteString("\nNo close match found. Re-read the file with read_file and copy oldString from the current contents.\n")
+	}
+
+	b.WriteString("\nTips: preserve exact indentation/whitespace; if the file changed, read_file again; for multi-hunk or multi-file edits prefer apply_patch.")
+	return fmt.Errorf("%s", b.String())
+}
+
 func splitLines(content string) []string {
 	lines := strings.Split(content, "\n")
 	if len(lines) > 0 && lines[len(lines)-1] == "" {

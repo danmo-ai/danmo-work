@@ -32,13 +32,13 @@ func (h *Edit) Schema() domain.ToolSchema {
 		Name: "edit",
 		Description: "Performs exact string replacements in an existing file.\n\n" +
 			"**Important**: All paths are relative to the project root directory. Use relative paths like 'src/main.go' instead of absolute paths.\n\n" +
-			"- You MUST use read_file first -- the edit will fail if you haven't read the file in this turn.\n" +
-			"- When editing text from read_file output, ensure you preserve the exact indentation (tabs/spaces) as it appears in the file.\n" +
-			"- oldString must match the file content, including all whitespace and indentation. The line number prefix from read_file (e.g., '1: ') is NOT part of the file content.\n" +
-			"- If exact matching fails, the tool will automatically try fuzzy matching: stripping leading whitespace, then normalizing all whitespace.\n" +
+			"- You MUST use read_file first on this exact path -- the edit will fail if you haven't read it in this turn.\n" +
+			"- When editing text from read_file output, preserve exact indentation (tabs/spaces). The line number prefix from read_file (e.g., '1: ') is NOT part of the file content.\n" +
+			"- oldString must match the file content. If exact matching fails, fuzzy matching tries indent-strip then whitespace normalize.\n" +
+			"- On failure, the error includes the closest matching file region — copy exact text from that hint (or re-read) and retry.\n" +
 			"- newString must be different from oldString.\n" +
 			"- Use replaceAll for replacing and renaming strings across the file.\n" +
-			"- For multi-hunk or multi-file edits, prefer apply_patch instead.\n" +
+			"- For multi-hunk or multi-file edits, prefer apply_patch (begin-patch) instead of many edit calls.\n" +
 			"- The result includes a unified diff showing what was changed.",
 		Parameters: map[string]any{
 			"type": "object",
@@ -100,7 +100,11 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 
 	if matchErr != nil {
 		if strings.Contains(matchErr.Error(), "not found") {
-			return domain.ToolResult{}, fmt.Errorf("oldString not found in %q after exact and fuzzy matching", relPath)
+			return domain.ToolResult{}, formatEditNotFoundError(relPath, content, oldStr)
+		}
+		// Multiple matches: keep the original error but add a short next-step hint.
+		if strings.Contains(matchErr.Error(), "occurrences of oldString") {
+			return domain.ToolResult{}, fmt.Errorf("%w. Tip: widen oldString with surrounding unique context, or set replaceAll=true", matchErr)
 		}
 		return domain.ToolResult{}, matchErr
 	}

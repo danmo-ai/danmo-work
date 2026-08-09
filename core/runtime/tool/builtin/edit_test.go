@@ -223,3 +223,56 @@ func TestEditMultipleExactMatches(t *testing.T) {
 		t.Errorf("expected replaceAll hint, got: %v", err)
 	}
 }
+
+func TestEditNotFoundIncludesClosestMatch(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "story.md")
+	content := "chapter one\nthe hero walked home\nend\n"
+	os.WriteFile(f, []byte(content), 0644)
+
+	ft := setupTracker(dir)
+	ft.NoteRead(f)
+
+	h := &Edit{}
+	// Near-miss that fails exact/indent/whitespace matchers but is still close enough for hints.
+	_, err := h.Execute(nil, map[string]any{
+		"path":           f,
+		"oldString":      "the hero walked away slowly",
+		"newString":      "the hero ran home",
+		"__work_dir":     dir,
+		"__file_tracker": ft,
+	})
+	if err == nil {
+		t.Fatal("expected not-found error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "Closest match") && !strings.Contains(msg, "No close match") {
+		t.Fatalf("expected closest-match guidance, got: %v", err)
+	}
+	if !strings.Contains(msg, "Tips:") {
+		t.Fatalf("expected tips in error, got: %v", err)
+	}
+}
+
+func TestEditNotFoundLineNumberPrefixHint(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "a.txt")
+	os.WriteFile(f, []byte("hello world\n"), 0644)
+	ft := setupTracker(dir)
+	ft.NoteRead(f)
+
+	h := &Edit{}
+	_, err := h.Execute(nil, map[string]any{
+		"path":           f,
+		"oldString":      "1: hello world",
+		"newString":      "1: hello there",
+		"__work_dir":     dir,
+		"__file_tracker": ft,
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "line-number prefixes") {
+		t.Fatalf("expected line-number hint, got: %v", err)
+	}
+}

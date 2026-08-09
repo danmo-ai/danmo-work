@@ -23,6 +23,27 @@ func TestBuiltinAgentsDoNotBindCoreTools(t *testing.T) {
 	}
 }
 
+func TestBuiltinAgentsEditImpliesApplyPatch(t *testing.T) {
+	templates, err := LoadTemplates()
+	if err != nil {
+		t.Fatalf("LoadTemplates: %v", err)
+	}
+	for _, tmpl := range templates {
+		hasEdit, hasPatch := false, false
+		for _, b := range tmpl.Agent.Tools {
+			switch b.ToolID {
+			case "edit":
+				hasEdit = true
+			case "apply_patch":
+				hasPatch = true
+			}
+		}
+		if hasEdit && !hasPatch {
+			t.Errorf("agent %q binds edit without apply_patch", tmpl.Agent.ID)
+		}
+	}
+}
+
 func TestBuiltinNovelExpertAggregatesSkillAndCraftKB(t *testing.T) {
 	templates, err := LoadTemplates()
 	if err != nil {
@@ -57,7 +78,7 @@ func TestBuiltinNovelExpertAggregatesSkillAndCraftKB(t *testing.T) {
 		t.Fatalf("novel knowledge=%v, want [%s]", novel.Agent.KnowledgeIDs, NovelCraftKnowledgeBaseID)
 	}
 	need := map[string]bool{
-		"read_file": false, "write": false, "edit": false,
+		"read_file": false, "write": false, "edit": false, "apply_patch": false,
 		"web_search": false, "todowrite": false,
 	}
 	for _, b := range novel.Agent.Tools {
