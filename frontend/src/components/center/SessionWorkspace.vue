@@ -503,16 +503,20 @@ const turnMap = computed(() => {
     }
     if (ev.type === 'turn.ended' || ev.type === 'turn.failed') {
       const payload = asRecord(ev.payload)
+      // Runtime publishes TurnEndedPayload.status on both turn.ended and turn.failed.
       map[turnId].status = String(payload?.status ?? '')
       // Historical gap: cancel could drop tool.error from DB; close open cards.
       const openCards = turnToolCards[turnId]
       if (openCards) {
-        const failed = ev.type === 'turn.failed'
-        const kind = String(payload?.kind ?? '')
+        const endedAsCancelled = map[turnId].status === 'cancelled'
         for (const card of Object.values(openCards)) {
           if (card.status === 'running' || card.status === 'pending') {
-            card.status = failed || kind === 'cancelled' ? 'cancelled' : 'error'
-            if (!card.error) card.error = failed ? String(payload?.message ?? 'cancelled') : 'interrupted'
+            card.status = endedAsCancelled ? 'cancelled' : 'error'
+            if (!card.error) {
+              card.error = endedAsCancelled
+                ? String(payload?.summary ?? 'cancelled')
+                : 'interrupted'
+            }
           }
         }
       }
@@ -580,6 +584,16 @@ const turnMap = computed(() => {
           map[parentTurnId].childTurnIds.push(childTurnId)
         }
       }
+    }
+  }
+
+  // Durable turn status from the run/DB wins when the stream left status empty
+  // or still "running" (legacy turn.failed payloads omitted status on cancel).
+  for (const row of sessions.turns) {
+    const turn = map[row.id]
+    if (!turn || !row.status || row.status === 'running') continue
+    if (!turn.status || turn.status === 'running') {
+      turn.status = row.status
     }
   }
 

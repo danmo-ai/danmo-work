@@ -431,7 +431,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			}
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepEnded, domain.StepPayload{Step: step})
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventTurnFailed, domain.TurnEndedPayload{
-				TurnID: tctx.TurnID, Status: "failed", Summary: doomSummary,
+				TurnID: tctx.TurnID, Status: string(domain.TurnFailed), Summary: doomSummary,
 			})
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventError, domain.ErrorPayload{
 				Message: doomSummary, Kind: "doom_loop",

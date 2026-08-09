@@ -103,17 +103,17 @@ export function countFoldableProcessEvents(events: StreamEvent[]): number {
   return events.length - filterCollapsedTimelineEvents(events).length
 }
 
-/** True when the turn has finished — process should fold by default. */
+/** True when the turn has finished — process/body should fold by default. */
 export function isTurnSettled(turn: Pick<StreamTurn, 'status'>): boolean {
   const s = turn.status
-  // turn.ended copies report status: successful turns emit "done" (not "completed").
+  // turn.ended uses report status ("done"); turn.failed / DB use completed|failed|cancelled|timeout.
   return s === 'completed' || s === 'done' || s === 'failed' || s === 'cancelled' || s === 'timeout'
 }
 
 /**
  * Two independent folds:
  * - process: mid-turn tools/thinking/etc. (default on after turn settles)
- * - body: entire turn (user + timeline); header toggle only; default expanded
+ * - body: entire turn (user + timeline); header toggle; default collapsed after settle
  */
 export function useTurnCollapse(getTurns: () => StreamTurn[]) {
   const processCollapseOverrides = ref(new Map<string, boolean>())
@@ -127,6 +127,11 @@ export function useTurnCollapse(getTurns: () => StreamTurn[]) {
   function defaultProcessCollapsed(turn: StreamTurn): boolean {
     // While running (or status unknown), keep the full process open.
     // After the turn ends, fold intermediate process — final answer stays visible.
+    return isTurnSettled(turn)
+  }
+
+  function defaultBodyCollapsed(turn: StreamTurn): boolean {
+    // Running turns stay open; finished turns fold the whole body by default.
     return isTurnSettled(turn)
   }
 
@@ -154,7 +159,13 @@ export function useTurnCollapse(getTurns: () => StreamTurn[]) {
   }
 
   function isTurnBodyCollapsed(turnId: string): boolean {
-    return bodyCollapseOverrides.value.get(turnId) === true
+    const override = bodyCollapseOverrides.value.get(turnId)
+    if (override !== undefined) return override
+
+    const turns = getTurns()
+    const idx = turns.findIndex((t) => t.id === turnId)
+    if (idx === -1) return false
+    return defaultBodyCollapsed(turns[idx])
   }
 
   function toggleTurnBodyCollapse(turnId: string) {

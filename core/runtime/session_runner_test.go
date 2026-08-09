@@ -682,10 +682,17 @@ func TestCancelTurnEagerlyClearsRunningStatus(t *testing.T) {
 			Status:    domain.TurnRunning,
 			Goal:      "stuck",
 		},
+		"turn-child": {
+			ID:        "turn-child",
+			SessionID: "session-1",
+			Status:    domain.TurnRunning,
+			Goal:      "delegate",
+		},
 	}}
+	stream := &memStream{}
 	engine := &Engine{
 		turns:  service.NewTurnManager(repo),
-		stream: noopStream{},
+		stream: stream,
 		cancel: map[string]context.CancelFunc{},
 	}
 	// Register a cancel func as if the turn goroutine is alive in this process.
@@ -705,7 +712,32 @@ func TestCancelTurnEagerlyClearsRunningStatus(t *testing.T) {
 	if got.Status != domain.TurnCancelled {
 		t.Fatalf("expected cancelled after CancelTurn, got %s", got.Status)
 	}
+	child, err := repo.Get(context.Background(), "turn-child")
+	if err != nil {
+		t.Fatalf("get child: %v", err)
+	}
+	if child.Status != domain.TurnCancelled {
+		t.Fatalf("expected child cancelled after CancelTurn, got %s", child.Status)
+	}
 	if id := engine.ActiveTurnID("session-1"); id != "" {
 		t.Fatalf("expected activeTurns cleared after CancelTurn, still %q", id)
+	}
+
+	saw := map[string]string{}
+	for _, ev := range stream.ListSince("session-1", 0) {
+		if ev.Type != domain.EventTurnFailed {
+			continue
+		}
+		var p domain.TurnEndedPayload
+		if err := json.Unmarshal(ev.Payload, &p); err != nil {
+			t.Fatalf("decode turn.failed: %v", err)
+		}
+		saw[ev.TurnID] = p.Status
+	}
+	if saw["turn-1"] != string(domain.TurnCancelled) {
+		t.Fatalf("turn-1 stream status: want cancelled, got %q (events=%v)", saw["turn-1"], saw)
+	}
+	if saw["turn-child"] != string(domain.TurnCancelled) {
+		t.Fatalf("turn-child stream status: want cancelled, got %q (events=%v)", saw["turn-child"], saw)
 	}
 }

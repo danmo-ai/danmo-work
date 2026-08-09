@@ -399,9 +399,7 @@ func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments
 	turnID := newRuntimeID("turn")
 	atts := append([]domain.UserAttachment(nil), attachments...)
 	if err := e.reserveSessionTurn(s.ID, turnID); err != nil {
-		e.stream.Publish(ctx, s.ID, turnID, domain.EventTurnFailed, domain.ErrorPayload{
-			Message: err.Error(), Kind: "conflict",
-		})
+		e.publishTurnFailed(ctx, s.ID, turnID, domain.TurnFailed, err.Error())
 		return
 	}
 	go func() {
@@ -419,7 +417,7 @@ func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments
 
 		agent, err := e.agents.Get(ctx, s.AgentID)
 		if err != nil {
-			e.stream.Publish(ctx, s.ID, "", domain.EventTurnFailed, map[string]string{"error": err.Error()})
+			e.publishTurnFailed(ctx, s.ID, turnID, domain.TurnFailed, err.Error())
 			return
 		}
 		agentPtr := *agent
@@ -510,9 +508,7 @@ func (e *Engine) CancelTurn(ctx context.Context, turnID string) {
 			c()
 		}
 		_ = e.turns.UpdateStatus(bg, other.ID, domain.TurnCancelled)
-		e.stream.Publish(bg, t.SessionID, other.ID, domain.EventTurnFailed, domain.ErrorPayload{
-			Message: "cancelled", Kind: "cancelled",
-		})
+		e.publishTurnFailed(bg, t.SessionID, other.ID, domain.TurnCancelled, "cancelled")
 		// Do not wait for a stuck child goroutine to finishSessionTurn.
 		e.releaseSessionTurn(t.SessionID, other.ID)
 	}
@@ -523,9 +519,7 @@ func (e *Engine) CancelTurn(ctx context.Context, turnID string) {
 	// DB), the Composer stop button looked broken while status stayed "running".
 	if t.Status == domain.TurnRunning {
 		_ = e.turns.UpdateStatus(bg, turnID, domain.TurnCancelled)
-		e.stream.Publish(bg, t.SessionID, turnID, domain.EventTurnFailed, domain.ErrorPayload{
-			Message: "cancelled", Kind: "cancelled",
-		})
+		e.publishTurnFailed(bg, t.SessionID, turnID, domain.TurnCancelled, "cancelled")
 		e.updateSessionStatus(t.SessionID, domain.SessionStatusCompleted)
 	}
 	// Always clear the in-memory reservation. finishSessionTurn may never run if
@@ -751,9 +745,7 @@ func (e *Engine) RecoverRunning(ctx context.Context) {
 			}
 			_ = e.turnLog.CreateNested(t.ID, t.SessionID, "", t.AgentID, t.Goal)
 			e.turnLog.EndTurn(t.ID, domain.TurnFailed)
-			e.stream.Publish(context.Background(), t.SessionID, t.ID, domain.EventTurnFailed, domain.ErrorPayload{
-				Message: recoveryToolClosedReason, Kind: "turn",
-			})
+			e.publishTurnFailed(context.Background(), t.SessionID, t.ID, domain.TurnFailed, recoveryToolClosedReason)
 			continue
 		}
 
@@ -1091,9 +1083,7 @@ func (e *Engine) settleRecoveredDelegate(
 				_ = e.turnLog.CreateNested(childTurnID, sessionID, "", meta.agentID, "")
 				e.turnLog.EndTurn(childTurnID, domain.TurnFailed)
 			}
-			e.stream.Publish(ctx, sessionID, childTurnID, domain.EventTurnFailed, domain.ErrorPayload{
-				Message: recoveryToolClosedReason, Kind: "turn",
-			})
+			e.publishTurnFailed(ctx, sessionID, childTurnID, domain.TurnFailed, recoveryToolClosedReason)
 		}
 	}
 	if st.delegateCompleted[callID] {
@@ -1392,20 +1382,17 @@ func (e *Engine) afterTurn(sessionID, turnID, agentID string, rep domain.Report,
 		return
 	}
 	if err != nil {
-		kind := "turn"
-		msg := err.Error()
+		st := turnStatus(err, rep)
+		summary := err.Error()
 		sessionStatus := domain.SessionStatusFailed
-		if errors.Is(err, context.Canceled) {
-			kind = "cancelled"
-			msg = "cancelled"
+		if st == domain.TurnCancelled {
+			summary = "cancelled"
 			// Intentional interrupt is not a hard failure for the session.
 			sessionStatus = domain.SessionStatusCompleted
 		}
-		e.stream.Publish(context.Background(), sessionID, turnID, domain.EventTurnFailed, domain.ErrorPayload{
-			Message: msg, Kind: kind,
-		})
+		e.publishTurnFailed(context.Background(), sessionID, turnID, st, summary)
 		e.updateSessionStatus(sessionID, sessionStatus)
-		_ = e.turns.UpdateStatus(context.Background(), turnID, turnStatus(err, rep))
+		_ = e.turns.UpdateStatus(context.Background(), turnID, st)
 		return
 	}
 	e.updateSessionStatus(sessionID, domain.SessionStatusCompleted)
@@ -1625,18 +1612,20 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			// Parent cancel leaves ctx cancelled; persist/publish with Background
 			// so the child turn does not stay stuck as "running" in the UI.
 			bg := context.Background()
+			prevStatus := domain.TurnStatus("")
+			if cur, getErr := e.turns.Get(bg, childTurnID); getErr == nil {
+				prevStatus = cur.Status
+			}
 			_ = e.turns.UpdateStatus(bg, childTurnID, finalStatus)
 			status := string(finalStatus)
-			if err != nil {
-				kind := "turn"
-				msg := err.Error()
-				if errors.Is(err, context.Canceled) {
-					kind = "cancelled"
-					msg = "cancelled"
+			// CancelTurn already published turn.failed with status=cancelled for
+			// eager UI updates — do not emit a second terminal event.
+			if err != nil && prevStatus != domain.TurnCancelled {
+				summary := err.Error()
+				if finalStatus == domain.TurnCancelled {
+					summary = "cancelled"
 				}
-				e.stream.Publish(bg, sessionID, childTurnID, domain.EventTurnFailed, domain.ErrorPayload{
-					Message: msg, Kind: kind,
-				})
+				e.publishTurnFailed(bg, sessionID, childTurnID, finalStatus, summary)
 			}
 			e.stream.Publish(bg, sessionID, parentTurnID, domain.EventDelegateCompleted, domain.DelegateCompletedPayload{
 				AgentID: workerAgent.ID, Status: status, Summary: rep.Summary,
@@ -1899,4 +1888,18 @@ func turnStatus(err error, rep domain.Report) domain.TurnStatus {
 	default:
 		return domain.TurnCompleted
 	}
+}
+
+// publishTurnFailed emits turn.failed with TurnEndedPayload so clients can
+// read the durable turn status without inferring from ErrorPayload kind/message.
+func (e *Engine) publishTurnFailed(ctx context.Context, sessionID, turnID string, status domain.TurnStatus, summary string) {
+	if status == "" {
+		status = domain.TurnFailed
+	}
+	if summary == "" {
+		summary = string(status)
+	}
+	e.stream.Publish(ctx, sessionID, turnID, domain.EventTurnFailed, domain.TurnEndedPayload{
+		TurnID: turnID, Status: string(status), Summary: summary,
+	})
 }
