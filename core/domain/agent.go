@@ -75,6 +75,33 @@ func (a Agent) InheritsAmbient() bool {
 	return a.Mode != AgentModeSubagent
 }
 
+// PlanModeAllowedToolIDs is the built-in read-only tool whitelist used when
+// plan mode is enabled. In plan mode, the agent's available tools are the
+// intersection of its own tool bindings and this set.
+var PlanModeAllowedToolIDs = map[string]struct{}{
+	// Codebase exploration
+	"read_file": {},
+	"grep":      {},
+	"glob":      {},
+	// External research
+	"web_search": {},
+	"web_fetch":  {},
+	// Clarification / delegation (delegated sub-agents also inherit plan mode)
+	"ask_user":       {},
+	"delegate_agent": {},
+	// Skills / memory read
+	"read_skill":  {},
+	"memory_read": {},
+	// Knowledge base read
+	"search_kb":    {},
+	"list_kb_docs": {},
+	"get_kb_doc":   {},
+	// Table store read
+	"table_get":    {},
+	"table_query":  {},
+	"table_list":   {},
+}
+
 // coreToolIDs are engine-mounted for every agent (Core layer). Binding them in
 // tools[] is redundant and harmful: mountBuiltinTools would replace the wired
 // handlers with catalog stubs (e.g. ask_user with OnAsk=nil).

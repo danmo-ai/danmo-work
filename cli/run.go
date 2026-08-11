@@ -20,7 +20,7 @@ func runHeadless(args []string) int {
 
 	workdir := fs.String("workdir", "", "project working directory (required)")
 	goal := fs.String("goal", "", "task goal / instruction (required)")
-	agentID := fs.String("agent", "default", "agent id")
+	agentID := fs.String("agent", "team", "agent id")
 	modelID := fs.String("model", "", "model id as provider_name/model_name (or WORK_MODEL)")
 	timeoutStr := fs.String("timeout", "10m", "max wall time for the turn")
 	autoApprove := fs.Bool("auto-approve", true, "auto-approve tool permissions")

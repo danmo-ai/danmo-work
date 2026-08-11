@@ -11,12 +11,14 @@
 
 | Lens | Blocking if… |
 |------|----------------|
-| Structure / purpose | Chapter misses `purpose` or `must_happen` |
+| Structure / purpose | Chapter misses `purpose` or `beats` |
 | Character / OOC | Breaks desire/wound or knowledge boundary |
 | World / lore | Contradicts Canon rules without change request |
 | Tension / pacing | Dead air with no intentional蓄势; or hook missing |
 | Voice / style | Wrong POV or severe style break |
 | Reader / 爽点 | Broken reader promise for this beat (advisory unless catastrophic) |
+
+番茄向/免费网文书籍额外检查（ch1–3 blocking，之后 advisory）：开篇 3 句内有冲突、首章末必钩、合同 `pleasure_point` 与 `hook` 非空且正文兑现（KB 番茄平台）。
 
 Plus **anti-AI P0** from KB「去 AI 味」— always blocking.
 

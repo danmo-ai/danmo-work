@@ -422,8 +422,8 @@ func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments
 		}
 		agentPtr := *agent
 
-		reg, skills := e.setupRegistry(s, agentPtr)
-		rep, err := e.runTurn(turnCtx, s.ID, turnID, s.Content, s.ModelID, s.ProjectID, agentPtr, reg, skills, atts, nil)
+		reg, skills := e.setupRegistry(s, agentPtr, s.PlanMode)
+		rep, err := e.runTurn(turnCtx, s.ID, turnID, s.Content, s.ModelID, s.ProjectID, agentPtr, reg, skills, atts, nil, s.PlanMode)
 		e.turnLog.EndTurn(turnID, turnStatus(err, rep))
 	}()
 }
@@ -470,8 +470,8 @@ func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, m
 			cancel()
 		}()
 
-		reg, skills := e.setupRegistry(s, agentPtr)
-		rep, err := e.runTurn(turnCtx, sessionID, turnID, userInput, targetModelID, s.ProjectID, agentPtr, reg, skills, atts, extraSnap)
+		reg, skills := e.setupRegistry(s, agentPtr, s.PlanMode)
+		rep, err := e.runTurn(turnCtx, sessionID, turnID, userInput, targetModelID, s.ProjectID, agentPtr, reg, skills, atts, extraSnap, s.PlanMode)
 		e.turnLog.EndTurn(turnID, turnStatus(err, rep))
 	}()
 	return turnID, nil
@@ -583,7 +583,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 			goal = s.Content
 		}
 
-		reg, skills := e.setupRegistry(s, agentPtr)
+		reg, skills := e.setupRegistry(s, agentPtr, s.PlanMode)
 		runner := e.spawnTurnRunner(turnID, reg, skills, agentPtr.Tools)
 		e.stream.Publish(turnCtx, sessionID, turnID, domain.EventTurnStarted, domain.TurnStartedPayload{
 			TurnID: turnID, AgentID: agentPtr.ID, Goal: goal,
@@ -606,7 +606,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 			fileChanges = formatFileChanges(checkpoint.FileChanges)
 		}
 
-		sys := buildSystemPrompt(agentPtr.SystemPrompt, skills, e.delegatableAgents(agentPtr), agentPtr.CanDelegate, checkpointText, activeTodos, fileChanges, e.sandboxStatus())
+		sys := buildSystemPrompt(agentPtr.SystemPrompt, skills, e.delegatableAgents(agentPtr), agentPtr.CanDelegate, s.PlanMode, checkpointText, activeTodos, fileChanges, e.sandboxStatus())
 		messages := []Message{{Role: RoleSystem, Content: sys}}
 		if hits := e.knowledge.Search(agentPtr.KnowledgeIDs, goal, cfg.knowledgeSearchTopK); len(hits) > 0 {
 			content := ""
@@ -633,6 +633,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 			SessionID: sessionID, TurnID: turnID, Agent: agentPtr,
 			Model: s.ModelID, MaxSteps: agentPtr.Steps, WorkDir: workDir, ProjectID: s.ProjectID, Messages: messages,
 			Path: []domain.TurnPathEntry{{TurnID: turnID, AgentID: agentPtr.ID}},
+			PlanMode: s.PlanMode,
 		})
 
 		e.clearSessionTurnMessages(sessionID)
@@ -1117,15 +1118,15 @@ func (e *Engine) ListTurns(sessionID string) []domain.TurnLog {
 	return turns
 }
 
-func (e *Engine) setupRegistry(s domain.Session, agent domain.Agent) (*tool.Registry, []domain.Skill) {
+func (e *Engine) setupRegistry(s domain.Session, agent domain.Agent, planMode bool) (*tool.Registry, []domain.Skill) {
 	workDir := e.resolveWorkDir(context.Background(), s.ProjectID)
 	skills := e.resolveAgentSkills(agent, workDir)
 
 	var reg *tool.Registry
 	if agentHasDelegation(agent) {
-		reg = e.buildTeamRegistry(agent)
+		reg = e.buildTeamRegistry(agent, planMode)
 	} else {
-		reg = e.buildWorkerRegistry(agent)
+		reg = e.buildWorkerRegistry(agent, planMode)
 	}
 	return reg, skills
 }
@@ -1203,7 +1204,7 @@ func (e *Engine) setTurnFSSkills(skills []domain.Skill, files map[string][]domai
 	}
 }
 
-func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, projectID string, agent domain.Agent, reg *tool.Registry, skills []domain.Skill, attachments []domain.UserAttachment, extraSnapshotPaths []string) (domain.Report, error) {
+func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, projectID string, agent domain.Agent, reg *tool.Registry, skills []domain.Skill, attachments []domain.UserAttachment, extraSnapshotPaths []string, planMode bool) (domain.Report, error) {
 	cfg := e.loadRunCfg(ctx)
 
 	runner := e.spawnTurnRunner(turnID, reg, skills, agent.Tools)
@@ -1232,7 +1233,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		fileChanges = formatFileChanges(checkpoint.FileChanges)
 	}
 
-	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, checkpointText, activeTodos, fileChanges, e.sandboxStatus())
+	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, planMode, checkpointText, activeTodos, fileChanges, e.sandboxStatus())
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
 	}
@@ -1263,6 +1264,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		MaxSteps:  agent.Steps,
 		WorkDir:   workDir,
 		ProjectID: projectID,
+		PlanMode:  planMode,
 		Messages:  messages,
 		Path:      []domain.TurnPathEntry{{TurnID: turnID, AgentID: agent.ID}},
 		ClaimSteers: func() []Message {
@@ -1536,7 +1538,7 @@ func appendTurnPath(path []domain.TurnPathEntry, turnID, agentID string) []domai
 	return next
 }
 
-func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
+func (e *Engine) buildTeamRegistry(agent domain.Agent, planMode bool) *tool.Registry {
 	cfg := e.loadRunCfg(context.Background())
 	delegator := &builtin.DelegateAgent{
 		Stream: e.stream, Agents: e.agents,
@@ -1565,6 +1567,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 				SessionID: sessionID, TurnID: childTurnID,
 				Agent: workerAgent, Model: modelID, MaxSteps: workerAgent.Steps,
 				WorkDir: workDir, ProjectID: projectID, Path: childPath,
+				PlanMode: planMode,
 			}
 			e.stream.Publish(ctx, sessionID, parentTurnID, domain.EventDelegateStarted, domain.DelegateStartedPayload{
 				AgentID: workerAgent.ID, Goal: goal, ChildTurnID: childTurnID, CallID: callID,
@@ -1575,14 +1578,14 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 			skills := e.resolveAgentSkills(workerAgent, workDir)
 			var childReg *tool.Registry
 			if agentHasDelegation(workerAgent) {
-				childReg = e.buildTeamRegistry(workerAgent)
+				childReg = e.buildTeamRegistry(workerAgent, planMode)
 			} else {
-				childReg = e.buildWorkerRegistry(workerAgent)
+				childReg = e.buildWorkerRegistry(workerAgent, planMode)
 			}
 			childReg.Register(&builtin.ReadSkill{Skills: e.skills})
 			childRunner := e.spawnTurnRunner(childTurnID, childReg, skills, workerAgent.Tools)
 
-			sys := buildSystemPrompt(workerAgent.SystemPrompt, skills, nil, workerAgent.CanDelegate, "", "", "", e.sandboxStatus())
+			sys := buildSystemPrompt(workerAgent.SystemPrompt, skills, nil, workerAgent.CanDelegate, planMode, "", "", "", e.sandboxStatus())
 			messages := []Message{
 				{Role: RoleSystem, Content: sys},
 			}
@@ -1651,10 +1654,13 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent) *tool.Registry {
 	e.mountAlwaysOnBuiltins(reg)
 	e.mountBuiltinTools(reg, agent.Tools)
 	e.mountMCPForAgent(reg, agent)
+	if planMode {
+		reg.Filter(domain.PlanModeAllowedToolIDs)
+	}
 	return reg
 }
 
-func (e *Engine) buildWorkerRegistry(agent domain.Agent) *tool.Registry {
+func (e *Engine) buildWorkerRegistry(agent domain.Agent, planMode bool) *tool.Registry {
 	cfg := e.loadRunCfg(context.Background())
 	handlers := []tool.Handler{
 		&builtin.SearchKB{Knowledge: e.knowledge, KBIDs: agent.KnowledgeIDs},
@@ -1672,6 +1678,9 @@ func (e *Engine) buildWorkerRegistry(agent domain.Agent) *tool.Registry {
 	e.mountAlwaysOnBuiltins(reg)
 	e.mountBuiltinTools(reg, agent.Tools)
 	e.mountMCPForAgent(reg, agent)
+	if planMode {
+		reg.Filter(domain.PlanModeAllowedToolIDs)
+	}
 	return reg
 }
 
@@ -1845,13 +1854,13 @@ func (e *Engine) ResolveAskUser(askID, answer string) error {
 	}
 }
 
-func (e *Engine) buildTurnMessages(sessionID string, agent domain.Agent, goal string, checkpointText string) []Message {
+func (e *Engine) buildTurnMessages(sessionID string, agent domain.Agent, goal string, checkpointText string, planMode bool) []Message {
 	cfg := e.loadRunCfg(context.Background())
 	var skills []domain.Skill
 	if e.skills != nil {
 		skills = e.resolveAgentSkills(agent, e.dataDir)
 	}
-	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, checkpointText, "", "", e.sandboxStatus())
+	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, planMode, checkpointText, "", "", e.sandboxStatus())
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
 	}

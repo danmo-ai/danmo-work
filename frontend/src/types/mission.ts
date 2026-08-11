@@ -10,6 +10,7 @@ export interface Session {
   projectId?: string
   agentId?: string
   modelId?: string
+  planMode?: boolean
   content: string
   status: SessionStatus
   summary?: string
@@ -23,6 +24,7 @@ export interface UpdateSessionPayload {
   status?: SessionStatus
   modelId?: string
   agentId?: string
+  planMode?: boolean
 }
 
 export interface TurnLog {
@@ -38,6 +40,7 @@ export interface CreateSessionPayload {
   agentId?: string
   projectId?: string
   modelId?: string
+  planMode?: boolean
 }
 
 export interface SendMessagePayload {

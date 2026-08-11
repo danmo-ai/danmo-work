@@ -243,7 +243,7 @@ func TestBuildTurnMessages_IncludesPreviousTurnMessages(t *testing.T) {
 
 	sessionID := "session-1"
 
-	msgs1 := engine.buildTurnMessages(sessionID, agent, "hello turn 1", "")
+	msgs1 := engine.buildTurnMessages(sessionID, agent, "hello turn 1", "", false)
 	if len(msgs1) < 2 {
 		t.Fatalf("turn 1: expected at least 2 messages (system + user), got %d", len(msgs1))
 	}
@@ -259,7 +259,7 @@ func TestBuildTurnMessages_IncludesPreviousTurnMessages(t *testing.T) {
 	engine.turnMessages[sessionID] = append(engine.turnMessages[sessionID], msgs1...)
 	engine.mu.Unlock()
 
-	msgs2 := engine.buildTurnMessages(sessionID, agent, "hello turn 2", "")
+	msgs2 := engine.buildTurnMessages(sessionID, agent, "hello turn 2", "", false)
 
 	turn1UserFound := false
 	turn1SystemFound := false
@@ -299,7 +299,7 @@ func TestBuildTurnMessages_EmptyPreviousMessages(t *testing.T) {
 		KnowledgeIDs: []string{},
 	}
 
-	msgs := engine.buildTurnMessages("session-1", agent, "hello", "")
+	msgs := engine.buildTurnMessages("session-1", agent, "hello", "", false)
 
 	if len(msgs) < 2 {
 		t.Fatalf("expected at least 2 messages, got %d", len(msgs))
@@ -326,7 +326,7 @@ func TestBuildTurnMessages_CheckpointTextInSystemPrompt(t *testing.T) {
 	}
 
 	checkpoint := "Previous summary: completed task A"
-	msgs := engine.buildTurnMessages("session-1", agent, "continue", checkpoint)
+	msgs := engine.buildTurnMessages("session-1", agent, "continue", checkpoint, false)
 
 	if len(msgs) == 0 {
 		t.Fatal("expected at least 1 message")
@@ -362,12 +362,12 @@ func TestBuildTurnMessages_MessageOrder(t *testing.T) {
 		KnowledgeIDs: []string{},
 	}
 
-	turn1Msgs := engine.buildTurnMessages(sessionID, agent, "TURN-1-GOAL", "")
+	turn1Msgs := engine.buildTurnMessages(sessionID, agent, "TURN-1-GOAL", "", false)
 	engine.mu.Lock()
 	engine.turnMessages[sessionID] = append(engine.turnMessages[sessionID], turn1Msgs...)
 	engine.mu.Unlock()
 
-	turn2Msgs := engine.buildTurnMessages(sessionID, agent, "TURN-2-GOAL", "")
+	turn2Msgs := engine.buildTurnMessages(sessionID, agent, "TURN-2-GOAL", "", false)
 
 	lastUserIdx := -1
 	for i, msg := range turn2Msgs {

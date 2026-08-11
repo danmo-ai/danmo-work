@@ -20,7 +20,18 @@ After review PASS (and optional polish), before starting the next chapter.
 
 1. Ensure final text in `chapters/chNNN.md`.  
 2. Set `chapters/chNNN-contract.yaml` `status=reviewed`; `table_upsert` timeline_events, foreshadows, characters, resources, chapter_contracts mirror.  
-3. Append `continuity/chapter_summaries.md` (5–10 lines); update `continuity/foreshadow-tracker.md` / `decision-log.md` as needed.  
+3. Append `continuity/chapter_summaries.md` — fixed 5-line block per chapter:
+
+   ```markdown
+   ## chNNN {{title}}
+   - 事件: 一两句主干剧情
+   - 状态变化: 谁从X→Y（位置/伤势/资源/关系）
+   - 伏笔: FS-id plant/advance/payoff
+   - 钩子: 章末留下的具体悬念
+   - 下章指向: 接钩的第一拍
+   ```
+
+   Update `continuity/foreshadow-tracker.md` / `decision-log.md` as needed.  
 4. `memory_update` agent: `last_committed_ch`, rolling summary pointer; project if promise changed.  
 5. Update `novel-state.yaml` next chapter / stage.  
 6. Close fixed `continuity_issues`.

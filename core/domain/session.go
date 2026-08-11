@@ -17,6 +17,7 @@ type Session struct {
 	ProjectID string        `json:"projectId,omitempty"`
 	AgentID   string        `json:"agentId,omitempty"`
 	ModelID   string        `json:"modelId,omitempty"`
+	PlanMode  bool          `json:"planMode,omitempty"`
 	Content   string        `json:"content"`
 	Status    SessionStatus `json:"status"`
 	CreatedAt time.Time     `json:"createdAt"`
@@ -37,6 +38,7 @@ type CreateSessionRequest struct {
 	ProjectID   string           `json:"projectId,omitempty"`
 	ModelID     string           `json:"modelId,omitempty"`
 	Title       string           `json:"title,omitempty"`
+	PlanMode    bool             `json:"planMode,omitempty"`
 	// SkipAutoTitle disables the async LLM title generator (e.g. WeChat ingress).
 	SkipAutoTitle bool             `json:"skipAutoTitle,omitempty"`
 	Attachments   []UserAttachment `json:"attachments,omitempty"`
@@ -57,4 +59,5 @@ type UpdateSessionRequest struct {
 	Status    *SessionStatus `json:"status,omitempty"`
 	ModelID   *string        `json:"modelId,omitempty"`
 	AgentID   *string        `json:"agentId,omitempty"`
+	PlanMode  *bool          `json:"planMode,omitempty"`
 }

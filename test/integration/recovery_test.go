@@ -63,7 +63,7 @@ func TestRecoverRunningCleansZombieTurns(t *testing.T) {
 
 	w := postJSON(t, r1, "/api/v1/sessions", domain.CreateSessionRequest{
 		Content: "简单回复: 僵尸turn测试, 回答'完成'",
-		AgentID: agentDefault,
+		AgentID: agentTeam,
 		ModelID: modelID,
 	})
 	if w.Code != 201 {
@@ -79,7 +79,7 @@ func TestRecoverRunningCleansZombieTurns(t *testing.T) {
 	// Phase 2: manually inject a zombie turn (status=running) into DB.
 	zombieTurnID := "turn-zombie-001"
 	err := core1.Store.Turns().Create(ctx, domain.TurnLog{
-		ID: zombieTurnID, SessionID: s.ID, AgentID: agentDefault,
+		ID: zombieTurnID, SessionID: s.ID, AgentID: agentTeam,
 		Goal: "zombie goal", Status: domain.TurnRunning,
 	})
 	if err != nil {
@@ -161,7 +161,7 @@ func TestCheckpointRecoveryFromDisk(t *testing.T) {
 
 	w := postJSON(t, r1, "/api/v1/sessions", domain.CreateSessionRequest{
 		Content: "简单回复: checkpoint测试, 回答'完成'",
-		AgentID: agentDefault,
+		AgentID: agentTeam,
 		ModelID: modelID,
 	})
 	if w.Code != 201 {
@@ -251,7 +251,7 @@ func TestCancelSetsCorrectDBStatus(t *testing.T) {
 
 	w := postJSON(t, r, "/api/v1/sessions", domain.CreateSessionRequest{
 		Content: "简单回复: 取消状态测试第一轮, 回答'完成'",
-		AgentID: agentDefault,
+		AgentID: agentTeam,
 		ModelID: modelID,
 	})
 	if w.Code != 201 {
@@ -322,7 +322,7 @@ func TestInterruptThenResumeRecovers(t *testing.T) {
 
 	w := postJSON(t, r, "/api/v1/sessions", domain.CreateSessionRequest{
 		Content: "简单回复: 中断恢复测试, 回答'初始完成'",
-		AgentID: agentDefault,
+		AgentID: agentTeam,
 		ModelID: modelID,
 	})
 	if w.Code != 201 {
@@ -400,7 +400,7 @@ func TestRecoverRunningAutoResumesFromToolPairs(t *testing.T) {
 
 	w := postJSON(t, r1, "/api/v1/sessions", domain.CreateSessionRequest{
 		Content: "简单回复: 自动恢复准备, 回答'准备完成'",
-		AgentID: agentDefault,
+		AgentID: agentTeam,
 		ModelID: modelID,
 	})
 	if w.Code != 201 {
@@ -415,7 +415,7 @@ func TestRecoverRunningAutoResumesFromToolPairs(t *testing.T) {
 
 	zombieTurnID := "turn-resume-001"
 	projectID := s.ProjectID
-	if err := core1.TurnLogs.Create(zombieTurnID, s.ID, projectID, agentDefault, "简单回复: 自动恢复测试, 回答'恢复完成'"); err != nil {
+	if err := core1.TurnLogs.Create(zombieTurnID, s.ID, projectID, agentTeam, "简单回复: 自动恢复测试, 回答'恢复完成'"); err != nil {
 		t.Fatalf("create turn log: %v", err)
 	}
 	core1.TurnLogs.Append(zombieTurnID, "user", map[string]any{"content": "简单回复: 自动恢复测试, 回答'恢复完成'"})
@@ -429,7 +429,7 @@ func TestRecoverRunningAutoResumesFromToolPairs(t *testing.T) {
 	})
 
 	if err := core1.Store.Turns().Create(ctx, domain.TurnLog{
-		ID: zombieTurnID, SessionID: s.ID, AgentID: agentDefault,
+		ID: zombieTurnID, SessionID: s.ID, AgentID: agentTeam,
 		Goal: "简单回复: 自动恢复测试, 回答'恢复完成'", Status: domain.TurnRunning,
 	}); err != nil {
 		t.Fatalf("insert zombie turn: %v", err)
@@ -543,7 +543,7 @@ func TestRecoverRunningMidApprovalKeepsPriorPairs(t *testing.T) {
 
 	w := postJSON(t, r1, "/api/v1/sessions", domain.CreateSessionRequest{
 		Content: "简单回复: mid-approval准备, 回答'准备完成'",
-		AgentID: agentDefault,
+		AgentID: agentTeam,
 		ModelID: modelID,
 	})
 	if w.Code != 201 {
@@ -557,7 +557,7 @@ func TestRecoverRunningMidApprovalKeepsPriorPairs(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 
 	zombieTurnID := "turn-mid-appr-001"
-	if err := core1.TurnLogs.Create(zombieTurnID, s.ID, s.ProjectID, agentDefault, "简单回复: mid-approval恢复, 回答'恢复完成'"); err != nil {
+	if err := core1.TurnLogs.Create(zombieTurnID, s.ID, s.ProjectID, agentTeam, "简单回复: mid-approval恢复, 回答'恢复完成'"); err != nil {
 		t.Fatalf("create turn log: %v", err)
 	}
 	// Prior successful pair only — mid-approval never logs tool_call.
@@ -588,7 +588,7 @@ func TestRecoverRunningMidApprovalKeepsPriorPairs(t *testing.T) {
 	}
 
 	if err := core1.Store.Turns().Create(ctx, domain.TurnLog{
-		ID: zombieTurnID, SessionID: s.ID, AgentID: agentDefault,
+		ID: zombieTurnID, SessionID: s.ID, AgentID: agentTeam,
 		Goal: goal, Status: domain.TurnRunning,
 	}); err != nil {
 		t.Fatalf("insert zombie: %v", err)
@@ -684,7 +684,7 @@ func TestRecoverRunningClosesIncompleteDelegate(t *testing.T) {
 
 	w := postJSON(t, r1, "/api/v1/sessions", domain.CreateSessionRequest{
 		Content: "简单回复: 委派恢复准备, 回答'准备完成'",
-		AgentID: agentDefault,
+		AgentID: agentTeam,
 		ModelID: modelID,
 	})
 	if w.Code != 201 {
@@ -700,7 +700,7 @@ func TestRecoverRunningClosesIncompleteDelegate(t *testing.T) {
 	parentTurnID := "turn-dlg-parent-001"
 	childTurnID := "turn-dlg-child-001"
 	goal := "简单回复: 委派恢复测试, 回答'恢复完成'"
-	if err := core1.TurnLogs.Create(parentTurnID, s.ID, s.ProjectID, agentDefault, goal); err != nil {
+	if err := core1.TurnLogs.Create(parentTurnID, s.ID, s.ProjectID, agentTeam, goal); err != nil {
 		t.Fatalf("create parent log: %v", err)
 	}
 	core1.TurnLogs.Append(parentTurnID, "user", map[string]any{"content": goal})
@@ -719,7 +719,7 @@ func TestRecoverRunningClosesIncompleteDelegate(t *testing.T) {
 	core1.TurnLogs.Append(childTurnID, "user", map[string]any{"content": "gather facts"})
 
 	if err := core1.Store.Turns().Create(ctx, domain.TurnLog{
-		ID: parentTurnID, SessionID: s.ID, AgentID: agentDefault,
+		ID: parentTurnID, SessionID: s.ID, AgentID: agentTeam,
 		Goal: goal, Status: domain.TurnRunning,
 	}); err != nil {
 		t.Fatalf("insert parent: %v", err)
@@ -831,11 +831,11 @@ func TestListByStatusQueries(t *testing.T) {
 
 	// Insert turns with different statuses.
 	turns := []domain.TurnLog{
-		{ID: "t-running-1", SessionID: "s1", AgentID: agentDefault, Goal: "g1", Status: domain.TurnRunning},
-		{ID: "t-running-2", SessionID: "s1", AgentID: agentDefault, Goal: "g2", Status: domain.TurnRunning},
-		{ID: "t-completed-1", SessionID: "s1", AgentID: agentDefault, Goal: "g3", Status: domain.TurnCompleted},
-		{ID: "t-failed-1", SessionID: "s1", AgentID: agentDefault, Goal: "g4", Status: domain.TurnFailed},
-		{ID: "t-cancelled-1", SessionID: "s1", AgentID: agentDefault, Goal: "g5", Status: domain.TurnCancelled},
+		{ID: "t-running-1", SessionID: "s1", AgentID: agentTeam, Goal: "g1", Status: domain.TurnRunning},
+		{ID: "t-running-2", SessionID: "s1", AgentID: agentTeam, Goal: "g2", Status: domain.TurnRunning},
+		{ID: "t-completed-1", SessionID: "s1", AgentID: agentTeam, Goal: "g3", Status: domain.TurnCompleted},
+		{ID: "t-failed-1", SessionID: "s1", AgentID: agentTeam, Goal: "g4", Status: domain.TurnFailed},
+		{ID: "t-cancelled-1", SessionID: "s1", AgentID: agentTeam, Goal: "g5", Status: domain.TurnCancelled},
 	}
 	for _, tl := range turns {
 		if err := core.Store.Turns().Create(ctx, tl); err != nil {
@@ -896,7 +896,7 @@ func TestSessionHistorySurvivesRestartFromTurnLog(t *testing.T) {
 
 	w := postJSON(t, r1, "/api/v1/sessions", domain.CreateSessionRequest{
 		Content: "简单回复: 历史种子, 回答'种子完成'",
-		AgentID: agentDefault,
+		AgentID: agentTeam,
 		ModelID: modelID,
 	})
 	if w.Code != 201 {
@@ -911,14 +911,14 @@ func TestSessionHistorySurvivesRestartFromTurnLog(t *testing.T) {
 
 	// Simulate a completed prior turn written in the new LLM-message format.
 	histTurn := "turn-hist-001"
-	if err := core1.TurnLogs.Create(histTurn, s.ID, s.ProjectID, agentDefault, "查深圳天气"); err != nil {
+	if err := core1.TurnLogs.Create(histTurn, s.ID, s.ProjectID, agentTeam, "查深圳天气"); err != nil {
 		t.Fatalf("create hist turn log: %v", err)
 	}
 	core1.TurnLogs.Append(histTurn, "user", map[string]any{"content": "查深圳天气"})
 	core1.TurnLogs.Append(histTurn, "assistant", map[string]any{"content": "深圳今天 29°C，有烟霾"})
 	core1.TurnLogs.EndTurn(histTurn, domain.TurnCompleted)
 	_ = core1.Store.Turns().Create(ctx, domain.TurnLog{
-		ID: histTurn, SessionID: s.ID, AgentID: agentDefault,
+		ID: histTurn, SessionID: s.ID, AgentID: agentTeam,
 		Goal: "查深圳天气", Status: domain.TurnCompleted,
 	})
 
@@ -952,7 +952,7 @@ func TestSessionHistorySurvivesRestartFromTurnLog(t *testing.T) {
 	r2 := newRouter(t, core2)
 	w2 := postJSON(t, r2, "/api/v1/sessions/"+s.ID+"/turns", domain.SendMessageRequest{
 		UserInput: "把刚才的天气做成网页",
-		AgentID:   agentDefault,
+		AgentID:   agentTeam,
 		ModelID:   modelID,
 	})
 	if w2.Code != 200 && w2.Code != 201 && w2.Code != 202 {

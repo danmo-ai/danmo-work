@@ -15,8 +15,8 @@ If you write a context note, list **source paths/ids** only; do not fork Canon i
 ## Draft
 
 - `write` `novel/<book-id>/chapters/chNNN.md` (zero-pad to 3+ digits).  
-- Honor `must_happen` / `must_not_happen` and POV knowledge boundary.  
-- End on `hook_out` (event, not chicken-soup).  
+- Honor `beats` / `forbidden` and POV knowledge boundary.  
+- Land `pleasure_point`; end on `hook.out` (event, not chicken-soup). Respect `word_target` (番茄 2000–3500 unless user says otherwise).
 - Modes: **full** (default) / **fast** (shorter, still contracted) — only if user asks.
 
 ## After draft

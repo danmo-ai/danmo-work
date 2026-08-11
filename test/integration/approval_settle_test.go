@@ -36,7 +36,7 @@ func TestCancelDuringApprovalSettlesApproval(t *testing.T) {
 
 	w := postJSON(t, r, "/api/v1/sessions", domain.CreateSessionRequest{
 		Content: "审批挂起后取消 turn",
-		AgentID: agentDefault,
+		AgentID: agentTeam,
 		ModelID: mockModelID,
 	})
 	if w.Code != 201 {

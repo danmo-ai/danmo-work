@@ -450,7 +450,7 @@ func TestFormatActiveTodosAndSystemPrompt(t *testing.T) {
 		t.Fatalf("formatActiveTodos=%q", block)
 	}
 
-	sys := buildSystemPrompt("persona", nil, nil, false, `{"summary":"x"}`, block, "", domain.SandboxStatus{})
+	sys := buildSystemPrompt("persona", nil, nil, false, false, `{"summary":"x"}`, block, "", domain.SandboxStatus{})
 	if !contains(sys, "<compaction-checkpoint>") {
 		t.Error("expected compaction-checkpoint")
 	}

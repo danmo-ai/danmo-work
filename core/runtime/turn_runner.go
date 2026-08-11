@@ -153,6 +153,9 @@ type TurnContext struct {
 	MaxSteps  int
 	WorkDir   string
 	ProjectID string
+	// PlanMode restricts the agent to read-only built-in tools and injects a
+	// plan-mode system prompt. Inherited by sub-turns.
+	PlanMode bool
 	// Path is the root→current turn chain (lead first). Used for delegation
 	// depth and cycle checks; turn IDs alone do not encode ancestry.
 	Path     []domain.TurnPathEntry
@@ -290,6 +293,12 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 
 	tools := p.Registry.Schemas()
 	skillTools := skillToolSchemas(p.SkillList, p.ToolBindings)
+	if tctx.PlanMode {
+		// In plan mode only built-in read-only tools are exposed; skill tools
+		// and any non-allowed registry schemas are removed.
+		tools = filterSchemasByAllowed(tools, domain.PlanModeAllowedToolIDs)
+		skillTools = filterSchemasByAllowed(skillTools, domain.PlanModeAllowedToolIDs)
+	}
 	if len(skillTools) > 0 {
 		tools = mergeSchemas(tools, skillTools)
 		for _, sk := range p.SkillList {
@@ -1307,6 +1316,16 @@ func mergeSchemas(base, extra []domain.ToolSchema) []domain.ToolSchema {
 	for _, s := range extra {
 		if _, ok := seen[s.Name]; !ok {
 			seen[s.Name] = struct{}{}
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func filterSchemasByAllowed(schemas []domain.ToolSchema, allowed map[string]struct{}) []domain.ToolSchema {
+	out := make([]domain.ToolSchema, 0, len(schemas))
+	for _, s := range schemas {
+		if _, ok := allowed[s.Name]; ok {
 			out = append(out, s)
 		}
 	}

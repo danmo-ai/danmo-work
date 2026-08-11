@@ -16,6 +16,7 @@ export interface NovelStateSummary {
 export type NovelStageAction =
   | 'init'
   | 'outline'
+  | 'volume'
   | 'assets'
   | 'goldfinger'
   | 'contract'
@@ -29,6 +30,7 @@ export interface NovelStagePrefillCtx {
   bookId?: string
   chapter?: number
   chapterPath?: string
+  volume?: number
 }
 
 /** Parse a few scalar fields from novel-state.yaml without a YAML dependency. */
@@ -77,12 +79,39 @@ export function novelOutlineDir(bookId: string): string {
   return `novel/${bookId}/outline`
 }
 
+export function novelVolumesDir(bookId: string): string {
+  return `novel/${bookId}/outline/volumes`
+}
+
+/** Volume number from names like v01.md, v02-三眼时间回廊.md. */
+export function volumeNumFromName(name: string): number | null {
+  const m = name.match(/^v(\d+)/i)
+  if (!m) return null
+  const n = Number.parseInt(m[1], 10)
+  return Number.isFinite(n) ? n : null
+}
+
+/** Next volume to outline = max existing volume file + 1 (fallback 1). */
+export function nextVolumeNumber(volumeFiles: NovelFileNode[]): number {
+  let max = 0
+  for (const f of volumeFiles) {
+    if (f.isDir) continue
+    const n = volumeNumFromName(f.name)
+    if (n != null && n > max) max = n
+  }
+  return max + 1
+}
+
 export function novelReviewsDir(bookId: string): string {
   return `novel/${bookId}/reviews`
 }
 
 export function novelCanonDir(bookId: string): string {
   return `novel/${bookId}/canon`
+}
+
+export function novelCastDir(bookId: string): string {
+  return `novel/${bookId}/canon/cast`
 }
 
 export function novelChapterSummariesPath(bookId: string): string {
@@ -242,6 +271,8 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
   const chPad = ch > 0 ? String(ch).padStart(3, '0') : 'NNN'
   const chPath = ctx.chapterPath || `novel/${bookId}/chapters/ch${chPad}.md`
   const root = `novel/${bookId}`
+  const vol = ctx.volume && ctx.volume > 0 ? ctx.volume : 0
+  const volPad = vol > 0 ? String(vol).padStart(2, '0') : 'NN'
 
   switch (action) {
     case 'init':
@@ -256,8 +287,21 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
     case 'outline':
       return [
         `书目录：${root}/`,
-        '基于现有 book-bible / canon，写出：一句话梗概 + 分卷大纲 + 前若干章一句话章纲（含钩子）。',
-        '先不要写章节正文；大纲写完停下来等我确认。',
+        '基于现有 book-bible / canon 产出总纲与卷纲（不写章节正文）：',
+        `- 总纲 ${root}/outline/book_outline.md（模板 book-outline.md：一句话故事 / 读者承诺 / 分卷结构表 / 主线伏笔 / 结局方向）。`,
+        `- 卷纲 ${root}/outline/volumes/vNN.md（模板 volume-outline.md：卷目标 / 核心冲突 / 节奏锚点 / 章纲表）。`,
+        '章纲表固定四列「章号 | 一句任务 | 爽点 | 钩子」，连续 3 行无爽点必须重排（KB 节奏与结构）。',
+        '每卷卷纲写完停下来等我确认。',
+        '按 read_skill novel-writing/references/outline.md 执行。',
+      ].join('\n')
+    case 'volume':
+      return [
+        `为本书写第 ${vol || 'N'} 卷卷纲（书目录：${root}/）。`,
+        `唯一落盘：${root}/outline/volumes/v${volPad}.md（模板 volume-outline.md，先 read_skill novel-writing/assets/templates/volume-outline.md）。`,
+        '先读 outline/book_outline.md 与 canon/ 相关设定、continuity/ 未回收伏笔，保持与前后卷衔接。',
+        '内容：卷目标一句话 / 核心冲突（对手+代价）/ 节奏锚点（卷高潮章位、中点反转、伏笔埋收）/ 章纲表（固定四列：章号 | 一句任务 | 爽点 | 钩子）。',
+        '章纲表连续 3 行无爽点必须重排；卷纲只到章纲表为止，不写章合同、不写正文。',
+        '写完停下来等我确认，再进入章合同阶段。',
         '按 read_skill novel-writing/references/outline.md 执行。',
       ].join('\n')
     case 'assets':
@@ -279,7 +323,7 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         `为第 ${ch || 'N'} 章写章合同（尚不写正文）。`,
         `唯一落盘：${root}/chapters/ch${chPad}-contract.yaml（YAML；模板 chapter-contract.yaml）。`,
         `可选 table_upsert chapter_contracts 作索引（book_id=${bookId}，file 指向该 yaml），不能代替文件。`,
-        '含：目的、must_happen / must_not、进出状态、伏笔、章末钩子、连续性风险；status=proposed。',
+        '含：purpose、beats / forbidden、pleasure_point、state_deltas、伏笔、hook(type+out)、word_target、连续性风险；status=proposed。',
         '里程碑章或本批首章需 ask_user 接受后再进入写作。',
         '按 read_skill novel-writing/references/chapter-contract.md 执行。',
       ].join('\n')
@@ -315,7 +359,8 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         ch > 0
           ? `对第 ${ch} 章（${chPath}）做 Continuity Commit。`
           : `对当前进度做 Continuity Commit（书：${root}/）。`,
-        '更新：章节定稿文件、table_*（timeline / foreshadows / characters / contracts）、continuity/chapter_summaries.md、memory、novel-state。',
+        '更新：章节定稿文件、table_*（timeline / foreshadows / characters / contracts）、memory、novel-state。',
+        '追加 continuity/chapter_summaries.md 固定 5 字段块（事件 / 状态变化 / 伏笔 / 钩子 / 下章指向）。',
         '关闭已修复的 continuity_issues。每满 10 个已提交章写 continuity/phase-NN.md。',
         '按 read_skill novel-writing/references/continuity-commit.md 执行。完成=工具证据，勿口头宣称。',
       ].join('\n')

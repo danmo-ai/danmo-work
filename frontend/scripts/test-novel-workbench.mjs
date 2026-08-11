@@ -8,8 +8,10 @@ import {
   isNovelContractName,
   isNovelContractPath,
   nextChapterNumber,
+  nextVolumeNumber,
   parseNovelStateYaml,
   sortChapterNodes,
+  volumeNumFromName,
 } from '../src/types/novel-workbench.ts'
 
 const yaml = `
@@ -104,6 +106,7 @@ assert.deepEqual(inferNovelBookNextStep(0, []), { action: 'contract', chapter: 1
 const stages = [
   'init',
   'outline',
+  'volume',
   'assets',
   'goldfinger',
   'contract',
@@ -145,5 +148,29 @@ assert.ok(commit.includes('phase-NN'))
 const write = buildNovelStagePrefill('write', { bookId: 'star-inn', chapter: 4 })
 assert.ok(write.includes('ch004.md'))
 assert.ok(write.includes('accepted'))
+
+const outline = buildNovelStagePrefill('outline', { bookId: 'star-inn' })
+assert.ok(outline.includes('book-outline.md'))
+assert.ok(outline.includes('volume-outline.md'))
+assert.ok(outline.includes('爽点'))
+
+const volume = buildNovelStagePrefill('volume', { bookId: 'star-inn', volume: 3 })
+assert.ok(volume.includes('v03.md'))
+assert.ok(volume.includes('volume-outline.md'))
+assert.ok(volume.includes('章纲表'))
+assert.ok(volume.includes('outline.md'))
+
+assert.equal(volumeNumFromName('v01.md'), 1)
+assert.equal(volumeNumFromName('v12-补天天道重启.md'), 12)
+assert.equal(volumeNumFromName('book_outline.md'), null)
+assert.equal(
+  nextVolumeNumber([
+    { name: 'v01.md', path: 'a', isDir: false },
+    { name: 'v03-莲花生命编码.md', path: 'b', isDir: false },
+    { name: 'drafts', path: 'c', isDir: true },
+  ]),
+  4,
+)
+assert.equal(nextVolumeNumber([]), 1)
 
 console.log('novel-workbench helpers ok')

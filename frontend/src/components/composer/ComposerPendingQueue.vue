@@ -96,7 +96,7 @@ async function steerToCurrentTurn(id: string) {
     )
     // Soft-steer stays in the queue as status=steering until claimed after tools.
     await sessions.loadPending()
-    if (wasRunning) await sessions.loadTurns()
+    if (wasRunning && sessions.currentSessionId) await sessions.loadTurns(sessions.currentSessionId)
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('composer.queueSteerFailed'))
   } finally {

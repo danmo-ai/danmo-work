@@ -166,7 +166,7 @@ func (m *AutomationManager) execute(ctx context.Context, a domain.Automation) (d
 	}
 	agentID := a.AgentID
 	if agentID == "" {
-		agentID = "default"
+		agentID = "team"
 	}
 	title := "Automation: " + a.Name
 	// Create starts the first turn via StartSession (content required).

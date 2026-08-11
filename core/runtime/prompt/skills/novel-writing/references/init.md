@@ -13,6 +13,8 @@ Do **not** create a half-baked project. Before seeding files/tables, collect via
 
 Optional: platform tone (番茄/起点等) as **preference**, not hard rules.
 
+If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding the defaults from KB 番茄平台（章字数 2000–3500、断章必钩、3–5 章一爽点、黄金三章闭环）so later stages inherit them without re-searching.
+
 ## Steps
 
 1. `read_skill` → `project-layout.md`, `table-schema.md`, templates.  

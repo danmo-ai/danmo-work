@@ -1327,10 +1327,10 @@ defineExpose({
         class="composer-float__tray"
       >
         <div class="composer-float__tray-leading">
-          <div
-            v-if="sessions.composingNew"
-            class="composer-select composer-select--project"
-          >
+      <div
+        v-if="sessions.composingNew"
+        class="composer-select composer-select--project composer-tray-segment"
+      >
             <DqSelect
               v-model="sessions.selectedProjectId"
               size="sm"
@@ -1349,7 +1349,7 @@ defineExpose({
 
           <div
             v-if="showAgentSelect"
-            class="composer-agent-picker"
+            class="composer-agent-picker composer-tray-segment"
           >
             <DqSegmented
               v-if="useAgentSegmented"
@@ -1381,16 +1381,32 @@ defineExpose({
             </div>
           </div>
 
-          <span
-            v-if="gitDisplay"
-            class="composer-git-branch"
-            :class="{ 'is-error': Boolean(gitError) }"
-            :title="gitDisplay"
-            :aria-label="gitError ? gitError : `${t('composer.gitBranch')}: ${gitBranch}`"
+          <div
+            class="composer-plan-toggle composer-tray-segment"
+            :class="{ 'is-active': sessions.selectedPlanMode }"
           >
-            <span class="composer-git-branch__icon" aria-hidden="true">⎇</span>
-            <span class="composer-git-branch__name">{{ gitDisplay }}</span>
-          </span>
+            <DqSwitch
+              v-model="sessions.selectedPlanMode"
+              size="sm"
+              :aria-label="t('composer.planModeToggle')"
+            />
+            <span class="composer-plan-toggle__label">{{ t('composer.planModeLabel') }}</span>
+          </div>
+
+          <div
+            v-if="gitDisplay"
+            class="composer-tray-segment"
+          >
+            <span
+              class="composer-git-branch"
+              :class="{ 'is-error': Boolean(gitError) }"
+              :title="gitDisplay"
+              :aria-label="gitError ? gitError : `${t('composer.gitBranch')}: ${gitBranch}`"
+            >
+              <span class="composer-git-branch__icon" aria-hidden="true">⎇</span>
+              <span class="composer-git-branch__name">{{ gitDisplay }}</span>
+            </span>
+          </div>
         </div>
 
         <div class="composer-float__tray-trailing">
@@ -1627,8 +1643,6 @@ defineExpose({
   max-width: 200px;
   min-width: 64px;
   height: 28px;
-  padding: 0 8px;
-  border-radius: 6px;
   color: var(--dq-label-secondary);
   font-size: var(--dq-font-size-caption);
   font-weight: 500;
@@ -1897,6 +1911,40 @@ defineExpose({
   font-size: var(--dq-font-size-caption);
   font-weight: 600;
   opacity: 0.9;
+}
+
+.composer-float__tray-leading {
+  gap: 0;
+}
+
+.composer-float__tray-leading > .composer-tray-segment {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 8px;
+}
+
+.composer-float__tray-leading > .composer-tray-segment:not(:first-child) {
+  border-left: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+}
+
+.composer-plan-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dq-label-secondary);
+  font-size: var(--dq-font-size-caption);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+
+.composer-plan-toggle.is-active {
+  color: var(--dq-accent);
+}
+
+.composer-plan-toggle__label {
+  white-space: nowrap;
 }
 
 @keyframes pulse {

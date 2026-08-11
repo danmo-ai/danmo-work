@@ -9,6 +9,7 @@ import { useSkillsStore } from '@/stores/skills'
 const base = apiBaseUrl()
 const MODEL_KEY = 'teams-composer-model'
 const EFFORT_KEY = 'teams-composer-effort'
+const PLAN_MODE_KEY = 'teams-composer-plan-mode'
 
 function encodeModelId(modelBaseId: string, effort: string): string {
   if (!effort || effort === 'off') return modelBaseId
@@ -36,6 +37,7 @@ export const useSessionsStore = defineStore('sessions', () => {
 
   const selectedModelId = ref(localStorage.getItem(MODEL_KEY) ?? '')
   const selectedEffort = ref(localStorage.getItem(EFFORT_KEY) ?? '')
+  const selectedPlanMode = ref(localStorage.getItem(PLAN_MODE_KEY) === 'true')
   const selectedProjectId = ref<string | null>(null)
   const selectedAgentId = ref<string | null>(null)
   const composingNew = ref(true)
@@ -73,6 +75,16 @@ export const useSessionsStore = defineStore('sessions', () => {
 
   watch(selectedEffort, (v) => {
     localStorage.setItem(EFFORT_KEY, v)
+  })
+
+  watch(selectedPlanMode, (v) => {
+    localStorage.setItem(PLAN_MODE_KEY, String(v))
+    // Persist plan mode change to current session (skip compose / missing session)
+    if (composingNew.value || !currentSessionId.value) return
+    const idx = sessions.value.findIndex((x) => x.id === currentSessionId.value)
+    if (idx < 0) return
+    sessions.value[idx] = { ...sessions.value[idx], planMode: v }
+    void updateSession(currentSessionId.value, { planMode: v })
   })
 
   watch(selectedAgentId, (v) => {
@@ -151,7 +163,7 @@ export const useSessionsStore = defineStore('sessions', () => {
   }
 
   function defaultAgentId(): string {
-    const priority = ['team', 'default', 'planner']
+    const priority = ['team']
     for (const id of priority) {
       if (agents.value.find((a) => a.id === id && a.mode !== 'subagent')) return id
     }
@@ -194,6 +206,7 @@ export const useSessionsStore = defineStore('sessions', () => {
         modelId: selectedModelId.value,
         content,
         projectId: projectId ?? undefined,
+        planMode: selectedPlanMode.value,
       }
       if (attachments?.length) body.attachments = attachments
       const t = await fetchJSON<Session>('/sessions', {
@@ -665,6 +678,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     const t = sessions.value.find((x) => x.id === id)
     selectedProjectId.value = t?.projectId ?? null
     selectedAgentId.value = t?.agentId ?? null
+    selectedPlanMode.value = t?.planMode ?? false
     if (t?.modelId) {
       const decoded = decodeModelId(t.modelId)
       selectedModelId.value = t.modelId
@@ -687,6 +701,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     currentSessionId.value = null
     selectedProjectId.value = projectId ?? null
     selectedAgentId.value = defaultAgentId() || 'team'
+    selectedPlanMode.value = localStorage.getItem(PLAN_MODE_KEY) === 'true'
     resetStreamState()
     turns.value = []
     pendingMessages.value = []
@@ -705,6 +720,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     agentRuns,
     selectedModelId,
     selectedEffort,
+    selectedPlanMode,
     selectedProjectId,
     selectedAgentId,
     composingNew,

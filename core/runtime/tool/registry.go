@@ -156,3 +156,37 @@ func (r *Registry) Schemas() []domain.ToolSchema {
 	}
 	return out
 }
+
+// Filter keeps only tools whose names are in the allowed set, dropping all
+// others from the registry. It also prunes MCP servers whose tools are no
+// longer represented so subsequent Mount* calls cannot re-add them.
+func (r *Registry) Filter(allowed map[string]struct{}) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	newOrder := r.order[:0]
+	newByName := make(map[string]Handler, len(r.byName))
+	for _, h := range r.order {
+		if _, ok := allowed[h.Name()]; ok {
+			newOrder = append(newOrder, h)
+			newByName[h.Name()] = h
+		}
+	}
+	r.order = newOrder
+	r.byName = newByName
+
+	for sid, handlers := range r.mcpServers {
+		filtered := make([]Handler, 0, len(handlers))
+		for _, h := range handlers {
+			if _, ok := allowed[h.Name()]; ok {
+				filtered = append(filtered, h)
+			}
+		}
+		if len(filtered) == 0 {
+			delete(r.mcpServers, sid)
+			delete(r.mcpAmbient, sid)
+			delete(r.mounted, sid)
+		} else {
+			r.mcpServers[sid] = filtered
+		}
+	}
+}

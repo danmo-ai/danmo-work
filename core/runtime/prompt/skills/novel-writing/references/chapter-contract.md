@@ -18,19 +18,21 @@ Book/volume planning stays in `outline/` (`outline.md`). Per-chapter acceptance 
 
 ## Template fields
 
-See `assets/templates/chapter-contract.yaml`. Minimum:
+Copy `assets/templates/chapter-contract.yaml`. Keep it lean — fill only what this chapter uses; empty optional lists are fine.
 
 | Field | Purpose |
 |-------|---------|
 | `chapter` / `title_working` | Identity |
-| `pov` / `time` / `location` | Scene anchors |
+| `scene` | One line: `pov \| time \| location` |
 | `purpose` | One-sentence chapter job |
-| `must_happen` | Beats that must land |
-| `must_not_happen` | Ban list / spoilers to avoid |
-| `character_state_in` / `out` | Deltas only |
-| `reveals` / `secrets_preserved` | Information control |
-| `foreshadowing` | Plant or advance FS-ids |
-| `hook_out` | Concrete open loop |
+| `beats` | 3–5 beats that must land, in order |
+| `forbidden` | Ban list / spoilers to avoid |
+| `pleasure_point` | 本章爽点（网文必填：读者爽在哪） |
+| `emotion_line` | One-line curve, e.g. `压抑→爆发→留钩` |
+| `state_deltas` | `"谁: 从X→Y"` — deltas only |
+| `info_control.reveals` / `.foreshadowing` | Information control; FS-ids with `plant\|advance\|payoff` |
+| `hook.type` / `hook.out` | Type from KB 断章钩子六类; `out` = concrete event, not slogan |
+| `word_target` | 番茄常见 2000–3500 |
 | `continuity_risks` | What could break |
 | `status` | `proposed` → `accepted` → `drafted` → `reviewed` |
 
@@ -43,4 +45,7 @@ See `assets/templates/chapter-contract.yaml`. Minimum:
 
 ## Status vocabulary
 
-`missing | in_progress | ready | stale | blocked` for artifacts in `novel-state.yaml`.
+- **Contract `status`** (this file + `chapter_contracts` table): `proposed | accepted | drafted | reviewed`.
+- **Artifact status** in `novel-state.yaml` only: `missing | in_progress | ready | stale | blocked`.
+
+Do not mix the two vocabularies.

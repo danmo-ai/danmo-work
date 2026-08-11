@@ -9,7 +9,7 @@ import (
 	"danmo-work/core/domain"
 )
 
-func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, canDelegate bool, checkpoint string, activeTodos string, fileChanges string, sandboxStatus domain.SandboxStatus) string {
+func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, canDelegate bool, planMode bool, checkpoint string, activeTodos string, fileChanges string, sandboxStatus domain.SandboxStatus) string {
 	var b strings.Builder
 	b.WriteString(agentPersona)
 
@@ -52,10 +52,66 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 	b.WriteString(buildMCPToolNamingPolicy())
 	b.WriteString("\n\n")
 	b.WriteString(buildRuntimeEnvironment(sandboxStatus))
+	if planMode {
+		b.WriteString("\n\n")
+		b.WriteString(buildPlanModePrompt())
+	}
 
 	return b.String()
 }
 
+func buildPlanModePrompt() string {
+	return `<plan-mode>
+You are currently in PLAN MODE. Your task is to investigate the request and produce a clear, actionable implementation plan. Do NOT write files, edit files, apply patches, or execute shell commands. Only read-only built-in tools are available to you.
+
+Allowed tools in this mode:
+- Explore the codebase: read_file, grep, glob
+- External research: web_search, web_fetch, search_kb, list_kb_docs, get_kb_doc
+- Clarify intent: ask_user
+- Read skills: read_skill
+- Read durable memory: memory_read
+- Read table store: table_get, table_query, table_list
+- Delegate to read-only sub-experts: delegate_agent
+
+Delegation in plan mode:
+- You MAY delegate to sub-agents (e.g. explorer, researcher) when parallel investigation improves the plan.
+- Delegated sub-agents inherit PLAN MODE automatically: their tool set is restricted to the same read-only whitelist and they receive the plan-mode instructions.
+- Give sub-agents clear, scoped read-only goals. Do NOT ask them to implement, write, or modify anything.
+- Read sub-agent reports before incorporating findings into your plan.
+
+Workflow:
+1. Understand the goal, constraints, and success criteria. Call ask_user if anything important is ambiguous.
+2. Explore the codebase with glob/grep first, then read_file the relevant files. Cite evidence as path:line (or ranges).
+3. Research external docs or knowledge bases only if the chosen approach depends on unfamiliar APIs, libraries, or best practices.
+4. Optionally delegate parallel read-only investigation to sub-agents.
+5. Synthesize the simplest approach that meets the requirements. Note only 1-2 rejected alternatives when the trade-off genuinely matters.
+6. Deliver the complete plan as your final assistant message. Do not claim to write files, execute commands, or perform edits.
+
+Required structure for the final plan:
+
+# [Feature] Implementation Plan
+
+**Goal:** one sentence
+**Architecture:** 2-3 sentences
+**Tech stack:** key pieces already in the repo (or justified additions)
+**Constraints:** versions, naming, platforms (from user/spec)
+
+### Task N: [Name]
+
+**Files:**
+- Create: <path>
+- Modify: <path> (why)
+- Test: <path>
+
+**Steps:**
+- [ ] Concrete step with exact path or command
+- [ ] Verification step (what to run or check)
+
+**Done when:** independently verifiable outcome
+
+Keep tasks bite-sized. No TBD/TODO placeholders, no "similar to Task N", and no vague "update the service layer" without paths. If the request is too simple to need a formal plan, say so and stop.
+</plan-mode>`
+}
 func buildAskUserPolicy() string {
 	return `<ask-user-policy>
 When you need clarification, a decision, missing inputs, or approval before proceeding, you MUST call the ask_user tool. Do NOT ask the user in a plain assistant message — that ends the turn without waiting for an answer.

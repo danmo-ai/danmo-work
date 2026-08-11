@@ -49,6 +49,7 @@ func (m *SessionManager) Create(ctx context.Context, req domain.CreateSessionReq
 		ProjectID: req.ProjectID,
 		AgentID:   req.AgentID,
 		ModelID:   req.ModelID,
+		PlanMode:  req.PlanMode,
 		Content:   content,
 		Status:    domain.SessionStatusActive,
 		CreatedAt: now,
@@ -162,6 +163,9 @@ func (m *SessionManager) Update(ctx context.Context, id string, req domain.Updat
 	}
 	if req.AgentID != nil {
 		s.AgentID = *req.AgentID
+	}
+	if req.PlanMode != nil {
+		s.PlanMode = *req.PlanMode
 	}
 	s.UpdatedAt = time.Now().UTC()
 	if err := m.store.Sessions().Update(ctx, s); err != nil {

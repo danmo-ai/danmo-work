@@ -16,9 +16,10 @@ Engineering-style long-form fiction for Danmo Work. **Skills guide; tools mutate
 ## Core rules
 
 1. **Canon ≠ chat.** Authoritative state lives in project files + `table_*`. Craft/theory lives in knowledge (`kb-novel-craft` and book lore KBs). LLM context is a projection.
-2. **Pipeline:** 章合同 → draft → one review round → Commit. `qc_gate` FAIL blocks「定稿」.
+2. **Pipeline:** 章合同 → draft → one review round → Commit. `qc_gate` FAIL blocks「定稿」.  
    Layout dirs are English-only (`canon/`, `outline/`, `chapters/`, `continuity/`, `reviews/`).  
-   Contract path/format is fixed: `chapters/chNNN-contract.yaml` (YAML only).
+   Contract path/format is fixed: `chapters/chNNN-contract.yaml` (YAML only).  
+   **Lean artifacts:** copy templates as-is; fill only what the current stage uses. No invented extra sections.
 3. **`candidate` stays out of prose** until the user confirms via `ask_user`.
 4. **Minimal load per chapter:** contract + relevant table rows + last 3–5 chapter summaries + KB top-k. Never dump the whole bible.
 5. **No fake completion.** Do not claim Commit without `write`/`edit`/`table_upsert`/`memory_update` evidence.
@@ -51,9 +52,9 @@ Load the matching reference with `read_skill` **before** heavy work. Path = skil
 | Intent | Load | Also search_kb themes |
 |--------|------|------------------------|
 | New book / 立项 | `references/init.md`, `references/project-layout.md`, `references/table-schema.md` | 题材速览, 人设 |
-| Outline / 卷纲 / 章纲列表 | `references/outline.md` | 节奏与结构 |
-| Chapter contract / 章合同 | `references/chapter-contract.md` | 节奏, 爽点 |
-| Write chapter | `references/chapter-write.md` | 文风, 情绪, 爽点 |
+| Outline / 卷纲 / 章纲列表 | `references/outline.md` | 节奏与结构, 番茄平台 |
+| Chapter contract / 章合同 | `references/chapter-contract.md` | 节奏, 爽点, 番茄平台 |
+| Write chapter | `references/chapter-write.md` | 文风, 情绪, 爽点, 番茄平台 |
 | Review | `references/review-gates.md` | 去 AI 味, 世界观 |
 | Deslop / polish | `references/polish-deslop.md` | 去 AI 味, 语言与文风 |
 | Commit / resume | `references/continuity-commit.md` | 金手指（若涉及） |

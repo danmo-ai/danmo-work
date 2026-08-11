@@ -17,6 +17,7 @@ import {
   novelBiblePath,
   novelBookDir,
   novelCanonDir,
+  novelCastDir,
   novelChapterFilePath,
   novelChapterSummariesPath,
   novelChaptersDir,
@@ -24,6 +25,8 @@ import {
   novelOutlineDir,
   novelReviewsDir,
   novelStatePath,
+  novelVolumesDir,
+  nextVolumeNumber,
   parseNovelStateYaml,
   sortWorkbenchDocNodes,
   type NovelBookNextStep,
@@ -58,8 +61,10 @@ const selectedBookId = ref<string | null>(null)
 const chapterEntries = ref<NovelChapterEntry[]>([])
 const continuityFiles = ref<NovelFileNode[]>([])
 const outlineFiles = ref<NovelFileNode[]>([])
+const volumeFiles = ref<NovelFileNode[]>([])
 const reviewFiles = ref<NovelFileNode[]>([])
 const canonFiles = ref<NovelFileNode[]>([])
+const castFiles = ref<NovelFileNode[]>([])
 const bookState = ref<NovelStateSummary | null>(null)
 const readPath = ref<string | null>(null)
 const readTitle = ref('')
@@ -85,6 +90,12 @@ const bookNextStep = computed((): NovelBookNextStep =>
 )
 
 const hasAnyProse = computed(() => chapterEntries.value.some((e) => Boolean(e.prose)))
+
+const nextVolume = computed(() => nextVolumeNumber(volumeFiles.value))
+
+const bookOutlineFile = computed(() =>
+  outlineFiles.value.find((f) => f.name === 'book_outline.md') ?? null,
+)
 
 function runBookNextStep() {
   const step = bookNextStep.value
@@ -187,23 +198,30 @@ async function openBook(bookId: string, opts?: { keepView?: boolean }) {
   loading.value = true
   try {
     bookState.value = await loadState(bookId)
-    const [chNodes, contNodes, outNodes, revNodes, canonNodes] = await Promise.all([
+    const [chNodes, contNodes, outNodes, volNodes, revNodes, canonNodes, castNodes] = await Promise.all([
       listDirSoft(novelChaptersDir(bookId)),
       listDirSoft(novelContinuityDir(bookId)),
       listDirSoft(novelOutlineDir(bookId)),
+      listDirSoft(novelVolumesDir(bookId)),
       listDirSoft(novelReviewsDir(bookId)),
       listDirSoft(novelCanonDir(bookId)),
+      listDirSoft(novelCastDir(bookId)),
     ])
     chapterEntries.value = buildChapterEntries(chNodes, outNodes)
     continuityFiles.value = sortWorkbenchDocNodes(contNodes)
     outlineFiles.value = sortWorkbenchDocNodes(outNodes).filter((n) => !isNovelContractName(n.name))
+    volumeFiles.value = sortWorkbenchDocNodes(volNodes)
     reviewFiles.value = sortWorkbenchDocNodes(revNodes)
     canonFiles.value = sortWorkbenchDocNodes(canonNodes)
+    castFiles.value = sortWorkbenchDocNodes(castNodes)
   } catch {
     chapterEntries.value = []
     continuityFiles.value = []
     outlineFiles.value = []
+    volumeFiles.value = []
     reviewFiles.value = []
+    canonFiles.value = []
+    castFiles.value = []
     canonFiles.value = []
     bookState.value = null
   } finally {
@@ -288,9 +306,9 @@ function backToBook() {
   if (selectedBookId.value) void openBook(selectedBookId.value)
 }
 
-function runAction(action: NovelStageAction, chapter?: number, chapterPath?: string) {
+function runAction(action: NovelStageAction, chapter?: number, chapterPath?: string, volume?: number) {
   const bookId = selectedBookId.value ?? undefined
-  let text = buildNovelStagePrefill(action, { bookId, chapter, chapterPath })
+  let text = buildNovelStagePrefill(action, { bookId, chapter, chapterPath, volume })
   if (!canDelegate.value) {
     text = `${t('novelWorkbench.needTeamHint')}\n\n${text}`
     toast.warning(t('composer.expertNeedDelegate'))
@@ -394,9 +412,6 @@ function escapeHtml(s: string) {
         <div class="novel-wb__group">
           <div class="novel-wb__group-label">{{ t('novelWorkbench.groupSetup') }}</div>
           <div class="novel-wb__actions novel-wb__actions--tight">
-            <button type="button" class="novel-wb__btn novel-wb__btn--ghost" @click="runAction('outline')">
-              {{ t('novelWorkbench.actionOutline') }}
-            </button>
             <button type="button" class="novel-wb__btn novel-wb__btn--ghost" @click="runAction('assets')">
               {{ t('novelWorkbench.actionAssets') }}
             </button>
@@ -404,6 +419,67 @@ function escapeHtml(s: string) {
               {{ t('novelWorkbench.actionGoldfinger') }}
             </button>
           </div>
+          <div v-if="canonFiles.length || castFiles.length" class="novel-wb__quick">
+            <button
+              v-for="f in canonFiles"
+              :key="nodePath(selectedBookId, novelCanonDir(selectedBookId), f)"
+              type="button"
+              class="novel-wb__chip"
+              @click="openRead(nodePath(selectedBookId, novelCanonDir(selectedBookId), f), f.name)"
+            >
+              canon/{{ f.name }}
+            </button>
+            <button
+              v-for="f in castFiles"
+              :key="nodePath(selectedBookId, novelCastDir(selectedBookId), f)"
+              type="button"
+              class="novel-wb__chip"
+              @click="openRead(nodePath(selectedBookId, novelCastDir(selectedBookId), f), f.name)"
+            >
+              cast/{{ f.name }}
+            </button>
+          </div>
+          <p v-else class="novel-wb__hint novel-wb__hint--pad">
+            {{ t('novelWorkbench.noCanonYet') }}
+          </p>
+        </div>
+
+        <div class="novel-wb__group">
+          <div class="novel-wb__group-label">{{ t('novelWorkbench.groupVolumes') }}</div>
+          <div class="novel-wb__actions novel-wb__actions--tight">
+            <button type="button" class="novel-wb__btn novel-wb__btn--ghost" @click="runAction('outline')">
+              {{ t('novelWorkbench.actionOutline') }}
+            </button>
+            <button
+              type="button"
+              class="novel-wb__btn novel-wb__btn--ghost"
+              @click="runAction('volume', undefined, undefined, nextVolume)"
+            >
+              {{ t('novelWorkbench.actionVolumeOutline', { n: nextVolume }) }}
+            </button>
+          </div>
+          <div class="novel-wb__quick">
+            <button
+              v-if="bookOutlineFile"
+              type="button"
+              class="novel-wb__chip"
+              @click="openRead(nodePath(selectedBookId, novelOutlineDir(selectedBookId), bookOutlineFile), bookOutlineFile.name)"
+            >
+              outline/book_outline.md
+            </button>
+            <button
+              v-for="f in volumeFiles"
+              :key="nodePath(selectedBookId, novelVolumesDir(selectedBookId), f)"
+              type="button"
+              class="novel-wb__chip"
+              @click="openRead(nodePath(selectedBookId, novelVolumesDir(selectedBookId), f), f.name)"
+            >
+              volumes/{{ f.name }}
+            </button>
+          </div>
+          <p v-if="!bookOutlineFile && !volumeFiles.length" class="novel-wb__hint novel-wb__hint--pad">
+            {{ t('novelWorkbench.noVolumesYet') }}
+          </p>
         </div>
 
         <div class="novel-wb__group">
@@ -457,17 +533,6 @@ function escapeHtml(s: string) {
               @click="openRead(novelChapterSummariesPath(selectedBookId), 'chapter_summaries.md')"
             >
               summaries
-            </button>
-          </div>
-          <div v-if="canonFiles.length" class="novel-wb__quick">
-            <button
-              v-for="f in canonFiles"
-              :key="nodePath(selectedBookId, novelCanonDir(selectedBookId), f)"
-              type="button"
-              class="novel-wb__chip"
-              @click="openRead(nodePath(selectedBookId, novelCanonDir(selectedBookId), f), f.name)"
-            >
-              canon/{{ f.name }}
             </button>
           </div>
           <div v-if="outlineFiles.length" class="novel-wb__quick">

@@ -176,9 +176,10 @@ func skillFileFromDomain(f domain.SkillFile) skillFileModel {
 type sessionModel struct {
 	ID        string `gorm:"primaryKey"`
 	Title     string
-	ProjectID string `gorm:"column:project_id"`
-	AgentID   string `gorm:"column:agent_id"`
-	ModelID   string `gorm:"column:model_id"`
+	ProjectID string    `gorm:"column:project_id"`
+	AgentID   string    `gorm:"column:agent_id"`
+	ModelID   string    `gorm:"column:model_id"`
+	PlanMode  bool      `gorm:"column:plan_mode"`
 	Content   string
 	Status    string
 	CreatedAt time.Time `gorm:"column:created_at"`
@@ -190,7 +191,7 @@ func (sessionModel) TableName() string { return "sessions" }
 func sessionToDomain(m sessionModel) domain.Session {
 	return domain.Session{
 		ID: m.ID, Title: m.Title, ProjectID: m.ProjectID, AgentID: m.AgentID,
-		ModelID: m.ModelID, Content: m.Content,
+		ModelID: m.ModelID, PlanMode: m.PlanMode, Content: m.Content,
 		Status: domain.SessionStatus(m.Status), CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt,
 	}
 }
@@ -198,7 +199,7 @@ func sessionToDomain(m sessionModel) domain.Session {
 func sessionFromDomain(s domain.Session) sessionModel {
 	return sessionModel{
 		ID: s.ID, Title: s.Title, ProjectID: s.ProjectID, AgentID: s.AgentID,
-		ModelID: s.ModelID, Content: s.Content,
+		ModelID: s.ModelID, PlanMode: s.PlanMode, Content: s.Content,
 		Status: string(s.Status), CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
 	}
 }

@@ -40,7 +40,7 @@ func main() {
 		}
 		session, err := core.Sessions.Create(context.Background(), domain.CreateSessionRequest{
 			Content: input,
-			AgentID: "default",
+			AgentID: "team",
 		})
 		if err != nil {
 			fmt.Println("error:", err)

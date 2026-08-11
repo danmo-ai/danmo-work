@@ -10,10 +10,10 @@ Danmo Work 用**主专家（lead / primary）**跑会话，用**子专家（suba
 
 | 类型 | `mode` | 典型用途 |
 |------|--------|----------|
-| 主专家 | `primary` | Composer 里选择的会话主角：`team`（可协作）、`default`（单兵）、`planner`（只读规划） |
+| 主专家 | `primary` | Composer 里选择的会话主角：内置 `team`（可协作）；自定义 primary 专家会一并出现在选择器中 |
 | 子专家 | `subagent` | 被 `delegate_agent` 召唤：文档、代码实现、GitHub、调研等 |
 
-只有主专家打开 **`canDelegate`（启用专家协作）** 时，运行时才会挂载 `delegate_agent`，并在 system prompt 注入 `<available_agents>`。内置 **Team** 默认开启；**Default / Planner** 默认关闭。可在 **Teams → 专家** 中开关。
+只有主专家打开 **`canDelegate`（启用专家协作）** 时，运行时才会挂载 `delegate_agent`，并在 system prompt 注入 `<available_agents>`。内置 **Team** 默认开启；可在 **Teams → 专家** 中开关。Composer 的 **Plan 模式**开关会进一步把当前回合限制为只读工具，并注入计划模式提示词。
 
 ---
 
@@ -56,8 +56,6 @@ delegate_agent(agent_id="<id>", goal="...")
 | id | 名称 | 说明 |
 |----|------|------|
 | `team` | Team | 默认可协作；适合跨文件、多步骤任务 |
-| `default` | Default | 单兵全工具；默认不委派 |
-| `planner` | Planner | 只读规划；不写文件/不 shell |
 
 ### 子专家（可召唤）
 
