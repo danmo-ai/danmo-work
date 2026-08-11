@@ -83,13 +83,13 @@ func TestMergeSkillsByID(t *testing.T) {
 	}
 }
 
-func TestBoundDBSkills(t *testing.T) {
+func TestBoundSkills(t *testing.T) {
 	all := []domain.Skill{{ID: "a"}, {ID: "b"}, {ID: "c"}}
-	got := BoundDBSkills(all, domain.Agent{SkillIDs: []string{"b", "x", "a"}})
+	got := BoundSkills(all, domain.Agent{SkillIDs: []string{"b", "x", "a"}})
 	if len(got) != 2 || got[0].ID != "a" || got[1].ID != "b" {
 		t.Fatalf("%+v", got)
 	}
-	if BoundDBSkills(all, domain.Agent{}) != nil {
+	if BoundSkills(all, domain.Agent{}) != nil {
 		t.Fatal("expected nil for empty skillIds")
 	}
 }

@@ -1122,6 +1122,10 @@ func (e *Engine) setupRegistry(s domain.Session, agent domain.Agent, planMode bo
 	workDir := e.resolveWorkDir(context.Background(), s.ProjectID)
 	skills := e.resolveAgentSkills(agent, workDir)
 
+	if e.readSkill != nil {
+		e.readSkill.SetRoots(e.dataDir, workDir)
+	}
+
 	var reg *tool.Registry
 	if agentHasDelegation(agent) {
 		reg = e.buildTeamRegistry(agent, planMode)
@@ -1173,35 +1177,29 @@ func (e *Engine) delegatableAgents(agent domain.Agent) []domain.Agent {
 	return result
 }
 
-// resolveAgentSkills returns Agent-bound DB skills, optionally merged with
-// Ambient filesystem skills when agent.InheritsAmbient() (default: primary yes,
-// subagent no). Filesystem skills are not written to the database.
+func homeDir() string {
+	h, _ := os.UserHomeDir()
+	return h
+}
+
 func (e *Engine) resolveAgentSkills(agent domain.Agent, workDir string) []domain.Skill {
-	bound := e.boundDBSkills(agent)
-	if !agent.InheritsAmbient() {
-		// Do not clear the shared ReadSkill FS overlay. Parent turns (and
-		// parallel sibling tool calls) may still need it; subagent registries
-		// mount an isolated ReadSkill without that overlay.
-		return bound
+	allSkills := service.ScanAllSkills(e.dataDir, workDir)
+	for i := range allSkills {
+		allSkills[i].PromptPath = builtin.SkillPathForPrompt(allSkills[i].Dir, e.dataDir, homeDir()+"/.agents", workDir)
 	}
-	fsSkills, fsFiles := service.ScanFilesystemSkills(workDir)
-	e.setTurnFSSkills(fsSkills, fsFiles)
-	return service.MergeSkillsByID(bound, fsSkills)
+
+	if agent.Mode == domain.AgentModeSubagent {
+		return service.BoundSkills(allSkills, agent)
+	}
+
+	bound := service.BoundSkills(allSkills, agent)
+	orphan := service.OrphanSkills(allSkills, agent)
+	return service.MergeSkillsByID(bound, orphan)
 }
 
-func (e *Engine) boundDBSkills(agent domain.Agent) []domain.Skill {
+func (e *Engine) boundSkills(agent domain.Agent) []domain.Skill {
 	all, _ := e.skills.List(context.Background())
-	return service.BoundDBSkills(all, agent)
-}
-
-func (e *Engine) setTurnFSSkills(skills []domain.Skill, files map[string][]domain.SkillFile) {
-	byID := make(map[string]domain.Skill, len(skills))
-	for _, sk := range skills {
-		byID[sk.ID] = sk
-	}
-	if e.readSkill != nil {
-		e.readSkill.SetTurnFS(byID, files)
-	}
+	return service.BoundSkills(all, agent)
 }
 
 func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, projectID string, agent domain.Agent, reg *tool.Registry, skills []domain.Skill, attachments []domain.UserAttachment, extraSnapshotPaths []string, planMode bool) (domain.Report, error) {
@@ -1582,7 +1580,9 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent, planMode bool) *tool.Regi
 			} else {
 				childReg = e.buildWorkerRegistry(workerAgent, planMode)
 			}
-			childReg.Register(&builtin.ReadSkill{Skills: e.skills})
+			rs := &builtin.ReadSkill{}
+			rs.SetRoots(e.dataDir, workDir)
+			childReg.Register(rs)
 			childRunner := e.spawnTurnRunner(childTurnID, childReg, skills, workerAgent.Tools)
 
 			sys := buildSystemPrompt(workerAgent.SystemPrompt, skills, nil, workerAgent.CanDelegate, planMode, "", "", "", e.sandboxStatus())
@@ -1684,12 +1684,12 @@ func (e *Engine) buildWorkerRegistry(agent domain.Agent, planMode bool) *tool.Re
 	return reg
 }
 
-// mountMCPForAgent applies the Ambient / Bound MCP policy:
-// - InheritAmbient (default primary): all enabled MCP servers
-// - otherwise: only agent.MCPServers (exact server ids)
+// mountMCPForAgent applies MCP policy:
+// - Primary agent: all enabled MCP servers
+// - Subagent: only agent.MCPServers (exact server ids)
 func (e *Engine) mountMCPForAgent(reg *tool.Registry, agent domain.Agent) {
 	reg.CopyMCPServersFrom(e.toolCatalog)
-	if agent.InheritsAmbient() {
+	if agent.Mode != domain.AgentModeSubagent {
 		reg.MountAllMCP()
 		return
 	}

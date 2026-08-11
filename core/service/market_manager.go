@@ -345,6 +345,7 @@ func (m *MarketManager) installSkill(
 	} else {
 		skill.Body = NormalizeSkillBodyRefs(skill.Body, skill.ID)
 	}
+	skill.Source = "market"
 	if item.Name != "" {
 		skill.Name = item.Name
 	}
@@ -444,16 +445,14 @@ func (m *MarketManager) installExpert(
 	if err != nil {
 		return err
 	}
-	// Force market provenance meta on install (stored as YAML frontmatter).
+	agent.Source = "market"
 	agent.MarketSource = market.SourceID()
-	meta := map[string]string{"market.source": market.SourceID()}
-	if ref != "" {
-		meta["market.ref"] = ref
+	if item.Version != "" && agent.SystemPrompt != "" {
+		versionLine := fmt.Sprintf(" version: %s", item.Version)
+		if !strings.Contains(agent.SystemPrompt, versionLine) {
+			agent.SystemPrompt += "\n\n<!-- market version: " + item.Version + " -->"
+		}
 	}
-	if item.Version != "" {
-		meta["market.version"] = item.Version
-	}
-	agent.SystemPrompt = EncodeAgentSystemPrompt(agent.SystemPrompt, meta)
 	if err := m.agents.Upsert(ctx, *agent); err != nil {
 		return err
 	}
@@ -582,16 +581,8 @@ func (m *MarketManager) Uninstall(ctx context.Context, req domain.UninstallMarke
 		if err != nil || sk == nil {
 			return nil, fmt.Errorf("skill %q not found", req.ID)
 		}
-		if sk.MarketSource == "" {
+		if sk.Source != "market" || sk.MarketSource == "" {
 			return nil, fmt.Errorf("skill %q was not installed from the market", req.ID)
-		}
-		// Template-backed skills must return to the builtin pack instead of
-		// disappearing from the library until the next process restart.
-		if m.skills.HasTemplate(req.ID) {
-			if _, err := m.skills.ResetFromTemplate(ctx, req.ID); err != nil {
-				return nil, err
-			}
-			break
 		}
 		if err := m.skills.Delete(ctx, req.ID); err != nil {
 			return nil, err
@@ -602,7 +593,7 @@ func (m *MarketManager) Uninstall(ctx context.Context, req domain.UninstallMarke
 		if err != nil || ag == nil {
 			return nil, fmt.Errorf("expert %q not found", req.ID)
 		}
-		if ag.MarketSource == "" {
+		if ag.Source != "market" || ag.MarketSource == "" {
 			return nil, fmt.Errorf("expert %q was not installed from the market", req.ID)
 		}
 		if err := m.agents.Delete(ctx, req.ID); err != nil {

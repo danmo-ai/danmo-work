@@ -98,9 +98,10 @@ func TestMarketManagerInstallLocal(t *testing.T) {
 	}}
 	configMgr := NewConfigManager(cfgStore)
 	reg := &fakeRegistry{m: &fakeMarket{id: "local", root: abs}}
-	skills := NewSkillManager(newMemSkillRepo(), newMemSkillFileRepo())
-	agents := NewAgentManager(newMemAgentRepo())
-	mcp := NewMCPManager(newMemMCPServerRepo())
+	dataDir := t.TempDir()
+	skills := NewSkillManager(dataDir)
+	agents := NewAgentManager(dataDir)
+	mcp := NewMCPManager(dataDir)
 	mgr := NewMarketManager(configMgr, reg, skills, agents, mcp)
 
 	ctx := context.Background()
@@ -221,8 +222,9 @@ func TestMarketInstallNormalizesBodyWithCatalogID(t *testing.T) {
 			Sources: []domain.MarketSource{{ID: "local", Kind: "git", Enabled: true}},
 		},
 	}}
-	skills := NewSkillManager(newMemSkillRepo(), newMemSkillFileRepo())
-	agents := NewAgentManager(newMemAgentRepo())
+	dataDir := t.TempDir()
+	skills := NewSkillManager(dataDir)
+	agents := NewAgentManager(dataDir)
 	mgr := NewMarketManager(NewConfigManager(cfgStore), &fakeRegistry{m: &fakeMarket{id: "local", root: root}}, skills, agents, nil)
 
 	res, err := mgr.Install(context.Background(), domain.InstallMarketRequest{
@@ -250,17 +252,10 @@ func TestMarketUninstallRestoresBuiltinSkill(t *testing.T) {
 	ctx := context.Background()
 	cfgStore := &memConfigStore{cfg: &domain.ConfigFile{}}
 	configMgr := NewConfigManager(cfgStore)
-	skills := NewSkillManager(newMemSkillRepo(), newMemSkillFileRepo())
-	skills.SetTemplateLoader(func(id string) (*domain.Skill, error) {
-		if id != "debugging" {
-			return nil, os.ErrNotExist
-		}
-		return &domain.Skill{ID: "debugging", Name: "debugging", Body: "builtin-body", Builtin: true}, nil
-	})
-	skills.SetFileTemplateLoader(func(id string) ([]domain.SkillFile, error) {
-		return nil, nil
-	})
-	agents := NewAgentManager(newMemAgentRepo())
+	dataDir := t.TempDir()
+	skills := NewSkillManager(dataDir)
+	_ = skills.Upsert(ctx, domain.Skill{ID: "debugging", Name: "debugging", Body: "builtin-body", Source: "builtin"})
+	agents := NewAgentManager(dataDir)
 	mgr := NewMarketManager(configMgr, &fakeRegistry{}, skills, agents, nil)
 
 	_ = skills.Upsert(ctx, domain.Skill{
@@ -285,77 +280,9 @@ func TestMarketUninstallRestoresBuiltinSkill(t *testing.T) {
 	if got.MarketSource != "" {
 		t.Fatalf("marketSource = %q, want empty after restore", got.MarketSource)
 	}
-	if !got.Builtin {
+	if got.Source != "builtin" {
 		t.Fatal("restored skill should be builtin")
 	}
-}
-
-type memAgentRepo struct {
-	byID map[string]domain.Agent
-}
-
-func newMemAgentRepo() *memAgentRepo {
-	return &memAgentRepo{byID: make(map[string]domain.Agent)}
-}
-
-func (r *memAgentRepo) List(ctx context.Context) ([]domain.Agent, error) {
-	var out []domain.Agent
-	for _, a := range r.byID {
-		out = append(out, a)
-	}
-	return out, nil
-}
-
-func (r *memAgentRepo) Get(ctx context.Context, id string) (domain.Agent, error) {
-	a, ok := r.byID[id]
-	if !ok {
-		return domain.Agent{}, os.ErrNotExist
-	}
-	return a, nil
-}
-
-func (r *memAgentRepo) Upsert(ctx context.Context, a domain.Agent) error {
-	r.byID[a.ID] = a
-	return nil
-}
-
-func (r *memAgentRepo) Delete(ctx context.Context, id string) error {
-	delete(r.byID, id)
-	return nil
-}
-
-type memMCPServerRepo struct {
-	byID map[string]domain.MCPServer
-}
-
-func newMemMCPServerRepo() *memMCPServerRepo {
-	return &memMCPServerRepo{byID: make(map[string]domain.MCPServer)}
-}
-
-func (r *memMCPServerRepo) List(ctx context.Context) ([]domain.MCPServer, error) {
-	var out []domain.MCPServer
-	for _, s := range r.byID {
-		out = append(out, s)
-	}
-	return out, nil
-}
-
-func (r *memMCPServerRepo) Get(ctx context.Context, id string) (domain.MCPServer, error) {
-	s, ok := r.byID[id]
-	if !ok {
-		return domain.MCPServer{}, os.ErrNotExist
-	}
-	return s, nil
-}
-
-func (r *memMCPServerRepo) Upsert(ctx context.Context, s domain.MCPServer) error {
-	r.byID[s.ID] = s
-	return nil
-}
-
-func (r *memMCPServerRepo) Delete(ctx context.Context, id string) error {
-	delete(r.byID, id)
-	return nil
 }
 
 func TestMarketInstallExpertPullsConnectorDepsScript(t *testing.T) {
@@ -430,9 +357,10 @@ prompt
 			Sources: []domain.MarketSource{{ID: "local", Kind: "git", Enabled: true}},
 		},
 	}}
-	skills := NewSkillManager(newMemSkillRepo(), newMemSkillFileRepo())
-	agents := NewAgentManager(newMemAgentRepo())
-	mcp := NewMCPManager(newMemMCPServerRepo())
+	dataDir := t.TempDir()
+	skills := NewSkillManager(dataDir)
+	agents := NewAgentManager(dataDir)
+	mcp := NewMCPManager(dataDir)
 	mgr := NewMarketManager(NewConfigManager(cfgStore), &fakeRegistry{m: &fakeMarket{id: "local", root: root}}, skills, agents, mcp)
 
 	res, err := mgr.Install(context.Background(), domain.InstallMarketRequest{

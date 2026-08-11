@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSkillsStore } from '@/stores/skills'
+import { useProjectsStore } from '@/stores/projects'
 import { confirm, toast } from '@/utils/feedback'
 import type { Skill, SkillFile } from '@/types'
 import MdEditor from '@/components/common/MdEditor.vue'
@@ -15,6 +16,7 @@ type PageView = 'library' | 'market'
 
 const { t } = useI18n()
 const store = useSkillsStore()
+const projectsStore = useProjectsStore()
 const marketStore = useMarketStore()
 
 const pageView = ref<PageView>('library')
@@ -72,11 +74,32 @@ const marketSkills = computed(() =>
   sortedSkills.value.filter((s) => !!s.marketSource && !s.builtin),
 )
 const customSkills = computed(() =>
-  sortedSkills.value.filter((s) => !s.builtin && !s.marketSource),
+  sortedSkills.value.filter((s) => !s.builtin && !s.marketSource && !s.projectId),
 )
+const projectSkills = computed(() =>
+  sortedSkills.value.filter((s) => !!s.projectId),
+)
+const projectSkillGroups = computed(() => {
+  const groups = new Map<string, Skill[]>()
+  for (const s of projectSkills.value) {
+    const pid = s.projectId!
+    if (!groups.has(pid)) groups.set(pid, [])
+    groups.get(pid)!.push(s)
+  }
+  return groups
+})
+
+function projectName(id: string) {
+  return projectsStore.projects.find((p) => p.id === id)?.name ?? id
+}
+
+async function loadSkills() {
+  const projectIds = projectsStore.sortedProjects.map((p) => p.id)
+  await store.load(projectIds)
+}
 
 async function onMarketUninstalled() {
-  await store.load()
+  await loadSkills()
   if (selectedId.value && !store.items.some((s) => s.id === selectedId.value)) {
     selectedId.value = null
   }
@@ -108,7 +131,7 @@ const headerTitle = computed(() => {
 })
 
 async function onMarketInstalled() {
-  await store.load()
+  await loadSkills()
 }
 
 const skillTabs = computed(() => [
@@ -133,7 +156,7 @@ const metadataEntries = computed(() => {
 })
 
 onMounted(() => {
-  store.load()
+  loadSkills()
   if (!selectedId.value && sortedSkills.value.length) {
     selectSkill(sortedSkills.value[0].id)
   }
@@ -170,21 +193,18 @@ function initial(name: string) {
 }
 
 async function save() {
-  if (!skillForm.value.id.trim()) {
-    toast.warning(t('skills.idPlaceholder'))
-    return
-  }
-  if (!skillForm.value.name.trim()) {
+  const name = skillForm.value.name.trim()
+  if (!name) {
     toast.warning(t('skills.namePlaceholder'))
     return
   }
   saving.value = true
   try {
     if (isCreating.value) {
-      await store.create({ ...skillForm.value, id: skillForm.value.id.trim() })
+      const created = await store.create({ ...skillForm.value, id: name, name })
       toast.success(t('skills.created'))
       isCreating.value = false
-      selectedId.value = skillForm.value.id.trim()
+      selectedId.value = created.id
     } else if (selectedId.value) {
       const updated = await store.update(selectedId.value, { ...skillForm.value })
       skillForm.value = {
@@ -536,6 +556,28 @@ function formatSize(bytes: number): string {
               </button>
             </nav>
           </div>
+          <div v-if="projectSkills.length" class="resource-rail__group">
+            <div class="resource-rail__group-title">{{ $t('skills.projectSkills') }}</div>
+            <template v-for="[projectId, skills] in [...projectSkillGroups]" :key="projectId as string">
+              <div class="resource-rail__group-title resource-rail__group-subtitle">{{ projectName(projectId as string) }}</div>
+              <nav class="resource-rail__list">
+                <button
+                  v-for="skill in (skills as Skill[])"
+                  :key="skill.id"
+                  type="button"
+                  class="resource-rail__row"
+                  :class="{ 'is-active': selectedSkill?.id === skill.id && !isCreating }"
+                  @click="selectSkill(skill.id)"
+                >
+                  <span class="resource-rail__avatar">{{ initial(skill.name) }}</span>
+                  <span class="resource-rail__meta">
+                    <span class="resource-rail__name">{{ skill.name }}</span>
+                    <span class="resource-rail__desc">{{ skill.dir }}</span>
+                  </span>
+                </button>
+              </nav>
+            </template>
+          </div>
         </template>
         </template>
         <MarketCatalogRail v-else v-model:selected-key="marketSelectedKey" kind="skill" />
@@ -591,13 +633,12 @@ function formatSize(bytes: number): string {
         <section v-show="activeTab === 'info'" class="resource-section">
           <div class="resource-form-grid resource-form-grid--3">
             <label class="resource-field">
-              <span class="resource-field__label">{{ $t('skills.skillId') }}</span>
-              <DqInput v-model="skillForm.id" class="resource-input-mono" placeholder="my-skill" :disabled="!isCreating" />
-              <span v-if="isCreating" class="resource-field__hint">{{ $t('skills.idHint') }}</span>
-            </label>
-            <label class="resource-field">
               <span class="resource-field__label">{{ $t('common.name') }}</span>
               <DqInput v-model="skillForm.name" :placeholder="$t('skills.namePlaceholder')" />
+            </label>
+            <label class="resource-field">
+              <span class="resource-field__label">{{ $t('skills.path') }}</span>
+              <DqInput v-model="skillForm.dir" class="resource-input-mono" readonly :placeholder="$t('skills.pathPlaceholder')" />
             </label>
             <label class="resource-field">
               <span class="resource-field__label">License</span>

@@ -131,9 +131,6 @@ func (s *Store) withWrite(fn func(*gorm.DB) error) error {
 
 func (s *Store) migrate() error {
 	if err := s.db.AutoMigrate(
-		&agentModel{},
-		&skillModel{},
-		&skillFileModel{},
 		&sessionModel{},
 		&projectModel{},
 		&llmConfigModel{},
@@ -142,7 +139,6 @@ func (s *Store) migrate() error {
 		&memoryModel{},
 		&streamEventModel{},
 		&turnModel{},
-		&mcpServerModel{},
 		&secretModel{},
 		&automationModel{},
 		&weixinAccountModel{},
@@ -163,23 +159,6 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
-	// One-time: agent.steps 0 = follow runtime.turn.max_steps_default.
-	if err := s.db.AutoMigrate(&appMetaModel{}); err != nil {
-		return err
-	}
-	const metaKey = "agent_steps_follow_global_v1"
-	var meta appMetaModel
-	err := s.db.Where("key = ?", metaKey).First(&meta).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		if err := s.db.Exec("UPDATE agents SET steps = 0").Error; err != nil {
-			return err
-		}
-		if err := s.db.Create(&appMetaModel{Key: metaKey, Value: "1"}).Error; err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
-	}
 	if err := migrateKnowledgeSchema(s.db); err != nil {
 		return err
 	}
@@ -192,10 +171,6 @@ type appMetaModel struct {
 }
 
 func (appMetaModel) TableName() string { return "app_meta" }
-
-func (s *Store) Agents() port.AgentRepo                   { return &agentRepo{s} }
-func (s *Store) Skills() port.SkillRepo                   { return &skillRepo{s} }
-func (s *Store) SkillFiles() port.SkillFileRepo           { return &skillFileRepo{s} }
 func (s *Store) Sessions() port.SessionRepo               { return &sessionRepo{s} }
 func (s *Store) Projects() port.ProjectRepo               { return &projectRepo{s} }
 func (s *Store) LLMConfig() port.LLMConfigRepo            { return &llmConfigRepo{s} }
@@ -203,7 +178,6 @@ func (s *Store) Approvals() port.ApprovalRepo             { return &approvalRepo
 func (s *Store) PendingMessages() port.PendingMessageRepo { return &pendingMessageRepo{s} }
 func (s *Store) StreamEvents() port.StreamEventRepo       { return &streamEventRepo{s} }
 func (s *Store) Turns() port.TurnRepo                     { return &turnRepo{s} }
-func (s *Store) MCPServers() port.MCPServerRepo           { return &mcpServerRepo{s} }
 func (s *Store) Secrets() port.SecretStore                { return newSecretStore(s.db) }
 func (s *Store) Automations() port.AutomationRepo         { return &automationRepo{s} }
 func (s *Store) Memories() port.MemoryRepo                { return &memoryRepo{s} }
@@ -211,137 +185,6 @@ func (s *Store) WeixinAccounts() port.WeixinAccountRepo   { return &weixinAccoun
 func (s *Store) WeixinBindings() port.WeixinBindingRepo   { return &weixinBindingRepo{s} }
 func (s *Store) ChannelBindings() port.ChannelBindingRepo { return &channelBindingRepo{s} }
 func (s *Store) AppMeta() port.AppMetaRepo                { return &appMetaRepo{s} }
-
-// ---- AgentRepo ----
-
-type agentRepo struct{ s *Store }
-
-func (r *agentRepo) List(ctx context.Context) ([]domain.Agent, error) {
-	var rows []agentModel
-	if err := r.s.db.WithContext(ctx).Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	out := make([]domain.Agent, len(rows))
-	for i, row := range rows {
-		out[i] = agentToDomain(row)
-	}
-	return out, nil
-}
-
-func (r *agentRepo) Get(ctx context.Context, id string) (domain.Agent, error) {
-	var row agentModel
-	if err := r.s.db.WithContext(ctx).First(&row, "id = ?", id).Error; err != nil {
-		return domain.Agent{}, err
-	}
-	return agentToDomain(row), nil
-}
-
-func (r *agentRepo) Upsert(ctx context.Context, a domain.Agent) error {
-	m := agentFromDomain(a)
-	var existing agentModel
-	err := r.s.db.WithContext(ctx).First(&existing, "id = ?", a.ID).Error
-	if err != nil {
-		return r.s.db.WithContext(ctx).Create(&m).Error
-	}
-	// Select all columns so zero values (steps=0 follow-global, can_delegate=false) persist.
-	// Plain Updates() skips zero fields and left legacy per-agent step caps stuck.
-	return r.s.db.WithContext(ctx).Model(&existing).Select(
-		"Name", "Description", "Persona", "Mode", "SystemPrompt", "Steps",
-		"SkillIDsJSON", "ToolsJSON", "KnowledgeJSON", "CanDelegate",
-	).Updates(&m).Error
-}
-
-func (r *agentRepo) Delete(ctx context.Context, id string) error {
-	return r.s.db.WithContext(ctx).Delete(&agentModel{}, "id = ?", id).Error
-}
-
-// ---- SkillRepo ----
-
-type skillRepo struct{ s *Store }
-
-func (r *skillRepo) List(ctx context.Context) ([]domain.Skill, error) {
-	var rows []skillModel
-	if err := r.s.db.WithContext(ctx).Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	out := make([]domain.Skill, len(rows))
-	for i, row := range rows {
-		out[i] = skillToDomain(row)
-	}
-	return out, nil
-}
-
-func (r *skillRepo) Get(ctx context.Context, id string) (domain.Skill, error) {
-	var row skillModel
-	if err := r.s.db.WithContext(ctx).First(&row, "id = ?", id).Error; err != nil {
-		return domain.Skill{}, err
-	}
-	return skillToDomain(row), nil
-}
-
-func (r *skillRepo) Upsert(ctx context.Context, sk domain.Skill) error {
-	m := skillFromDomain(sk)
-	var existing skillModel
-	err := r.s.db.WithContext(ctx).First(&existing, "id = ?", sk.ID).Error
-	if err != nil {
-		return r.s.db.WithContext(ctx).Create(&m).Error
-	}
-	// Select all columns so zero values (and builtin=true/false) always persist.
-	// Plain Updates() skips zero fields and can leave stale builtin/metadata.
-	return r.s.db.WithContext(ctx).Model(&existing).Select(
-		"Name", "Description", "License", "Compatibility", "MetadataJSON",
-		"AllowedTools", "KeywordsJSON", "ToolIDsJSON", "SystemHint", "Body",
-		"SourcePath", "Builtin",
-	).Updates(&m).Error
-}
-
-func (r *skillRepo) Delete(ctx context.Context, id string) error {
-	return r.s.db.WithContext(ctx).Delete(&skillModel{}, "id = ?", id).Error
-}
-
-// ---- SkillFileRepo ----
-
-type skillFileRepo struct{ s *Store }
-
-func (r *skillFileRepo) ListBySkill(ctx context.Context, skillID string) ([]domain.SkillFile, error) {
-	var rows []skillFileModel
-	if err := r.s.db.WithContext(ctx).Where("skill_id = ?", skillID).Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	out := make([]domain.SkillFile, len(rows))
-	for i, row := range rows {
-		out[i] = skillFileToDomain(row)
-	}
-	return out, nil
-}
-
-func (r *skillFileRepo) Get(ctx context.Context, skillID, path string) (domain.SkillFile, error) {
-	id := skillID + ":" + path
-	var row skillFileModel
-	if err := r.s.db.WithContext(ctx).First(&row, "id = ?", id).Error; err != nil {
-		return domain.SkillFile{}, err
-	}
-	return skillFileToDomain(row), nil
-}
-
-func (r *skillFileRepo) Upsert(ctx context.Context, f domain.SkillFile) error {
-	m := skillFileFromDomain(f)
-	var existing skillFileModel
-	err := r.s.db.WithContext(ctx).First(&existing, "id = ?", m.ID).Error
-	if err != nil {
-		return r.s.db.WithContext(ctx).Create(&m).Error
-	}
-	return r.s.db.WithContext(ctx).Model(&existing).Updates(&m).Error
-}
-
-func (r *skillFileRepo) Delete(ctx context.Context, skillID, path string) error {
-	id := skillID + ":" + path
-	return r.s.db.WithContext(ctx).Delete(&skillFileModel{}, "id = ?", id).Error
-}
-
-func (r *skillFileRepo) DeleteBySkill(ctx context.Context, skillID string) error {
-	return r.s.db.WithContext(ctx).Delete(&skillFileModel{}, "skill_id = ?", skillID).Error
-}
 
 // ---- SessionRepo ----
 
@@ -747,51 +590,6 @@ func (r *turnRepo) ListByStatus(ctx context.Context, status domain.TurnStatus) (
 		out[i] = turnToDomain(row)
 	}
 	return out, nil
-}
-
-// ---- MCPServerRepo ----
-
-type mcpServerRepo struct{ s *Store }
-
-func (r *mcpServerRepo) List(ctx context.Context) ([]domain.MCPServer, error) {
-	var rows []mcpServerModel
-	if err := r.s.db.WithContext(ctx).Order("rowid asc").Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	out := make([]domain.MCPServer, len(rows))
-	for i, row := range rows {
-		out[i] = mcpServerToDomain(row)
-	}
-	return out, nil
-}
-
-func (r *mcpServerRepo) Get(ctx context.Context, id string) (domain.MCPServer, error) {
-	var row mcpServerModel
-	if err := r.s.db.WithContext(ctx).First(&row, "id = ?", id).Error; err != nil {
-		return domain.MCPServer{}, err
-	}
-	return mcpServerToDomain(row), nil
-}
-
-func (r *mcpServerRepo) Upsert(ctx context.Context, s domain.MCPServer) error {
-	m := mcpServerFromDomain(s)
-	cols := []string{
-		"Name", "Description", "Transport", "Command", "Args", "URL", "Env",
-		"HeadersJSON", "Auth", "SecretHeadersRefJSON",
-		"OAuthClientID", "OAuthAuthorizeURL", "OAuthTokenURL", "OAuthScopes", "OAuthStatus",
-		"CatalogID", "MarketSource", "EnabledToolsJSON", "DiscoveredToolsJSON",
-		"ToolTimeout", "Status", "Enabled", "AmbientMount", "Network",
-	}
-	var existing mcpServerModel
-	if err := r.s.db.WithContext(ctx).First(&existing, "id = ?", s.ID).Error; err != nil {
-		// Select includes AmbientMount/Enabled so false is not dropped (GORM zero-value skip).
-		return r.s.db.WithContext(ctx).Select(append([]string{"ID"}, cols...)).Create(&m).Error
-	}
-	return r.s.db.WithContext(ctx).Model(&existing).Select(cols).Updates(&m).Error
-}
-
-func (r *mcpServerRepo) Delete(ctx context.Context, id string) error {
-	return r.s.db.WithContext(ctx).Delete(&mcpServerModel{}, "id = ?", id).Error
 }
 
 // ---- MemoryRepo ----

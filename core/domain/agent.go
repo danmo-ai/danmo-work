@@ -45,13 +45,13 @@ type Agent struct {
 	MCPServers   []string `json:"mcpServers,omitempty"`
 	KnowledgeIDs []string `json:"knowledgeIds"`
 	CanDelegate  bool     `json:"canDelegate"`
-	// InheritAmbient controls the Ambient capability layer (filesystem skills +
-	// all enabled MCP servers). nil = default by Mode: primary true, subagent false.
+// InheritAmbient is unused (replaced by AgentMode) but kept for backward compat.
+// Primary agents get all skills/MCP; subagents get only bound.
 	InheritAmbient *bool `json:"inheritAmbient,omitempty"`
-	// Builtin is computed (not a DB column): true when an embedded template exists.
-	Builtin bool `json:"builtin,omitempty"`
-	// MarketSource is computed from YAML frontmatter stored in SystemPrompt
-	// (metadata.market.source); not a DB column.
+	// Source tracks the origin: builtin, market, or user.
+	Source string `json:"source,omitempty"`
+	Builtin bool `json:"builtin"`
+	// MarketSource is the market source id when installed from the marketplace.
 	MarketSource string `json:"marketSource,omitempty"`
 }
 

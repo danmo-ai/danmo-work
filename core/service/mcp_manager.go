@@ -2,7 +2,11 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -11,23 +15,44 @@ import (
 	"danmo-work/core/port"
 )
 
-// MCPManager persists MCP server config, keeps live sessions, and syncs tools
+const mcpSchemaURL = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
+
+type mcpSpecServer struct {
+	Type    string            `json:"type"`
+	Command string            `json:"command,omitempty"`
+	Args    string            `json:"args,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Cwd     string            `json:"cwd,omitempty"`
+}
+
+type mcpSpecDoc struct {
+	Schema     string                   `json:"$schema"`
+	MCPServers map[string]mcpSpecServer `json:"mcpServers"`
+}
+
+// MCPManager persists MCP server config (mcp.json), keeps live sessions, and syncs tools
 // into the runtime catalog via MCPToolSync.
 type MCPManager struct {
-	repo    port.MCPServerRepo
+	mcpFile string
+	servers map[string]domain.MCPServer
 	secrets port.SecretStore
 	dialer  port.MCPDialer
 	syncer  port.MCPToolSync
 
 	mu       sync.Mutex
-	sessions map[string]port.MCPSession // serverID -> session
+	sessions map[string]port.MCPSession
 }
 
-func NewMCPManager(repo port.MCPServerRepo) *MCPManager {
-	return &MCPManager{
-		repo:     repo,
+func NewMCPManager(dataDir string) *MCPManager {
+	m := &MCPManager{
+		mcpFile:  filepath.Join(dataDir, "mcp.json"),
+		servers:  make(map[string]domain.MCPServer),
 		sessions: make(map[string]port.MCPSession),
 	}
+	m.loadFromDisk()
+	return m
 }
 
 func (m *MCPManager) SetDialer(d port.MCPDialer) { m.dialer = d }
@@ -36,12 +61,149 @@ func (m *MCPManager) SetSecretStore(s port.SecretStore) { m.secrets = s }
 
 func (m *MCPManager) SetToolSync(s port.MCPToolSync) { m.syncer = s }
 
+func (m *MCPManager) loadFromDisk() {
+	data, err := os.ReadFile(m.mcpFile)
+	if err != nil {
+		return
+	}
+	var doc mcpSpecDoc
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return
+	}
+	for id, srv := range doc.MCPServers {
+		server := mcpSpecToDomain(id, srv)
+		normalizeMCPServer(&server)
+		m.servers[id] = server
+	}
+}
+
+func (m *MCPManager) saveToDisk() error {
+	doc := mcpSpecDoc{
+		Schema:     mcpSchemaURL,
+		MCPServers: make(map[string]mcpSpecServer),
+	}
+	for id, srv := range m.servers {
+		doc.MCPServers[id] = domainToMCPSpec(srv)
+	}
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(m.mcpFile)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(m.mcpFile, append(data, '\n'), 0o644)
+}
+
+func mcpSpecToDomain(id string, spec mcpSpecServer) domain.MCPServer {
+	var args string
+	if spec.Args != "" {
+		args = spec.Args
+	}
+	var env string
+	if len(spec.Env) > 0 {
+		parts := make([]string, 0, len(spec.Env))
+		for k, v := range spec.Env {
+			parts = append(parts, k+"="+v)
+		}
+		env = strings.Join(parts, "\n")
+	}
+	return domain.MCPServer{
+		ID:          id,
+		Name:        id,
+		Transport:   spec.Type,
+		Command:     spec.Command,
+		Args:        args,
+		URL:         spec.URL,
+		Env:         env,
+		Headers:     spec.Headers,
+		Enabled:     true,
+		AmbientMount: true,
+	}
+}
+
+func domainToMCPSpec(srv domain.MCPServer) mcpSpecServer {
+	spec := mcpSpecServer{
+		Type:    srv.Transport,
+		Command: srv.Command,
+		Args:    srv.Args,
+		URL:     srv.URL,
+		Headers: srv.Headers,
+	}
+	if srv.Env != "" {
+		envMap := make(map[string]string)
+		for _, line := range strings.Split(srv.Env, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				envMap[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+			}
+		}
+		if len(envMap) > 0 {
+			spec.Env = envMap
+		}
+	}
+	return spec
+}
+
+// SyncBuiltinMCP adds built-in MCP server entries that are missing from the user's mcp.json.
+// Never overwrites existing entries with the same ID.
+func (m *MCPManager) SyncBuiltinMCP() error {
+	builtins := map[string]mcpSpecServer{}
+
+	danmoMakeURL := ResolveDanmoMakeMCPURL()
+	if danmoMakeURL != "" {
+		builtins["danmo-make"] = mcpSpecServer{
+			Type: "streamable-http",
+			URL:  danmoMakeURL,
+		}
+	}
+
+	builtins["github"] = mcpSpecServer{
+		Type: "streamable-http",
+		URL:  "https://api.githubcopilot.com/mcp/",
+	}
+
+	m.mu.Lock()
+	changed := false
+	for id, spec := range builtins {
+		if _, exists := m.servers[id]; !exists {
+			m.servers[id] = mcpSpecToDomain(id, spec)
+			changed = true
+			log.Printf("[mcp] added builtin server %q", id)
+		}
+	}
+	saveErr := m.saveToDisk()
+	m.mu.Unlock()
+
+	if changed {
+		log.Printf("[mcp] builtin sync: %d new server(s)", 1)
+	}
+	return saveErr
+}
+
 func (m *MCPManager) List(ctx context.Context) ([]domain.MCPServer, error) {
-	return m.repo.List(ctx)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	list := make([]domain.MCPServer, 0, len(m.servers))
+	for _, s := range m.servers {
+		list = append(list, s)
+	}
+	return list, nil
 }
 
 func (m *MCPManager) Get(ctx context.Context, id string) (domain.MCPServer, error) {
-	return m.repo.Get(ctx, id)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.servers[id]
+	if !ok {
+		return domain.MCPServer{}, fmt.Errorf("MCP server %q not found", id)
+	}
+	return s, nil
 }
 
 func (m *MCPManager) Create(ctx context.Context, req domain.UpsertMCPServerRequest) (domain.MCPServer, error) {
@@ -53,29 +215,29 @@ func (m *MCPManager) Create(ctx context.Context, req domain.UpsertMCPServerReque
 		id = fmt.Sprintf("mcp-%d", time.Now().UnixNano())
 	}
 	s := domain.MCPServer{
-		ID:                 id,
-		Name:               req.Name,
-		Description:        req.Description,
-		Transport:          req.Transport,
-		Command:            req.Command,
-		Args:               req.Args,
-		URL:                req.URL,
-		Env:                req.Env,
-		Headers:            req.Headers,
-		Auth:               req.Auth,
-		SecretHeadersRef:   req.SecretHeadersRef,
-		OAuthClientID:      req.OAuthClientID,
-		OAuthAuthorizeURL:  req.OAuthAuthorizeURL,
-		OAuthTokenURL:      req.OAuthTokenURL,
-		OAuthScopes:        req.OAuthScopes,
-		CatalogID:          req.CatalogID,
-		MarketSource:       req.MarketSource,
-		EnabledTools:       req.EnabledTools,
-		ToolTimeout:        req.ToolTimeout,
-		Status:             "disconnected",
-		Enabled:            req.Enabled,
-		Network:            req.Network,
-		AmbientMount:       true,
+		ID:                id,
+		Name:              req.Name,
+		Description:       req.Description,
+		Transport:         req.Transport,
+		Command:           req.Command,
+		Args:              req.Args,
+		URL:               req.URL,
+		Env:               req.Env,
+		Headers:           req.Headers,
+		Auth:              req.Auth,
+		SecretHeadersRef:  req.SecretHeadersRef,
+		OAuthClientID:     req.OAuthClientID,
+		OAuthAuthorizeURL: req.OAuthAuthorizeURL,
+		OAuthTokenURL:     req.OAuthTokenURL,
+		OAuthScopes:       req.OAuthScopes,
+		CatalogID:         req.CatalogID,
+		MarketSource:      req.MarketSource,
+		EnabledTools:      req.EnabledTools,
+		ToolTimeout:       req.ToolTimeout,
+		Status:            "disconnected",
+		Enabled:           req.Enabled,
+		Network:           req.Network,
+		AmbientMount:      true,
 	}
 	if req.AmbientMount != nil {
 		s.AmbientMount = *req.AmbientMount
@@ -84,7 +246,11 @@ func (m *MCPManager) Create(ctx context.Context, req domain.UpsertMCPServerReque
 	if err := m.storeHeaderSecrets(ctx, s.ID, req.HeaderSecrets, &s); err != nil {
 		return domain.MCPServer{}, err
 	}
-	if err := m.repo.Upsert(ctx, s); err != nil {
+	m.mu.Lock()
+	m.servers[id] = s
+	err := m.saveToDisk()
+	m.mu.Unlock()
+	if err != nil {
 		return domain.MCPServer{}, err
 	}
 	_ = m.syncServer(ctx, s)
@@ -92,10 +258,13 @@ func (m *MCPManager) Create(ctx context.Context, req domain.UpsertMCPServerReque
 }
 
 func (m *MCPManager) Update(ctx context.Context, id string, req domain.UpsertMCPServerRequest) (domain.MCPServer, error) {
-	existing, err := m.repo.Get(ctx, id)
-	if err != nil {
-		return domain.MCPServer{}, fmt.Errorf("MCP server not found: %w", err)
+	m.mu.Lock()
+	existing, ok := m.servers[id]
+	if !ok {
+		m.mu.Unlock()
+		return domain.MCPServer{}, fmt.Errorf("MCP server not found")
 	}
+	m.mu.Unlock()
 	if req.Name != "" {
 		existing.Name = req.Name
 	}
@@ -151,7 +320,11 @@ func (m *MCPManager) Update(ctx context.Context, id string, req domain.UpsertMCP
 		return domain.MCPServer{}, err
 	}
 	m.closeSession(id)
-	if err := m.repo.Upsert(ctx, existing); err != nil {
+	m.mu.Lock()
+	m.servers[id] = existing
+	err := m.saveToDisk()
+	m.mu.Unlock()
+	if err != nil {
 		return domain.MCPServer{}, err
 	}
 	_ = m.syncServer(ctx, existing)
@@ -166,20 +339,21 @@ func (m *MCPManager) Delete(ctx context.Context, id string) error {
 	if m.syncer != nil {
 		m.syncer.RemoveMCPServer(id)
 	}
-	return m.repo.Delete(ctx, id)
+	m.mu.Lock()
+	delete(m.servers, id)
+	err := m.saveToDisk()
+	m.mu.Unlock()
+	return err
 }
 
-// FindByCatalogID returns the first installed server matching catalog/market id.
 func (m *MCPManager) FindByCatalogID(ctx context.Context, catalogID string) (domain.MCPServer, bool, error) {
 	catalogID = strings.TrimSpace(catalogID)
 	if catalogID == "" {
 		return domain.MCPServer{}, false, nil
 	}
-	list, err := m.repo.List(ctx)
-	if err != nil {
-		return domain.MCPServer{}, false, err
-	}
-	for _, s := range list {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, s := range m.servers {
 		if s.ID == catalogID || s.CatalogID == catalogID {
 			return s, true, nil
 		}
@@ -187,13 +361,11 @@ func (m *MCPManager) FindByCatalogID(ctx context.Context, catalogID string) (dom
 	return domain.MCPServer{}, false, nil
 }
 
-// RefreshTools connects to the MCP server and discovers available tools.
 func (m *MCPManager) RefreshTools(ctx context.Context, id string) ([]domain.MCPToolDef, error) {
-	srv, err := m.repo.Get(ctx, id)
+	srv, err := m.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("MCP server not found: %w", err)
 	}
-
 	timeout := time.Duration(srv.ToolTimeout) * time.Second
 	if timeout <= 0 {
 		timeout = 30 * time.Second
@@ -203,14 +375,10 @@ func (m *MCPManager) RefreshTools(ctx context.Context, id string) ([]domain.MCPT
 
 	sess, err := m.openSession(ctx, srv)
 	if err != nil {
-		srv.Status = "error"
-		_ = m.repo.Upsert(context.Background(), srv)
 		return nil, fmt.Errorf("connect: %w", err)
 	}
 	discoveredInfo, err := sess.ListTools(ctx)
 	if err != nil {
-		srv.Status = "error"
-		_ = m.repo.Upsert(context.Background(), srv)
 		return nil, fmt.Errorf("discover tools: %w", err)
 	}
 
@@ -231,25 +399,21 @@ func (m *MCPManager) RefreshTools(ctx context.Context, id string) ([]domain.MCPT
 			InputSchema: t.InputSchema,
 		}
 	}
-
 	srv.DiscoveredTools = discovered
 	srv.Status = "connected"
 	rebuildEnabledTools(&srv)
-
-	if err := m.repo.Upsert(ctx, srv); err != nil {
-		return nil, err
-	}
+	m.mu.Lock()
+	m.servers[id] = srv
+	m.mu.Unlock()
 	_ = m.syncServer(ctx, srv)
 	return discovered, nil
 }
 
-// ToggleTool enables or disables a single discovered tool.
 func (m *MCPManager) ToggleTool(ctx context.Context, id string, toolName string, enabled bool) (domain.MCPServer, error) {
-	srv, err := m.repo.Get(ctx, id)
+	srv, err := m.Get(ctx, id)
 	if err != nil {
 		return domain.MCPServer{}, fmt.Errorf("MCP server not found: %w", err)
 	}
-
 	found := false
 	for i, t := range srv.DiscoveredTools {
 		if t.Name == toolName {
@@ -262,16 +426,15 @@ func (m *MCPManager) ToggleTool(ctx context.Context, id string, toolName string,
 		return domain.MCPServer{}, fmt.Errorf("tool not found: %s", toolName)
 	}
 	rebuildEnabledTools(&srv)
-	if err := m.repo.Upsert(ctx, srv); err != nil {
-		return domain.MCPServer{}, err
-	}
+	m.mu.Lock()
+	m.servers[id] = srv
+	m.mu.Unlock()
 	_ = m.syncServer(ctx, srv)
 	return srv, nil
 }
 
-// CallTool implements port.MCPCaller for runtime MCP handlers.
 func (m *MCPManager) CallTool(ctx context.Context, serverID, toolName string, args map[string]any) (string, error) {
-	srv, err := m.repo.Get(ctx, serverID)
+	srv, err := m.Get(ctx, serverID)
 	if err != nil {
 		return "", fmt.Errorf("MCP server not found: %w", err)
 	}
@@ -284,7 +447,6 @@ func (m *MCPManager) CallTool(ctx context.Context, serverID, toolName string, ar
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-
 	sess, err := m.openSession(ctx, srv)
 	if err != nil {
 		return "", err
@@ -292,17 +454,13 @@ func (m *MCPManager) CallTool(ctx context.Context, serverID, toolName string, ar
 	return sess.CallTool(ctx, toolName, args)
 }
 
-// SyncAll registers enabled MCP tools into the runtime catalog.
 func (m *MCPManager) SyncAll(ctx context.Context) error {
-	servers, err := m.repo.List(ctx)
+	servers, err := m.List(ctx)
 	if err != nil {
 		return err
 	}
 	for _, srv := range servers {
-		if err := m.syncServer(ctx, srv); err != nil {
-			// Non-fatal per server
-			_ = err
-		}
+		_ = m.syncServer(ctx, srv)
 	}
 	return nil
 }
@@ -359,7 +517,6 @@ func (m *MCPManager) openSession(ctx context.Context, srv domain.MCPServer) (por
 		return nil, err
 	}
 	m.mu.Lock()
-	// Close race winner if any
 	if old, ok := m.sessions[srv.ID]; ok && old != nil {
 		_ = old.Close()
 	}
@@ -420,7 +577,6 @@ func (m *MCPManager) storeHeaderSecrets(ctx context.Context, serverID string, se
 			return err
 		}
 		srv.SecretHeadersRef[header] = key
-		// Never persist secret values in Headers
 		if srv.Headers != nil {
 			delete(srv.Headers, header)
 		}
@@ -428,9 +584,8 @@ func (m *MCPManager) storeHeaderSecrets(ctx context.Context, serverID string, se
 	return nil
 }
 
-// BeginOAuth stores a pending OAuth state and returns the authorize URL.
 func (m *MCPManager) BeginOAuth(ctx context.Context, id, redirectURI string) (authorizeURL string, state string, err error) {
-	srv, err := m.repo.Get(ctx, id)
+	srv, err := m.Get(ctx, id)
 	if err != nil {
 		return "", "", fmt.Errorf("MCP server not found: %w", err)
 	}
@@ -446,7 +601,9 @@ func (m *MCPManager) BeginOAuth(ctx context.Context, id, redirectURI string) (au
 	}
 	srv.Auth = domain.MCPAuthOAuth
 	srv.OAuthStatus = "pending"
-	_ = m.repo.Upsert(ctx, srv)
+	m.mu.Lock()
+	m.servers[id] = srv
+	m.mu.Unlock()
 
 	sep := "?"
 	if containsQuery(srv.OAuthAuthorizeURL) {
@@ -465,9 +622,8 @@ func (m *MCPManager) BeginOAuth(ctx context.Context, id, redirectURI string) (au
 	return url, state, nil
 }
 
-// CompleteOAuth exchanges the code for tokens (or stores a pasted access token).
 func (m *MCPManager) CompleteOAuth(ctx context.Context, id, code, state, accessToken string) (domain.MCPServer, error) {
-	srv, err := m.repo.Get(ctx, id)
+	srv, err := m.Get(ctx, id)
 	if err != nil {
 		return domain.MCPServer{}, fmt.Errorf("MCP server not found: %w", err)
 	}
@@ -479,7 +635,6 @@ func (m *MCPManager) CompleteOAuth(ctx context.Context, id, code, state, accessT
 	}
 	token := accessToken
 	if token == "" && code != "" && srv.OAuthTokenURL != "" {
-		// Minimal token exchange; many MCP OAuth servers use DCR — allow paste fallback.
 		token = code
 	}
 	if token == "" {
@@ -493,9 +648,9 @@ func (m *MCPManager) CompleteOAuth(ctx context.Context, id, code, state, accessT
 	srv.Auth = domain.MCPAuthOAuth
 	srv.OAuthStatus = "connected"
 	m.closeSession(id)
-	if err := m.repo.Upsert(ctx, srv); err != nil {
-		return domain.MCPServer{}, err
-	}
+	m.mu.Lock()
+	m.servers[id] = srv
+	m.mu.Unlock()
 	_ = m.syncServer(ctx, srv)
 	return srv, nil
 }

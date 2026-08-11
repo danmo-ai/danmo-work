@@ -137,11 +137,8 @@ func New(cfg Config) *Core {
 	ensureDefaultProject(pm)
 
 	turnLog := turnlog.NewTurnLogStore(pm.ProjectDir)
-	agents := service.NewAgentManager(st.Agents())
-	agents.SetTemplateLoader(prompt.LoadTemplateByID)
-	skills := service.NewSkillManager(st.Skills(), st.SkillFiles())
-	skills.SetTemplateLoader(prompt.LoadSkillTemplateByID)
-	skills.SetFileTemplateLoader(prompt.LoadBuiltinSkillFiles)
+	agents := service.NewAgentManager(appCfg.Data.Dir)
+	skills := service.NewSkillManager(appCfg.Data.Dir)
 	knowledgeMgr := service.NewKnowledgeManager(
 		st.KnowledgeBases(),
 		st.KnowledgeDocs(),
@@ -177,7 +174,7 @@ func New(cfg Config) *Core {
 	turnManager := service.NewTurnManager(st.Turns())
 	turnLogManager := service.NewTurnLogManager(turnLog)
 	approvalManager := service.NewApprovalManager(st.Approvals())
-	mcpManager := service.NewMCPManager(st.MCPServers())
+	mcpManager := service.NewMCPManager(appCfg.Data.Dir)
 	mcpManager.SetSecretStore(st.Secrets())
 	mcpDialer := adaptermcp.NewDialer()
 	mcpManager.SetDialer(mcpDialer)
@@ -202,9 +199,12 @@ func New(cfg Config) *Core {
 		provider = client
 	}
 
-	ensureBuiltinAgents(agents)
-	ensureBuiltinSkills(skills)
-	ensureBuiltinConnectors(mcpManager)
+	if err := service.SyncBuiltinToFS(appCfg.Data.Dir); err != nil {
+		log.Printf("[bootstrap] builtin sync: %v", err)
+	}
+	if err := mcpManager.SyncBuiltinMCP(); err != nil {
+		log.Printf("[bootstrap] builtin mcp sync: %v", err)
+	}
 
 	marketReg := marketadapter.NewRegistry(appCfg.Market.Sources)
 	marketMgr := service.NewMarketManager(configManager, marketReg, skills, agents, mcpManager)
@@ -269,7 +269,7 @@ func New(cfg Config) *Core {
 	eng.RegisterTool(&builtin.HTTPRequest{ConfigFunc: searchCfgFn, Egress: sb})
 	eng.RegisterTool(&builtin.AskUser{})
 	eng.RegisterTool(&builtin.Sleep{})
-	eng.RegisterTool(&builtin.ReadSkill{Skills: skills})
+	eng.RegisterTool(&builtin.ReadSkill{})
 	memTopK := appCfg.Runtime.Memory.ReadTopK
 	if memTopK <= 0 {
 		memTopK = 10
@@ -356,11 +356,6 @@ func New(cfg Config) *Core {
 		// Non-fatal: channels may be disabled or incomplete.
 		_ = err
 	}
-
-	service.StartFirstLaunchAsync(func() {
-		// Refresh product builtin connectors after post-install hooks (danmo-make, github, …).
-		ensureBuiltinConnectors(mcpManager)
-	})
 
 	return &Core{
 		Store:         st,
@@ -454,176 +449,5 @@ func ensureNovelCraftKnowledge(knowledgeMgr *service.KnowledgeManager) {
 	}
 	if _, err := knowledgeMgr.EnsureNovelCraftKnowledge(context.Background(), seeds); err != nil {
 		log.Printf("[bootstrap] seed novel craft KB: %v", err)
-	}
-}
-
-func ensureBuiltinAgents(agents *service.AgentManager) {
-	ctx := context.Background()
-	templates, err := prompt.LoadTemplates()
-	if err != nil {
-		return
-	}
-	for _, tmpl := range templates {
-		existing, err := agents.Get(ctx, tmpl.Agent.ID)
-		if err != nil {
-			if err := agents.Upsert(ctx, tmpl.Agent); err != nil {
-				log.Printf("[bootstrap] seed builtin agent %q: %v", tmpl.Agent.ID, err)
-			}
-			continue
-		}
-		// Template-backed agents must not stay "custom": clear accidental marketSource
-		// and backfill empty skill/MCP bindings from the embedded template.
-		if existing.MarketSource != "" {
-			continue
-		}
-		changed := false
-		if len(existing.SkillIDs) == 0 && len(tmpl.Agent.SkillIDs) > 0 {
-			existing.SkillIDs = append([]string(nil), tmpl.Agent.SkillIDs...)
-			changed = true
-		}
-		if len(existing.KnowledgeIDs) == 0 && len(tmpl.Agent.KnowledgeIDs) > 0 {
-			existing.KnowledgeIDs = append([]string(nil), tmpl.Agent.KnowledgeIDs...)
-			changed = true
-		}
-		if len(existing.MCPServers) == 0 && len(tmpl.Agent.MCPServers) > 0 {
-			existing.MCPServers = append([]string(nil), tmpl.Agent.MCPServers...)
-			changed = true
-		}
-		if existing.InheritAmbient == nil && tmpl.Agent.InheritAmbient != nil {
-			existing.InheritAmbient = tmpl.Agent.InheritAmbient
-			changed = true
-		}
-		if existing.Mode == "" && tmpl.Agent.Mode != "" {
-			existing.Mode = tmpl.Agent.Mode
-			changed = true
-		}
-		if changed {
-			if err := agents.Upsert(ctx, *existing); err != nil {
-				log.Printf("[bootstrap] backfill builtin agent %q: %v", tmpl.Agent.ID, err)
-			}
-		}
-	}
-}
-
-func ensureBuiltinConnectors(mcp *service.MCPManager) {
-	ctx := context.Background()
-	for _, id := range service.BuiltinConnectorIDs {
-		entry := service.CatalogEntryByID(id)
-		if entry == nil {
-			log.Printf("[bootstrap] missing catalog entry for builtin connector %q", id)
-			continue
-		}
-		if id == "danmo-make" {
-			entry.URL = service.ResolveDanmoMakeMCPURL()
-		}
-		if existing, err := mcp.Get(ctx, id); err == nil {
-			syncBuiltinConnector(ctx, mcp, existing, entry)
-			continue
-		}
-		if existing, ok, err := mcp.FindByCatalogID(ctx, id); err == nil && ok {
-			syncBuiltinConnector(ctx, mcp, existing, entry)
-			continue
-		}
-		req := service.InstallCatalogEntry(*entry, entry.Name)
-		req.ID = id
-		req.CatalogID = id
-		if _, err := mcp.Create(ctx, req); err != nil {
-			log.Printf("[bootstrap] seed builtin connector %q: %v", id, err)
-		}
-	}
-}
-
-func syncBuiltinConnector(ctx context.Context, mcp *service.MCPManager, existing domain.MCPServer, entry *domain.ConnectorCatalogEntry) {
-	wantURL := existing.URL
-	if entry.URL != "" {
-		loopback := strings.HasPrefix(existing.URL, "http://127.0.0.1:") ||
-			strings.HasPrefix(existing.URL, "http://localhost:")
-		if loopback || existing.URL == "" {
-			wantURL = entry.URL
-		}
-	}
-	wantAmbient := true
-	if entry.AmbientMount != nil {
-		wantAmbient = *entry.AmbientMount
-	}
-	wantTimeout := existing.ToolTimeout
-	if entry.ToolTimeout > 0 {
-		wantTimeout = entry.ToolTimeout
-	}
-	wantCommand := existing.Command
-	wantArgs := existing.Args
-	wantEnv := existing.Env
-	wantNetwork := existing.Network
-	if existing.URL == wantURL && existing.AmbientMount == wantAmbient && existing.ToolTimeout == wantTimeout &&
-		existing.Command == wantCommand && existing.Args == wantArgs && existing.Env == wantEnv && existing.Network == wantNetwork {
-		return
-	}
-	req := domain.UpsertMCPServerRequest{
-		Name:         existing.Name,
-		Description:  existing.Description,
-		Transport:    existing.Transport,
-		Command:      wantCommand,
-		Args:         wantArgs,
-		URL:          wantURL,
-		Env:          wantEnv,
-		Headers:      existing.Headers,
-		Auth:         existing.Auth,
-		CatalogID:    existing.CatalogID,
-		MarketSource: existing.MarketSource,
-		EnabledTools: existing.EnabledTools,
-		ToolTimeout:  wantTimeout,
-		Enabled:      existing.Enabled,
-		Network:      wantNetwork,
-		AmbientMount: &wantAmbient,
-	}
-	if entry.Transport != "" {
-		req.Transport = entry.Transport
-	}
-	if _, err := mcp.Update(ctx, existing.ID, req); err != nil {
-		log.Printf("[bootstrap] sync builtin connector %q: %v", existing.ID, err)
-	}
-}
-
-func ensureBuiltinSkills(skills *service.SkillManager) {
-	ctx := context.Background()
-	templates, err := prompt.LoadSkillTemplates()
-	if err != nil {
-		log.Printf("[bootstrap] load builtin skill templates: %v", err)
-		return
-	}
-	if len(templates) == 0 {
-		log.Printf("[bootstrap] no builtin skill templates embedded")
-		return
-	}
-	for _, tmpl := range templates {
-		skill := tmpl.Skill
-		skill.Builtin = true
-		skill.Body = service.NormalizeSkillBodyRefs(skill.Body, skill.ID)
-		if existing, err := skills.Get(ctx, skill.ID); err == nil && existing != nil {
-			// Preserve user edits; only backfill the builtin flag if missing.
-			// Builtin is also computed at read time from the embedded template.
-			if !existing.Builtin {
-				existing.Builtin = true
-				if err := skills.Upsert(ctx, *existing); err != nil {
-					log.Printf("[bootstrap] backfill builtin skill %q: %v", skill.ID, err)
-				}
-			}
-		} else {
-			if err := skills.Upsert(ctx, skill); err != nil {
-				log.Printf("[bootstrap] seed builtin skill %q: %v", skill.ID, err)
-			}
-		}
-		// Seed missing resource files only — never overwrite existing ones
-		// (same seed-if-missing policy as skill metadata / body).
-		files, err := prompt.LoadBuiltinSkillFiles(skill.ID)
-		if err != nil {
-			log.Printf("[bootstrap] load builtin skill files %q: %v", skill.ID, err)
-			continue
-		}
-		for _, f := range files {
-			if err := skills.EnsureFile(ctx, f); err != nil {
-				log.Printf("[bootstrap] seed builtin skill file %q %s: %v", skill.ID, f.Path, err)
-			}
-		}
 	}
 }

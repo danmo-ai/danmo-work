@@ -8,9 +8,6 @@ import (
 )
 
 type Repository interface {
-	Agents()          AgentRepo
-	Skills()          SkillRepo
-	SkillFiles()      SkillFileRepo
 	Sessions()        SessionRepo
 	Projects()        ProjectRepo
 	LLMConfig()       LLMConfigRepo
@@ -18,7 +15,6 @@ type Repository interface {
 	PendingMessages() PendingMessageRepo
 	StreamEvents()    StreamEventRepo
 	Turns()           TurnRepo
-	MCPServers()      MCPServerRepo
 	Secrets()         SecretStore
 	Automations()     AutomationRepo
 	Memories()        MemoryRepo
@@ -150,28 +146,6 @@ type TableStoreRepo interface {
 	Close() error
 }
 
-type AgentRepo interface {
-	List(ctx context.Context) ([]domain.Agent, error)
-	Get(ctx context.Context, id string) (domain.Agent, error)
-	Upsert(ctx context.Context, a domain.Agent) error
-	Delete(ctx context.Context, id string) error
-}
-
-type SkillRepo interface {
-	List(ctx context.Context) ([]domain.Skill, error)
-	Get(ctx context.Context, id string) (domain.Skill, error)
-	Upsert(ctx context.Context, s domain.Skill) error
-	Delete(ctx context.Context, id string) error
-}
-
-type SkillFileRepo interface {
-	ListBySkill(ctx context.Context, skillID string) ([]domain.SkillFile, error)
-	Get(ctx context.Context, skillID, path string) (domain.SkillFile, error)
-	Upsert(ctx context.Context, f domain.SkillFile) error
-	Delete(ctx context.Context, skillID, path string) error
-	DeleteBySkill(ctx context.Context, skillID string) error
-}
-
 type SessionRepo interface {
 	Create(ctx context.Context, s domain.Session) error
 	Update(ctx context.Context, s domain.Session) error
@@ -245,13 +219,6 @@ type TurnRepo interface {
 	Get(ctx context.Context, id string) (domain.TurnLog, error)
 	ListBySession(ctx context.Context, sessionID string) ([]domain.TurnLog, error)
 	ListByStatus(ctx context.Context, status domain.TurnStatus) ([]domain.TurnLog, error)
-}
-
-type MCPServerRepo interface {
-	List(ctx context.Context) ([]domain.MCPServer, error)
-	Get(ctx context.Context, id string) (domain.MCPServer, error)
-	Upsert(ctx context.Context, s domain.MCPServer) error
-	Delete(ctx context.Context, id string) error
 }
 
 // TurnLogStore persists turn-level JSONL entries used exclusively for LLM

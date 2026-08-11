@@ -282,7 +282,7 @@ func buildSkillMetadata(skills []domain.Skill) string {
 	b.WriteString("  <!-- Resource files: read_skill(path=\"<path>/references/file.md\") — never bare references/… -->\n")
 	for _, sk := range skills {
 		fmt.Fprintf(&b, "  <skill>\n")
-		fmt.Fprintf(&b, "    <path>%s</path>\n", escapeXML(sk.ID))
+		fmt.Fprintf(&b, "    <path>%s</path>\n", escapeXML(sk.PromptPath))
 		if sk.Name != "" && sk.Name != sk.ID {
 			fmt.Fprintf(&b, "    <name>%s</name>\n", escapeXML(sk.Name))
 		}

@@ -2,85 +2,115 @@ package builtin
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
-
-	"danmo-work/core/domain"
 )
 
-func TestReadSkillPrefersTurnFS(t *testing.T) {
-	h := &ReadSkill{}
-	h.SetTurnFS(
-		map[string]domain.Skill{
-			"demo": {ID: "demo", Name: "demo", Body: "fs-body"},
-		},
-		map[string][]domain.SkillFile{
-			"demo": {{SkillID: "demo", Path: "references/note.md", Content: []byte("fs-ref")}},
-		},
-	)
+func TestReadSkillBody(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "skills", "demo")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	md := "---\nname: demo\ndescription: test\n---\n\nhello world"
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
-	got, err := h.Execute(context.Background(), map[string]any{"path": "demo"})
+	h := &ReadSkill{dataDir: dir}
+	got, err := h.Execute(context.Background(), map[string]any{"path": skillDir})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Content != "fs-body" {
+	if got.Content != "hello world" {
 		t.Fatalf("body=%q", got.Content)
 	}
+}
 
-	got, err = h.Execute(context.Background(), map[string]any{"path": "demo/references/note.md"})
+func TestReadSkillResourceFile(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "skills", "demo")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	md := "---\nname: demo\n---\n\nbody"
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	refDir := filepath.Join(skillDir, "references")
+	if err := os.MkdirAll(refDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(refDir, "note.md"), []byte("ref-content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &ReadSkill{dataDir: dir}
+	got, err := h.Execute(context.Background(), map[string]any{"path": filepath.Join(skillDir, "references", "note.md")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Content != "fs-ref" {
+	if got.Content != "ref-content" {
 		t.Fatalf("ref=%q", got.Content)
 	}
 }
 
-func TestReadSkillFSOnlyNotInDB(t *testing.T) {
-	h := &ReadSkill{} // no Skills manager
-	h.SetTurnFS(map[string]domain.Skill{
-		"proj": {ID: "proj", Body: "hello"},
-	}, nil)
-	got, err := h.Execute(context.Background(), map[string]any{"path": "proj"})
+func TestReadSkillPlaceholderPath(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "skills", "demo")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	md := "---\nname: demo\n---\n\nhello"
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &ReadSkill{dataDir: dir}
+	p := "{danmo_work_home}/skills/demo"
+	got, err := h.Execute(context.Background(), map[string]any{"path": p})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Content != "hello" {
-		t.Fatalf("got %q", got.Content)
+		t.Fatalf("body=%q", got.Content)
 	}
 }
 
-func TestReadSkillRejectsBareResourcePath(t *testing.T) {
-	h := &ReadSkill{}
-	h.SetTurnFS(map[string]domain.Skill{
-		"demo": {ID: "demo", Body: "body"},
-	}, map[string][]domain.SkillFile{
-		"demo": {{SkillID: "demo", Path: "references/note.md", Content: []byte("ref")}},
-	})
-
-	_, err := h.Execute(context.Background(), map[string]any{"path": "references/note.md"})
+func TestReadSkillInvalidPath(t *testing.T) {
+	h := &ReadSkill{dataDir: "/tmp/valid-root"}
+	_, err := h.Execute(context.Background(), map[string]any{"path": "/etc/passwd"})
 	if err == nil {
-		t.Fatal("expected error for bare resource path")
+		t.Fatal("expected error for path outside skill root")
 	}
-	if !strings.Contains(err.Error(), "bare resource path") {
+	if !strings.Contains(err.Error(), "valid skill directory") {
 		t.Fatalf("error = %v", err)
 	}
+}
 
-	got, err := h.Execute(context.Background(), map[string]any{"path": "demo/references/note.md"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Content != "ref" {
-		t.Fatalf("content = %q", got.Content)
+func TestReadSkillSchema(t *testing.T) {
+	s := (&ReadSkill{}).Schema()
+	if !strings.Contains(s.Description, "<available_skills>") {
+		t.Fatalf("schema: %s", s.Description)
 	}
 }
 
-func TestReadSkillSchemaMentionsMetaID(t *testing.T) {
-	s := (&ReadSkill{}).Schema()
-	if !strings.Contains(s.Description, "meta id") {
-		t.Fatalf("schema should mention meta id:\n%s", s.Description)
+func TestSkillPathForPrompt(t *testing.T) {
+	tests := []struct {
+		skillDir, dataDir, agentsHome, projectDir, want string
+	}{
+		{"/home/u/.danmo-work/skills/debugging", "/home/u/.danmo-work", "/home/u/.agents", "", "{danmo_work_home}/skills/debugging"},
+		{"/home/u/.agents/skills/foo", "/home/u/.danmo-work", "/home/u/.agents", "", "{agents_home}/skills/foo"},
+		{"/work/proj/.danmo-work/skills/bar", "/home/u/.danmo-work", "/home/u/.agents", "/work/proj", "{project}/.danmo-work/skills/bar"},
+		{"/work/proj/.agents/skills/baz", "/home/u/.danmo-work", "/home/u/.agents", "/work/proj", "{project}/.agents/skills/baz"},
 	}
-	if !strings.Contains(s.Description, "Anti-examples") {
-		t.Fatalf("schema should include anti-examples:\n%s", s.Description)
+	for _, tt := range tests {
+		got := SkillPathForPrompt(tt.skillDir, tt.dataDir, tt.agentsHome, tt.projectDir)
+		if got != tt.want {
+			t.Errorf("SkillPathForPrompt(%q, %q, %q, %q) = %q, want %q",
+				tt.skillDir, tt.dataDir, tt.agentsHome, tt.projectDir, got, tt.want)
+		}
 	}
 }

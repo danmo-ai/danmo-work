@@ -1,15 +1,16 @@
 package prompt
 
 import (
+	"fmt"
 	"testing"
 
 	"danmo-work/core/domain"
 )
 
 func TestBuiltinAgentsDoNotBindCoreTools(t *testing.T) {
-	templates, err := LoadTemplates()
+	templates, err := LoadAgentTemplates()
 	if err != nil {
-		t.Fatalf("LoadTemplates: %v", err)
+		t.Fatalf("LoadAgentTemplates: %v", err)
 	}
 	if len(templates) == 0 {
 		t.Fatal("expected embedded agent templates")
@@ -24,9 +25,9 @@ func TestBuiltinAgentsDoNotBindCoreTools(t *testing.T) {
 }
 
 func TestBuiltinAgentsEditImpliesApplyPatch(t *testing.T) {
-	templates, err := LoadTemplates()
+	templates, err := LoadAgentTemplates()
 	if err != nil {
-		t.Fatalf("LoadTemplates: %v", err)
+		t.Fatalf("LoadAgentTemplates: %v", err)
 	}
 	for _, tmpl := range templates {
 		hasEdit, hasPatch := false, false
@@ -45,9 +46,9 @@ func TestBuiltinAgentsEditImpliesApplyPatch(t *testing.T) {
 }
 
 func TestBuiltinNovelExpertAggregatesSkillAndCraftKB(t *testing.T) {
-	templates, err := LoadTemplates()
+	templates, err := LoadAgentTemplates()
 	if err != nil {
-		t.Fatalf("LoadTemplates: %v", err)
+		t.Fatalf("LoadAgentTemplates: %v", err)
 	}
 	var novel *AgentTemplate
 	for i := range templates {
@@ -100,16 +101,16 @@ func TestBuiltinNovelExpertAggregatesSkillAndCraftKB(t *testing.T) {
 }
 
 func TestBuiltinNovelWritingSkillHasReferences(t *testing.T) {
-	sk, err := LoadSkillTemplateByID("novel-writing")
+	sk, err := loadSkillByID("novel-writing")
 	if err != nil {
-		t.Fatalf("LoadSkillTemplateByID: %v", err)
+		t.Fatalf("loadSkillByID: %v", err)
 	}
 	if sk.ID != "novel-writing" || sk.Description == "" {
 		t.Fatalf("unexpected skill: %+v", sk)
 	}
-	files, err := LoadBuiltinSkillFiles("novel-writing")
+	files, err := loadBuiltinSkillFiles(BuiltinFS, "builtin/skills", "novel-writing")
 	if err != nil {
-		t.Fatalf("LoadBuiltinSkillFiles: %v", err)
+		t.Fatalf("loadBuiltinSkillFiles: %v", err)
 	}
 	want := map[string]bool{
 		"references/routes.md":                 false,
@@ -155,9 +156,9 @@ func TestLoadNovelCraftDocs(t *testing.T) {
 }
 
 func TestBuiltinGitHubExpertOwnsConnectorAndGh(t *testing.T) {
-	templates, err := LoadTemplates()
+	templates, err := LoadAgentTemplates()
 	if err != nil {
-		t.Fatalf("LoadTemplates: %v", err)
+		t.Fatalf("LoadAgentTemplates: %v", err)
 	}
 	var github *AgentTemplate
 	for i := range templates {
@@ -187,7 +188,21 @@ func TestBuiltinGitHubExpertOwnsConnectorAndGh(t *testing.T) {
 		t.Fatalf("github expert needs skill=github + exec_shell; skills=%v tools=%v",
 			github.Agent.SkillIDs, github.Agent.Tools)
 	}
-	if github.Agent.InheritAmbient == nil || *github.Agent.InheritAmbient {
-		t.Fatal("github expert should set inherit_ambient: false")
+	if github.Agent.Mode != domain.AgentModeSubagent {
+		t.Fatal("github expert should be subagent mode")
 	}
+}
+
+func loadSkillByID(id string) (*domain.Skill, error) {
+	templates, err := LoadSkillTemplates()
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range templates {
+		if t.Skill.ID == id {
+			s := t.Skill
+			return &s, nil
+		}
+	}
+	return nil, fmt.Errorf("skill %q not found", id)
 }

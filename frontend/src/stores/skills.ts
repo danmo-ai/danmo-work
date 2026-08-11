@@ -16,10 +16,22 @@ export const useSkillsStore = defineStore('skills', () => {
   const items = ref<Skill[]>([])
   const loading = ref(false)
 
-  async function load() {
+  async function load(projectIds?: string[]) {
     loading.value = true
     try {
-      items.value = asArray(await fetchJSON<Skill[]>('/skills'))
+      const global = asArray(await fetchJSON<Skill[]>('/skills'))
+      items.value = global
+
+      if (projectIds && projectIds.length > 0) {
+        for (const pid of projectIds) {
+          const projSkills = asArray(await fetchJSON<Skill[]>(`/skills?project_id=${encodeURIComponent(pid)}`))
+          for (const s of projSkills) {
+            if (!items.value.find((x) => x.id === s.id)) {
+              items.value.push(s)
+            }
+          }
+        }
+      }
     } finally {
       loading.value = false
     }

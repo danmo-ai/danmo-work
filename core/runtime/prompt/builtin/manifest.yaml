@@ -1,0 +1,29 @@
+version: "1"
+agents:
+  - implementer
+  - reviewer
+  - explorer
+  - researcher
+  - document
+  - data
+  - novel
+  - team
+  - comms
+  - danmo-make
+  - github
+skills:
+  - debugging
+  - novel-writing
+  - playable-slides
+  - requesting-code-review
+  - git-workflow
+  - document-writing
+  - test-driven-development
+  - writing-plans
+  - mcp-connectors
+  - brainstorming
+  - sheet-writing
+  - github
+  - danmo-make
+  - deep-research
+  - skill-creator

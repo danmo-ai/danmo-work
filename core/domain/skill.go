@@ -13,11 +13,16 @@ type Skill struct {
 	SystemHint    string            `json:"systemHint"`
 	Body          string            `json:"body"`
 	SourcePath    string            `json:"sourcePath,omitempty"`
-	Builtin       bool              `json:"builtin,omitempty"`
+	// Dir is the absolute path to the skill directory on disk.
+	Dir string `json:"dir,omitempty"`
+	// PromptPath is the path shown to the LLM in <available_skills> (placeholder form).
+	PromptPath string `json:"-"`
+	// ProjectID is set when the skill comes from a project-level directory.
+	ProjectID string `json:"projectId,omitempty"`
+	// Source tracks the origin: builtin, market, or user.
+	Source string `json:"source,omitempty"`
+	// Builtin is true when Source == "builtin" (read-time computed, kept for frontend compatibility).
+	Builtin bool `json:"builtin"`
 	// MarketSource is the market source id when installed from the marketplace.
-	// Also mirrored in Metadata["market.source"] for persistence compatibility.
 	MarketSource string `json:"marketSource,omitempty"`
-	// TemplateDiverged is computed (not persisted): true when a builtin skill's
-	// stored content or resource files differ from the embedded template.
-	TemplateDiverged bool `json:"templateDiverged,omitempty"`
 }

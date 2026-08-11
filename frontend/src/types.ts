@@ -86,6 +86,8 @@ export interface Skill {
   systemHint?: string
   body?: string
   sourcePath?: string
+  dir?: string
+  projectId?: string
   builtin?: boolean
   marketSource?: string
   templateDiverged?: boolean

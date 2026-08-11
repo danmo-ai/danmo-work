@@ -1,26 +1,24 @@
 package service
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"slices"
+	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"danmo-work/core/domain"
-	"danmo-work/core/port"
+	"danmo-work/core/paths"
+
+	"gopkg.in/yaml.v3"
 )
 
-// ErrBuiltinSkill is returned when a caller tries to delete a template-backed
-// or otherwise builtin skill from the library.
-var ErrBuiltinSkill = errors.New("cannot delete builtin skill")
-
-// ValidSkillResourcePrefixes are the allowed top-level dirs for skill resource files.
 var ValidSkillResourcePrefixes = []string{"scripts/", "references/", "assets/"}
 
-// NormalizeSkillResourcePath cleans and validates a skill resource relative path.
+var ErrBuiltinSkill = fmt.Errorf("cannot delete builtin skill")
+
 func NormalizeSkillResourcePath(path string) (string, error) {
 	p := strings.TrimSpace(path)
 	p = strings.TrimPrefix(p, "/")
@@ -48,331 +46,293 @@ func NormalizeSkillResourcePath(path string) (string, error) {
 }
 
 type SkillManager struct {
-	store             port.SkillRepo
-	filesRepo         port.SkillFileRepo
-	mu                sync.RWMutex
-	cache             map[string]*domain.Skill
-	cachedList        bool
-	listCache         []domain.Skill
-	templateLoader    func(id string) (*domain.Skill, error)
-	fileTemplateLoader func(id string) ([]domain.SkillFile, error)
+	dataDir   string
+	globalDir string
+	mu        sync.RWMutex
 }
 
-func NewSkillManager(store port.SkillRepo, filesRepo port.SkillFileRepo) *SkillManager {
+func NewSkillManager(dataDir string) *SkillManager {
 	return &SkillManager{
-		store:     store,
-		filesRepo: filesRepo,
-		cache:     make(map[string]*domain.Skill),
+		dataDir:   dataDir,
+		globalDir: filepath.Join(dataDir, "skills"),
+	}
+}
+
+func (m *SkillManager) DataDir() string { return m.dataDir }
+
+// globalDirs returns all global skill roots (read), low → high priority.
+func (m *SkillManager) globalDirs() []string {
+	return []string{
+		paths.AgentsSkillDir(),
+		m.globalDir,
 	}
 }
 
 func (m *SkillManager) List(ctx context.Context) ([]domain.Skill, error) {
-	m.mu.RLock()
-	if m.cachedList {
-		result := m.listCache
-		m.mu.RUnlock()
-		out := make([]domain.Skill, len(result))
-		copy(out, result)
-		m.enrichBatch(ctx, out)
-		return out, nil
-	}
-	m.mu.RUnlock()
-	list, err := m.store.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-	m.mu.Lock()
-	m.listCache = list
-	m.cachedList = true
-	m.mu.Unlock()
-	out := make([]domain.Skill, len(list))
-	copy(out, list)
-	m.enrichBatch(ctx, out)
-	return out, nil
+	return LoadSkillsFromFS(m.globalDir)
 }
 
 func (m *SkillManager) Get(ctx context.Context, id string) (*domain.Skill, error) {
-	m.mu.RLock()
-	if s, ok := m.cache[id]; ok {
-		m.mu.RUnlock()
-		cp := *s
-		m.enrich(ctx, &cp)
-		return &cp, nil
+	for _, dir := range m.globalDirs() {
+		skillDir := filepath.Join(dir, id)
+		mdPath := filepath.Join(skillDir, "SKILL.md")
+		data, err := os.ReadFile(mdPath)
+		if err != nil {
+			continue
+		}
+		return parseSkillMarkdown(string(data), skillDir)
 	}
-	m.mu.RUnlock()
-	sk, err := m.store.Get(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	m.mu.Lock()
-	m.cache[id] = &sk
-	m.mu.Unlock()
-	cp := sk
-	m.enrich(ctx, &cp)
-	return &cp, nil
+	return nil, fmt.Errorf("skill %q not found", id)
 }
 
 func (m *SkillManager) Upsert(ctx context.Context, s domain.Skill) error {
-	// Never clear builtin via a partial client update, and treat any skill that
-	// still has an embedded template as builtin (same rule as AgentManager).
-	if existing, err := m.store.Get(ctx, s.ID); err == nil && existing.Builtin {
-		s.Builtin = true
+	if s.ID == "" {
+		s.ID = s.Name
 	}
-	if m.hasTemplate(s.ID) {
-		s.Builtin = true
+	if s.ID == "" {
+		return fmt.Errorf("skill id or name is required")
 	}
-	s.TemplateDiverged = false
-	if err := m.store.Upsert(ctx, s); err != nil {
+	dir := filepath.Join(m.globalDir, s.ID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	m.mu.Lock()
-	m.cache[s.ID] = &s
-	m.cachedList = false
-	m.mu.Unlock()
-	return nil
+	if s.Source == "" {
+		s.Source = "user"
+	}
+	if existing, err := m.Get(ctx, s.ID); err == nil && existing.Source == "builtin" {
+		return fmt.Errorf("cannot modify builtin skill %q", s.ID)
+	}
+	return writeSkillFile(dir, s)
 }
 
 func (m *SkillManager) Delete(ctx context.Context, id string) error {
-	if m.hasTemplate(id) {
-		return fmt.Errorf("%w %q", ErrBuiltinSkill, id)
-	}
-	if existing, err := m.store.Get(ctx, id); err == nil && existing.Builtin {
-		return fmt.Errorf("%w %q", ErrBuiltinSkill, id)
-	}
-	if err := m.store.Delete(ctx, id); err != nil {
+	s, err := m.Get(ctx, id)
+	if err != nil {
 		return err
 	}
-	m.mu.Lock()
-	delete(m.cache, id)
-	m.cachedList = false
-	m.mu.Unlock()
-	return nil
-}
-
-// HasTemplate reports whether an embedded builtin template exists for id.
-func (m *SkillManager) HasTemplate(id string) bool {
-	return m.hasTemplate(id)
+	if s.Source == "builtin" {
+		return fmt.Errorf("cannot delete builtin skill %q", id)
+	}
+	return os.RemoveAll(filepath.Join(m.globalDir, id))
 }
 
 func (m *SkillManager) Files(ctx context.Context, skillID string) ([]domain.SkillFile, error) {
-	return m.filesRepo.ListBySkill(ctx, skillID)
+	return readSkillFiles(m.globalDir, skillID)
 }
 
 func (m *SkillManager) File(ctx context.Context, skillID, path string) (domain.SkillFile, error) {
-	return m.filesRepo.Get(ctx, skillID, path)
+	p, err := NormalizeSkillResourcePath(path)
+	if err != nil {
+		return domain.SkillFile{}, err
+	}
+	fullPath := filepath.Join(m.globalDir, skillID, p)
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		return domain.SkillFile{}, err
+	}
+	info, _ := os.Stat(fullPath)
+	var size int64
+	if info != nil {
+		size = info.Size()
+	}
+	return domain.SkillFile{
+		ID:      skillID + ":" + p,
+		SkillID: skillID,
+		Path:    p,
+		Content: data,
+		Size:    size,
+	}, nil
 }
 
 func (m *SkillManager) UpsertFile(ctx context.Context, f domain.SkillFile) error {
-	path, err := NormalizeSkillResourcePath(f.Path)
+	p, err := NormalizeSkillResourcePath(f.Path)
 	if err != nil {
 		return err
 	}
-	f.Path = path
+	f.Path = p
 	if f.SkillID == "" {
 		return fmt.Errorf("skillId required")
 	}
-	if f.ID == "" {
-		f.ID = f.SkillID + ":" + f.Path
-	}
-	if f.Size == 0 {
-		f.Size = int64(len(f.Content))
-	}
-	return m.filesRepo.Upsert(ctx, f)
-}
-
-// EnsureFile inserts a skill resource file only when the path does not already
-// exist. Existing content (including user edits) is left untouched.
-func (m *SkillManager) EnsureFile(ctx context.Context, f domain.SkillFile) error {
-	path, err := NormalizeSkillResourcePath(f.Path)
-	if err != nil {
+	skillDir := filepath.Join(m.globalDir, f.SkillID)
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		return err
 	}
-	f.Path = path
-	if _, err := m.filesRepo.Get(ctx, f.SkillID, f.Path); err == nil {
-		return nil
+	fullPath := filepath.Join(skillDir, p)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		return err
 	}
-	return m.UpsertFile(ctx, f)
+	return os.WriteFile(fullPath, f.Content, 0o644)
 }
 
 func (m *SkillManager) DeleteFile(ctx context.Context, skillID, path string) error {
-	path, err := NormalizeSkillResourcePath(path)
+	p, err := NormalizeSkillResourcePath(path)
 	if err != nil {
 		return err
 	}
-	return m.filesRepo.Delete(ctx, skillID, path)
+	return os.Remove(filepath.Join(m.globalDir, skillID, p))
 }
 
 func (m *SkillManager) DeleteFiles(ctx context.Context, skillID string) error {
-	return m.filesRepo.DeleteBySkill(ctx, skillID)
+	for _, prefix := range []string{"scripts", "references", "assets"} {
+		_ = os.RemoveAll(filepath.Join(m.globalDir, skillID, prefix))
+	}
+	return nil
 }
 
-func (m *SkillManager) SetTemplateLoader(fn func(id string) (*domain.Skill, error)) {
-	m.templateLoader = fn
+// HasTemplate always returns false — templates no longer exist as a separate concept.
+func (m *SkillManager) HasTemplate(id string) bool {
+	return false
 }
 
-func (m *SkillManager) SetFileTemplateLoader(fn func(id string) ([]domain.SkillFile, error)) {
-	m.fileTemplateLoader = fn
-}
-
+// ResetFromTemplate is no longer supported.
 func (m *SkillManager) ResetFromTemplate(ctx context.Context, id string) (*domain.Skill, error) {
-	if m.templateLoader == nil {
-		return nil, fmt.Errorf("template loader not configured")
-	}
-	_, err := m.store.Get(ctx, id)
+	return nil, fmt.Errorf("ResetFromTemplate is no longer supported: builtin skills are read-only")
+}
+
+// SetTemplateLoader and SetFileTemplateLoader are no-ops retained for interface compatibility.
+func (m *SkillManager) SetTemplateLoader(fn func(id string) (*domain.Skill, error)) {}
+func (m *SkillManager) SetFileTemplateLoader(fn func(id string) ([]domain.SkillFile, error)) {}
+
+// LoadSkillsFromFS reads all skill directories from the given path.
+func LoadSkillsFromFS(dir string) ([]domain.Skill, error) {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("skill %q not found: %w", id, err)
-	}
-	tmpl, err := m.templateLoader(id)
-	if err != nil {
-		return nil, fmt.Errorf("no template found for skill %q: %w", id, err)
-	}
-	tmpl.Builtin = true
-	tmpl.TemplateDiverged = false
-	tmpl.Body = NormalizeSkillBodyRefs(tmpl.Body, tmpl.ID)
-	if err := m.store.Upsert(ctx, *tmpl); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
-	// Reset resource files from template if available
-	if m.fileTemplateLoader != nil {
-		files, err := m.fileTemplateLoader(id)
-		if err == nil {
-			_ = m.filesRepo.DeleteBySkill(ctx, id)
-			for _, f := range files {
-				_ = m.filesRepo.Upsert(ctx, f)
+	var result []domain.Skill
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		skillDir := filepath.Join(dir, entry.Name())
+		mdPath := filepath.Join(skillDir, "SKILL.md")
+		data, err := os.ReadFile(mdPath)
+		if err != nil {
+			continue
+		}
+		skill, err := parseSkillMarkdown(string(data), skillDir)
+		if err != nil {
+			log.Printf("[skills] parse %s: %v", mdPath, err)
+			continue
+		}
+		result = append(result, *skill)
+	}
+	return result, nil
+}
+
+func parseSkillMarkdown(content, skillDir string) (*domain.Skill, error) {
+	id := filepath.Base(skillDir)
+	lines := strings.Split(strings.TrimPrefix(content, "\ufeff"), "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return nil, fmt.Errorf("skill %q: missing YAML frontmatter", id)
+	}
+	var fmTextLines []string
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			body := strings.TrimSpace(strings.Join(lines[i+1:], "\n"))
+			fmText := strings.Join(fmTextLines, "\n")
+			var fm struct {
+				Name          string            `yaml:"name"`
+				Description   string            `yaml:"description"`
+				Source        string            `yaml:"source"`
+				License       string            `yaml:"license"`
+				Compatibility string            `yaml:"compatibility"`
+				Metadata      map[string]string `yaml:"metadata"`
+				AllowedTools  string            `yaml:"allowed-tools"`
 			}
+			if err := yaml.Unmarshal([]byte(fmText), &fm); err != nil {
+				return nil, fmt.Errorf("skill %q: parse frontmatter: %w", id, err)
+			}
+			name := fm.Name
+			if name == "" {
+				name = id
+			}
+			source := fm.Source
+			if source == "" {
+				source = "builtin"
+			}
+			return &domain.Skill{
+				ID: id, Name: name, Description: fm.Description, Source: source, Builtin: source == "builtin",
+				License: fm.License, Compatibility: fm.Compatibility,
+				Metadata: fm.Metadata, AllowedTools: fm.AllowedTools,
+				Body: body, Dir: skillDir,
+			}, nil
 		}
+		fmTextLines = append(fmTextLines, lines[i])
 	}
-	m.mu.Lock()
-	m.cache[id] = tmpl
-	m.cachedList = false
-	m.mu.Unlock()
-	return tmpl, nil
+	return nil, fmt.Errorf("skill %q: unclosed YAML frontmatter", id)
 }
 
-func (m *SkillManager) enrichBatch(ctx context.Context, skills []domain.Skill) {
-	for i := range skills {
-		m.enrich(ctx, &skills[i])
+func writeSkillFile(dir string, s domain.Skill) error {
+	mdPath := filepath.Join(dir, "SKILL.md")
+	var b strings.Builder
+	b.WriteString("---\n")
+	if s.Name != "" {
+		b.WriteString(fmt.Sprintf("name: %s\n", s.Name))
+	} else {
+		b.WriteString(fmt.Sprintf("name: %s\n", s.ID))
 	}
+	if s.Description != "" {
+		b.WriteString(fmt.Sprintf("description: %s\n", s.Description))
+	}
+	if s.Source != "" {
+		b.WriteString(fmt.Sprintf("source: %s\n", s.Source))
+	}
+	if s.License != "" {
+		b.WriteString(fmt.Sprintf("license: %s\n", s.License))
+	}
+	if s.Compatibility != "" {
+		b.WriteString(fmt.Sprintf("compatibility: %s\n", s.Compatibility))
+	}
+	if s.AllowedTools != "" {
+		b.WriteString(fmt.Sprintf("allowed-tools: %s\n", s.AllowedTools))
+	}
+	if s.MarketSource != "" {
+		b.WriteString(fmt.Sprintf("marketSource: %s\n", s.MarketSource))
+	}
+	b.WriteString("---\n")
+	if s.Body != "" {
+		b.WriteString("\n")
+		b.WriteString(s.Body)
+	}
+	return os.WriteFile(mdPath, []byte(b.String()), 0o644)
 }
 
-func (m *SkillManager) hasTemplate(id string) bool {
-	if m.templateLoader == nil || id == "" {
-		return false
+func readSkillFiles(baseDir, skillID string) ([]domain.SkillFile, error) {
+	skillDir := filepath.Join(baseDir, skillID)
+	var files []domain.SkillFile
+	for _, sub := range []string{"scripts", "references", "assets"} {
+		subDir := filepath.Join(skillDir, sub)
+		_ = filepath.WalkDir(subDir, func(fullPath string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return nil
+			}
+			relPath, err := filepath.Rel(skillDir, fullPath)
+			if err != nil {
+				return nil
+			}
+			relPath = filepath.ToSlash(relPath)
+			data, err := os.ReadFile(fullPath)
+			if err != nil {
+				return nil
+			}
+			info, _ := d.Info()
+			var size int64
+			if info != nil {
+				size = info.Size()
+			}
+			files = append(files, domain.SkillFile{
+				ID:      skillID + ":" + relPath,
+				SkillID: skillID,
+				Path:    relPath,
+				Content: data,
+				Size:    size,
+			})
+			return nil
+		})
 	}
-	_, err := m.templateLoader(id)
-	return err == nil
-}
-
-// enrich marks template-backed skills as builtin (read-time, like AgentManager)
-// and computes template drift for the library UI.
-func (m *SkillManager) enrich(ctx context.Context, sk *domain.Skill) {
-	if sk == nil {
-		return
-	}
-	if sk.MarketSource == "" && sk.Metadata != nil {
-		sk.MarketSource = sk.Metadata["market.source"]
-	}
-	if m.hasTemplate(sk.ID) {
-		sk.Builtin = true
-	}
-	if !sk.Builtin {
-		return
-	}
-	diverged, err := m.DivergedFromTemplate(ctx, *sk)
-	if err != nil {
-		return
-	}
-	sk.TemplateDiverged = diverged
-}
-
-// DivergedFromTemplate reports whether a builtin skill differs from its
-// embedded template (metadata/body and/or resource files). Non-builtin skills
-// and skills without a template loader are never considered diverged.
-func (m *SkillManager) DivergedFromTemplate(ctx context.Context, sk domain.Skill) (bool, error) {
-	if !sk.Builtin || m.templateLoader == nil {
-		return false, nil
-	}
-	tmpl, err := m.templateLoader(sk.ID)
-	if err != nil {
-		return false, nil
-	}
-	// Seed/reset persist NormalizeSkillBodyRefs(body); compare against the same
-	// canonical form so bare refs like `references/foo.md` are not false drift.
-	tmpl.Body = NormalizeSkillBodyRefs(tmpl.Body, tmpl.ID)
-	if !skillContentEqual(sk, *tmpl) {
-		return true, nil
-	}
-	if m.fileTemplateLoader == nil {
-		return false, nil
-	}
-	tmplFiles, err := m.fileTemplateLoader(sk.ID)
-	if err != nil {
-		return false, nil
-	}
-	storedFiles, err := m.filesRepo.ListBySkill(ctx, sk.ID)
-	if err != nil {
-		return false, err
-	}
-	return !skillFilesEqual(storedFiles, tmplFiles), nil
-}
-
-func skillContentEqual(a, b domain.Skill) bool {
-	if a.Name != b.Name ||
-		a.Description != b.Description ||
-		a.License != b.License ||
-		a.Compatibility != b.Compatibility ||
-		a.AllowedTools != b.AllowedTools ||
-		a.SystemHint != b.SystemHint ||
-		a.Body != b.Body {
-		return false
-	}
-	if !mapsEqual(a.Metadata, b.Metadata) {
-		return false
-	}
-	if !stringSlicesEqual(a.Keywords, b.Keywords) {
-		return false
-	}
-	if !stringSlicesEqual(a.ToolIDs, b.ToolIDs) {
-		return false
-	}
-	return true
-}
-
-func skillFilesEqual(stored, tmpl []domain.SkillFile) bool {
-	if len(stored) != len(tmpl) {
-		return false
-	}
-	byPath := make(map[string][]byte, len(stored))
-	for _, f := range stored {
-		byPath[f.Path] = f.Content
-	}
-	for _, f := range tmpl {
-		content, ok := byPath[f.Path]
-		if !ok || !bytes.Equal(content, f.Content) {
-			return false
-		}
-	}
-	return true
-}
-
-func mapsEqual(a, b map[string]string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	if len(a) == 0 {
-		return true
-	}
-	for k, v := range a {
-		if b[k] != v {
-			return false
-		}
-	}
-	return true
-}
-
-func stringSlicesEqual(a, b []string) bool {
-	if len(a) == 0 && len(b) == 0 {
-		return true
-	}
-	return slices.Equal(a, b)
+	return files, nil
 }

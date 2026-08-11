@@ -49,7 +49,9 @@ func main() {
 		Skills:       core.Skills,
 		SkillHandler: &apiv1.SkillHandler{
 			Skills:   core.Skills,
+			Projects: core.Projects,
 			Importer: service.NewSkillImporter(),
+			DataDir:  core.Config.Data.Dir,
 		},
 		MarketHandler: &apiv1.MarketHandler{
 			Market: core.Market,

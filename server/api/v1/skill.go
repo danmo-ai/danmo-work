@@ -3,28 +3,46 @@ package v1
 import (
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 
 	"danmo-work/core/domain"
+	"danmo-work/core/runtime/tool/builtin"
 	"danmo-work/core/service"
 
 	"github.com/gin-gonic/gin"
 )
 
 type SkillHandler struct {
-	Skills    *service.SkillManager
-	Importer  *service.SkillImporter
+	Skills   *service.SkillManager
+	Projects *service.ProjectManager
+	Importer *service.SkillImporter
+	DataDir  string
 }
 
 func listSkills(h *SkillHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		skills, err := h.Skills.List(c)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
+		var projectDir string
+		if projectID := c.Query("project_id"); projectID != "" && h.Projects != nil {
+			if proj, err := h.Projects.Get(c, projectID); err == nil {
+				projectDir = proj.Directory
+			}
 		}
+
+		skills := service.ScanAllSkills(h.DataDir, projectDir)
+		for i := range skills {
+			skills[i].Dir = h.skillDisplayPath(skills[i].Dir)
+		}
+
 		c.JSON(http.StatusOK, skills)
 	}
+}
+
+func (h *SkillHandler) skillDisplayPath(skillDir string) string {
+	agentsHome, _ := os.UserHomeDir()
+	agentsHome = agentsHome + "/.agents"
+	projectDir := ""
+	return builtin.SkillPathForPrompt(skillDir, h.DataDir, agentsHome, projectDir)
 }
 
 func getSkill(h *SkillHandler) gin.HandlerFunc {

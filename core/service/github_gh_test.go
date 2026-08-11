@@ -98,7 +98,7 @@ func TestGitHubCatalogEntryBoundOnlyBuiltin(t *testing.T) {
 
 func TestGitHubMCPReadyRequiresAuth(t *testing.T) {
 	ctx := context.Background()
-	mcp := NewMCPManager(newMemMCPServerRepo())
+	mcp := NewMCPManager(t.TempDir())
 	if mcp.GitHubMCPReady(ctx) {
 		t.Fatal("missing server should not be ready")
 	}

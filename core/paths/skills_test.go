@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-func TestUserSkillDirs(t *testing.T) {
+func TestGlobalSkillDirs(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
 
-	dirs := UserSkillDirs()
+	dirs := GlobalSkillDirs()
 	if len(dirs) != 2 {
 		t.Fatalf("len=%d", len(dirs))
 	}

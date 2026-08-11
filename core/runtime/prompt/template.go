@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io/fs"
 	"strings"
@@ -14,6 +15,7 @@ type agentFrontmatter struct {
 	ID             string            `yaml:"id"`
 	Name           string            `yaml:"name"`
 	Description    string            `yaml:"description"`
+	Source         string            `yaml:"source"`
 	Persona        string            `yaml:"persona"`
 	Mode           string            `yaml:"mode"`
 	Steps          int               `yaml:"steps"`
@@ -27,8 +29,8 @@ type agentFrontmatter struct {
 
 type toolFrontmatter struct {
 	ToolID    string `yaml:"tool_id"`
-	MCP       string `yaml:"mcp"`        // legacy → mcp_servers
-	MCPServer string `yaml:"mcp_server"` // legacy → mcp_servers
+	MCP       string `yaml:"mcp"`
+	MCPServer string `yaml:"mcp_server"`
 	RiskLevel string `yaml:"risk_level"`
 }
 
@@ -71,8 +73,12 @@ type AgentTemplate struct {
 	Source string
 }
 
-func LoadTemplates() ([]AgentTemplate, error) {
-	entries, err := fs.ReadDir(AgentTemplates, "agents")
+func LoadAgentTemplates() ([]AgentTemplate, error) {
+	return loadAgentTemplatesFromFS(BuiltinFS, "builtin/agents")
+}
+
+func loadAgentTemplatesFromFS(fsys fs.FS, dir string) ([]AgentTemplate, error) {
+	entries, err := fs.ReadDir(fsys, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +87,7 @@ func LoadTemplates() ([]AgentTemplate, error) {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
 			continue
 		}
-		data, err := fs.ReadFile(AgentTemplates, "agents/"+entry.Name())
+		data, err := fs.ReadFile(fsys, dir+"/"+entry.Name())
 		if err != nil {
 			return nil, err
 		}
@@ -104,10 +110,16 @@ func LoadTemplates() ([]AgentTemplate, error) {
 				RiskLevel: parseRisk(t.RiskLevel),
 			})
 		}
+		source := fm.Source
+		if source == "" {
+			source = "builtin"
+		}
 		agent := domain.Agent{
 			ID:             fm.ID,
 			Name:           fm.Name,
 			Description:    fm.Description,
+			Source:         source,
+			Builtin:        source == "builtin",
 			Persona:        fm.Persona,
 			Mode:           parseAgentMode(fm.Mode),
 			SystemPrompt:   body,
@@ -125,22 +137,10 @@ func LoadTemplates() ([]AgentTemplate, error) {
 	return result, nil
 }
 
-func LoadTemplateByID(id string) (*domain.Agent, error) {
-	templates, err := LoadTemplates()
-	if err != nil {
-		return nil, err
-	}
-	for _, t := range templates {
-		if t.Agent.ID == id {
-			return &t.Agent, nil
-		}
-	}
-	return nil, fs.ErrNotExist
-}
-
 type skillFrontmatter struct {
 	Name          string            `yaml:"name"`
 	Description   string            `yaml:"description"`
+	Source        string            `yaml:"source"`
 	License       string            `yaml:"license"`
 	Compatibility string            `yaml:"compatibility"`
 	Metadata      map[string]string `yaml:"metadata"`
@@ -153,7 +153,11 @@ type SkillTemplate struct {
 }
 
 func LoadSkillTemplates() ([]SkillTemplate, error) {
-	entries, err := fs.ReadDir(SkillTemplates, "skills")
+	return loadSkillTemplatesFromFS(BuiltinFS, "builtin/skills")
+}
+
+func loadSkillTemplatesFromFS(fsys fs.FS, dir string) ([]SkillTemplate, error) {
+	entries, err := fs.ReadDir(fsys, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -162,8 +166,8 @@ func LoadSkillTemplates() ([]SkillTemplate, error) {
 		if !entry.IsDir() {
 			continue
 		}
-		skillDir := "skills/" + entry.Name()
-		data, err := fs.ReadFile(SkillTemplates, skillDir+"/SKILL.md")
+		skillDir := dir + "/" + entry.Name()
+		data, err := fs.ReadFile(fsys, skillDir+"/SKILL.md")
 		if err != nil {
 			continue
 		}
@@ -176,33 +180,54 @@ func LoadSkillTemplates() ([]SkillTemplate, error) {
 	return result, nil
 }
 
-func LoadSkillTemplateByID(id string) (*domain.Skill, error) {
-	templates, err := LoadSkillTemplates()
-	if err != nil {
-		return nil, err
-	}
-	for _, t := range templates {
-		if t.Skill.ID == id {
-			s := t.Skill
-			return &s, nil
-		}
-	}
-	return nil, fmt.Errorf("skill template %q not found", id)
+// BuiltinFile represents a file to be copied from embedded FS to the filesystem.
+type BuiltinFile struct {
+	Path    string
+	Content []byte
 }
 
-// LoadBuiltinSkillFiles reads all resource files (scripts/, references/, assets/)
-// from the embedded FS for a given skill directory name (including nested files).
-func LoadBuiltinSkillFiles(skillID string) ([]domain.SkillFile, error) {
-	skillDir := "skills/" + skillID
+// LoadBuiltinFiles returns all embedded builtin agent and skill files as a flat list.
+func LoadBuiltinFiles() ([]BuiltinFile, error) {
+	var files []BuiltinFile
+	if err := fs.WalkDir(BuiltinFS, "builtin", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		data, err := fs.ReadFile(BuiltinFS, path)
+		if err != nil {
+			return nil
+		}
+		relPath := strings.TrimPrefix(path, "builtin/")
+		files = append(files, BuiltinFile{Path: relPath, Content: data})
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+// BuiltinManifestHash returns the SHA256 hash of the embedded manifest.yaml content.
+func BuiltinManifestHash() (string, error) {
+	data, err := fs.ReadFile(BuiltinFS, "builtin/manifest.yaml")
+	if err != nil {
+		return "", err
+	}
+	h := sha256.Sum256(data)
+	return fmt.Sprintf("%x", h), nil
+}
+
+// loadBuiltinSkillFiles reads resource files for a skill from embedded FS.
+func loadBuiltinSkillFiles(fsys fs.FS, dir string, skillID string) ([]domain.SkillFile, error) {
+	skillDir := dir + "/" + skillID
 	var files []domain.SkillFile
 	for _, sub := range []string{"scripts", "references", "assets"} {
 		subDir := skillDir + "/" + sub
-		_ = fs.WalkDir(SkillTemplates, subDir, func(fullPath string, d fs.DirEntry, walkErr error) error {
+		_ = fs.WalkDir(fsys, subDir, func(fullPath string, d fs.DirEntry, walkErr error) error {
 			if walkErr != nil || d.IsDir() {
 				return nil
 			}
 			relPath := strings.TrimPrefix(fullPath, skillDir+"/")
-			data, err := fs.ReadFile(SkillTemplates, fullPath)
+			data, err := fs.ReadFile(fsys, fullPath)
 			if err != nil {
 				return nil
 			}
@@ -233,13 +258,21 @@ func parseSkill(content, dirName string) (*domain.Skill, error) {
 	if err := yaml.Unmarshal([]byte(fmText), &fm); err != nil {
 		return nil, fmt.Errorf("skill %q: parse frontmatter: %w", dirName, err)
 	}
-	if fm.Name == "" {
-		return nil, fmt.Errorf("skill %q: frontmatter name is required", dirName)
+	source := fm.Source
+	if source == "" {
+		source = "builtin"
+	}
+	builtin := source == "builtin"
+	name := fm.Name
+	if name == "" {
+		name = dirName
 	}
 	return &domain.Skill{
-		ID:            fm.Name,
-		Name:          fm.Name,
+		ID:            dirName,
+		Name:          name,
 		Description:   fm.Description,
+		Source:        source,
+		Builtin:       builtin,
 		License:       fm.License,
 		Compatibility: fm.Compatibility,
 		Metadata:      fm.Metadata,
@@ -249,10 +282,6 @@ func parseSkill(content, dirName string) (*domain.Skill, error) {
 	}, nil
 }
 
-// splitFrontmatter separates YAML frontmatter from the Markdown body. The
-// closing delimiter must be a line consisting of exactly "---" — a naive
-// SplitN(content, "---", 3) breaks when the frontmatter itself contains the
-// substring "---" (e.g. a description mentioning Markdown page breaks).
 func splitFrontmatter(content string) (fmText, body string, ok bool) {
 	content = strings.TrimPrefix(content, "\ufeff")
 	lines := strings.Split(content, "\n")

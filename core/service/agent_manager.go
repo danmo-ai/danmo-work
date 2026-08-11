@@ -3,135 +3,197 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"danmo-work/core/domain"
-	"danmo-work/core/port"
+
+	"gopkg.in/yaml.v3"
 )
 
 type AgentManager struct {
-	store          port.AgentRepo
-	mu             sync.RWMutex
-	cache          map[string]*domain.Agent
-	templateLoader func(id string) (*domain.Agent, error)
+	dataDir string
+	mu      sync.RWMutex
 }
 
-func NewAgentManager(store port.AgentRepo) *AgentManager {
-	return &AgentManager{store: store, cache: make(map[string]*domain.Agent)}
+func NewAgentManager(dataDir string) *AgentManager {
+	return &AgentManager{dataDir: dataDir}
 }
 
-func (m *AgentManager) SetTemplateLoader(fn func(id string) (*domain.Agent, error)) {
-	m.templateLoader = fn
-}
-
-func (m *AgentManager) enrich(a *domain.Agent) {
-	if a == nil {
-		return
-	}
-	body, meta := DecodeAgentSystemPrompt(a.SystemPrompt)
-	a.SystemPrompt = body
-	a.MarketSource = marketSourceFromMeta(meta)
-	if m.templateLoader != nil {
-		if _, err := m.templateLoader(a.ID); err == nil {
-			a.Builtin = true
-		}
-	}
-}
-
-func (m *AgentManager) prepareStore(a domain.Agent) domain.Agent {
-	body, meta := DecodeAgentSystemPrompt(a.SystemPrompt)
-	if meta == nil {
-		meta = map[string]string{}
-	}
-	if a.MarketSource != "" {
-		meta["market.source"] = a.MarketSource
-	}
-	a.SystemPrompt = EncodeAgentSystemPrompt(body, meta)
-	a.Builtin = false
-	a.MarketSource = ""
-	return a
-}
-
-func (m *AgentManager) Get(ctx context.Context, id string) (*domain.Agent, error) {
-	m.mu.RLock()
-	if a, ok := m.cache[id]; ok {
-		m.mu.RUnlock()
-		cp := *a
-		m.enrich(&cp)
-		return &cp, nil
-	}
-	m.mu.RUnlock()
-	a, err := m.store.Get(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	m.mu.Lock()
-	m.cache[id] = &a
-	m.mu.Unlock()
-	cp := a
-	m.enrich(&cp)
-	return &cp, nil
+func (m *AgentManager) agentDir() string {
+	return filepath.Join(m.dataDir, "agents")
 }
 
 func (m *AgentManager) List(ctx context.Context) ([]domain.Agent, error) {
-	list, err := m.store.List(ctx)
+	return LoadAgentsFromFS(m.agentDir())
+}
+
+func (m *AgentManager) Get(ctx context.Context, id string) (*domain.Agent, error) {
+	dir := m.agentDir()
+	path := filepath.Join(dir, id+".md")
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("agent %q not found", id)
 	}
-	out := make([]domain.Agent, len(list))
-	for i := range list {
-		out[i] = list[i]
-		m.enrich(&out[i])
-	}
-	return out, nil
+	return parseAgentMarkdown(string(data))
 }
 
 func (m *AgentManager) Upsert(ctx context.Context, a domain.Agent) error {
 	domain.NormalizeAgentBindings(&a)
-	stored := m.prepareStore(a)
-	if err := m.store.Upsert(ctx, stored); err != nil {
+	if a.Source == "" {
+		a.Source = "user"
+	}
+	dir := m.agentDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	m.mu.Lock()
-	m.cache[a.ID] = &stored
-	m.mu.Unlock()
-	return nil
+	// Never overwrite builtin agents.
+	if existing, err := m.Get(ctx, a.ID); err == nil && existing.Source == "builtin" {
+		return fmt.Errorf("cannot modify builtin agent %q", a.ID)
+	}
+	return writeAgentFile(dir, a)
 }
 
 func (m *AgentManager) Delete(ctx context.Context, id string) error {
-	if err := m.store.Delete(ctx, id); err != nil {
+	a, err := m.Get(ctx, id)
+	if err != nil {
 		return err
 	}
-	m.mu.Lock()
-	delete(m.cache, id)
-	m.mu.Unlock()
-	return nil
+	if a.Source == "builtin" {
+		return fmt.Errorf("cannot delete builtin agent %q", id)
+	}
+	return os.Remove(filepath.Join(m.agentDir(), id+".md"))
 }
 
 func (m *AgentManager) ResetFromTemplate(ctx context.Context, id string) (*domain.Agent, error) {
-	if m.templateLoader == nil {
-		return nil, fmt.Errorf("template loader not configured")
-	}
-	_, err := m.store.Get(ctx, id)
+	return nil, fmt.Errorf("ResetFromTemplate is no longer supported: builtin agents are read-only")
+}
+
+// LoadAgentsFromFS reads all agent files (*.yaml, *.md) from a directory.
+func LoadAgentsFromFS(dir string) ([]domain.Agent, error) {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("agent %q not found, cannot reset: %w", id, err)
-	}
-	tmpl, err := m.templateLoader(id)
-	if err != nil {
-		return nil, fmt.Errorf("no template found for agent %q: %w", id, err)
-	}
-	tmpl.MarketSource = ""
-	body, _ := DecodeAgentSystemPrompt(tmpl.SystemPrompt)
-	stored := *tmpl
-	stored.SystemPrompt = strings.TrimSpace(body)
-	if err := m.store.Upsert(ctx, stored); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
-	m.mu.Lock()
-	m.cache[id] = &stored
-	m.mu.Unlock()
-	out := stored
-	m.enrich(&out)
-	return &out, nil
+	var result []domain.Agent
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			log.Printf("[agents] read %s: %v", path, err)
+			continue
+		}
+		agent, err := parseAgentMarkdown(string(data))
+		if err != nil {
+			log.Printf("[agents] parse %s: %v", path, err)
+			continue
+		}
+		result = append(result, *agent)
+	}
+	return result, nil
+}
+
+func parseAgentMarkdown(content string) (*domain.Agent, error) {
+	parts := strings.SplitN(content, "---", 3)
+	if len(parts) < 3 {
+		return nil, fmt.Errorf("missing frontmatter")
+	}
+	var fm struct {
+		ID             string `yaml:"id"`
+		Name           string `yaml:"name"`
+		Description    string `yaml:"description"`
+		Source         string `yaml:"source"`
+		Persona        string `yaml:"persona"`
+		Mode           string `yaml:"mode"`
+		Steps          int    `yaml:"steps"`
+		Skills         []string          `yaml:"skills"`
+		Tools          []toolFrontmatter `yaml:"tools"`
+		MCPServers     []string          `yaml:"mcp_servers"`
+		Knowledge      []string          `yaml:"knowledge"`
+		CanDelegate    bool              `yaml:"can_delegate"`
+		InheritAmbient *bool             `yaml:"inherit_ambient"`
+	}
+	if err := yaml.Unmarshal([]byte(strings.TrimSpace(parts[1])), &fm); err != nil {
+		return nil, err
+	}
+	if fm.ID == "" {
+		return nil, fmt.Errorf("agent id required")
+	}
+	source := fm.Source
+	if source == "" {
+		source = "builtin"
+	}
+	mode := domain.AgentModePrimary
+	if strings.ToLower(fm.Mode) == "subagent" {
+		mode = domain.AgentModeSubagent
+	}
+	var tools []domain.ToolBinding
+	for _, t := range fm.Tools {
+		mcp := t.MCPServer
+		if mcp == "" {
+			mcp = t.MCP
+		}
+		tools = append(tools, domain.ToolBinding{
+			ToolID:    t.ToolID,
+			MCPServer: mcp,
+			RiskLevel: parseAgentRisk(t.RiskLevel),
+		})
+	}
+	a := domain.Agent{
+		ID: fm.ID, Name: fm.Name, Description: fm.Description, Source: source, Builtin: source == "builtin",
+		Persona: fm.Persona, Mode: mode, SystemPrompt: strings.TrimSpace(parts[2]),
+		Steps: fm.Steps, SkillIDs: fm.Skills, Tools: tools, MCPServers: fm.MCPServers,
+		KnowledgeIDs: fm.Knowledge, CanDelegate: fm.CanDelegate,
+		InheritAmbient: fm.InheritAmbient,
+	}
+	domain.NormalizeAgentBindings(&a)
+	return &a, nil
+}
+
+func writeAgentFile(dir string, a domain.Agent) error {
+	type agentFM struct {
+		ID             string            `yaml:"id"`
+		Name           string            `yaml:"name,omitempty"`
+		Description    string            `yaml:"description,omitempty"`
+		Source         string            `yaml:"source,omitempty"`
+		Persona        string            `yaml:"persona,omitempty"`
+		Mode           string            `yaml:"mode,omitempty"`
+		Steps          int               `yaml:"steps,omitempty"`
+		Skills         []string          `yaml:"skills,omitempty"`
+		Tools          []toolFrontmatter `yaml:"tools,omitempty"`
+		MCPServers     []string          `yaml:"mcp_servers,omitempty"`
+		Knowledge      []string          `yaml:"knowledge,omitempty"`
+		CanDelegate    bool              `yaml:"can_delegate,omitempty"`
+		InheritAmbient *bool             `yaml:"inherit_ambient,omitempty"`
+	}
+	var tools []toolFrontmatter
+	for _, t := range a.Tools {
+		tools = append(tools, toolFrontmatter{ToolID: t.ToolID, RiskLevel: string(t.RiskLevel)})
+	}
+	fm, _ := yaml.Marshal(agentFM{
+		ID: a.ID, Name: a.Name, Description: a.Description, Source: a.Source,
+		Persona: a.Persona, Mode: string(a.Mode), Steps: a.Steps,
+		Skills: a.SkillIDs, Tools: tools, MCPServers: a.MCPServers,
+		Knowledge: a.KnowledgeIDs, CanDelegate: a.CanDelegate,
+		InheritAmbient: a.InheritAmbient,
+	})
+
+	var b strings.Builder
+	b.WriteString("---\n")
+	b.WriteString(string(fm))
+	b.WriteString("---\n")
+	if a.SystemPrompt != "" {
+		b.WriteString(a.SystemPrompt)
+	}
+	path := filepath.Join(dir, a.ID+".md")
+	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
