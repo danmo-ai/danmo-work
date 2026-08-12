@@ -570,7 +570,29 @@ func (m *MCPManager) CallTool(ctx context.Context, serverID, toolName string, ar
 	if err != nil {
 		return "", err
 	}
-	return sess.CallTool(ctx, toolName, args)
+	out, err := sess.CallTool(ctx, toolName, args)
+	if err != nil && isStaleSessionError(err) {
+		m.closeSession(serverID)
+		sess, err = m.openSession(ctx, srv)
+		if err != nil {
+			return "", err
+		}
+		out, err = sess.CallTool(ctx, toolName, args)
+	}
+	return out, err
+}
+
+func isStaleSessionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	for _, p := range []string{"broken pipe", "connection closed", "connection reset", "eof", "session expired", "session invalid", "closed"} {
+		if strings.Contains(msg, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *MCPManager) SyncAll(ctx context.Context) error {
