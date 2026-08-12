@@ -63,7 +63,8 @@ func (m *MCPManager) SetPluginMCPFiles(files []string) error {
 	m.pluginMCPFiles = append([]string{}, files...)
 	m.mu.Unlock()
 	m.loadFromDisk()
-	return m.autoConnectPlugins()
+	go m.autoConnectPlugins()
+	return nil
 }
 
 // RegisterPluginMCP appends a single plugin mcp.json path, loads its entries, and auto-connects.
@@ -78,7 +79,8 @@ func (m *MCPManager) RegisterPluginMCP(mcpPath string) error {
 	m.pluginMCPFiles = append(m.pluginMCPFiles, mcpPath)
 	m.mu.Unlock()
 	m.loadFromDisk()
-	return m.autoConnectPlugins()
+	go m.autoConnectPlugins()
+	return nil
 }
 
 // UnregisterPluginMCP removes a plugin's mcp servers by source marker.
@@ -185,6 +187,9 @@ func (m *MCPManager) saveToDisk() error {
 		MCPServers: make(map[string]mcpSpecServer),
 	}
 	for id, srv := range m.servers {
+		if strings.HasPrefix(srv.MarketSource, "plugin:") {
+			continue
+		}
 		doc.MCPServers[id] = domainToMCPSpec(srv)
 	}
 	data, err := json.MarshalIndent(doc, "", "  ")
