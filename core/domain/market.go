@@ -28,6 +28,7 @@ const (
 	MarketKindExpert    MarketItemKind = "expert"
 	MarketKindConnector MarketItemKind = "connector"
 	MarketKindBundle    MarketItemKind = "bundle"
+	MarketKindPlugin    MarketItemKind = "plugin"
 )
 
 // MarketItem is one installable entry from a source catalog.

@@ -15,12 +15,45 @@ import (
 )
 
 type AgentManager struct {
-	dataDir string
-	mu      sync.RWMutex
+	dataDir          string
+	pluginExpertDirs []string
+	mu               sync.RWMutex
 }
 
 func NewAgentManager(dataDir string) *AgentManager {
 	return &AgentManager{dataDir: dataDir}
+}
+
+// SetPluginExpertDirs replaces the plugin expert directories list (batch set, called by PluginManager.Init).
+func (m *AgentManager) SetPluginExpertDirs(dirs []string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pluginExpertDirs = append([]string{}, dirs...)
+}
+
+// RegisterPluginExpertDir appends a single plugin experts/ directory.
+func (m *AgentManager) RegisterPluginExpertDir(dir string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, existing := range m.pluginExpertDirs {
+		if existing == dir {
+			return
+		}
+	}
+	m.pluginExpertDirs = append(m.pluginExpertDirs, dir)
+}
+
+// UnregisterPluginExpertDir removes a plugin experts/ directory.
+func (m *AgentManager) UnregisterPluginExpertDir(dir string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	filtered := m.pluginExpertDirs[:0]
+	for _, d := range m.pluginExpertDirs {
+		if d != dir {
+			filtered = append(filtered, d)
+		}
+	}
+	m.pluginExpertDirs = filtered
 }
 
 func (m *AgentManager) agentDir() string {
@@ -28,17 +61,34 @@ func (m *AgentManager) agentDir() string {
 }
 
 func (m *AgentManager) List(ctx context.Context) ([]domain.Agent, error) {
-	return LoadAgentsFromFS(m.agentDir())
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var plugin []domain.Agent
+	for _, dir := range m.pluginExpertDirs {
+		agents, _ := LoadAgentsFromFS(dir)
+		plugin = append(plugin, agents...)
+	}
+	native, _ := LoadAgentsFromFS(m.agentDir())
+	return MergeAgentsByID(plugin, native), nil
 }
 
 func (m *AgentManager) Get(ctx context.Context, id string) (*domain.Agent, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	dir := m.agentDir()
 	path := filepath.Join(dir, id+".md")
 	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("agent %q not found", id)
+	if err == nil {
+		return parseAgentMarkdown(string(data))
 	}
-	return parseAgentMarkdown(string(data))
+	for _, pDir := range m.pluginExpertDirs {
+		path := filepath.Join(pDir, id+".md")
+		data, err := os.ReadFile(path)
+		if err == nil {
+			return parseAgentMarkdown(string(data))
+		}
+	}
+	return nil, fmt.Errorf("agent %q not found", id)
 }
 
 func (m *AgentManager) Upsert(ctx context.Context, a domain.Agent) error {
@@ -196,4 +246,23 @@ func writeAgentFile(dir string, a domain.Agent) error {
 	}
 	path := filepath.Join(dir, a.ID+".md")
 	return os.WriteFile(path, []byte(b.String()), 0o644)
+}
+
+// MergeAgentsByID merges agent slices; later agents override earlier by ID.
+func MergeAgentsByID(layers ...[]domain.Agent) []domain.Agent {
+	byID := make(map[string]domain.Agent)
+	var order []string
+	for _, layer := range layers {
+		for _, a := range layer {
+			if _, exists := byID[a.ID]; !exists {
+				order = append(order, a.ID)
+			}
+			byID[a.ID] = a
+		}
+	}
+	out := make([]domain.Agent, 0, len(order))
+	for _, id := range order {
+		out = append(out, byID[id])
+	}
+	return out
 }

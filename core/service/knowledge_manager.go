@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -24,7 +26,11 @@ type KnowledgeManager struct {
 	rootDir string
 	cfg     func() domain.ConfigKnowledgeSection
 
-	mu sync.RWMutex
+	pluginKBRoots []string
+
+	indexingDone chan struct{}
+	indexingOnce sync.Once
+	mu           sync.RWMutex
 }
 
 func NewKnowledgeManager(
@@ -42,12 +48,19 @@ func NewKnowledgeManager(
 			return domain.ConfigKnowledgeSection{SearchTopK: 3, ChapterMaxTokens: 512}
 		}
 	}
-	m := &KnowledgeManager{bases: bases, docs: docs, index: index, rootDir: rootDir, cfg: cfg}
+	m := &KnowledgeManager{
+		bases:        bases,
+		docs:         docs,
+		index:        index,
+		rootDir:      rootDir,
+		cfg:          cfg,
+		indexingDone: make(chan struct{}),
+	}
 	_ = os.MkdirAll(rootDir, 0o755)
 	return m
 }
 
-// ReindexAll rebuilds chapter indexes from disk (bootstrap / recovery).
+// ReindexAll rebuilds chapter indexes from disk (sync, used for backward compat and async goroutine).
 func (m *KnowledgeManager) ReindexAll(ctx context.Context) error {
 	docs, err := m.docs.ListAll(ctx)
 	if err != nil {
@@ -63,6 +76,183 @@ func (m *KnowledgeManager) ReindexAll(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// StartAsyncIndex kicks off async full reindex in a goroutine. Does not block.
+func (m *KnowledgeManager) StartAsyncIndex(ctx context.Context) {
+	m.indexingOnce.Do(func() {
+		go func() {
+			defer close(m.indexingDone)
+			if err := m.ReindexAll(ctx); err != nil {
+				log.Printf("[knowledge] async reindex error: %v", err)
+			}
+		}()
+	})
+}
+
+// AwaitIndexReady returns a channel that closes when first async index completes.
+func (m *KnowledgeManager) AwaitIndexReady() <-chan struct{} {
+	return m.indexingDone
+}
+
+// IndexReady is deprecated; the index is always populated incrementally via CreateDoc/UpdateDoc.
+func (m *KnowledgeManager) IndexReady() bool {
+	select {
+	case <-m.indexingDone:
+		return true
+	default:
+		return false
+	}
+}
+
+// SetPluginKBRoots replaces plugin knowledge root directories (batch set, called by PluginManager.Init).
+func (m *KnowledgeManager) SetPluginKBRoots(roots []string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pluginKBRoots = append([]string{}, roots...)
+}
+
+// RegisterPluginKB appends a single plugin knowledge root directory.
+func (m *KnowledgeManager) RegisterPluginKB(root string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, existing := range m.pluginKBRoots {
+		if existing == root {
+			return
+		}
+	}
+	m.pluginKBRoots = append(m.pluginKBRoots, root)
+}
+
+// UnregisterPluginKB removes a plugin knowledge root (unloads its KB from SQLite).
+// The files themselves remain in the plugin directory (removed separately by PluginManager).
+func (m *KnowledgeManager) UnregisterPluginKB(ctx context.Context, pluginRoot string) error {
+	m.mu.Lock()
+	filtered := m.pluginKBRoots[:0]
+	for _, d := range m.pluginKBRoots {
+		if d != pluginRoot {
+			filtered = append(filtered, d)
+		}
+	}
+	m.pluginKBRoots = filtered
+	m.mu.Unlock()
+
+	pluginName := pluginNameFromKBPath(pluginRoot)
+	if pluginName == "" {
+		return nil
+	}
+	_ = m.DeleteBase(ctx, pluginName)
+	return nil
+}
+
+// ScanPluginBases discovers plugin knowledge directories and registers them as KBs in SQLite.
+// One plugin = one knowledge base; kb-id is the plugin name.
+// Call this before StartAsyncIndex so plugin KBs/docs are included in the reindex.
+func (m *KnowledgeManager) ScanPluginBases(ctx context.Context) error {
+	m.mu.RLock()
+	roots := append([]string{}, m.pluginKBRoots...)
+	m.mu.RUnlock()
+
+	for _, root := range roots {
+		pluginName := pluginNameFromKBPath(root)
+		if pluginName == "" {
+			continue
+		}
+
+		meta := readKBmeta(filepath.Join(root, "_meta.json"))
+		name := meta["name"]
+		if name == "" {
+			name = pluginName
+		}
+		desc := meta["description"]
+
+		if _, err := m.bases.Get(ctx, pluginName); err == nil {
+			continue
+		}
+
+		if _, err := m.createBaseWithID(ctx, pluginName, name, desc); err != nil {
+			log.Printf("[knowledge] plugin kb %q create: %v", pluginName, err)
+			continue
+		}
+
+		files, err := filepath.Glob(filepath.Join(root, "*.md"))
+		if err != nil {
+			continue
+		}
+		for _, f := range files {
+			fname := filepath.Base(f)
+			if fname == "_meta.json" || strings.HasPrefix(fname, ".") {
+				continue
+			}
+			docID := strings.TrimSuffix(fname, ".md")
+			if _, err := m.docs.Get(ctx, docID); err == nil {
+				continue
+			}
+			data, err := os.ReadFile(f)
+			if err != nil {
+				continue
+			}
+			title := extractMarkdownTitle(string(data))
+			if title == "" {
+				title = docID
+			}
+			rel := filepath.ToSlash(filepath.Join(pluginName, fname))
+			now := time.Now().UTC().Format(time.RFC3339)
+			d := domain.KnowledgeDoc{
+				ID: docID, KBID: pluginName, Title: title, Path: rel,
+				CreatedAt: now, UpdatedAt: now,
+			}
+			if err := m.docs.Upsert(ctx, d); err != nil {
+				log.Printf("[knowledge] plugin doc %q upsert: %v", docID, err)
+			}
+		}
+	}
+	return nil
+}
+
+func pluginNameFromKBPath(root string) string {
+	parts := strings.Split(filepath.ToSlash(filepath.Clean(root)), "/")
+	for i := len(parts) - 1; i >= 0; i-- {
+		if parts[i] == "plugins" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
+}
+
+func readKBmeta(path string) map[string]string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var m map[string]string
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil
+	}
+	return m
+}
+
+func extractMarkdownTitle(content string) string {
+	lines := strings.SplitN(content, "\n", 5)
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "# ") {
+			return strings.TrimPrefix(line, "# ")
+		}
+	}
+	return ""
+}
+
+func (m *KnowledgeManager) createBaseWithID(ctx context.Context, id, name, description string) (domain.KnowledgeBase, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	b := domain.KnowledgeBase{
+		ID: id, Name: name, Description: description,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := m.bases.Upsert(ctx, b); err != nil {
+		return domain.KnowledgeBase{}, err
+	}
+	return b, nil
 }
 
 // DefaultKnowledgeBaseID is the stable id for the auto-created default KB.
@@ -409,10 +599,17 @@ func (m *KnowledgeManager) readContent(ctx context.Context, d domain.KnowledgeDo
 	_ = ctx
 	path := m.absPath(d)
 	b, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("read knowledge doc %s: %w", d.ID, err)
+	if err == nil {
+		return string(b), nil
 	}
-	return string(b), nil
+	for _, root := range m.pluginKBRoots {
+		pluginPath := filepath.Join(root, d.ID+".md")
+		b, err := os.ReadFile(pluginPath)
+		if err == nil {
+			return string(b), nil
+		}
+	}
+	return "", fmt.Errorf("read knowledge doc %s: %w", d.ID, err)
 }
 
 func (m *KnowledgeManager) indexDoc(ctx context.Context, d domain.KnowledgeDoc, content string) error {

@@ -7,7 +7,7 @@ import { confirm, toast } from '@/utils/feedback'
 import type { InstallMarketResult, MarketListing, UninstallMarketResult } from '@/types'
 
 const props = defineProps<{
-  kind: 'skill' | 'expert' | 'connector'
+  kind: 'skill' | 'expert' | 'connector' | 'plugin'
   selectedKey?: string | null
 }>()
 

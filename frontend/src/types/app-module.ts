@@ -7,3 +7,4 @@ export type AppModule =
   | 'automations'
   | 'usage'
   | 'settings'
+  | 'plugins'

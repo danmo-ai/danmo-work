@@ -35,11 +35,12 @@ type mcpSpecDoc struct {
 // MCPManager persists MCP server config (mcp.json), keeps live sessions, and syncs tools
 // into the runtime catalog via MCPToolSync.
 type MCPManager struct {
-	mcpFile string
-	servers map[string]domain.MCPServer
-	secrets port.SecretStore
-	dialer  port.MCPDialer
-	syncer  port.MCPToolSync
+	mcpFile        string
+	pluginMCPFiles []string
+	servers        map[string]domain.MCPServer
+	secrets        port.SecretStore
+	dialer         port.MCPDialer
+	syncer         port.MCPToolSync
 
 	mu       sync.Mutex
 	sessions map[string]port.MCPSession
@@ -55,6 +56,82 @@ func NewMCPManager(dataDir string) *MCPManager {
 	return m
 }
 
+// SetPluginMCPFiles replaces the plugin mcp.json file list (batch set, called by PluginManager.Init).
+// Loads all plugin entries into servers and triggers auto-connect.
+func (m *MCPManager) SetPluginMCPFiles(files []string) error {
+	m.mu.Lock()
+	m.pluginMCPFiles = append([]string{}, files...)
+	m.mu.Unlock()
+	m.loadFromDisk()
+	return m.autoConnectPlugins()
+}
+
+// RegisterPluginMCP appends a single plugin mcp.json path, loads its entries, and auto-connects.
+func (m *MCPManager) RegisterPluginMCP(mcpPath string) error {
+	m.mu.Lock()
+	for _, existing := range m.pluginMCPFiles {
+		if existing == mcpPath {
+			m.mu.Unlock()
+			return nil
+		}
+	}
+	m.pluginMCPFiles = append(m.pluginMCPFiles, mcpPath)
+	m.mu.Unlock()
+	m.loadFromDisk()
+	return m.autoConnectPlugins()
+}
+
+// UnregisterPluginMCP removes a plugin's mcp servers by source marker.
+func (m *MCPManager) UnregisterPluginMCP(pluginName string) {
+	source := "plugin:" + pluginName
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	filtered := m.pluginMCPFiles[:0]
+	for _, f := range m.pluginMCPFiles {
+		if pluginNameFromMCPPath(f) != pluginName {
+			filtered = append(filtered, f)
+		}
+	}
+	m.pluginMCPFiles = filtered
+
+	for id, srv := range m.servers {
+		if strings.HasPrefix(srv.MarketSource, "plugin:") && srv.MarketSource == source {
+			m.closeSession(id)
+			delete(m.servers, id)
+		}
+	}
+}
+
+func pluginNameFromMCPPath(mcpPath string) string {
+	parts := strings.Split(filepath.ToSlash(mcpPath), "/")
+	for i := len(parts) - 1; i >= 0; i-- {
+		if parts[i] == "plugins" && i+1 < len(parts) {
+			return parts[i+1]
+		}
+	}
+	return ""
+}
+
+func (m *MCPManager) autoConnectPlugins() error {
+	m.mu.Lock()
+	ids := make([]string, 0, len(m.servers))
+	for id, srv := range m.servers {
+		if strings.HasPrefix(srv.MarketSource, "plugin:") && srv.Enabled {
+			ids = append(ids, id)
+		}
+	}
+	m.mu.Unlock()
+
+	for _, id := range ids {
+		_, err := m.RefreshTools(context.Background(), id)
+		if err != nil {
+			log.Printf("[mcp] plugin auto-connect %q: %v", id, err)
+		}
+	}
+	return nil
+}
+
 func (m *MCPManager) SetDialer(d port.MCPDialer) { m.dialer = d }
 
 func (m *MCPManager) SetSecretStore(s port.SecretStore) { m.secrets = s }
@@ -62,19 +139,44 @@ func (m *MCPManager) SetSecretStore(s port.SecretStore) { m.secrets = s }
 func (m *MCPManager) SetToolSync(s port.MCPToolSync) { m.syncer = s }
 
 func (m *MCPManager) loadFromDisk() {
+	merged := make(map[string]domain.MCPServer)
+
+	for _, p := range m.pluginMCPFiles {
+		pluginName := pluginNameFromMCPPath(p)
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		var doc mcpSpecDoc
+		if err := json.Unmarshal(data, &doc); err != nil {
+			log.Printf("[mcp] parse plugin mcp.json %s: %v", p, err)
+			continue
+		}
+		for id, srv := range doc.MCPServers {
+			server := mcpSpecToDomain(id, srv)
+			normalizeMCPServer(&server)
+			server.Enabled = true
+			server.AmbientMount = true
+			if server.MarketSource == "" {
+				server.MarketSource = "plugin:" + pluginName
+			}
+			merged[id] = server
+		}
+	}
+
 	data, err := os.ReadFile(m.mcpFile)
-	if err != nil {
-		return
+	if err == nil {
+		var doc mcpSpecDoc
+		if err := json.Unmarshal(data, &doc); err == nil {
+			for id, srv := range doc.MCPServers {
+				server := mcpSpecToDomain(id, srv)
+				normalizeMCPServer(&server)
+				merged[id] = server
+			}
+		}
 	}
-	var doc mcpSpecDoc
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return
-	}
-	for id, srv := range doc.MCPServers {
-		server := mcpSpecToDomain(id, srv)
-		normalizeMCPServer(&server)
-		m.servers[id] = server
-	}
+
+	m.servers = merged
 }
 
 func (m *MCPManager) saveToDisk() error {

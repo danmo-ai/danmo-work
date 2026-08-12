@@ -263,7 +263,7 @@ export interface MarketSource {
 }
 
 export interface MarketListing {
-  kind: 'skill' | 'expert' | 'connector' | 'bundle'
+  kind: 'skill' | 'expert' | 'connector' | 'bundle' | 'plugin'
   id: string
   name: string
   description?: string

@@ -102,7 +102,7 @@ func TestMarketManagerInstallLocal(t *testing.T) {
 	skills := NewSkillManager(dataDir)
 	agents := NewAgentManager(dataDir)
 	mcp := NewMCPManager(dataDir)
-	mgr := NewMarketManager(configMgr, reg, skills, agents, mcp)
+	mgr := NewMarketManager(configMgr, reg, skills, agents, mcp, nil)
 
 	ctx := context.Background()
 	list, warnings, err := mgr.ListCatalog(ctx, true)
@@ -225,7 +225,7 @@ func TestMarketInstallNormalizesBodyWithCatalogID(t *testing.T) {
 	dataDir := t.TempDir()
 	skills := NewSkillManager(dataDir)
 	agents := NewAgentManager(dataDir)
-	mgr := NewMarketManager(NewConfigManager(cfgStore), &fakeRegistry{m: &fakeMarket{id: "local", root: root}}, skills, agents, nil)
+	mgr := NewMarketManager(NewConfigManager(cfgStore), &fakeRegistry{m: &fakeMarket{id: "local", root: root}}, skills, agents, nil, nil)
 
 	res, err := mgr.Install(context.Background(), domain.InstallMarketRequest{
 		SourceID: "local", Kind: "skill", ID: "tlc__pr-review", Overwrite: true,
@@ -256,7 +256,7 @@ func TestMarketUninstallRestoresBuiltinSkill(t *testing.T) {
 	skills := NewSkillManager(dataDir)
 	_ = skills.Upsert(ctx, domain.Skill{ID: "debugging", Name: "debugging", Body: "builtin-body", Source: "builtin"})
 	agents := NewAgentManager(dataDir)
-	mgr := NewMarketManager(configMgr, &fakeRegistry{}, skills, agents, nil)
+	mgr := NewMarketManager(configMgr, &fakeRegistry{}, skills, agents, nil, nil)
 
 	_ = skills.Upsert(ctx, domain.Skill{
 		ID: "debugging", Name: "debugging", Body: "market-body",
@@ -361,7 +361,7 @@ prompt
 	skills := NewSkillManager(dataDir)
 	agents := NewAgentManager(dataDir)
 	mcp := NewMCPManager(dataDir)
-	mgr := NewMarketManager(NewConfigManager(cfgStore), &fakeRegistry{m: &fakeMarket{id: "local", root: root}}, skills, agents, mcp)
+	mgr := NewMarketManager(NewConfigManager(cfgStore), &fakeRegistry{m: &fakeMarket{id: "local", root: root}}, skills, agents, mcp, nil)
 
 	res, err := mgr.Install(context.Background(), domain.InstallMarketRequest{
 		SourceID: "local", Kind: "expert", ID: "cg-expert", Overwrite: true,

@@ -21,6 +21,7 @@ type MarketManager struct {
 	skills   *SkillManager
 	agents   *AgentManager
 	mcp      *MCPManager
+	plugins  *PluginManager
 	skillImp *SkillImporter
 	agentImp *AgentImporter
 	connImp  *ConnectorImporter
@@ -40,6 +41,7 @@ func NewMarketManager(
 	skills *SkillManager,
 	agents *AgentManager,
 	mcp *MCPManager,
+	plugins *PluginManager,
 ) *MarketManager {
 	return &MarketManager{
 		config:   config,
@@ -47,6 +49,7 @@ func NewMarketManager(
 		skills:   skills,
 		agents:   agents,
 		mcp:      mcp,
+		plugins:  plugins,
 		skillImp: NewSkillImporter(),
 		agentImp: NewAgentImporter(),
 		connImp:  NewConnectorImporter(),
@@ -275,6 +278,10 @@ func (m *MarketManager) Install(ctx context.Context, req domain.InstallMarketReq
 			return nil, fmt.Errorf("connector %q is a product builtin (auto-seeded); configure it under Connectors — not installable from the market", req.ID)
 		}
 		if err := m.installConnector(ctx, market, *item, ref, req.Overwrite, result); err != nil {
+			return nil, err
+		}
+	case domain.MarketKindPlugin:
+		if err := m.installPlugin(ctx, market, *item, ref, result); err != nil {
 			return nil, err
 		}
 	default:
@@ -557,6 +564,36 @@ func (m *MarketManager) installConnector(
 	return nil
 }
 
+func (m *MarketManager) installPlugin(
+	ctx context.Context,
+	market port.Market,
+	item domain.MarketItem,
+	ref string,
+	result *domain.InstallMarketResult,
+) error {
+	if m.plugins == nil {
+		return fmt.Errorf("plugin manager not configured")
+	}
+	dir, cleanup, err := market.FetchPackage(ctx, item, ref)
+	if err != nil {
+		return err
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	depsScript := ""
+	if scriptRel, _, ok, _ := ResolveConnectorDepsScript(dir, item.Deps); ok {
+		depsScript = scriptRel
+	}
+
+	if err := m.plugins.InstallPlugin(ctx, dir, depsScript); err != nil {
+		return fmt.Errorf("install plugin %s: %w", item.ID, err)
+	}
+	result.Installed = append(result.Installed, item.ID)
+	return nil
+}
+
 // refreshConnectorTools dials the MCP server so status becomes connected and tools are listed.
 // Failure is non-fatal: the connector row is already persisted (status may be "error").
 func (m *MarketManager) refreshConnectorTools(ctx context.Context, id string) {
@@ -619,6 +656,13 @@ func (m *MarketManager) Uninstall(ctx context.Context, req domain.UninstallMarke
 			}
 		}
 		if err := m.mcp.Delete(ctx, srv.ID); err != nil {
+			return out, err
+		}
+	case domain.MarketKindPlugin:
+		if m.plugins == nil {
+			return nil, fmt.Errorf("plugin manager not configured")
+		}
+		if err := m.plugins.UninstallPlugin(ctx, req.ID, ""); err != nil {
 			return out, err
 		}
 	default:

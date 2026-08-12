@@ -46,9 +46,10 @@ func NormalizeSkillResourcePath(path string) (string, error) {
 }
 
 type SkillManager struct {
-	dataDir   string
-	globalDir string
-	mu        sync.RWMutex
+	dataDir         string
+	globalDir       string
+	pluginSkillDirs []string
+	mu              sync.RWMutex
 }
 
 func NewSkillManager(dataDir string) *SkillManager {
@@ -56,6 +57,38 @@ func NewSkillManager(dataDir string) *SkillManager {
 		dataDir:   dataDir,
 		globalDir: filepath.Join(dataDir, "skills"),
 	}
+}
+
+// SetPluginSkillDirs replaces the plugin skill directories list (batch set, called by PluginManager.Init).
+func (m *SkillManager) SetPluginSkillDirs(dirs []string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pluginSkillDirs = append([]string{}, dirs...) // defensive copy
+}
+
+// RegisterPluginSkillDir appends a single plugin skills/ directory.
+func (m *SkillManager) RegisterPluginSkillDir(dir string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, existing := range m.pluginSkillDirs {
+		if existing == dir {
+			return
+		}
+	}
+	m.pluginSkillDirs = append(m.pluginSkillDirs, dir)
+}
+
+// UnregisterPluginSkillDir removes a plugin skills/ directory.
+func (m *SkillManager) UnregisterPluginSkillDir(dir string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	filtered := m.pluginSkillDirs[:0]
+	for _, d := range m.pluginSkillDirs {
+		if d != dir {
+			filtered = append(filtered, d)
+		}
+	}
+	m.pluginSkillDirs = filtered
 }
 
 func (m *SkillManager) DataDir() string { return m.dataDir }
@@ -69,11 +102,27 @@ func (m *SkillManager) globalDirs() []string {
 }
 
 func (m *SkillManager) List(ctx context.Context) ([]domain.Skill, error) {
-	return LoadSkillsFromFS(m.globalDir)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	dirs := append([]string{}, m.pluginSkillDirs...)
+	dirs = append(dirs, m.globalDir)
+	skills, _ := ScanSkillDirs(dirs)
+	return skills, nil
 }
 
 func (m *SkillManager) Get(ctx context.Context, id string) (*domain.Skill, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	for _, dir := range m.globalDirs() {
+		skillDir := filepath.Join(dir, id)
+		mdPath := filepath.Join(skillDir, "SKILL.md")
+		data, err := os.ReadFile(mdPath)
+		if err != nil {
+			continue
+		}
+		return parseSkillMarkdown(string(data), skillDir)
+	}
+	for _, dir := range m.pluginSkillDirs {
 		skillDir := filepath.Join(dir, id)
 		mdPath := filepath.Join(skillDir, "SKILL.md")
 		data, err := os.ReadFile(mdPath)

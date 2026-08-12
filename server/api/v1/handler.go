@@ -50,6 +50,7 @@ type Handler struct {
 	TableStore    port.TableStoreRepo
 	AIReview      *service.AIReviewManager
 	Remote        *connector.Connector
+	PluginManager *service.PluginManager
 }
 
 type RouterConfig struct {
@@ -233,6 +234,8 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 		api.POST("/market/install", installMarketItem(h.MarketHandler))
 		api.POST("/market/uninstall", uninstallMarketItem(h.MarketHandler))
 	}
+
+	api.GET("/plugins", listPlugins(h))
 
 	api.GET("/version", getVersion())
 
@@ -491,6 +494,17 @@ func pollEvents(h *Handler) gin.HandlerFunc {
 		since, _ := strconv.ParseInt(c.DefaultQuery("since", "0"), 10, 64)
 		events := h.Sessions.StreamEvents(c.Param("id"), since)
 		c.JSON(http.StatusOK, events)
+	}
+}
+
+func listPlugins(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.PluginManager == nil {
+			c.JSON(http.StatusOK, []domain.PluginInstalled{})
+			return
+		}
+		plugins := h.PluginManager.ListInstalled()
+		c.JSON(http.StatusOK, plugins)
 	}
 }
 

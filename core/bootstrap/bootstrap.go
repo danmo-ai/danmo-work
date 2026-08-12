@@ -67,6 +67,7 @@ type Core struct {
 	QQ            *service.QQBridge
 	Channels      *service.ChannelManager
 	AIReview      *service.AIReviewManager
+	PluginManager *service.PluginManager
 }
 
 func New(cfg Config) *Core {
@@ -166,9 +167,6 @@ func New(cfg Config) *Core {
 		log.Printf("[bootstrap] knowledge default base: %v", err)
 	}
 	ensureNovelCraftKnowledge(knowledgeMgr)
-	if err := knowledgeMgr.ReindexAll(context.Background()); err != nil {
-		log.Printf("[bootstrap] knowledge reindex: %v", err)
-	}
 	knowledge := builtin.NewKnowledge()
 	knowledge.SetBackend(knowledgeMgr)
 	turnManager := service.NewTurnManager(st.Turns())
@@ -178,6 +176,12 @@ func New(cfg Config) *Core {
 	mcpManager.SetSecretStore(st.Secrets())
 	mcpDialer := adaptermcp.NewDialer()
 	mcpManager.SetDialer(mcpDialer)
+
+	pluginManager := service.NewPluginManager(appCfg.Data.Dir, skills, agents, mcpManager, knowledgeMgr)
+	if err := pluginManager.Init(context.Background()); err != nil {
+		log.Printf("[bootstrap] plugin init: %v", err)
+	}
+	knowledgeMgr.StartAsyncIndex(context.Background())
 
 	llmConfigRepo := st.LLMConfig()
 	searchConfig := service.NewSearchConfigManager(loader)
@@ -207,7 +211,7 @@ func New(cfg Config) *Core {
 	}
 
 	marketReg := marketadapter.NewRegistry(appCfg.Market.Sources)
-	marketMgr := service.NewMarketManager(configManager, marketReg, skills, agents, mcpManager)
+	marketMgr := service.NewMarketManager(configManager, marketReg, skills, agents, mcpManager, pluginManager)
 
 	stream := dqruntime.NewStreamEventManager(st.StreamEvents())
 	usageSink := dqruntime.NewUsageSink(st.Usage(), st.Sessions())
@@ -384,6 +388,7 @@ func New(cfg Config) *Core {
 		Wecom:         wecomBridge,
 		QQ:            qqBridge,
 		AIReview:      aiReview,
+		PluginManager: pluginManager,
 	}
 }
 
