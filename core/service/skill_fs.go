@@ -166,6 +166,9 @@ func OrphanSkills(all []domain.Skill, agent domain.Agent) []domain.Skill {
 func ListAvailableSkillsForAgent(ctx context.Context, skills *SkillManager, agent domain.Agent, workDir string) ([]AvailableSkill, error) {
 	_ = ctx
 	all := ScanAllSkills(skills.DataDir(), workDir)
+	if pluginSkills, err := skills.List(ctx); err == nil {
+		all = MergeSkillsByID(pluginSkills, all)
+	}
 
 	bound := BoundSkills(all, agent)
 	boundIDs := make(map[string]struct{}, len(bound))
