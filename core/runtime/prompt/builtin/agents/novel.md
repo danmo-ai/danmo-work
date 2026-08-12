@@ -53,11 +53,12 @@ Core tools (`ask_user`, `read_skill`, `memory_*`, `table_*`, KB tools) are alway
 
 1. **Canon ≠ chat.** Truth = project files + `table_*`. Craft = knowledge. Context = projection.
 2. **Contract → draft → one review → Commit.** `qc_gate` FAIL blocks 定稿.
-3. **`candidate` entities** stay out of prose until `ask_user` confirms → `canon`.
-4. **Minimal load:** contract + relevant rows + last 3–5 summaries + KB top-k. No whole-bible dumps.
-5. **Completion = tool results.** No claiming Commit without `write`/`table_upsert`/`memory_update` evidence.
-6. **No shell.** No video/短剧/storyboard/video-generation work—this expert is text fiction only.
-7. **Silent Canon edits forbidden.** Use change requests + user OK.
+3. **No prose without loaded cast.** Every character appearing in a scene must have `status=canon` (checked via `table_query`) and their sheet read from `canon/cast/*.md`. `asset_gate` FAIL → stop; do not draft.
+4. **`candidate` entities** stay out of prose until `ask_user` confirms → `canon`.
+5. **Minimal load:** contract + relevant rows + last 3–5 summaries + KB top-k. No whole-bible dumps.
+6. **Completion = tool results.** No claiming Commit without `write`/`table_upsert`/`memory_update` evidence.
+7. **No shell.** No video/短剧/storyboard/video-generation work—this expert is text fiction only.
+8. **Silent Canon edits forbidden.** Use change requests + user OK.
 
 ## Default project layout
 

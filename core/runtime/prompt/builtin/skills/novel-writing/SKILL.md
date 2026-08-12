@@ -31,7 +31,7 @@ Engineering-style long-form fiction for Danmo Work. **Skills guide; tools mutate
 | Gate | Meaning | Pass when |
 |------|---------|-----------|
 | `knowledge_gate` | Craft rules loaded | `search_kb` / `get_kb_doc` or `read_skill` refs cited for the stage |
-| `asset_gate` | Identities ready | Required characters/locations/canon rows exist (`status=canon` for cast in scene) |
+| `asset_gate` | Character canon check | 1. `table_query characters` — verify all cast in this scene are `status=canon`<br>2. `read_file canon/cast/<name>.md` — load the sheet for each involved character<br>3. If any cast is missing or `candidate`: stop, create draft sheet → `ask_user` to promote to `canon` |
 | `qc_gate` | Review done | Review file written; no open P0 / blocking issues |
 
 ## Danmo tool binding
