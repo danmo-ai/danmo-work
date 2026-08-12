@@ -491,13 +491,13 @@ func (m *MCPManager) RefreshTools(ctx context.Context, id string) ([]domain.MCPT
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	m.closeSession(id)
 	sess, err := m.openSession(ctx, srv)
 	if err != nil {
 		return nil, fmt.Errorf("connect: %w", err)
 	}
 	discoveredInfo, err := sess.ListTools(ctx)
 	if err != nil {
-		m.closeSession(id)
 		return nil, fmt.Errorf("discover tools: %w", err)
 	}
 
