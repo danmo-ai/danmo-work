@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -69,6 +70,7 @@ func (d *Dialer) dialStdio(ctx context.Context, srv domain.MCPServer) (port.MCPS
 	command := srv.Command
 	args := splitArgs(srv.Args)
 	env := append(os.Environ(), parseEnv(srv.Env)...)
+	env = prependWorkBinToPath(env)
 	if d.PrepareStdio != nil {
 		command, args, env = d.PrepareStdio(srv, env)
 	}
@@ -546,4 +548,19 @@ func parseEnv(envStr string) []string {
 		}
 	}
 	return env
+}
+
+func prependWorkBinToPath(env []string) []string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return env
+	}
+	binDir := filepath.Join(home, ".danmo-work", "bin")
+	for i, e := range env {
+		if strings.HasPrefix(e, "PATH=") {
+			env[i] = "PATH=" + binDir + string(filepath.ListSeparator) + e[5:]
+			return env
+		}
+	}
+	return append(env, "PATH="+binDir)
 }
