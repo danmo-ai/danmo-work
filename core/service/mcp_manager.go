@@ -86,6 +86,20 @@ func (m *MCPManager) RegisterPluginMCP(mcpPath string) error {
 // UnregisterPluginMCP removes a plugin's mcp servers by source marker.
 func (m *MCPManager) UnregisterPluginMCP(pluginName string) {
 	source := "plugin:" + pluginName
+
+	m.mu.Lock()
+	var toClose []string
+	for id, srv := range m.servers {
+		if srv.MarketSource == source {
+			toClose = append(toClose, id)
+		}
+	}
+	m.mu.Unlock()
+
+	for _, id := range toClose {
+		m.closeSession(id)
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -97,11 +111,8 @@ func (m *MCPManager) UnregisterPluginMCP(pluginName string) {
 	}
 	m.pluginMCPFiles = filtered
 
-	for id, srv := range m.servers {
-		if strings.HasPrefix(srv.MarketSource, "plugin:") && srv.MarketSource == source {
-			m.closeSession(id)
-			delete(m.servers, id)
-		}
+	for _, id := range toClose {
+		delete(m.servers, id)
 	}
 }
 
