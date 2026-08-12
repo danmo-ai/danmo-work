@@ -23,7 +23,11 @@ const marketSelectedKey = ref<string | null>(null)
 
 onMounted(async () => {
   await store.load()
+  if (!store.selectedName && sortedPlugins.value.length) {
+    store.selectedName = sortedPlugins.value[0].name
+  }
   try { await marketStore.loadSources() } catch { /* ignore */ }
+  try { await marketStore.loadCatalog() } catch { /* ignore */ }
 })
 
 const sortedPlugins = computed(() =>
@@ -36,11 +40,13 @@ function selectPlugin(name: string | null) {
   store.selectedName = name
 }
 
-const hasSelection = computed(
-  () =>
-    (pageView.value === 'market' && !!marketSelectedKey.value) ||
-    (pageView.value === 'library' && !!selectedName.value),
-)
+function initial(name: string) {
+  return name.trim().charAt(0).toUpperCase() || '?'
+}
+
+// Always true so the header (本地/市场 tabs) is always visible;
+// empty states are handled inside the body slots below.
+const hasSelection = computed(() => true)
 
 async function handleUninstall() {
   if (!selectedName.value) return
@@ -87,49 +93,43 @@ const marketSelected = computed(() => {
     :has-selection="hasSelection"
     :custom-rail="true"
   >
-    <template #header>
-      <div style="padding-left: 8px;">
-        <DqSegmented
-          :value="pageView"
-          :options="pageViewOptions"
-          @change="(v: string) => { pageView = v as PageView; store.selectedName = null; marketSelectedKey = null }"
-        />
-      </div>
-    </template>
-
-    <template v-if="pageView === 'library'" #rail>
-      <div class="resource-rail">
-        <div
-          v-for="p in sortedPlugins"
-          :key="p.name"
-          class="resource-rail__row"
-          :class="{ 'resource-rail__row--active': selectedName === p.name }"
-          @click="selectPlugin(p.name)"
-        >
-          <div class="resource-rail__avatar">&#128268;</div>
-          <div class="resource-rail__meta">
-            <div class="resource-rail__title">{{ p.name }}</div>
-            <div class="resource-rail__subtitle">v{{ p.version || '0.0.0' }}</div>
+    <template #rail>
+      <div class="plugins-rail">
+        <div class="plugins-rail__head">
+          <DqSegmented
+            v-model="pageView"
+            block
+            class="resource-rail__page-view"
+            :options="pageViewOptions"
+          />
+        </div>
+        <template v-if="pageView === 'library'">
+          <div class="plugins-rail__list">
+            <div
+              v-for="p in sortedPlugins"
+              :key="p.name"
+              class="resource-rail__row"
+              :class="{ 'is-active': selectedName === p.name }"
+              @click="selectPlugin(p.name)"
+            >
+              <div class="resource-rail__avatar">{{ initial(p.name) }}</div>
+              <div class="resource-rail__meta">
+                <div class="resource-rail__title">{{ p.name }}</div>
+                <div class="resource-rail__subtitle">v{{ p.version || '0.0.0' }}</div>
+              </div>
+            </div>
+            <div v-if="sortedPlugins.length === 0" class="resource-rail__empty">
+              {{ t('plugins.empty') }}
+            </div>
           </div>
-        </div>
-        <div v-if="sortedPlugins.length === 0" class="resource-rail__empty">
-          {{ t('plugins.empty') }}
-        </div>
+        </template>
+        <template v-else>
+          <MarketCatalogRail
+            kind="plugin"
+            v-model:selected-key="marketSelectedKey"
+          />
+        </template>
       </div>
-    </template>
-
-    <template v-if="pageView === 'market'" #rail>
-      <MarketCatalogRail
-        kind="plugin"
-        v-model:selected-key="marketSelectedKey"
-      />
-    </template>
-
-    <template #empty>
-      <DqEmpty
-        :description="pageView === 'library' ? t('plugins.emptyHint') : t('market.emptyHint')"
-        style="min-height: 200px; display: flex; align-items: center; justify-content: center;"
-      />
     </template>
 
     <template #body>
@@ -162,14 +162,18 @@ const marketSelected = computed(() => {
           <div class="detail-row"><span class="detail-label">{{ t('plugins.installedAt') }}</span><span>{{ store.selected.installedAt }}</span></div>
         </div>
       </div>
-      <div v-if="pageView === 'market'" style="height: 100%;">
-        <MarketBrowser
-          kind="plugin"
-          :selected-key="marketSelectedKey ?? undefined"
-          @installed="onMarketInstalled"
-          @uninstalled="onMarketUninstalled"
-        />
-      </div>
+      <DqEmpty
+        v-else-if="pageView === 'library'"
+        :description="t('plugins.emptyHint')"
+        style="min-height: 200px; display: flex; align-items: center; justify-content: center;"
+      />
+      <MarketBrowser
+        v-else-if="pageView === 'market'"
+        kind="plugin"
+        :selected-key="marketSelectedKey ?? undefined"
+        @installed="onMarketInstalled"
+        @uninstalled="onMarketUninstalled"
+      />
     </template>
 
     <template v-if="pageView === 'library' && store.selected" #footer>
@@ -187,64 +191,35 @@ const marketSelected = computed(() => {
 </template>
 
 <style scoped>
-.resource-rail {
+.plugins-rail {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow-y: auto;
+  min-height: 0;
 }
-.resource-rail__row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: background 0.15s;
-}
-.resource-rail__row:hover {
-  background: var(--dq-color-fill-secondary);
-}
-.resource-rail__row--active {
-  background: var(--dq-color-fill-brand-light);
-}
-.resource-rail__avatar {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  border-radius: 6px;
-  background: var(--dq-color-fill-secondary);
+.plugins-rail__head {
+  padding: 8px 10px;
   flex-shrink: 0;
 }
-.resource-rail__meta {
+.resource-rail__page-view {
+  width: 100%;
+}
+.plugins-rail__list {
   flex: 1;
-  min-width: 0;
-}
-.resource-rail__title {
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.resource-rail__subtitle {
-  font-size: 11px;
-  color: var(--dq-color-text-tertiary);
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 8px;
 }
 .resource-rail__empty {
   padding: 24px 12px;
   text-align: center;
   color: var(--dq-color-text-tertiary);
   font-size: 13px;
+  flex-shrink: 0;
 }
 
 .detail-panel {
   padding: 16px 20px;
-  overflow-y: auto;
-  height: 100%;
 }
 .detail-header {
   font-size: 18px;

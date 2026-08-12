@@ -154,10 +154,6 @@ func (m *MarketManager) enrichInstalled(ctx context.Context, list []domain.Marke
 			if sk, err := m.skills.Get(ctx, list[i].ID); err == nil && sk != nil {
 				list[i].Installed = true
 			}
-		case domain.MarketKindExpert:
-			if _, err := m.agents.Get(ctx, list[i].ID); err == nil {
-				list[i].Installed = true
-			}
 		case domain.MarketKindConnector:
 			if m.mcp == nil {
 				continue
@@ -209,69 +205,6 @@ func (m *MarketManager) Install(ctx context.Context, req domain.InstallMarketReq
 	case domain.MarketKindSkill:
 		if err := m.installSkill(ctx, market, *item, ref, req.Overwrite, result); err != nil {
 			return nil, err
-		}
-	case domain.MarketKindExpert:
-		// Install skill deps first.
-		for _, depID := range item.SkillDeps {
-			depItem := findSkillItem(cat.Items, depID)
-			if depItem == nil {
-				depItem = &domain.MarketItem{
-					Kind: domain.MarketKindSkill,
-					ID:   depID,
-					Path: "skills/" + depID,
-				}
-			}
-			if err := m.installSkill(ctx, market, *depItem, ref, req.Overwrite, result); err != nil {
-				return nil, fmt.Errorf("install skill dep %s: %w", depID, err)
-			}
-		}
-		// Then connector deps (each may download platform binaries).
-		for _, depID := range item.ConnectorDeps {
-			depItem := findConnectorItem(cat.Items, depID)
-			if depItem == nil {
-				depItem = &domain.MarketItem{
-					Kind: domain.MarketKindConnector,
-					ID:   depID,
-					Path: "connectors/" + depID,
-				}
-			}
-			if IsProductBuiltinConnector(depItem.ID) {
-				return nil, fmt.Errorf("connector dep %q is a product builtin; not installable from the market", depItem.ID)
-			}
-			if err := m.installConnector(ctx, market, *depItem, ref, req.Overwrite, result); err != nil {
-				return nil, fmt.Errorf("install connector dep %s: %w", depID, err)
-			}
-		}
-		if err := m.installExpert(ctx, market, *item, ref, req.Overwrite, result); err != nil {
-			return nil, err
-		}
-	case domain.MarketKindBundle:
-		// Same dependency order as expert for now.
-		for _, depID := range item.SkillDeps {
-			depItem := findSkillItem(cat.Items, depID)
-			if depItem == nil {
-				depItem = &domain.MarketItem{Kind: domain.MarketKindSkill, ID: depID, Path: "skills/" + depID}
-			}
-			if err := m.installSkill(ctx, market, *depItem, ref, req.Overwrite, result); err != nil {
-				return nil, fmt.Errorf("install skill dep %s: %w", depID, err)
-			}
-		}
-		for _, depID := range item.ConnectorDeps {
-			depItem := findConnectorItem(cat.Items, depID)
-			if depItem == nil {
-				depItem = &domain.MarketItem{Kind: domain.MarketKindConnector, ID: depID, Path: "connectors/" + depID}
-			}
-			if IsProductBuiltinConnector(depItem.ID) {
-				return nil, fmt.Errorf("connector dep %q is a product builtin", depItem.ID)
-			}
-			if err := m.installConnector(ctx, market, *depItem, ref, req.Overwrite, result); err != nil {
-				return nil, fmt.Errorf("install connector dep %s: %w", depID, err)
-			}
-		}
-		if item.Path != "" {
-			if err := m.installExpert(ctx, market, *item, ref, req.Overwrite, result); err != nil {
-				return nil, err
-			}
 		}
 	case domain.MarketKindConnector:
 		if IsProductBuiltinConnector(req.ID) {
@@ -426,44 +359,6 @@ func (m *MarketManager) installSkill(
 		}
 	}
 	result.Installed = append(result.Installed, skill.ID)
-	return nil
-}
-
-func (m *MarketManager) installExpert(
-	ctx context.Context,
-	market port.Market,
-	item domain.MarketItem,
-	ref string,
-	overwrite bool,
-	result *domain.InstallMarketResult,
-) error {
-	if _, err := m.agents.Get(ctx, item.ID); err == nil && !overwrite {
-		result.Skipped = append(result.Skipped, item.ID)
-		return nil
-	}
-	dir, cleanup, err := market.FetchPackage(ctx, item, ref)
-	if err != nil {
-		return err
-	}
-	if cleanup != nil {
-		defer cleanup()
-	}
-	agent, err := m.agentImp.Import(dir)
-	if err != nil {
-		return err
-	}
-	agent.Source = "market"
-	agent.MarketSource = market.SourceID()
-	if item.Version != "" && agent.SystemPrompt != "" {
-		versionLine := fmt.Sprintf(" version: %s", item.Version)
-		if !strings.Contains(agent.SystemPrompt, versionLine) {
-			agent.SystemPrompt += "\n\n<!-- market version: " + item.Version + " -->"
-		}
-	}
-	if err := m.agents.Upsert(ctx, *agent); err != nil {
-		return err
-	}
-	result.Installed = append(result.Installed, agent.ID)
 	return nil
 }
 
@@ -625,17 +520,6 @@ func (m *MarketManager) Uninstall(ctx context.Context, req domain.UninstallMarke
 			return nil, err
 		}
 		_ = m.skills.DeleteFiles(ctx, req.ID)
-	case domain.MarketKindExpert:
-		ag, err := m.agents.Get(ctx, req.ID)
-		if err != nil || ag == nil {
-			return nil, fmt.Errorf("expert %q not found", req.ID)
-		}
-		if ag.Source != "market" || ag.MarketSource == "" {
-			return nil, fmt.Errorf("expert %q was not installed from the market", req.ID)
-		}
-		if err := m.agents.Delete(ctx, req.ID); err != nil {
-			return nil, err
-		}
 	case domain.MarketKindConnector:
 		if m.mcp == nil {
 			return nil, fmt.Errorf("connector market uninstall is not configured")
