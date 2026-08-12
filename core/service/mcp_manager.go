@@ -497,6 +497,7 @@ func (m *MCPManager) RefreshTools(ctx context.Context, id string) ([]domain.MCPT
 	}
 	discoveredInfo, err := sess.ListTools(ctx)
 	if err != nil {
+		m.closeSession(id)
 		return nil, fmt.Errorf("discover tools: %w", err)
 	}
 
