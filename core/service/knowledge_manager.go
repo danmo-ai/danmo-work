@@ -422,18 +422,29 @@ func (m *KnowledgeManager) indexDoc(ctx context.Context, d domain.KnowledgeDoc, 
 		maxTok = 512
 	}
 	chapters := kb.SplitMarkdown(d.ID, d.Title, content, maxTok)
-	rows := make([]port.KnowledgeChapter, 0, len(chapters))
+
+	chapterRows := make([]port.KnowledgeChapter, 0, len(chapters))
+	var chunkEntries []port.KnowledgeChunkEntry
+	chunkVectors := make(map[string][]float32)
+
 	for _, ch := range chapters {
-		row := port.KnowledgeChapter{
-			Path: ch.Path, KBID: d.KBID, DocID: d.ID,
+		chapterRows = append(chapterRows, port.KnowledgeChapter{
+			ID: ch.Path, KBID: d.KBID, DocID: d.ID,
 			Title: ch.Title, Content: ch.Text,
+		})
+
+		cks := kb.SplitChunks(ch.Path, ch.Title, ch.Text, maxTok)
+		for _, ck := range cks {
+			chunkEntries = append(chunkEntries, port.KnowledgeChunkEntry{
+				ID: ck.ID, KBID: d.KBID, DocID: d.ID, Text: ck.Content,
+			})
+			if cfg.VectorHybrid {
+				chunkVectors[ck.ID] = kb.SimpleEmbed(ck.Title + "\n" + ck.Content)
+			}
 		}
-		if cfg.VectorHybrid {
-			row.Embedding = kb.SimpleEmbed(ch.Title + "\n" + ch.Text)
-		}
-		rows = append(rows, row)
 	}
-	return m.index.ReplaceDocChapters(ctx, d.ID, rows)
+
+	return m.index.ReplaceDocChapters(ctx, d.ID, chapterRows, chunkEntries, chunkVectors)
 }
 
 // Search returns ranked chapter snippet strings for prompt injection / search_kb.
@@ -445,12 +456,13 @@ func (m *KnowledgeManager) Search(kbIDs []string, query string, topK int) []stri
 		if len(snippet) > 4000 {
 			snippet = snippet[:4000] + "…"
 		}
-		out = append(out, fmt.Sprintf("[%s] %s\n%s", h.Path, h.Title, snippet))
+		out = append(out, fmt.Sprintf("[%s] %s\n%s", h.ID, h.Title, snippet))
 	}
 	return out
 }
 
 // SearchHits runs BM25 (+ optional vector hybrid) over bound knowledge bases.
+// Searches at chunk level, resolves to logical chapters, and fetches full content.
 func (m *KnowledgeManager) SearchHits(ctx context.Context, kbIDs []string, query string, topK int) []domain.KnowledgeChapterHit {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -474,58 +486,87 @@ func (m *KnowledgeManager) SearchHits(ctx context.Context, kbIDs []string, query
 	if err != nil {
 		bm25Hits = nil
 	}
-	if !cfg.VectorHybrid {
-		if len(bm25Hits) > topK {
-			bm25Hits = bm25Hits[:topK]
-		}
-		return bm25Hits
+
+	var vecHits []domain.KnowledgeChunkHit
+	if cfg.VectorHybrid {
+		qVec := kb.SimpleEmbed(query)
+		vecHits, _ = m.index.SearchVector(ctx, kbIDs, qVec, branchLimit)
 	}
 
-	qVec := kb.SimpleEmbed(query)
-	vecHits, err := m.index.SearchVector(ctx, kbIDs, qVec, branchLimit)
-	if err != nil {
-		vecHits = nil
-	}
-	return mergeHybridHits(bm25Hits, vecHits, topK)
-}
-
-func mergeHybridHits(bm25, vector []domain.KnowledgeChapterHit, topK int) []domain.KnowledgeChapterHit {
+	// Aggregate chunk hits by chapter ID, weighted equally.
 	type agg struct {
-		hit   domain.KnowledgeChapterHit
-		score float64
+		bm25   float64
+		vector float64
 	}
-	byPath := map[string]*agg{}
-	add := func(h domain.KnowledgeChapterHit, weight float64) {
-		s := h.Score * weight
-		if cur, ok := byPath[h.Path]; ok {
-			cur.score += s
-			if h.Source != "" && cur.hit.Source != "" && h.Source != cur.hit.Source {
-				cur.hit.Source = "hybrid"
+	chapterScores := make(map[string]*agg) // chapter ID → agg scores
+	add := func(h domain.KnowledgeChunkHit, weight float64, isBM25 bool) {
+		cid := domain.ChapterIDFromChunkID(h.ID)
+		a, ok := chapterScores[cid]
+		if !ok {
+			a = &agg{}
+			chapterScores[cid] = a
+		}
+		if isBM25 {
+			a.bm25 = h.Score * weight
+		} else {
+			a.vector = h.Score * weight
+		}
+	}
+	for _, h := range bm25Hits {
+		add(h, 0.5, true)
+	}
+	for _, h := range vecHits {
+		add(h, 0.5, false)
+	}
+
+	// Sort chapters by combined score.
+	type scored struct {
+		cid    string
+		score  float64
+		source string
+	}
+	var sorted []scored
+	for cid, a := range chapterScores {
+		source := "bm25"
+		if cfg.VectorHybrid {
+			if a.bm25 > 0 && a.vector > 0 {
+				source = "hybrid"
+			} else if a.vector > 0 {
+				source = "vector"
 			}
-			return
 		}
-		cp := h
-		cp.Source = h.Source
-		byPath[h.Path] = &agg{hit: cp, score: s}
+		sorted = append(sorted, scored{cid: cid, score: a.bm25 + a.vector, source: source})
 	}
-	for _, h := range bm25 {
-		add(h, 0.5)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].score > sorted[j].score })
+	if len(sorted) > topK {
+		sorted = sorted[:topK]
 	}
-	for _, h := range vector {
-		add(h, 0.5)
+
+	// Batch query chapters from the persistent table.
+	cids := make([]string, len(sorted))
+	for i, s := range sorted {
+		cids[i] = s.cid
 	}
-	out := make([]domain.KnowledgeChapterHit, 0, len(byPath))
-	for _, a := range byPath {
-		h := a.hit
-		h.Score = a.score
-		if h.Source == "" {
-			h.Source = "hybrid"
+	chapters, err := m.index.GetChaptersByIDs(ctx, cids)
+	if err != nil {
+		return nil
+	}
+	chapterMap := make(map[string]domain.KnowledgeChapter, len(chapters))
+	for _, ch := range chapters {
+		chapterMap[ch.ID] = ch
+	}
+
+	out := make([]domain.KnowledgeChapterHit, 0, len(sorted))
+	for _, s := range sorted {
+		ch, ok := chapterMap[s.cid]
+		if !ok {
+			continue
 		}
-		out = append(out, h)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Score > out[j].Score })
-	if len(out) > topK {
-		out = out[:topK]
+		out = append(out, domain.KnowledgeChapterHit{
+			ID: ch.ID, KBID: ch.KBID, DocID: ch.DocID,
+			Title: ch.Title, Content: ch.Content,
+			Score: s.score, Source: s.source,
+		})
 	}
 	return out
 }

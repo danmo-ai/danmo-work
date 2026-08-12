@@ -62,24 +62,31 @@ type KnowledgeDocRepo interface {
 	CountByKB(ctx context.Context, kbID string) (int, error)
 }
 
-// KnowledgeChapter is one indexed chapter row (not exposed over HTTP).
+// KnowledgeChapter is one bottom-up extracted logical chapter.
 type KnowledgeChapter struct {
-	Path      string
-	KBID      string
-	DocID     string
-	Title     string
-	Content   string
-	Embedding []float32 // optional; empty when vector hybrid off
+	ID      string
+	KBID    string
+	DocID   string
+	Title   string
+	Content string // full chapter Markdown
 }
 
-// KnowledgeIndexRepo maintains chapter FTS (+ optional vectors) for search_kb.
+// KnowledgeChunkEntry is one chunk-level unit for in-memory BM25 and vector indices.
+type KnowledgeChunkEntry struct {
+	ID    string
+	KBID  string
+	DocID string
+	Text  string // chunk content for BM25 tokenization
+}
+
+// KnowledgeIndexRepo persists chapters and manages in-memory BM25 + vector indices.
 type KnowledgeIndexRepo interface {
-	ReplaceDocChapters(ctx context.Context, docID string, chapters []KnowledgeChapter) error
+	ReplaceDocChapters(ctx context.Context, docID string, chapters []KnowledgeChapter, chunks []KnowledgeChunkEntry, vectors map[string][]float32) error
 	DeleteByDoc(ctx context.Context, docID string) error
 	DeleteByKB(ctx context.Context, kbID string) error
-	SearchBM25(ctx context.Context, kbIDs []string, query string, limit int) ([]domain.KnowledgeChapterHit, error)
-	SearchVector(ctx context.Context, kbIDs []string, queryVec []float32, limit int) ([]domain.KnowledgeChapterHit, error)
-	ListChapterEmbeddings(ctx context.Context, kbIDs []string) ([]KnowledgeChapter, error)
+	SearchBM25(ctx context.Context, kbIDs []string, query string, limit int) ([]domain.KnowledgeChunkHit, error)
+	SearchVector(ctx context.Context, kbIDs []string, queryVec []float32, limit int) ([]domain.KnowledgeChunkHit, error)
+	GetChaptersByIDs(ctx context.Context, chapterIDs []string) ([]domain.KnowledgeChapter, error)
 }
 
 // AutomationRepo persists scheduled / webhook automations.

@@ -3,7 +3,6 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -27,8 +26,6 @@ type knowledgeBaseModel struct {
 
 func (knowledgeBaseModel) TableName() string { return "knowledge_bases" }
 
-// knowledgeDocMetaModel replaces the legacy content-in-DB model.
-// Body Markdown lives on disk; Content column retained only for migration.
 type knowledgeDocMetaModel struct {
 	ID        string `gorm:"primaryKey;column:id"`
 	KBID      string `gorm:"column:kb_id;index"`
@@ -42,21 +39,18 @@ type knowledgeDocMetaModel struct {
 func (knowledgeDocMetaModel) TableName() string { return "knowledge_docs" }
 
 type knowledgeChapterModel struct {
-	Path      string `gorm:"primaryKey;column:path"`
-	KBID      string `gorm:"column:kb_id;index"`
-	DocID     string `gorm:"column:doc_id;index"`
-	Title     string `gorm:"column:title"`
-	Content   string `gorm:"column:content"`
-	Embedding string `gorm:"column:embedding"` // JSON []float32
+	ID      string `gorm:"primaryKey;column:id"`
+	KBID    string `gorm:"column:kb_id;index"`
+	DocID   string `gorm:"column:doc_id;index"`
+	Title   string `gorm:"column:title"`
+	Content string `gorm:"column:content"` // full chapter Markdown
 }
 
 func (knowledgeChapterModel) TableName() string { return "knowledge_chapters" }
 
-func (s *Store) KnowledgeBases() port.KnowledgeBaseRepo { return &knowledgeBaseRepo{s} }
-func (s *Store) KnowledgeDocs() port.KnowledgeDocRepo   { return &knowledgeDocRepo{s} }
-func (s *Store) KnowledgeIndex() port.KnowledgeIndexRepo {
-	return &knowledgeIndexRepo{s}
-}
+func (s *Store) KnowledgeBases() port.KnowledgeBaseRepo  { return &knowledgeBaseRepo{s} }
+func (s *Store) KnowledgeDocs() port.KnowledgeDocRepo     { return &knowledgeDocRepo{s} }
+func (s *Store) KnowledgeIndex() port.KnowledgeIndexRepo  { return &knowledgeIndexRepo{s, kb.NewInvertedIndex(), make(map[string][]float32)} }
 
 func migrateKnowledgeSchema(db *gorm.DB) error {
 	if err := rewriteLegacyKnowledgeDocsTable(db); err != nil {
@@ -68,53 +62,53 @@ func migrateKnowledgeSchema(db *gorm.DB) error {
 	if err := db.AutoMigrate(&knowledgeBaseModel{}, &knowledgeDocMetaModel{}, &knowledgeChapterModel{}); err != nil {
 		return err
 	}
-	if err := ensureKnowledgeFTS(db); err != nil {
-		return err
-	}
+	_ = dropOldKnowledgeChunks(db)
 	return migrateLegacyKnowledgeDocs(db)
 }
 
-// resetBrokenKnowledgeChapters drops aborted WIP leftovers so AutoMigrate can
-// recreate a clean path-PK table (SQLite index names are DB-global).
 func resetBrokenKnowledgeChapters(db *gorm.DB) error {
 	sqlDB, err := db.DB()
 	if err != nil {
 		return err
 	}
-	if _, err := sqlDB.Exec(`DROP TABLE IF EXISTS knowledge_chapters_legacy`); err != nil {
-		return err
+	_, _ = sqlDB.Exec(`DROP TABLE IF EXISTS knowledge_chapters_legacy`)
+	_, _ = sqlDB.Exec(`DROP TABLE IF EXISTS knowledge_chapters_fts`)
+	// Drop old v1 schema: PK=path, has embedding column; recreate with id PK.
+	if db.Migrator().HasTable("knowledge_chapters") {
+		rows, _ := sqlDB.Query(`PRAGMA table_info(knowledge_chapters)`)
+		if rows != nil {
+			defer rows.Close()
+			hasPathPK := false
+			hasID := false
+			for rows.Next() {
+				var cid int
+				var name, typ string
+				var notnull, pk int
+				var dflt sql.NullString
+				_ = rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk)
+				lower := strings.ToLower(name)
+				if lower == "path" && pk > 0 {
+					hasPathPK = true
+				}
+				if lower == "id" {
+					hasID = true
+				}
+			}
+			if hasPathPK && !hasID {
+				_, _ = sqlDB.Exec(`DROP TABLE IF EXISTS knowledge_chapters`)
+			}
+		}
 	}
-	if !db.Migrator().HasTable("knowledge_chapters") {
-		return nil
-	}
-	rows, err := sqlDB.Query(`PRAGMA table_info(knowledge_chapters)`)
+	return nil
+}
+
+func dropOldKnowledgeChunks(db *gorm.DB) error {
+	sqlDB, err := db.DB()
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	hasFullPath := false
-	pathIsPK := false
-	for rows.Next() {
-		var cid int
-		var name, typ string
-		var notnull, pk int
-		var dflt sql.NullString
-		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
-			return err
-		}
-		lower := strings.ToLower(name)
-		if lower == "full_path" {
-			hasFullPath = true
-		}
-		if lower == "path" && pk > 0 {
-			pathIsPK = true
-		}
-	}
-	if hasFullPath || !pathIsPK {
-		if _, err := sqlDB.Exec(`DROP TABLE IF EXISTS knowledge_chapters`); err != nil {
-			return err
-		}
-	}
+	_, _ = sqlDB.Exec(`DROP TABLE IF EXISTS knowledge_chunks`)
+	_, _ = sqlDB.Exec(`DROP TABLE IF EXISTS knowledge_chunks_fts`)
 	return nil
 }
 
@@ -184,26 +178,7 @@ FROM knowledge_docs_legacy`, now, now)
 	return nil
 }
 
-func ensureKnowledgeFTS(db *gorm.DB) error {
-	sqlDB, err := db.DB()
-	if err != nil {
-		return err
-	}
-	_, err = sqlDB.Exec(`
-CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_chapters_fts USING fts5(
-  path UNINDEXED,
-  title,
-  content,
-  kb_id UNINDEXED,
-  doc_id UNINDEXED,
-  tokenize = 'unicode61'
-);`)
-	return err
-}
-
 func migrateLegacyKnowledgeDocs(db *gorm.DB) error {
-	// Older schema used autoincrement id + content blob without string id/rel_path.
-	// If rows have empty string id, assign ids from rowid.
 	type legacy struct {
 		RowID   int64  `gorm:"column:rowid"`
 		ID      string `gorm:"column:id"`
@@ -212,14 +187,13 @@ func migrateLegacyKnowledgeDocs(db *gorm.DB) error {
 		Content string `gorm:"column:content"`
 	}
 	var rows []legacy
-	// Probe: table may not have rowid alias accessible via gorm; use raw SQL.
 	sqlDB, err := db.DB()
 	if err != nil {
 		return err
 	}
 	rs, err := sqlDB.Query(`SELECT rowid, COALESCE(id,''), COALESCE(kb_id,''), COALESCE(title,''), COALESCE(content,'') FROM knowledge_docs`)
 	if err != nil {
-		return nil // table missing — ignore
+		return nil
 	}
 	defer rs.Close()
 	for rs.Next() {
@@ -234,14 +208,10 @@ func migrateLegacyKnowledgeDocs(db *gorm.DB) error {
 		id := strings.TrimSpace(r.ID)
 		if id == "" || id == "0" {
 			id = fmt.Sprintf("doc-legacy-%d", r.RowID)
-			_, err := sqlDB.Exec(
+			_, _ = sqlDB.Exec(
 				`UPDATE knowledge_docs SET id=?, updated_at=COALESCE(NULLIF(updated_at,''), ?), created_at=COALESCE(NULLIF(created_at,''), ?) WHERE rowid=?`,
 				id, now, now, r.RowID,
 			)
-			if err != nil {
-				// column types may already be string PK without rowid update path
-				_ = err
-			}
 		}
 		if r.KBID != "" {
 			var n int
@@ -382,13 +352,11 @@ func docsToDomain(rows []knowledgeDocMetaModel) []domain.KnowledgeDoc {
 
 func docToDomain(row knowledgeDocMetaModel) domain.KnowledgeDoc {
 	return domain.KnowledgeDoc{
-		ID: row.ID, KBID: row.KBID, Title: row.Title, Path: row.RelPath,
-		// Content left empty — service loads from disk (or legacy column via LegacyContent).
+		ID:        row.ID, KBID: row.KBID, Title: row.Title, Path: row.RelPath,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
 }
 
-// LegacyDocContent returns leftover DB content for migration to disk (empty if none).
 func (s *Store) LegacyDocContent(ctx context.Context, id string) (string, error) {
 	var row knowledgeDocMetaModel
 	err := s.db.WithContext(ctx).Where("id = ?", id).First(&row).Error
@@ -406,195 +374,131 @@ func (s *Store) ClearLegacyDocContent(ctx context.Context, id string) error {
 
 // ---- KnowledgeIndexRepo ----
 
-type knowledgeIndexRepo struct{ s *Store }
+type knowledgeIndexRepo struct {
+	s        *Store
+	inverted *kb.InvertedIndex
+	vectors  map[string][]float32 // chunkID → embedding
+}
 
-func (r *knowledgeIndexRepo) ReplaceDocChapters(ctx context.Context, docID string, chapters []port.KnowledgeChapter) error {
-	return r.s.withWrite(func(db *gorm.DB) error {
-		sqlDB, err := db.DB()
-		if err != nil {
-			return err
-		}
-		if _, err := sqlDB.ExecContext(ctx, `DELETE FROM knowledge_chapters_fts WHERE doc_id = ?`, docID); err != nil {
-			return err
-		}
+func (r *knowledgeIndexRepo) ReplaceDocChapters(ctx context.Context, docID string, chapters []port.KnowledgeChapter, chunks []port.KnowledgeChunkEntry, vectors map[string][]float32) error {
+	// 1. Persist chapters to the knowledge_chapters table.
+	if err := r.s.withWrite(func(db *gorm.DB) error {
 		if err := db.WithContext(ctx).Where("doc_id = ?", docID).Delete(&knowledgeChapterModel{}).Error; err != nil {
 			return err
 		}
 		for _, ch := range chapters {
-			emb, _ := json.Marshal(ch.Embedding)
 			row := knowledgeChapterModel{
-				Path: ch.Path, KBID: ch.KBID, DocID: ch.DocID,
-				Title: ch.Title, Content: ch.Content, Embedding: string(emb),
+				ID: ch.ID, KBID: ch.KBID, DocID: ch.DocID,
+				Title: ch.Title, Content: ch.Content,
 			}
 			if err := db.WithContext(ctx).Create(&row).Error; err != nil {
 				return err
 			}
-			indexed := kb.CJKBigrams(ch.Title + " " + ch.Content)
-			if indexed == "" {
-				indexed = ch.Content
-			}
-			if _, err := sqlDB.ExecContext(ctx,
-				`INSERT INTO knowledge_chapters_fts (path, title, content, kb_id, doc_id) VALUES (?,?,?,?,?)`,
-				ch.Path, ch.Title, indexed, ch.KBID, ch.DocID,
-			); err != nil {
-				return err
-			}
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	// 2. Update in-memory BM25 inverted index.
+	entries := make([]kb.IndexEntry, len(chunks))
+	for i, c := range chunks {
+		entries[i] = kb.IndexEntry{ID: c.ID, KBID: c.KBID, DocID: c.DocID, Text: c.Text}
+	}
+	r.inverted.Index(docID, entries)
+
+	// 3. Update in-memory vector index.
+	for cid, vec := range vectors {
+		r.vectors[cid] = vec
+	}
+	return nil
 }
 
 func (r *knowledgeIndexRepo) DeleteByDoc(ctx context.Context, docID string) error {
-	return r.s.withWrite(func(db *gorm.DB) error {
-		sqlDB, err := db.DB()
-		if err != nil {
-			return err
-		}
-		if _, err := sqlDB.ExecContext(ctx, `DELETE FROM knowledge_chapters_fts WHERE doc_id = ?`, docID); err != nil {
-			return err
-		}
+	if err := r.s.withWrite(func(db *gorm.DB) error {
 		return db.WithContext(ctx).Where("doc_id = ?", docID).Delete(&knowledgeChapterModel{}).Error
-	})
+	}); err != nil {
+		return err
+	}
+	r.inverted.DeleteByDoc(docID)
+	return nil
 }
 
 func (r *knowledgeIndexRepo) DeleteByKB(ctx context.Context, kbID string) error {
-	return r.s.withWrite(func(db *gorm.DB) error {
-		sqlDB, err := db.DB()
-		if err != nil {
-			return err
-		}
-		if _, err := sqlDB.ExecContext(ctx, `DELETE FROM knowledge_chapters_fts WHERE kb_id = ?`, kbID); err != nil {
-			return err
-		}
+	if err := r.s.withWrite(func(db *gorm.DB) error {
 		return db.WithContext(ctx).Where("kb_id = ?", kbID).Delete(&knowledgeChapterModel{}).Error
-	})
+	}); err != nil {
+		return err
+	}
+	r.inverted.DeleteByKB(kbID)
+	return nil
 }
 
-func (r *knowledgeIndexRepo) SearchBM25(ctx context.Context, kbIDs []string, query string, limit int) ([]domain.KnowledgeChapterHit, error) {
-	if limit <= 0 {
-		limit = 5
-	}
-	match := kb.FTSQuery(query)
-	if match == "" || len(kbIDs) == 0 {
-		return nil, nil
-	}
-	sqlDB, err := r.s.db.DB()
-	if err != nil {
-		return nil, err
-	}
-	placeholders := make([]string, len(kbIDs))
-	args := make([]any, 0, len(kbIDs)+2)
-	args = append(args, match)
-	for i, id := range kbIDs {
-		placeholders[i] = "?"
-		args = append(args, id)
-	}
-	args = append(args, limit)
-	q := fmt.Sprintf(`
-SELECT f.path, f.kb_id, f.doc_id, c.title, c.content, bm25(knowledge_chapters_fts) AS score
-FROM knowledge_chapters_fts f
-JOIN knowledge_chapters c ON c.path = f.path
-WHERE knowledge_chapters_fts MATCH ?
-  AND f.kb_id IN (%s)
-ORDER BY score
-LIMIT ?`, strings.Join(placeholders, ","))
-
-	rows, err := sqlDB.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	type hit struct {
-		domain.KnowledgeChapterHit
-		raw float64
-	}
-	var hits []hit
-	var maxAbs float64
-	for rows.Next() {
-		var h hit
-		var score sql.NullFloat64
-		if err := rows.Scan(&h.Path, &h.KBID, &h.DocID, &h.Title, &h.Content, &score); err != nil {
-			return nil, err
-		}
-		// SQLite bm25() is typically negative (more negative = better).
-		raw := 0.0
-		if score.Valid {
-			raw = -score.Float64
-		}
-		if raw < 0 {
-			raw = 0
-		}
-		h.raw = raw
-		if raw > maxAbs {
-			maxAbs = raw
-		}
-		h.Source = "bm25"
-		hits = append(hits, h)
-	}
-	out := make([]domain.KnowledgeChapterHit, 0, len(hits))
-	for _, h := range hits {
-		if maxAbs > 0 {
-			h.Score = h.raw / maxAbs
-		} else {
-			h.Score = 0
-		}
-		out = append(out, h.KnowledgeChapterHit)
+func (r *knowledgeIndexRepo) SearchBM25(ctx context.Context, kbIDs []string, query string, limit int) ([]domain.KnowledgeChunkHit, error) {
+	_ = ctx
+	hits := r.inverted.Search(query, kbIDs, limit)
+	out := make([]domain.KnowledgeChunkHit, len(hits))
+	for i, h := range hits {
+		out[i] = domain.KnowledgeChunkHit{ID: h.ChunkID, Score: h.Score, Source: "bm25"}
 	}
 	return out, nil
 }
 
-func (r *knowledgeIndexRepo) ListChapterEmbeddings(ctx context.Context, kbIDs []string) ([]port.KnowledgeChapter, error) {
-	if len(kbIDs) == 0 {
-		return nil, nil
-	}
-	var rows []knowledgeChapterModel
-	if err := r.s.db.WithContext(ctx).Where("kb_id IN ?", kbIDs).Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	out := make([]port.KnowledgeChapter, 0, len(rows))
-	for _, row := range rows {
-		var emb []float32
-		if row.Embedding != "" {
-			_ = json.Unmarshal([]byte(row.Embedding), &emb)
-		}
-		out = append(out, port.KnowledgeChapter{
-			Path: row.Path, KBID: row.KBID, DocID: row.DocID,
-			Title: row.Title, Content: row.Content, Embedding: emb,
-		})
-	}
-	return out, nil
-}
-
-func (r *knowledgeIndexRepo) SearchVector(ctx context.Context, kbIDs []string, queryVec []float32, limit int) ([]domain.KnowledgeChapterHit, error) {
+func (r *knowledgeIndexRepo) SearchVector(ctx context.Context, kbIDs []string, queryVec []float32, limit int) ([]domain.KnowledgeChunkHit, error) {
+	_ = ctx
 	if limit <= 0 {
 		limit = 5
 	}
-	chapters, err := r.ListChapterEmbeddings(ctx, kbIDs)
-	if err != nil {
-		return nil, err
+	if len(queryVec) == 0 || len(kbIDs) == 0 {
+		return nil, nil
 	}
+
+	// Get chunk metadata from inverted index for KB filtering.
+	byKB := r.inverted.ChunkIDsByKB(kbIDs)
+	if len(byKB) == 0 {
+		return nil, nil
+	}
+
 	type scored struct {
-		domain.KnowledgeChapterHit
+		domain.KnowledgeChunkHit
 	}
 	var hits []scored
-	for _, ch := range chapters {
-		if len(ch.Embedding) == 0 {
+	for cid := range byKB {
+		vec, ok := r.vectors[cid]
+		if !ok || len(vec) == 0 {
 			continue
 		}
-		sim := kb.CosineSimilarity(queryVec, ch.Embedding)
-		hits = append(hits, scored{domain.KnowledgeChapterHit{
-			Path: ch.Path, KBID: ch.KBID, DocID: ch.DocID,
-			Title: ch.Title, Content: ch.Content, Score: sim, Source: "vector",
+		sim := kb.CosineSimilarity(queryVec, vec)
+		hits = append(hits, scored{domain.KnowledgeChunkHit{
+			ID: cid, Score: sim, Source: "vector",
 		}})
 	}
+
 	sort.Slice(hits, func(i, j int) bool { return hits[i].Score > hits[j].Score })
 	if len(hits) > limit {
 		hits = hits[:limit]
 	}
-	out := make([]domain.KnowledgeChapterHit, len(hits))
+	out := make([]domain.KnowledgeChunkHit, len(hits))
 	for i := range hits {
-		out[i] = hits[i].KnowledgeChapterHit
+		out[i] = hits[i].KnowledgeChunkHit
+	}
+	return out, nil
+}
+
+func (r *knowledgeIndexRepo) GetChaptersByIDs(ctx context.Context, chapterIDs []string) ([]domain.KnowledgeChapter, error) {
+	if len(chapterIDs) == 0 {
+		return nil, nil
+	}
+	var rows []knowledgeChapterModel
+	if err := r.s.db.WithContext(ctx).Where("id IN ?", chapterIDs).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.KnowledgeChapter, len(rows))
+	for i, row := range rows {
+		out[i] = domain.KnowledgeChapter{
+			ID: row.ID, KBID: row.KBID, DocID: row.DocID,
+			Title: row.Title, Content: row.Content,
+		}
 	}
 	return out, nil
 }

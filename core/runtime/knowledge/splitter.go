@@ -8,11 +8,18 @@ import (
 	"unicode"
 )
 
-// Chapter is one index unit produced by SplitMarkdown.
+// Chapter is a bottom-up extracted logical chapter from SplitMarkdown.
 type Chapter struct {
-	Path  string // docID/Title/... or docID/__root__/N
+	Path  string // docID/Title/... or docID/__root__
 	Title string // leaf title or doc title
-	Text  string
+	Text  string // full logical chapter content (may be large)
+}
+
+// Chunk is a non-overlapping window of chapter content for indexing.
+type Chunk struct {
+	ID      string // chapterPath/01, chapterPath/02, ...
+	Title   string
+	Content string
 }
 
 type headingSpan struct {
@@ -32,8 +39,9 @@ var (
 const defaultMaxTokens = 512
 const defaultStrideTokens = 100
 
-// SplitMarkdown splits markdown into chapters under docID.
-// maxTokens controls bottom-up merge / sliding window (default 512).
+// SplitMarkdown splits markdown into logical chapters under docID.
+// maxTokens controls bottom-up merge; chapters are NOT sliding-window split.
+// Large chapters are kept intact — use SplitChunks for indexing purposes.
 func SplitMarkdown(docID, docTitle, markdown string, maxTokens int) []Chapter {
 	if maxTokens <= 0 {
 		maxTokens = defaultMaxTokens
@@ -42,7 +50,7 @@ func SplitMarkdown(docID, docTitle, markdown string, maxTokens int) []Chapter {
 	md = stripYAMLFrontmatter(md)
 	spans := collectHeadingSpans(md)
 	root := buildTree(md, spans)
-	raw := postOrderMergeSplit(root, maxTokens, defaultStrideTokens)
+	raw := extractChapters(root, maxTokens)
 	out := make([]Chapter, 0, len(raw))
 	for _, r := range raw {
 		text := strings.TrimSpace(r.text)
@@ -64,13 +72,54 @@ func SplitMarkdown(docID, docTitle, markdown string, maxTokens int) []Chapter {
 		out = append(out, Chapter{Path: path, Title: title, Text: text})
 	}
 	if len(out) == 0 && strings.TrimSpace(md) != "" {
-		parts := splitOversizedRaw(strings.TrimSpace(md), nil, maxTokens, defaultStrideTokens)
-		for i, p := range parts {
-			path := docID + "/__root__/" + itoa(i+1)
-			out = append(out, Chapter{Path: path, Title: docTitle, Text: p})
-		}
+		path := docID + "/__root__"
+		out = append(out, Chapter{Path: path, Title: docTitle, Text: strings.TrimSpace(md)})
 	}
 	return out
+}
+
+// SplitChunks splits chapter text into non-overlapping chunks for indexing.
+// Chunk IDs are encoded as chapterPath/01, chapterPath/02, ...
+func SplitChunks(chapterPath, chapterTitle, chapterText string, maxTokens int) []Chunk {
+	text := strings.TrimSpace(chapterText)
+	if text == "" {
+		return nil
+	}
+	if maxTokens <= 0 {
+		maxTokens = defaultMaxTokens
+	}
+	if EstimateTokens(text) <= maxTokens {
+		return []Chunk{{ID: chapterPath + "/01", Title: chapterTitle, Content: text}}
+	}
+	windowRunes := maxTokens * 4
+	runes := []rune(text)
+	if windowRunes < 1 {
+		windowRunes = 1
+	}
+	var chunks []Chunk
+	seq := 1
+	for start := 0; start < len(runes); {
+		end := start + windowRunes
+		if end > len(runes) {
+			end = len(runes)
+		}
+		chunks = append(chunks, Chunk{
+			ID:      chapterPath + "/" + pad2(seq),
+			Title:   chapterTitle,
+			Content: strings.TrimSpace(string(runes[start:end])),
+		})
+		start = end
+		seq++
+	}
+	return chunks
+}
+
+func pad2(n int) string {
+	s := itoa(n)
+	if len(s) == 1 {
+		return "0" + s
+	}
+	return s
 }
 
 func normalizeEOL(s string) string {
@@ -241,16 +290,19 @@ type rawChapter struct {
 	text       string
 }
 
-func postOrderMergeSplit(node *treeNode, maxTokens, stride int) []rawChapter {
+// extractChapters extracts bottom-up merged logical chapters.
+// When a heading's merged text exceeds maxTokens it emits the parent body
+// + children as separate chapters. Leaves keep full text (no sliding window).
+func extractChapters(node *treeNode, maxTokens int) []rawChapter {
 	var childChapters []rawChapter
 	for _, ch := range node.children {
-		childChapters = append(childChapters, postOrderMergeSplit(ch, maxTokens, stride)...)
+		childChapters = append(childChapters, extractChapters(ch, maxTokens)...)
 	}
 
 	local := strings.TrimSpace(node.localBody)
 	if node.level == 0 {
 		if len(childChapters) == 0 && local != "" {
-			return splitOversizedToRaw(local, nil, maxTokens, stride)
+			return []rawChapter{{pathTitles: nil, text: local}}
 		}
 		return childChapters
 	}
@@ -275,72 +327,16 @@ func postOrderMergeSplit(node *treeNode, maxTokens, stride int) []rawChapter {
 	var out []rawChapter
 	if local != "" {
 		leaf := headingLine + "\n\n" + local
-		out = append(out, splitOversizedToRaw(strings.TrimSpace(leaf), path, maxTokens, stride)...)
+		out = append(out, rawChapter{pathTitles: path, text: strings.TrimSpace(leaf)})
 	}
 	for _, c := range childChapters {
 		childPath := append([]string{node.title}, c.pathTitles...)
 		out = append(out, rawChapter{pathTitles: childPath, text: c.text})
 	}
 	if len(out) == 0 {
-		return splitOversizedToRaw(merged, path, maxTokens, stride)
+		return []rawChapter{{pathTitles: path, text: merged}}
 	}
 	return out
-}
-
-func splitOversizedToRaw(text string, pathTitles []string, maxTokens, stride int) []rawChapter {
-	parts := splitOversizedRaw(text, pathTitles, maxTokens, stride)
-	out := make([]rawChapter, 0, len(parts))
-	base := append([]string{}, pathTitles...)
-	if len(parts) == 1 {
-		out = append(out, rawChapter{pathTitles: base, text: parts[0]})
-		return out
-	}
-	if len(base) == 0 {
-		base = []string{"__root__"}
-	}
-	for i, p := range parts {
-		pt := append(append([]string{}, base...), itoa(i+1))
-		out = append(out, rawChapter{pathTitles: pt, text: p})
-	}
-	return out
-}
-
-func splitOversizedRaw(text string, _ []string, maxTokens, stride int) []string {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return nil
-	}
-	if EstimateTokens(text) <= maxTokens {
-		return []string{text}
-	}
-	if stride < 1 {
-		stride = defaultStrideTokens
-	}
-	if stride > maxTokens {
-		stride = maxTokens
-	}
-	windowRunes := maxTokens * 4
-	strideRunes := stride * 4
-	runes := []rune(text)
-	if windowRunes < 1 {
-		windowRunes = 1
-	}
-	var parts []string
-	for start := 0; start < len(runes); {
-		end := start + windowRunes
-		if end > len(runes) {
-			end = len(runes)
-		}
-		parts = append(parts, strings.TrimSpace(string(runes[start:end])))
-		if end >= len(runes) {
-			break
-		}
-		start += strideRunes
-		if start >= len(runes) {
-			break
-		}
-	}
-	return parts
 }
 
 // EstimateTokens uses a CJK-aware heuristic (≈1 unit per CJK rune, else 4 runes/unit).

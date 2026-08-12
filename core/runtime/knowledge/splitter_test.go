@@ -53,14 +53,61 @@ func TestSplitMarkdownSkipsFencedHeadings(t *testing.T) {
 	}
 }
 
-func TestSplitMarkdownOversizedWindow(t *testing.T) {
+func TestSplitMarkdownOversizedChapter(t *testing.T) {
 	var b strings.Builder
 	for i := 0; i < 200; i++ {
 		b.WriteString("汉字内容段落重复填充用于超大叶切分测试。")
 	}
 	chs := SplitMarkdown("big", "Big", b.String(), 64)
-	if len(chs) < 2 {
-		t.Fatalf("expected multiple windows, got %d", len(chs))
+	if len(chs) != 1 {
+		t.Fatalf("expected 1 logical chapter, got %d", len(chs))
+	}
+	if !strings.Contains(chs[0].Path, "doc1") && !strings.Contains(chs[0].Path, "big") {
+		t.Fatalf("expected chapter path under doc, got %s", chs[0].Path)
+	}
+}
+
+func TestSplitChunks(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < 100; i++ {
+		b.WriteString("汉字内容段落重复填充。")
+	}
+	chunks := SplitChunks("big/__root__", "Big", b.String(), 64)
+	if len(chunks) < 2 {
+		t.Fatalf("expected multiple chunks, got %d", len(chunks))
+	}
+	for i, c := range chunks {
+		if !strings.HasPrefix(c.ID, "big/__root__/") {
+			t.Fatalf("chunk %d id should start with chapter path: %s", i, c.ID)
+		}
+		if c.Title != "Big" {
+			t.Fatalf("chunk %d title mismatch: %s", i, c.Title)
+		}
+	}
+	// small text should be 1 chunk
+	small := SplitChunks("p/01", "T", "hello", 512)
+	if len(small) != 1 {
+		t.Fatalf("small text: expected 1 chunk, got %d", len(small))
+	}
+	if small[0].ID != "p/01/01" {
+		t.Fatalf("unexpected chunk id: %s", small[0].ID)
+	}
+}
+
+// TestSplitChunksPairs checks non-overlapping chunk boundaries.
+func TestSplitChunksNoOverlap(t *testing.T) {
+	text := "ABCDEFGHIJKLMNOPQRSTUVWXYZ" // 26 chars
+	// maxTokens=2 → windowRunes=8. 26/8 = 4 chunks (8,8,8,2)
+	chunks := SplitChunks("p/t", "T", text, 2)
+	if len(chunks) != 4 {
+		t.Fatalf("expected 4 chunks, got %d", len(chunks))
+	}
+	var all string
+	for _, c := range chunks {
+		all += c.Content
+	}
+	if all != text {
+		t.Fatalf("reconstructed text mismatch: got %q want %q", all, text)
 	}
 }
 
