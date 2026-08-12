@@ -110,9 +110,9 @@ const menuItems = computed(() => [
   { module: 'workers' as const, label: t('navigation.workers'), icon: Grid },
   { module: 'knowledge' as const, label: t('navigation.knowledge'), icon: Document },
   { module: 'skills' as const, label: t('navigation.skills'), icon: MagicStick },
+  { module: 'plugins' as const, label: t('navigation.plugins'), icon: Tools },
   { module: 'mcpServers' as const, label: t('navigation.mcpServer'), isMcp: true },
   { module: 'automations' as const, label: t('navigation.automations'), icon: Tools },
-  { module: 'plugins' as const, label: t('navigation.plugins'), icon: Tools },
   { module: 'usage' as const, label: t('navigation.usage'), icon: Document },
 ])
 
