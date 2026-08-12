@@ -29,11 +29,20 @@ func listSkills(h *SkillHandler) gin.HandlerFunc {
 			}
 		}
 
-		skills := service.ScanAllSkills(h.DataDir, projectDir)
+		skills, err := h.Skills.List(c)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		if projectDir != "" {
+			projectSkills := service.ScanAllSkills(h.DataDir, projectDir)
+			skills = service.MergeSkillsByID(skills, projectSkills)
+		}
+
 		for i := range skills {
 			skills[i].Dir = h.skillDisplayPath(skills[i].Dir)
 		}
-
 		c.JSON(http.StatusOK, skills)
 	}
 }

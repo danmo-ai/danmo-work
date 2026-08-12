@@ -103,8 +103,8 @@ func (m *SkillManager) globalDirs() []string {
 
 func (m *SkillManager) List(ctx context.Context) ([]domain.Skill, error) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
 	dirs := append([]string{}, m.pluginSkillDirs...)
+	m.mu.RUnlock()
 	dirs = append(dirs, m.globalDir)
 	skills, _ := ScanSkillDirs(dirs)
 	return skills, nil
