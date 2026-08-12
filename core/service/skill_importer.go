@@ -21,6 +21,7 @@ type skillFrontmatter struct {
 	Compatibility string `yaml:"compatibility"`
 	Metadata      any    `yaml:"metadata"`
 	AllowedTools  string `yaml:"allowed-tools"`
+	Source        string `yaml:"source"`
 }
 
 func NewSkillImporter() *SkillImporter {
@@ -136,6 +137,7 @@ func (i *SkillImporter) ParseSkillMD(content string) (*domain.Skill, error) {
 		Compatibility: fm.Compatibility,
 		Metadata:      coerceMetadata(fm.Metadata),
 		AllowedTools:  fm.AllowedTools,
+		Source:        fm.Source,
 		Body:          strings.TrimSpace(parts[2]),
 	}, nil
 }
