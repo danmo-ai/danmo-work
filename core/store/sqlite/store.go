@@ -201,7 +201,17 @@ func (r *sessionRepo) Create(ctx context.Context, s domain.Session) error {
 }
 
 func (r *sessionRepo) Update(ctx context.Context, s domain.Session) error {
-	return r.s.db.WithContext(ctx).Model(&sessionModel{}).Where("id = ?", s.ID).Updates(sessionFromDomain(s)).Error
+	m := sessionFromDomain(s)
+	return r.s.db.WithContext(ctx).Model(&sessionModel{}).Where("id = ?", s.ID).Updates(map[string]any{
+		"title":      m.Title,
+		"project_id": m.ProjectID,
+		"agent_id":   m.AgentID,
+		"model_id":   m.ModelID,
+		"plan_mode":  m.PlanMode,
+		"content":    m.Content,
+		"status":     m.Status,
+		"updated_at": m.UpdatedAt,
+	}).Error
 }
 
 func (r *sessionRepo) Delete(ctx context.Context, id string) error {
