@@ -524,7 +524,7 @@ jobs:
             release-assets/linux/**/*.AppImage.tar.gz
             release-assets/linux/**/*.AppImage.tar.gz.sig
             release-assets/linux/**/*.deb
-            release-assets/env/**/*.tar
+            release-assets/env/**/*.tar.gz
             release-assets/windows/**/*.exe
             release-assets/windows/**/*.nsis.zip
             release-assets/windows/**/*.sig
