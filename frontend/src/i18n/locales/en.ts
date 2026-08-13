@@ -482,7 +482,7 @@ export default {
     qqSecretRequired: 'Client Secret is required',
     qqSaved: 'QQ settings saved',
     qqSaveFailed: 'Failed to save QQ settings',
-    hub: 'Danmo Hub',
+    hub: 'Hub',
     hubDesc: 'This PC dials out to a public Hub so phones/remote clients can reverse-proxy the local API and share the full session event stream (not an IM projection).',
     hubChannel: 'Connection',
     hubChannelDesc: 'When enabled, the PC connects outbound to the Hub. Routing key is deviceId; mobile pairing issues a token scoped to this device.',

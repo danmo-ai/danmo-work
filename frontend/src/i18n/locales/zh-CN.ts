@@ -482,7 +482,7 @@ export default {
     qqSecretRequired: '启用前请填写 Client Secret',
     qqSaved: 'QQ 设置已保存',
     qqSaveFailed: '保存 QQ 设置失败',
-    hub: 'Danmo Hub',
+    hub: 'Hub',
     hubDesc: '本机出站连接公网 Hub，手机/远程客户端经 Hub 反代访问本机 API，共享完整会话事件流（非 IM 投影）。',
     hubChannel: '连接',
     hubChannelDesc: '启用后 PC 主动连接 Hub；路由键为设备 deviceId，手机配对后持有绑定该设备的 Token。',
