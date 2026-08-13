@@ -1,20 +1,20 @@
-# Danmo Work bundled agent environment (ultra-light + apt).
-# Built in CI → docker/podman save → out/env/danmo-work-env-*.tar
+# Danmo Work bundled agent environment (ultra-light + apk).
+# Built in CI → docker/podman save → out/env/danmo-work-env-*.tar.gz
 # Runtime loads the tar locally; never pulls from a registry.
 #
-# Philosophy: small base + full Debian apt — do NOT bake Node/Python.
-# Agents install toolchains on demand: apt-get update && apt-get install -y …
+# Philosophy: tiny alpine base (busybox coreutils) + apk — do NOT bake Node/Python.
+# git/curl/jq are baked (small + used constantly); heavier toolchains install
+# on demand: apk add --no-cache python3 nodejs …
 # No project source COPY; workspace is bind-mounted at /workspace.
 
-FROM debian:bookworm-slim
+FROM alpine:3.24
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    LANG=C.UTF-8
+ENV LANG=C.UTF-8
 
-RUN apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false update -qq \
-  && apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false install -y -qq --no-install-recommends \
-       bash ca-certificates curl git jq xz-utils \
-  && rm -rf /var/lib/apt/lists/* \
+# bash (agents write bash scripts) + CA bundle (https via curl / apk) +
+# git/curl/jq baked (small, used constantly). Node/Python/Go etc.:
+# apk add --no-cache <pkg> when needed.
+RUN apk add --no-cache bash ca-certificates-bundle curl git jq \
   && git --version && curl --version | head -1 && jq --version
 
 WORKDIR /workspace

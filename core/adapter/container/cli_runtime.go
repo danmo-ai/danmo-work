@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -52,7 +53,14 @@ func (e *CLIRuntime) ImageExists(ctx context.Context, image string) (bool, error
 }
 
 func (e *CLIRuntime) LoadTar(ctx context.Context, tarPath string) error {
-	_, err := e.run(ctx, "load", "-i", tarPath)
+	p, tmp, err := prepLoadTar(tarPath)
+	if err != nil {
+		return err
+	}
+	if tmp != "" {
+		defer os.Remove(tmp)
+	}
+	_, err = e.run(ctx, "load", "-i", p)
 	return err
 }
 

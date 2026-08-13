@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -183,7 +184,14 @@ func (e *AppleRuntime) LoadTar(ctx context.Context, tarPath string) error {
 	if err := e.ensureSystem(ctx); err != nil {
 		return err
 	}
-	_, err := e.run(ctx, "image", "load", "--input", tarPath)
+	p, tmp, err := prepLoadTar(tarPath)
+	if err != nil {
+		return err
+	}
+	if tmp != "" {
+		defer os.Remove(tmp)
+	}
+	_, err = e.run(ctx, "image", "load", "--input", p)
 	return err
 }
 

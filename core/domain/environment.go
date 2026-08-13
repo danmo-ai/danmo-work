@@ -11,6 +11,11 @@ const (
 // EnvironmentEngine selects the container CLI. Empty / "auto" = probe.
 type EnvironmentEngine string
 
+// EnvImagePreinstalled describes the bundled agent image contents (environments/agent-base/Dockerfile).
+// Injected into the system prompt so the LLM knows what is available inside the
+// container without probing. Keep in sync with the Dockerfile apk list.
+const EnvImagePreinstalled = "Alpine Linux (busybox coreutils) with bash, git, curl, jq, ca-certificates preinstalled; install more with: apk add --no-cache <pkg>"
+
 const (
 	EnvironmentEngineAuto           EnvironmentEngine = "auto"
 	EnvironmentEnginePodman         EnvironmentEngine = "podman"

@@ -78,7 +78,7 @@ func TestBuildSkillMetadataEmpty(t *testing.T) {
 func TestBuildSystemPromptPolicies(t *testing.T) {
 	peers := []domain.Agent{{ID: "explorer", Name: "Explorer", Description: "Explore code"}}
 
-	withDelegate := buildSystemPrompt("persona", nil, peers, true, false, "", "", "", domain.SandboxStatus{})
+	withDelegate := buildSystemPrompt("persona", nil, peers, true, false, "", "", "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
 	if !strings.Contains(withDelegate, "<ask-user-policy>") {
 		t.Fatal("expected ask-user-policy")
 	}
@@ -89,7 +89,7 @@ func TestBuildSystemPromptPolicies(t *testing.T) {
 		t.Fatalf("expected available_agents roster:\n%s", withDelegate)
 	}
 
-	noDelegate := buildSystemPrompt("persona", nil, peers, false, false, "", "", "", domain.SandboxStatus{})
+	noDelegate := buildSystemPrompt("persona", nil, peers, false, false, "", "", "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
 	if strings.Contains(noDelegate, "<delegation-policy>") || strings.Contains(noDelegate, "<available_agents>") {
 		t.Fatal("delegation blocks must not appear when canDelegate=false")
 	}
@@ -101,7 +101,7 @@ func TestBuildSystemPromptPolicies(t *testing.T) {
 	}
 
 	// CanDelegate with empty peer list still gets the policy (no roster).
-	emptyPeers := buildSystemPrompt("persona", nil, nil, true, false, "", "", "", domain.SandboxStatus{})
+	emptyPeers := buildSystemPrompt("persona", nil, nil, true, false, "", "", "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
 	if !strings.Contains(emptyPeers, "<delegation-policy>") {
 		t.Fatal("expected delegation-policy even with no peers")
 	}
@@ -111,7 +111,7 @@ func TestBuildSystemPromptPolicies(t *testing.T) {
 }
 
 func TestBuildSystemPromptPlanMode(t *testing.T) {
-	plan := buildSystemPrompt("persona", nil, nil, false, true, "", "", "", domain.SandboxStatus{})
+	plan := buildSystemPrompt("persona", nil, nil, false, true, "", "", "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
 	if !strings.Contains(plan, "<plan-mode>") {
 		t.Fatal("expected plan-mode block")
 	}
@@ -123,5 +123,28 @@ func TestBuildSystemPromptPlanMode(t *testing.T) {
 	}
 	if !strings.Contains(plan, "delegate_agent") {
 		t.Fatal("expected delegate_agent to be allowed in plan mode")
+	}
+}
+
+func TestBuildRuntimeEnvironmentContainer(t *testing.T) {
+	envSt := domain.EnvironmentStatus{
+		Backend: domain.EnvironmentBackendContainer,
+		Engine:  "podman",
+		Image:   "localhost/danmo-work-env:bundled",
+	}
+	got := buildRuntimeEnvironment(domain.SandboxStatus{}, envSt)
+	if !strings.Contains(got, "OCI container") {
+		t.Fatalf("expected container block:\n%s", got)
+	}
+	if !strings.Contains(got, "podman") || !strings.Contains(got, "localhost/danmo-work-env:bundled") {
+		t.Fatalf("expected engine+image:\n%s", got)
+	}
+	if !strings.Contains(got, "git, curl, jq") || !strings.Contains(got, "apk add --no-cache") {
+		t.Fatalf("expected preinstalled list + apk hint:\n%s", got)
+	}
+
+	local := buildRuntimeEnvironment(domain.SandboxStatus{}, domain.EnvironmentStatus{})
+	if strings.Contains(local, "OCI container") {
+		t.Fatal("container block must not appear for local backend")
 	}
 }

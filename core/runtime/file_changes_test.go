@@ -90,7 +90,7 @@ func TestFormatFileChangesAndSystemPrompt(t *testing.T) {
 	if !contains(block, "<session-file-changes>") || !contains(block, "core/foo.go") {
 		t.Fatalf("formatFileChanges=%q", block)
 	}
-	sys := buildSystemPrompt("persona", nil, nil, false, false, "", "", block, domain.SandboxStatus{})
+	sys := buildSystemPrompt("persona", nil, nil, false, false, "", "", block, domain.SandboxStatus{}, domain.EnvironmentStatus{})
 	if !contains(sys, "<session-file-changes>") || !contains(sys, "update core/foo.go") {
 		t.Fatalf("expected file changes in prompt, got %q", sys)
 	}

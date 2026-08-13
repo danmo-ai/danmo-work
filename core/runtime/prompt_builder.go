@@ -9,7 +9,7 @@ import (
 	"danmo-work/core/domain"
 )
 
-func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, canDelegate bool, planMode bool, checkpoint string, activeTodos string, fileChanges string, sandboxStatus domain.SandboxStatus) string {
+func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, canDelegate bool, planMode bool, checkpoint string, activeTodos string, fileChanges string, sandboxStatus domain.SandboxStatus, envStatus domain.EnvironmentStatus) string {
 	var b strings.Builder
 	b.WriteString(agentPersona)
 
@@ -51,7 +51,7 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 	b.WriteString("\n\n")
 	b.WriteString(buildMCPToolNamingPolicy())
 	b.WriteString("\n\n")
-	b.WriteString(buildRuntimeEnvironment(sandboxStatus))
+	b.WriteString(buildRuntimeEnvironment(sandboxStatus, envStatus))
 	if planMode {
 		b.WriteString("\n\n")
 		b.WriteString(buildPlanModePrompt())
@@ -220,7 +220,7 @@ MCP tools are exposed to you as function names: mcp_<server>_<tool>
 
 // buildRuntimeEnvironment returns a block describing the runtime OS / shell environment.
 // Injected into the system prompt; shell fields come from the same resolve path as exec_shell.
-func buildRuntimeEnvironment(st domain.SandboxStatus) string {
+func buildRuntimeEnvironment(st domain.SandboxStatus, envSt domain.EnvironmentStatus) string {
 	osName := runtime.GOOS
 	osLabel := osName
 	switch osName {
@@ -267,6 +267,17 @@ func buildRuntimeEnvironment(st domain.SandboxStatus) string {
 		b.WriteString("Note: exec_shell invokes the Shell above under the OS sandbox when enabled (workspace-write by default). Prefer POSIX shell syntax. Avoid cmd.exe builtins unless necessary.\n")
 	default:
 		b.WriteString("Note: exec_shell runs under the OS sandbox when enabled (workspace-write by default).\n")
+	}
+	if envSt.Backend == domain.EnvironmentBackendContainer {
+		b.WriteString("Execution environment: OCI container (Alpine image)\n")
+		if envSt.Engine != "" {
+			b.WriteString("Engine: " + envSt.Engine + "\n")
+		}
+		if envSt.Image != "" {
+			b.WriteString("Image: " + envSt.Image + "\n")
+		}
+		b.WriteString("Preinstalled: " + domain.EnvImagePreinstalled + "\n")
+		b.WriteString("Note: exec_shell runs inside the per-project container; the project directory is bind-mounted at the same absolute path as the host.\n")
 	}
 	b.WriteString("</runtime-environment>")
 	return b.String()

@@ -7,14 +7,14 @@ import (
 
 func TestReleaseDownloadURLLatest(t *testing.T) {
 	u := ReleaseDownloadURL("dev", "amd64")
-	if !strings.Contains(u, "/releases/latest/download/danmo-work-env-linux-amd64.tar") {
+	if !strings.Contains(u, "/releases/latest/download/danmo-work-env-linux-amd64.tar.gz") {
 		t.Fatalf("url=%s", u)
 	}
 }
 
 func TestReleaseDownloadURLTagged(t *testing.T) {
 	u := ReleaseDownloadURL("0.9.2", "arm64")
-	if !strings.HasSuffix(u, "/releases/download/v0.9.2/danmo-work-env-linux-arm64.tar") {
+	if !strings.HasSuffix(u, "/releases/download/v0.9.2/danmo-work-env-linux-arm64.tar.gz") {
 		t.Fatalf("url=%s", u)
 	}
 	u2 := ReleaseDownloadURL("v1.0.0", "amd64")
@@ -31,7 +31,7 @@ func TestListTarVariants(t *testing.T) {
 	seen := map[string]bool{}
 	for _, v := range list {
 		seen[v.Arch] = true
-		if !strings.Contains(v.DownloadURL, "danmo-work-env-linux-"+v.Arch+".tar") {
+		if !strings.Contains(v.DownloadURL, "danmo-work-env-linux-"+v.Arch+".tar.gz") {
 			t.Fatalf("url=%s", v.DownloadURL)
 		}
 	}

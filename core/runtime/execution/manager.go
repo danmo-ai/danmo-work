@@ -102,7 +102,7 @@ func (m *Manager) Configure(envCfg domain.ConfigEnvironmentSection, sandboxCfg d
 
 	if m.tarPath == "" {
 		m.degraded = true
-		m.degradeMsg = "container backend requested but env tar not found — download danmo-work-env-linux-*.tar from GitHub Releases into ~/.danmo-work/env/ (or set WORK_ENV_TAR / make build-env-tar)"
+		m.degradeMsg = "container backend requested but env tar not found — download danmo-work-env-linux-*.tar.gz from GitHub Releases into ~/.danmo-work/env/ (or set WORK_ENV_TAR / make build-env-tar)"
 	} else if m.degraded && strings.Contains(m.degradeMsg, "env tar not found") {
 		m.degraded = false
 		m.degradeMsg = ""

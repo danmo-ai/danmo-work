@@ -282,6 +282,16 @@ func (e *Engine) sandboxStatus() domain.SandboxStatus {
 	return sb.Status()
 }
 
+func (e *Engine) environmentStatus() domain.EnvironmentStatus {
+	e.mu.Lock()
+	ex := e.execution
+	e.mu.Unlock()
+	if ex == nil {
+		return domain.EnvironmentStatus{}
+	}
+	return ex.Status()
+}
+
 func (e *Engine) effectiveIsolation() domain.EffectiveIsolation {
 	e.mu.Lock()
 	sb := e.sandbox
@@ -606,7 +616,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 			fileChanges = formatFileChanges(checkpoint.FileChanges)
 		}
 
-		sys := buildSystemPrompt(agentPtr.SystemPrompt, skills, e.delegatableAgents(agentPtr), agentPtr.CanDelegate, s.PlanMode, checkpointText, activeTodos, fileChanges, e.sandboxStatus())
+		sys := buildSystemPrompt(agentPtr.SystemPrompt, skills, e.delegatableAgents(agentPtr), agentPtr.CanDelegate, s.PlanMode, checkpointText, activeTodos, fileChanges, e.sandboxStatus(), e.environmentStatus())
 		messages := []Message{{Role: RoleSystem, Content: sys}}
 		if hits := e.knowledge.Search(agentPtr.KnowledgeIDs, goal, cfg.knowledgeSearchTopK); len(hits) > 0 {
 			content := ""
@@ -1231,7 +1241,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		fileChanges = formatFileChanges(checkpoint.FileChanges)
 	}
 
-	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, planMode, checkpointText, activeTodos, fileChanges, e.sandboxStatus())
+	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, planMode, checkpointText, activeTodos, fileChanges, e.sandboxStatus(), e.environmentStatus())
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
 	}
@@ -1585,7 +1595,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent, planMode bool) *tool.Regi
 			childReg.Register(rs)
 			childRunner := e.spawnTurnRunner(childTurnID, childReg, skills, workerAgent.Tools)
 
-			sys := buildSystemPrompt(workerAgent.SystemPrompt, skills, nil, workerAgent.CanDelegate, planMode, "", "", "", e.sandboxStatus())
+			sys := buildSystemPrompt(workerAgent.SystemPrompt, skills, nil, workerAgent.CanDelegate, planMode, "", "", "", e.sandboxStatus(), e.environmentStatus())
 			messages := []Message{
 				{Role: RoleSystem, Content: sys},
 			}
@@ -1860,7 +1870,7 @@ func (e *Engine) buildTurnMessages(sessionID string, agent domain.Agent, goal st
 	if e.skills != nil {
 		skills = e.resolveAgentSkills(agent, e.dataDir)
 	}
-	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, planMode, checkpointText, "", "", e.sandboxStatus())
+	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, planMode, checkpointText, "", "", e.sandboxStatus(), e.environmentStatus())
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
 	}

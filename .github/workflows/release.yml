@@ -249,7 +249,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: danmo-work-env-linux-${{ matrix.arch }}
-          path: ${{ env.REPO_DIR }}/out/env/danmo-work-env-linux-${{ matrix.arch }}.tar
+          path: ${{ env.REPO_DIR }}/out/env/danmo-work-env-linux-${{ matrix.arch }}.tar.gz
           if-no-files-found: error
 
   windows-desktop:

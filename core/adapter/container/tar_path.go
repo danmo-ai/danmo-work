@@ -42,6 +42,9 @@ func ResolveTarPath(override string) string {
 
 func archTarNames(dir, arch string) []string {
 	return []string{
+		filepath.Join(dir, "danmo-work-env-linux-"+arch+".tar.gz"),
+		filepath.Join(dir, "danmo-work-env.tar.gz"),
+		// legacy plain-tar installs (pre-gzip assets)
 		filepath.Join(dir, "danmo-work-env-linux-"+arch+".tar"),
 		filepath.Join(dir, "danmo-work-env.tar"),
 	}

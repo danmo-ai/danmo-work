@@ -12,7 +12,7 @@ func TestBuildRuntimeEnvironmentGitBash(t *testing.T) {
 		Backend:   domain.SandboxBackendWinToken,
 		Shell:     "bash (Git for Windows)",
 		ShellPath: `C:\Program Files\Git\bin\bash.exe`,
-	})
+	}, domain.EnvironmentStatus{})
 	for _, want := range []string{
 		"Shell: bash (Git for Windows)",
 		`Shell path: C:\Program Files\Git\bin\bash.exe`,
@@ -29,7 +29,7 @@ func TestBuildRuntimeEnvironmentWSL2(t *testing.T) {
 	out := buildRuntimeEnvironment(domain.SandboxStatus{
 		Backend: domain.SandboxBackendWSL2,
 		Shell:   "bash (WSL2)",
-	})
+	}, domain.EnvironmentStatus{})
 	if !strings.Contains(out, "Shell: bash (WSL2)") {
 		t.Fatal(out)
 	}
@@ -45,7 +45,7 @@ func TestBuildRuntimeEnvironmentCmdFallback(t *testing.T) {
 	out := buildRuntimeEnvironment(domain.SandboxStatus{
 		Backend: domain.SandboxBackendWinToken,
 		Shell:   "cmd",
-	})
+	}, domain.EnvironmentStatus{})
 	if !strings.Contains(out, "neither bundled/system Coreutils nor Git Bash detected") {
 		t.Fatal(out)
 	}
@@ -56,7 +56,7 @@ func TestBuildRuntimeEnvironmentCmdCoreutils(t *testing.T) {
 		Backend:      domain.SandboxBackendWinToken,
 		Shell:        "cmd (Coreutils)",
 		CoreutilsBin: `C:\Users\x\.danmo-work\bin\coreutils\bin`,
-	})
+	}, domain.EnvironmentStatus{})
 	for _, want := range []string{
 		"Shell: cmd (Coreutils)",
 		"Microsoft Coreutils on PATH",

@@ -48,10 +48,12 @@ runtime:
     network: "deny"
     # allowlist_domains:  # empty = fail closed when network=allowlist
     # Settings presets (additive):
-    #   开发依赖 — Debian/apt + npm + Go + PyPI + GitHub
+    #   开发依赖 — Alpine/apk + Debian/apt + npm + Go + PyPI + GitHub
     #   网络搜索 — DuckDuckGo / Bing / Brave / Google / Baidu / Tavily
-    #   单生态 — debian | npm | go | pypi | crates | github
+    #   单生态 — alpine | debian | npm | go | pypi | crates | github
     # allowlist_domains:
+    #   - "dl-cdn.alpinelinux.org"
+    #   - "*.alpinelinux.org"
     #   - "deb.debian.org"
     #   - "security.debian.org"
     #   - "*.debian.org"
@@ -60,7 +62,7 @@ runtime:
     backend: ""
     shell: "auto"
   # Optional OCI execution environment (one long-lived container per project).
-  # Image tar is NOT shipped in app packages — download danmo-work-env-linux-*.tar
+  # Image tar is NOT shipped in app packages — download danmo-work-env-linux-*.tar.gz
   # from GitHub Releases into ~/.danmo-work/env/ (or set WORK_ENV_TAR / tar_path).
   # Never registry-pulled; runtime only load (podman|docker|apple-container).
   # backend: local (default) | container

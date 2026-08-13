@@ -6,7 +6,7 @@ FRONTEND_DIR := $(CURDIR)/frontend
 OUT_DIR := $(CURDIR)/out
 FRONTEND_DIST := $(OUT_DIR)/frontend/dist
 RELEASE_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -w -X 'danmo-work/server/api/v1.Version=$(RELEASE_VERSION)'
+LDFLAGS := -w -s -X 'danmo-work/server/api/v1.Version=$(RELEASE_VERSION)'
 
 export DQ_APP_NAME := $(APP_NAME)
 
@@ -98,15 +98,15 @@ build-go: build-server build-cli build-tui
 
 build-server:
 	@mkdir -p $(OUT_DIR)/server
-	go build -ldflags "$(LDFLAGS)" -o $(SERVER_BIN) ./server
+	go build -trimpath -ldflags "$(LDFLAGS)" -o $(SERVER_BIN) ./server
 
 build-cli:
 	@mkdir -p $(OUT_DIR)/server
-	go build -ldflags "$(LDFLAGS)" -o $(CLI_BIN) ./cli
+	go build -trimpath -ldflags "$(LDFLAGS)" -o $(CLI_BIN) ./cli
 
 build-tui:
 	@mkdir -p $(OUT_DIR)/server
-	go build -ldflags "$(LDFLAGS)" -o $(TUI_BIN) ./tui
+	go build -trimpath -ldflags "$(LDFLAGS)" -o $(TUI_BIN) ./tui
 
 build-sidecar:
 	@chmod +x scripts/*.sh
@@ -126,7 +126,7 @@ pack-macos-desktop: pack-prereqs frontend-build
 	@chmod +x scripts/*.sh
 	@RELEASE_VERSION=$(RELEASE_VERSION) ./scripts/pack_desktop_macos.sh
 
-# Bundled agent OCI image → out/env/danmo-work-env-linux-<arch>.tar (no registry).
+# Bundled agent OCI image → out/env/danmo-work-env-linux-<arch>.tar.gz (no registry).
 build-env-tar:
 	@chmod +x scripts/*.sh
 	@./scripts/build_env_tar.sh
@@ -142,7 +142,7 @@ pack-windows-desktop: pack-prereqs frontend-build
 # Cross-compile CLI for Harbor task containers (linux).
 eval-harbor-bin:
 	@mkdir -p $(EVAL_BIN_DIR)
-	GOOS=linux GOARCH=$(EVAL_GOARCH) CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(EVAL_CLI_BIN) ./cli
+	GOOS=linux GOARCH=$(EVAL_GOARCH) CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(EVAL_CLI_BIN) ./cli
 	@echo "built $(EVAL_CLI_BIN) (linux/$(EVAL_GOARCH))"
 
 # Shared task image with nvm/Node/OpenCode/Python preinstalled (speeds OpenCode setup).

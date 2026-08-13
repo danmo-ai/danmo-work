@@ -42,16 +42,16 @@ if [[ "$GOOS" == "windows" ]]; then
 fi
 
 # Align sidecar /api/v1/version with desktop release when RELEASE_VERSION is set
-VERSION_LDFLAGS="-w"
+VERSION_LDFLAGS="-w -s"
 if [[ -n "${RELEASE_VERSION:-}" ]]; then
-  VERSION_LDFLAGS="-w -X 'danmo-work/server/api/v1.Version=${RELEASE_VERSION}'"
+  VERSION_LDFLAGS="-w -s -X 'danmo-work/server/api/v1.Version=${RELEASE_VERSION}'"
   echo "==> Sidecar version: $RELEASE_VERSION"
 fi
 
 echo "==> Building sidecar: $BINARY_NAME ($GOOS/$GOARCH)"
 
 cd "$ROOT_DIR"
-GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "$VERSION_LDFLAGS" -o "$BIN_DIR/$BINARY_NAME" ./server
+GOOS=$GOOS GOARCH=$GOARCH go build -trimpath -ldflags "$VERSION_LDFLAGS" -o "$BIN_DIR/$BINARY_NAME" ./server
 
 if [[ "$GOOS" != "windows" ]]; then
   chmod +x "$BIN_DIR/$BINARY_NAME"

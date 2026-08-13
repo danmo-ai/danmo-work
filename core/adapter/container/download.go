@@ -53,9 +53,9 @@ func NormalizeArch(arch string) string {
 	}
 }
 
-// AssetFileName is danmo-work-env-linux-<arch>.tar
+// AssetFileName is danmo-work-env-linux-<arch>.tar.gz
 func AssetFileName(arch string) string {
-	return "danmo-work-env-linux-" + NormalizeArch(arch) + ".tar"
+	return "danmo-work-env-linux-" + NormalizeArch(arch) + ".tar.gz"
 }
 
 // InstallPath is the canonical download destination under ~/.danmo-work/env/.
@@ -196,7 +196,7 @@ func DownloadEnvTar(ctx context.Context, version, arch string) (TarInfo, error) 
 	}
 	// Host-arch download also refreshes the generic alias used by ResolveTarPath.
 	if arch == LinuxArch() {
-		alias := filepath.Join(EnvDir(), "danmo-work-env.tar")
+		alias := filepath.Join(EnvDir(), "danmo-work-env.tar.gz")
 		_ = os.Remove(alias)
 		if err := os.Symlink(dest, alias); err != nil {
 			_ = copyFile(dest, alias)

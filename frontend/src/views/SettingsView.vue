@@ -251,9 +251,11 @@ const ALLOWLIST_PRESET_GROUPS: {
     id: 'combo',
     presets: [
       {
-        // Debian apt + common language registries + GitHub (container / agent install path)
+        // Alpine apk + common language registries + GitHub (container / agent install path)
         id: 'devDeps',
         domains: [
+          'dl-cdn.alpinelinux.org',
+          '*.alpinelinux.org',
           'deb.debian.org',
           'security.debian.org',
           '*.debian.org',
@@ -295,6 +297,10 @@ const ALLOWLIST_PRESET_GROUPS: {
   {
     id: 'dev',
     presets: [
+      {
+        id: 'alpine',
+        domains: ['dl-cdn.alpinelinux.org', '*.alpinelinux.org'],
+      },
       {
         id: 'debian',
         domains: ['deb.debian.org', 'security.debian.org', '*.debian.org'],
@@ -361,8 +367,8 @@ const envTarVariants = computed(() => {
   if (list?.length) return list
   // Fallback until status loads
   return [
-    { arch: 'amd64', present: false, downloadUrl: '', assetName: 'danmo-work-env-linux-amd64.tar' },
-    { arch: 'arm64', present: false, downloadUrl: '', assetName: 'danmo-work-env-linux-arm64.tar' },
+    { arch: 'amd64', present: false, downloadUrl: '', assetName: 'danmo-work-env-linux-amd64.tar.gz' },
+    { arch: 'arm64', present: false, downloadUrl: '', assetName: 'danmo-work-env-linux-arm64.tar.gz' },
   ]
 })
 

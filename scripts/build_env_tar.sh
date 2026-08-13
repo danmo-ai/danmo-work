@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build the agent OCI image and save as a local tar (no registry push/pull).
-# Output: out/env/danmo-work-env-linux-<arch>.tar
+# Build the agent OCI image and save as a gzipped tar (no registry push/pull).
+# Output: out/env/danmo-work-env-linux-<arch>.tar.gz (release asset; runtime gunzips before load)
 #
 # Cross-build:
 #   DQ_ENV_PLATFORM=linux/arm64 DQ_ENV_OUT_ARCH=arm64 ./scripts/build_env_tar.sh
@@ -26,7 +26,7 @@ IMAGE_TAG_ARCH="${DQ_ENV_IMAGE_TAG:-localhost/danmo-work-env:bundled}-${OUT_ARCH
 
 dq_ensure_out_layout
 mkdir -p "$DQ_OUT/env"
-OUT_TAR="${DQ_ENV_TAR_OUT:-$DQ_OUT/env/danmo-work-env-linux-${OUT_ARCH}.tar}"
+OUT_TAR="${DQ_ENV_TAR_OUT:-$DQ_OUT/env/danmo-work-env-linux-${OUT_ARCH}.tar.gz}"
 
 ENGINE=""
 if command -v docker >/dev/null 2>&1; then
@@ -69,8 +69,8 @@ if [[ "$OUT_ARCH" == "$ARCH" ]]; then
   "$ENGINE" tag "$IMAGE_TAG_ARCH" "${DQ_ENV_IMAGE_TAG:-localhost/danmo-work-env:bundled}" || true
 fi
 
-echo "==> Saving image → $OUT_TAR"
+echo "==> Saving image → $OUT_TAR (gzipped)"
 rm -f "$OUT_TAR"
-"$ENGINE" save -o "$OUT_TAR" "$IMAGE_TAG_ARCH"
+"$ENGINE" save "$IMAGE_TAG_ARCH" | gzip -6 > "$OUT_TAR"
 ls -lh "$OUT_TAR"
 echo "==> Done (tag=$IMAGE_TAG_ARCH engine=$ENGINE arch=$OUT_ARCH)"
