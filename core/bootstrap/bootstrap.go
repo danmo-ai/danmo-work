@@ -16,9 +16,9 @@ import (
 	"danmo-work/core/domain"
 	"danmo-work/core/paths"
 	"danmo-work/core/port"
+	"danmo-work/core/resource/home"
 	dqruntime "danmo-work/core/runtime"
 	dqbrowser "danmo-work/core/runtime/browser"
-	"danmo-work/core/runtime/prompt"
 	"danmo-work/core/runtime/sandbox"
 	"danmo-work/core/runtime/tool/builtin"
 	"danmo-work/core/service"
@@ -165,7 +165,6 @@ func New(cfg Config) *Core {
 	if _, err := knowledgeMgr.EnsureDefaultBase(context.Background()); err != nil {
 		log.Printf("[bootstrap] knowledge default base: %v", err)
 	}
-	ensureNovelCraftKnowledge(knowledgeMgr)
 	knowledge := builtin.NewKnowledge()
 	knowledge.SetBackend(knowledgeMgr)
 	turnManager := service.NewTurnManager(st.Turns())
@@ -205,6 +204,7 @@ func New(cfg Config) *Core {
 	if err := service.SyncBuiltinToFS(appCfg.Data.Dir); err != nil {
 		log.Printf("[bootstrap] builtin sync: %v", err)
 	}
+	ensureBuiltinKnowledge(knowledgeMgr)
 	if err := mcpManager.SyncBuiltinMCP(); err != nil {
 		log.Printf("[bootstrap] builtin mcp sync: %v", err)
 	}
@@ -433,21 +433,11 @@ func ensureDefaultProject(pm *service.ProjectManager) {
 	pm.Create(ctx, domain.CreateProjectRequest{Name: "默认项目"})
 }
 
-func ensureNovelCraftKnowledge(knowledgeMgr *service.KnowledgeManager) {
-	docs, err := prompt.LoadNovelCraftDocs()
-	if err != nil {
-		log.Printf("[bootstrap] load novel craft KB: %v", err)
-		return
-	}
-	seeds := make([]service.NovelCraftSeedDoc, 0, len(docs))
-	for _, d := range docs {
-		seeds = append(seeds, service.NovelCraftSeedDoc{
-			SeedKey: d.SeedKey,
-			Title:   d.Title,
-			Content: d.Content,
-		})
-	}
-	if _, err := knowledgeMgr.EnsureNovelCraftKnowledge(context.Background(), seeds); err != nil {
-		log.Printf("[bootstrap] seed novel craft KB: %v", err)
+func ensureBuiltinKnowledge(knowledgeMgr *service.KnowledgeManager) {
+	for _, id := range home.KnowledgeDirs() {
+		root := filepath.Join(paths.KnowledgeDir(), id)
+		if err := knowledgeMgr.ScanBuiltinKnowledgeDir(context.Background(), id, root); err != nil {
+			log.Printf("[bootstrap] scan builtin KB %s: %v", id, err)
+		}
 	}
 }

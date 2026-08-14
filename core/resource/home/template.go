@@ -1,4 +1,4 @@
-package prompt
+package home
 
 import (
 	"crypto/sha256"
@@ -74,7 +74,7 @@ type AgentTemplate struct {
 }
 
 func LoadAgentTemplates() ([]AgentTemplate, error) {
-	return loadAgentTemplatesFromFS(BuiltinFS, "builtin/agents")
+	return loadAgentTemplatesFromFS(FS, "agents")
 }
 
 func loadAgentTemplatesFromFS(fsys fs.FS, dir string) ([]AgentTemplate, error) {
@@ -153,7 +153,7 @@ type SkillTemplate struct {
 }
 
 func LoadSkillTemplates() ([]SkillTemplate, error) {
-	return loadSkillTemplatesFromFS(BuiltinFS, "builtin/skills")
+	return loadSkillTemplatesFromFS(FS, "skills")
 }
 
 func loadSkillTemplatesFromFS(fsys fs.FS, dir string) ([]SkillTemplate, error) {
@@ -186,19 +186,18 @@ type BuiltinFile struct {
 	Content []byte
 }
 
-// LoadBuiltinFiles returns all embedded builtin agent and skill files as a flat list.
+// LoadBuiltinFiles returns all embedded builtin agent, skill and knowledge files as a flat list.
 func LoadBuiltinFiles() ([]BuiltinFile, error) {
 	var files []BuiltinFile
-	if err := fs.WalkDir(BuiltinFS, "builtin", func(path string, d fs.DirEntry, err error) error {
+	if err := fs.WalkDir(FS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}
-		data, err := fs.ReadFile(BuiltinFS, path)
+		data, err := fs.ReadFile(FS, path)
 		if err != nil {
 			return nil
 		}
-		relPath := strings.TrimPrefix(path, "builtin/")
-		files = append(files, BuiltinFile{Path: relPath, Content: data})
+		files = append(files, BuiltinFile{Path: path, Content: data})
 		return nil
 	}); err != nil {
 		return nil, err
@@ -208,7 +207,7 @@ func LoadBuiltinFiles() ([]BuiltinFile, error) {
 
 // BuiltinManifestHash returns the SHA256 hash of the embedded manifest.yaml content.
 func BuiltinManifestHash() (string, error) {
-	data, err := fs.ReadFile(BuiltinFS, "builtin/manifest.yaml")
+	data, err := fs.ReadFile(FS, "manifest.yaml")
 	if err != nil {
 		return "", err
 	}

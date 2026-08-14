@@ -1,4 +1,4 @@
-package prompt
+package home
 
 import (
 	"fmt"
@@ -108,19 +108,19 @@ func TestBuiltinNovelWritingSkillHasReferences(t *testing.T) {
 	if sk.ID != "novel-writing" || sk.Description == "" {
 		t.Fatalf("unexpected skill: %+v", sk)
 	}
-	files, err := loadBuiltinSkillFiles(BuiltinFS, "builtin/skills", "novel-writing")
+	files, err := loadBuiltinSkillFiles(FS, "skills", "novel-writing")
 	if err != nil {
 		t.Fatalf("loadBuiltinSkillFiles: %v", err)
 	}
 	want := map[string]bool{
-		"references/routes.md":                 false,
-		"references/init.md":                   false,
-		"references/chapter-contract.md":       false,
-		"references/chapter-write.md":          false,
-		"references/review-gates.md":           false,
-		"references/continuity-commit.md":      false,
-		"references/table-schema.md":           false,
-		"assets/templates/novel-state.yaml":    false,
+		"references/routes.md":                   false,
+		"references/init.md":                     false,
+		"references/chapter-contract.md":         false,
+		"references/chapter-write.md":            false,
+		"references/review-gates.md":             false,
+		"references/continuity-commit.md":        false,
+		"references/table-schema.md":             false,
+		"assets/templates/novel-state.yaml":      false,
 		"assets/templates/chapter-contract.yaml": false,
 	}
 	for _, f := range files {
@@ -135,23 +135,19 @@ func TestBuiltinNovelWritingSkillHasReferences(t *testing.T) {
 	}
 }
 
-func TestLoadNovelCraftDocs(t *testing.T) {
-	docs, err := LoadNovelCraftDocs()
-	if err != nil {
-		t.Fatalf("LoadNovelCraftDocs: %v", err)
+func TestKnowledgeDirs(t *testing.T) {
+	dirs := KnowledgeDirs()
+	if len(dirs) == 0 {
+		t.Fatal("expected embedded knowledge base dirs")
 	}
-	if len(docs) < 9 {
-		t.Fatalf("expected >=9 craft docs, got %d", len(docs))
+	found := false
+	for _, d := range dirs {
+		if d == NovelCraftKnowledgeBaseID {
+			found = true
+		}
 	}
-	seen := map[string]bool{}
-	for _, d := range docs {
-		if d.SeedKey == "" || d.Title == "" || d.Content == "" {
-			t.Fatalf("incomplete craft doc: %+v", d)
-		}
-		if seen[d.SeedKey] {
-			t.Fatalf("duplicate seed key %q", d.SeedKey)
-		}
-		seen[d.SeedKey] = true
+	if !found {
+		t.Fatalf("missing kb-novel-craft in knowledge dirs: %v", dirs)
 	}
 }
 

@@ -10,11 +10,14 @@ import (
 	"strings"
 	"time"
 
-	"danmo-work/core/runtime/prompt"
+	"danmo-work/core/resource/home"
 )
 
+// SyncBuiltinToFS materializes the embedded builtin resources (agents, skills,
+// knowledge bases) into the data home so they go through the same filesystem
+// scan/ingest paths as user-created resources.
 func SyncBuiltinToFS(dataDir string) error {
-	hash, err := prompt.BuiltinManifestHash()
+	hash, err := home.BuiltinManifestHash()
 	if err != nil {
 		return fmt.Errorf("builtin manifest: %w", err)
 	}
@@ -63,7 +66,6 @@ func cleanBuiltinAgents(dir string) {
 	if err != nil {
 		return
 	}
-	// List of builtin agent filenames from the manifest
 	builtinNames := builtinAgentFiles()
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
@@ -94,43 +96,31 @@ func cleanBuiltinSkills(dir string) {
 }
 
 func builtinAgentFiles() map[string]struct{} {
-	return map[string]struct{}{
-		"comms.md":       {},
-		"danmo-make.md":   {},
-		"data.md":        {},
-		"document.md":    {},
-		"explorer.md":    {},
-		"github.md":      {},
-		"implementer.md": {},
-		"novel.md":       {},
-		"researcher.md":  {},
-		"reviewer.md":    {},
-		"team.md":        {},
+	out := map[string]struct{}{}
+	templates, err := home.LoadAgentTemplates()
+	if err != nil {
+		return out
 	}
+	for _, t := range templates {
+		out[t.Agent.ID+".md"] = struct{}{}
+	}
+	return out
 }
 
 func builtinSkillDirs() map[string]struct{} {
-	return map[string]struct{}{
-		"brainstorming":             {},
-		"danmo-make":                {},
-		"debugging":                 {},
-		"deep-research":             {},
-		"document-writing":           {},
-		"git-workflow":              {},
-		"github":                    {},
-		"mcp-connectors":            {},
-		"novel-writing":             {},
-		"playable-slides":           {},
-		"requesting-code-review":    {},
-		"sheet-writing":             {},
-		"skill-creator":             {},
-		"test-driven-development":   {},
-		"writing-plans":             {},
+	out := map[string]struct{}{}
+	templates, err := home.LoadSkillTemplates()
+	if err != nil {
+		return out
 	}
+	for _, t := range templates {
+		out[t.Skill.ID] = struct{}{}
+	}
+	return out
 }
 
 func copyBuiltinFiles(dataDir string) error {
-	files, err := prompt.LoadBuiltinFiles()
+	files, err := home.LoadBuiltinFiles()
 	if err != nil {
 		return err
 	}
@@ -176,6 +166,6 @@ func copyDirectory(src, dst string) error {
 }
 
 func BuiltinVersionHash() string {
-	h, _ := prompt.BuiltinManifestHash()
+	h, _ := home.BuiltinManifestHash()
 	return h
 }

@@ -154,57 +154,84 @@ func (m *KnowledgeManager) ScanPluginBases(ctx context.Context) error {
 	m.mu.RUnlock()
 
 	for _, root := range roots {
-		pluginName := pluginNameFromKBPath(root)
-		if pluginName == "" {
+		if err := m.ScanPluginBase(ctx, root); err != nil {
+			log.Printf("[knowledge] plugin kb scan %s: %v", root, err)
+		}
+	}
+	return nil
+}
+
+// ScanPluginBase registers one plugin knowledge directory as a KB in SQLite.
+func (m *KnowledgeManager) ScanPluginBase(ctx context.Context, root string) error {
+	id := pluginNameFromKBPath(root)
+	if id == "" {
+		return nil
+	}
+	return m.scanKnowledgeDir(ctx, id, root, func(fname string) string {
+		return strings.TrimSuffix(fname, ".md")
+	})
+}
+
+// ScanBuiltinKnowledgeDir registers a builtin knowledge directory (synced from
+// core/resource/home) as a KB in SQLite. Doc ids are prefixed with doc-<id>-
+// so builtin seed docs never collide across knowledge bases.
+func (m *KnowledgeManager) ScanBuiltinKnowledgeDir(ctx context.Context, id, root string) error {
+	return m.scanKnowledgeDir(ctx, id, root, func(fname string) string {
+		return "doc-" + id + "-" + strings.TrimSuffix(fname, ".md")
+	})
+}
+
+// scanKnowledgeDir is the shared filesystem → DB ingest for KB directories
+// defined on disk (_meta.json + *.md). Seed-if-missing: existing bases and
+// docs are never overwritten; newly created docs are indexed inline.
+func (m *KnowledgeManager) scanKnowledgeDir(ctx context.Context, id, root string, docIDFor func(fname string) string) error {
+	meta := readKBmeta(filepath.Join(root, "_meta.json"))
+	name := meta["name"]
+	if name == "" {
+		name = id
+	}
+	desc := meta["description"]
+
+	if _, err := m.bases.Get(ctx, id); err != nil {
+		if _, err := m.createBaseWithID(ctx, id, name, desc); err != nil {
+			log.Printf("[knowledge] kb %q create: %v", id, err)
+			return err
+		}
+	}
+
+	files, err := filepath.Glob(filepath.Join(root, "*.md"))
+	if err != nil {
+		return nil
+	}
+	for _, f := range files {
+		fname := filepath.Base(f)
+		if strings.HasPrefix(fname, ".") {
 			continue
 		}
-
-		meta := readKBmeta(filepath.Join(root, "_meta.json"))
-		name := meta["name"]
-		if name == "" {
-			name = pluginName
-		}
-		desc := meta["description"]
-
-		if _, err := m.bases.Get(ctx, pluginName); err == nil {
+		docID := docIDFor(fname)
+		if _, err := m.docs.Get(ctx, docID); err == nil {
 			continue
 		}
-
-		if _, err := m.createBaseWithID(ctx, pluginName, name, desc); err != nil {
-			log.Printf("[knowledge] plugin kb %q create: %v", pluginName, err)
-			continue
-		}
-
-		files, err := filepath.Glob(filepath.Join(root, "*.md"))
+		data, err := os.ReadFile(f)
 		if err != nil {
 			continue
 		}
-		for _, f := range files {
-			fname := filepath.Base(f)
-			if fname == "_meta.json" || strings.HasPrefix(fname, ".") {
-				continue
-			}
-			docID := strings.TrimSuffix(fname, ".md")
-			if _, err := m.docs.Get(ctx, docID); err == nil {
-				continue
-			}
-			data, err := os.ReadFile(f)
-			if err != nil {
-				continue
-			}
-			title := extractMarkdownTitle(string(data))
-			if title == "" {
-				title = docID
-			}
-			rel := filepath.ToSlash(filepath.Join(pluginName, fname))
-			now := time.Now().UTC().Format(time.RFC3339)
-			d := domain.KnowledgeDoc{
-				ID: docID, KBID: pluginName, Title: title, Path: rel,
-				CreatedAt: now, UpdatedAt: now,
-			}
-			if err := m.docs.Upsert(ctx, d); err != nil {
-				log.Printf("[knowledge] plugin doc %q upsert: %v", docID, err)
-			}
+		content := string(data)
+		title := extractMarkdownTitle(content)
+		if title == "" {
+			title = docID
+		}
+		now := time.Now().UTC().Format(time.RFC3339)
+		d := domain.KnowledgeDoc{
+			ID: docID, KBID: id, Title: title, Path: filepath.ToSlash(filepath.Join(id, fname)),
+			CreatedAt: now, UpdatedAt: now,
+		}
+		if err := m.docs.Upsert(ctx, d); err != nil {
+			log.Printf("[knowledge] doc %q upsert: %v", docID, err)
+			continue
+		}
+		if err := m.indexDoc(ctx, d, content); err != nil {
+			log.Printf("[knowledge] doc %q index: %v", docID, err)
 		}
 	}
 	return nil
@@ -257,57 +284,6 @@ func (m *KnowledgeManager) createBaseWithID(ctx context.Context, id, name, descr
 
 // DefaultKnowledgeBaseID is the stable id for the auto-created default KB.
 const DefaultKnowledgeBaseID = "kb-default"
-
-// NovelCraftKnowledgeBaseID is the stable id for the builtin novel craft KB.
-const NovelCraftKnowledgeBaseID = "kb-novel-craft"
-
-// NovelCraftSeedDoc is a Markdown document seeded into kb-novel-craft.
-type NovelCraftSeedDoc struct {
-	SeedKey string
-	Title   string
-	Content string
-}
-
-// EnsureNovelCraftKnowledge creates kb-novel-craft (if missing) and seeds documents
-// that are not yet present. Existing docs are never overwritten (seed-if-missing).
-func (m *KnowledgeManager) EnsureNovelCraftKnowledge(ctx context.Context, seeds []NovelCraftSeedDoc) (domain.KnowledgeBase, error) {
-	b, err := m.ensureBaseWithID(ctx, NovelCraftKnowledgeBaseID, "小说创作技法", "跨书可复用的小说/网文创作技法（节奏、爽点、人设、世界观、去AI味等）")
-	if err != nil {
-		return domain.KnowledgeBase{}, err
-	}
-	existing, err := m.docs.ListByKB(ctx, b.ID)
-	if err != nil {
-		return domain.KnowledgeBase{}, err
-	}
-	byID := make(map[string]domain.KnowledgeDoc, len(existing))
-	byTitle := make(map[string]domain.KnowledgeDoc, len(existing))
-	for _, d := range existing {
-		byID[d.ID] = d
-		byTitle[strings.TrimSpace(d.Title)] = d
-	}
-	for _, seed := range seeds {
-		seedKey := strings.TrimSpace(seed.SeedKey)
-		title := strings.TrimSpace(seed.Title)
-		if seedKey == "" || title == "" {
-			continue
-		}
-		docID := "doc-novel-craft-" + seedKey
-		if _, ok := byID[docID]; ok {
-			continue
-		}
-		if _, ok := byTitle[title]; ok {
-			continue
-		}
-		if _, err := m.createDocWithID(ctx, b.ID, docID, domain.UpsertKnowledgeDocRequest{
-			Title:   title,
-			Content: seed.Content,
-		}); err != nil {
-			return domain.KnowledgeBase{}, err
-		}
-	}
-	b.DocumentCount, _ = m.docs.CountByKB(ctx, b.ID)
-	return b, nil
-}
 
 func (m *KnowledgeManager) ensureBaseWithID(ctx context.Context, id, name, description string) (domain.KnowledgeBase, error) {
 	if existing, err := m.bases.Get(ctx, id); err == nil {

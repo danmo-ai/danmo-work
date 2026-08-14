@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -164,54 +165,75 @@ func TestEnsureDefaultBase(t *testing.T) {
 	}
 }
 
-func TestEnsureNovelCraftKnowledge(t *testing.T) {
+func TestScanBuiltinKnowledgeDir(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "work.db")
 	st, err := sqlitestore.New(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
+	root := filepath.Join(dir, "knowledge")
 	mgr := service.NewKnowledgeManager(
 		st.KnowledgeBases(),
 		st.KnowledgeDocs(),
 		st.KnowledgeIndex(),
-		filepath.Join(dir, "knowledge"),
+		root,
 		nil,
 	)
 	ctx := context.Background()
-	seeds := []service.NovelCraftSeedDoc{
-		{SeedKey: "01-pacing-structure", Title: "节奏与结构", Content: "# 节奏与结构\n\n黄金开篇与断章钩子。\n"},
-		{SeedKey: "07-anti-ai-prose", Title: "去 AI 味（P0 / P1）", Content: "# 去 AI 味（P0 / P1）\n\nP0 阻断套话。\n"},
+	const kbID = "kb-novel-craft"
+	kbDir := filepath.Join(root, kbID)
+	if err := os.MkdirAll(kbDir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	b, err := mgr.EnsureNovelCraftKnowledge(ctx, seeds)
+	if err := os.WriteFile(filepath.Join(kbDir, "_meta.json"), []byte(
+		`{"name":"小说创作技法","description":"跨书可复用的小说/网文创作技法"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	seedFiles := map[string]string{
+		"01-pacing-structure.md": "# 节奏与结构\n\n黄金开篇与断章钩子。\n",
+		"07-anti-ai-prose.md":    "# 去 AI 味（P0 / P1）\n\nP0 阻断套话。\n",
+	}
+	for name, content := range seedFiles {
+		if err := os.WriteFile(filepath.Join(kbDir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := mgr.ScanBuiltinKnowledgeDir(ctx, kbID, kbDir); err != nil {
+		t.Fatal(err)
+	}
+	b, err := mgr.GetBase(ctx, kbID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b.ID != service.NovelCraftKnowledgeBaseID {
-		t.Fatalf("id=%s", b.ID)
+	if b.Name != "小说创作技法" || b.Description != "跨书可复用的小说/网文创作技法" {
+		t.Fatalf("base meta = %q / %q", b.Name, b.Description)
 	}
-	if b.DocumentCount < 2 {
-		t.Fatalf("docs=%d", b.DocumentCount)
-	}
-	// Seed-if-missing: second call must not duplicate.
-	again, err := mgr.EnsureNovelCraftKnowledge(ctx, seeds)
+	docs, err := mgr.ListDocs(ctx, kbID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.DocumentCount != b.DocumentCount {
-		t.Fatalf("doc count changed on re-seed: %d → %d", b.DocumentCount, again.DocumentCount)
-	}
-	hits := mgr.Search([]string{service.NovelCraftKnowledgeBaseID}, "断章钩子", 5)
-	if len(hits) == 0 {
-		t.Fatal("expected search hits in novel craft KB")
-	}
-	docs, err := mgr.ListDocs(ctx, service.NovelCraftKnowledgeBaseID)
-	if err != nil {
-		t.Fatal(err)
+	if len(docs) != 2 {
+		t.Fatalf("docs=%d", len(docs))
 	}
 	for _, d := range docs {
-		if !strings.HasPrefix(d.ID, "doc-novel-craft-") {
+		if !strings.HasPrefix(d.ID, "doc-kb-novel-craft-") {
 			t.Fatalf("unexpected doc id %q", d.ID)
 		}
+	}
+	// Seed-if-missing: second scan must not duplicate.
+	if err := mgr.ScanBuiltinKnowledgeDir(ctx, kbID, kbDir); err != nil {
+		t.Fatal(err)
+	}
+	docs, err = mgr.ListDocs(ctx, kbID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(docs) != 2 {
+		t.Fatalf("doc count changed on re-scan: %d", len(docs))
+	}
+	hits := mgr.Search([]string{kbID}, "断章钩子", 5)
+	if len(hits) == 0 {
+		t.Fatal("expected search hits in novel craft KB")
 	}
 }
