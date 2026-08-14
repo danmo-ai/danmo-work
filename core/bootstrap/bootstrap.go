@@ -18,7 +18,6 @@ import (
 	"danmo-work/core/port"
 	dqruntime "danmo-work/core/runtime"
 	dqbrowser "danmo-work/core/runtime/browser"
-	"danmo-work/core/runtime/execution"
 	"danmo-work/core/runtime/prompt"
 	"danmo-work/core/runtime/sandbox"
 	"danmo-work/core/runtime/tool/builtin"
@@ -254,10 +253,11 @@ func New(cfg Config) *Core {
 	sb := sandbox.New(appCfg.Runtime.Sandbox)
 	eng.SetSandbox(sb)
 	mcpDialer.PrepareStdio = sb.PrepareMCPStdio
-	execBackend := execution.New(appCfg.Runtime.Environment, appCfg.Runtime.Sandbox, sb)
-	eng.SetExecution(execBackend)
+	// The unified sandbox manager is also the execution backend (container
+	// lifecycle + env tar status). Tools only face port.Sandbox + the factory.
+	eng.SetExecution(sb)
 	br := dqbrowser.New(appCfg.Runtime.Browser)
-	eng.RegisterTool(&builtin.ExecShell{Sandbox: sb, Runner: execBackend})
+	eng.RegisterTool(&builtin.ExecShell{Sandbox: sb})
 	eng.RegisterTool(&builtin.ReadFile{})
 	eng.RegisterTool(&builtin.Edit{})
 	eng.RegisterTool(&builtin.Write{})
@@ -366,7 +366,7 @@ func New(cfg Config) *Core {
 		TableStore:    tableStore,
 		Engine:        eng,
 		Sandbox:       sb,
-		Execution:     execBackend,
+		Execution:     sb,
 		Browser:       br,
 		Config:        appCfg,
 		Loader:        loader,
@@ -406,11 +406,6 @@ func (c *Core) Close() error {
 		c.Weixin.Stop()
 	}
 	var first error
-	if c.Execution != nil {
-		if err := c.Execution.Close(); err != nil && first == nil {
-			first = err
-		}
-	}
 	if c.Sandbox != nil {
 		if err := c.Sandbox.Close(); err != nil && first == nil {
 			first = err

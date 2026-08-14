@@ -24,36 +24,72 @@ var (
 
 const disableMaxPrivilege = 0x1
 
-func selectBackend(cfg domain.ConfigSandboxSection, allowlistProxyActive bool) (domain.SandboxBackend, runner, bool, string, []string) {
-	force := strings.ToLower(strings.TrimSpace(cfg.Backend))
-	switch force {
-	case "host-weak", "host":
-		return domain.SandboxBackendHostWeak, hostRunner{}, true, "forced host-weak backend", []string{"host"}
-	case "wsl2", "wsl":
-		if wslAvailable() {
-			return domain.SandboxBackendWSL2, wslRunner{}, false, "", []string{"wsl2", "linux-userspace"}
-		}
-		return domain.SandboxBackendHostWeak, hostRunner{}, true, "wsl2 forced but wsl.exe not found", []string{"host"}
-	case "win-token", "token", "":
-		// auto / forced token below
-	default:
-		return domain.SandboxBackendHostWeak, hostRunner{}, true, "unknown backend " + force + "; using host-weak", []string{"host"}
+// probeOSBackends lists the OS-level backends relevant on this platform
+// (container engines are appended by the factory).
+func probeOSBackends() []domain.SandboxBackendInfo {
+	tokenOK := tokenSandboxAvailable()
+	wslOK := wslAvailable()
+	infos := []domain.SandboxBackendInfo{
+		{
+			Name:          domain.SandboxBackendWinToken,
+			Available:     tokenOK,
+			Capabilities:  []string{"privilege-restricted"},
+			AutoPreferred: tokenOK,
+		},
+		{
+			Name:         domain.SandboxBackendWSL2,
+			Available:    wslOK,
+			Capabilities: []string{"linux-userspace"},
+		},
+		{
+			Name:      domain.SandboxBackendHostWeak,
+			Available: true,
+			Reason:    "direct host execution",
+		},
 	}
+	if !tokenOK {
+		infos[0].Reason = "CreateRestrictedToken unavailable in this process"
+	}
+	if !wslOK {
+		infos[1].Reason = "wsl.exe not found"
+	}
+	return infos
+}
 
-	if tokenSandboxAvailable() {
-		caps := []string{"win-token", "privilege-restricted"}
-		degraded, reason := false, ""
-		// Kernel network deny is unavailable; allowlist proxy covers allowlist mode.
-		if needNetDeny(cfg, allowlistProxyActive) && cfg.Network == domain.SandboxNetworkDeny {
-			degraded = true
-			reason = "win-token unelevated mode does not enforce kernel network deny; set runtime.sandbox.backend=wsl2 for stronger isolation"
+// selectOSBackend picks an OS-level backend for the normalized force name.
+// Container engines are handled by the factory before this is called.
+func selectOSBackend(force string, cfg domain.ConfigSandboxSection, allowlistProxyActive bool) (port.SandboxBackend, domain.SandboxBackend, bool, string, []string) {
+	switch force {
+	case string(domain.SandboxBackendHostWeak):
+		return hostBackend{}, domain.SandboxBackendHostWeak, true, "forced host-weak backend", []string{"host"}
+	case string(domain.SandboxBackendWSL2):
+		if wslAvailable() {
+			return wslBackend{}, domain.SandboxBackendWSL2, false, "", []string{"wsl2", "linux-userspace"}
 		}
-		return domain.SandboxBackendWinToken, winTokenRunner{}, degraded, reason, caps
+		return hostBackend{}, domain.SandboxBackendHostWeak, true, "wsl2 forced but wsl.exe not found", []string{"host"}
+	case string(domain.SandboxBackendSeatbelt), string(domain.SandboxBackendLandlock), string(domain.SandboxBackendBwrap):
+		return hostBackend{}, domain.SandboxBackendHostWeak, true, force + " backend is not available on windows", []string{"host"}
+	case string(domain.SandboxBackendWinToken), "auto":
+		if tokenSandboxAvailable() {
+			caps := []string{"win-token", "privilege-restricted"}
+			degraded, reason := false, ""
+			// Kernel network deny is unavailable; allowlist proxy covers allowlist mode.
+			if needNetDeny(cfg, allowlistProxyActive) && cfg.Network == domain.SandboxNetworkDeny {
+				degraded = true
+				reason = "win-token unelevated mode does not enforce kernel network deny; set runtime.sandbox.backend=wsl2 for stronger isolation"
+			}
+			return winTokenBackend{}, domain.SandboxBackendWinToken, degraded, reason, caps
+		}
+		if force != "auto" {
+			return hostBackend{}, domain.SandboxBackendHostWeak, true, "win-token forced but restricted token unavailable", []string{"host"}
+		}
+		if wslAvailable() {
+			return wslBackend{}, domain.SandboxBackendWSL2, true, "restricted token unavailable; falling back to WSL2", []string{"wsl2", "linux-userspace"}
+		}
+		return hostBackend{}, domain.SandboxBackendHostWeak, true, "neither win-token nor WSL2 available", []string{"host"}
+	default:
+		return hostBackend{}, domain.SandboxBackendHostWeak, true, "unknown backend " + force + "; using host-weak", []string{"host"}
 	}
-	if wslAvailable() {
-		return domain.SandboxBackendWSL2, wslRunner{}, true, "restricted token unavailable; falling back to WSL2", []string{"wsl2", "linux-userspace"}
-	}
-	return domain.SandboxBackendHostWeak, hostRunner{}, true, "neither win-token nor WSL2 available", []string{"host"}
 }
 
 func wslAvailable() bool {
@@ -94,11 +130,13 @@ func createRestrictedToken(existing windows.Token) (windows.Token, error) {
 	return windows.Token(newHandle), nil
 }
 
-type winTokenRunner struct{}
+type winTokenBackend struct{}
 
-func (winTokenRunner) name() domain.SandboxBackend { return domain.SandboxBackendWinToken }
+func (winTokenBackend) Name() domain.SandboxBackend { return domain.SandboxBackendWinToken }
 
-func (winTokenRunner) run(ctx context.Context, opts port.SandboxRunOptions, cfg domain.ConfigSandboxSection) ([]byte, error) {
+func (winTokenBackend) Close() error { return nil }
+
+func (winTokenBackend) Run(ctx context.Context, opts port.SandboxRunOptions, cfg domain.ConfigSandboxSection) ([]byte, error) {
 	workdir, err := filepath.Abs(opts.WorkDir)
 	if err != nil {
 		return nil, fmt.Errorf("sandbox: workdir: %w", err)
@@ -140,11 +178,13 @@ func (winTokenRunner) run(ctx context.Context, opts port.SandboxRunOptions, cfg 
 	return out, err
 }
 
-type wslRunner struct{}
+type wslBackend struct{}
 
-func (wslRunner) name() domain.SandboxBackend { return domain.SandboxBackendWSL2 }
+func (wslBackend) Name() domain.SandboxBackend { return domain.SandboxBackendWSL2 }
 
-func (wslRunner) run(ctx context.Context, opts port.SandboxRunOptions, _ domain.ConfigSandboxSection) ([]byte, error) {
+func (wslBackend) Close() error { return nil }
+
+func (wslBackend) Run(ctx context.Context, opts port.SandboxRunOptions, _ domain.ConfigSandboxSection) ([]byte, error) {
 	workdir, err := filepath.Abs(opts.WorkDir)
 	if err != nil {
 		return nil, fmt.Errorf("sandbox: workdir: %w", err)

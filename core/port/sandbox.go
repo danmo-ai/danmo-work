@@ -13,6 +13,9 @@ type SandboxRunOptions struct {
 	Command string
 	// WorkDir is the project workspace root (bind / write root).
 	WorkDir string
+	// ProjectID identifies the owning project; container backends key their
+	// per-project container on it (default "default").
+	ProjectID string
 	// Timeout bounds execution; zero means default (30s).
 	Timeout time.Duration
 	// Env is the child environment. Nil means a filtered copy of the host env.
@@ -21,7 +24,7 @@ type SandboxRunOptions struct {
 	AllowNetwork bool
 	// AllowlistProxy is the host:port of the loopback allowlist proxy. Set by
 	// sandbox.Manager when network=allowlist is active; opens OS network and
-	// signals runners not to unshare/deny net.
+	// signals backends not to unshare/deny net.
 	AllowlistProxy string
 	// ExtraDomains are once/turn-scoped Hard allows merged into the proxy for
 	// this invocation only (not persisted as session grants).
@@ -57,4 +60,26 @@ type ProcessSandbox interface {
 type Sandbox interface {
 	ProcessSandbox
 	EgressAuthority
+}
+
+// SandboxBackend is the unified backend abstraction. OS sandboxes (seatbelt,
+// landlock, bwrap, win-token, wsl2), OCI container engines (podman, docker,
+// apple-container), and direct host execution (host-weak) all implement it.
+// Tools face only this interface plus the BackendFactory.
+type SandboxBackend interface {
+	Name() domain.SandboxBackend
+	Run(ctx context.Context, opts SandboxRunOptions, cfg domain.ConfigSandboxSection) ([]byte, error)
+	Close() error
+}
+
+// BackendFactory builds and probes sandbox backends. When the sandbox is
+// disabled (or danger-full-access), the factory returns the host-weak backend
+// (direct OS execution).
+type BackendFactory interface {
+	// Available probes all platform-relevant backends for the settings page.
+	Available(cfg domain.ConfigSandboxSection) []domain.SandboxBackendInfo
+	// Build constructs the backend selected by cfg. Returned values:
+	// backend (host-weak when disabled/unknown/unavailable), the effective
+	// backend name, degraded flag, degraded reason, and capabilities.
+	Build(cfg domain.ConfigSandboxSection, allowlistProxyActive bool) (backend SandboxBackend, name domain.SandboxBackend, degraded bool, reason string, caps []string)
 }

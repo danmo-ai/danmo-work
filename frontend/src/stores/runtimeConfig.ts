@@ -13,8 +13,9 @@ export interface RuntimeForm {
   sandboxAllowlistDomains: string
   sandboxBackend: string
   sandboxShell: string
-  envBackend: 'local' | 'container'
-  envEngine: 'auto' | 'podman' | 'docker' | 'apple-container'
+  envImage: string
+  envTarPath: string
+  envWorkspaceMount: string
   envCpus: string
   envMemory: string
   browserEnabled: boolean
@@ -40,11 +41,11 @@ export interface RuntimeForm {
   compactionKeepRecentToolSteps: number
 }
 
+const CONTAINER_BACKENDS = ['podman', 'docker', 'apple-container']
+
 function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
   const sb = rt.sandbox
   const br = rt.browser
-  const env = rt.environment
-  const eng = (env?.engine || 'auto') as RuntimeForm['envEngine']
   return {
     autoApprove: rt.autoApprove,
     permissionMode: rt.permissionMode || 'interactive',
@@ -54,10 +55,11 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     sandboxAllowlistDomains: (sb?.allowlistDomains ?? []).join('\n'),
     sandboxBackend: sb?.backend ?? '',
     sandboxShell: sb?.shell ?? 'auto',
-    envBackend: env?.backend === 'container' ? 'container' : 'local',
-    envEngine: ['podman', 'docker', 'apple-container'].includes(eng) ? eng : 'auto',
-    envCpus: env?.resources?.cpus ?? '',
-    envMemory: env?.resources?.memory ?? '',
+    envImage: sb?.image ?? '',
+    envTarPath: sb?.tarPath ?? '',
+    envWorkspaceMount: sb?.workspaceMount ?? '',
+    envCpus: sb?.resources?.cpus ?? '',
+    envMemory: sb?.resources?.memory ?? '',
     browserEnabled: br?.enabled ?? true,
     browserExecutablePath: br?.executablePath ?? '',
     browserCdpUrl: br?.cdpUrl ?? '',
@@ -151,6 +153,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
   async function saveConfig(form: RuntimeForm) {
     saving.value = true
     try {
+      const containerSelected = CONTAINER_BACKENDS.includes(form.sandboxBackend)
       const runtime: ConfigFile['runtime'] = {
         autoApprove: form.autoApprove,
         permissionMode: form.permissionMode,
@@ -164,14 +167,15 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
             .filter(Boolean),
           backend: form.sandboxBackend || undefined,
           shell: form.sandboxShell || undefined,
-        },
-        environment: {
-          backend: form.envBackend,
-          engine: form.envEngine,
-          resources: {
-            cpus: form.envCpus.trim() || undefined,
-            memory: form.envMemory.trim() || undefined,
-          },
+          image: containerSelected && form.envImage.trim() ? form.envImage.trim() : undefined,
+          tarPath: containerSelected && form.envTarPath.trim() ? form.envTarPath.trim() : undefined,
+          workspaceMount: containerSelected && form.envWorkspaceMount.trim() ? form.envWorkspaceMount.trim() : undefined,
+          resources: containerSelected
+            ? {
+                cpus: form.envCpus.trim() || undefined,
+                memory: form.envMemory.trim() || undefined,
+              }
+            : undefined,
         },
         browser: {
           enabled: form.browserEnabled,

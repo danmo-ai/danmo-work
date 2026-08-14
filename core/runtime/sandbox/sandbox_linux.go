@@ -8,36 +8,75 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
 )
 
-func selectBackend(cfg domain.ConfigSandboxSection, allowlistProxyActive bool) (domain.SandboxBackend, runner, bool, string, []string) {
-	force := strings.ToLower(strings.TrimSpace(cfg.Backend))
+// probeOSBackends lists the OS-level backends relevant on this platform
+// (container engines are appended by the factory).
+func probeOSBackends() []domain.SandboxBackendInfo {
+	hasBwrap := lookPath("bwrap")
+	hasLL := landlockAvailable()
+	auto := ""
+	switch {
+	case hasLL:
+		auto = string(domain.SandboxBackendLandlock)
+	case hasBwrap:
+		auto = string(domain.SandboxBackendBwrap)
+	}
+	infos := []domain.SandboxBackendInfo{
+		{
+			Name:          domain.SandboxBackendLandlock,
+			Available:     hasLL,
+			Capabilities:  []string{"fs-isolation"},
+			AutoPreferred: hasLL && auto == string(domain.SandboxBackendLandlock),
+		},
+		{
+			Name:         domain.SandboxBackendBwrap,
+			Available:    hasBwrap,
+			Capabilities: []string{"fs-isolation", "network-control", "seccomp-via-bwrap"},
+		},
+		{
+			Name:      domain.SandboxBackendHostWeak,
+			Available: true,
+			Reason:    "direct host execution",
+		},
+	}
+	if !hasLL {
+		infos[0].Reason = "landlock unavailable (kernel < 5.13 or not enabled)"
+	}
+	if !hasBwrap {
+		infos[1].Reason = "bwrap not in PATH"
+	}
+	return infos
+}
+
+// selectOSBackend picks an OS-level backend for the normalized force name.
+// Container engines are handled by the factory before this is called.
+func selectOSBackend(force string, cfg domain.ConfigSandboxSection, allowlistProxyActive bool) (port.SandboxBackend, domain.SandboxBackend, bool, string, []string) {
 	netDeny := needNetDeny(cfg, allowlistProxyActive)
 	switch force {
-	case "host-weak", "host":
-		return domain.SandboxBackendHostWeak, hostRunner{}, true, "forced host-weak backend", []string{"host"}
-	case "bwrap", "bubblewrap":
+	case string(domain.SandboxBackendHostWeak):
+		return hostBackend{}, domain.SandboxBackendHostWeak, true, "forced host-weak backend", []string{"host"}
+	case string(domain.SandboxBackendBwrap):
 		if lookPath("bwrap") {
-			return domain.SandboxBackendBwrap, bwrapRunner{}, false, "", []string{"bwrap", "fs-isolation", "network-control"}
+			return bwrapBackend{}, domain.SandboxBackendBwrap, false, "", []string{"bwrap", "fs-isolation", "network-control"}
 		}
-		return domain.SandboxBackendHostWeak, hostRunner{}, true, "bwrap forced but not installed", []string{"host"}
-	case "landlock":
+		return hostBackend{}, domain.SandboxBackendHostWeak, true, "bwrap forced but not installed", []string{"host"}
+	case string(domain.SandboxBackendLandlock):
 		if landlockAvailable() {
 			caps := []string{"landlock", "fs-isolation"}
 			degraded, reason := false, ""
 			if netDeny {
 				degraded, reason = true, "landlock backend does not isolate network; install bubblewrap for --unshare-net"
 			}
-			return domain.SandboxBackendLandlock, landlockRunner{}, degraded, reason, caps
+			return landlockBackend{}, domain.SandboxBackendLandlock, degraded, reason, caps
 		}
-		return domain.SandboxBackendHostWeak, hostRunner{}, true, "landlock forced but unavailable", []string{"host"}
-	case "wsl2":
-		return domain.SandboxBackendHostWeak, hostRunner{}, true, "wsl2 backend is Windows-only", []string{"host"}
+		return hostBackend{}, domain.SandboxBackendHostWeak, true, "landlock forced but unavailable", []string{"host"}
+	case string(domain.SandboxBackendSeatbelt), string(domain.SandboxBackendWinToken), string(domain.SandboxBackendWSL2):
+		return hostBackend{}, domain.SandboxBackendHostWeak, true, force + " backend is not available on linux", []string{"host"}
 	}
 
 	// Auto: prefer landlock when network allows; prefer bwrap when network deny.
@@ -45,30 +84,32 @@ func selectBackend(cfg domain.ConfigSandboxSection, allowlistProxyActive bool) (
 	hasLL := landlockAvailable()
 
 	if netDeny && hasBwrap {
-		return domain.SandboxBackendBwrap, bwrapRunner{}, false, "", []string{"bwrap", "fs-isolation", "network-control", "seccomp-via-bwrap"}
+		return bwrapBackend{}, domain.SandboxBackendBwrap, false, "", []string{"bwrap", "fs-isolation", "network-control", "seccomp-via-bwrap"}
 	}
 	if hasLL {
 		caps := []string{"landlock", "fs-isolation"}
 		degraded, reason := false, ""
 		if netDeny {
 			if hasBwrap {
-				return domain.SandboxBackendBwrap, bwrapRunner{}, false, "", []string{"bwrap", "fs-isolation", "network-control"}
+				return bwrapBackend{}, domain.SandboxBackendBwrap, false, "", []string{"bwrap", "fs-isolation", "network-control"}
 			}
 			degraded, reason = true, "network deny requested but bubblewrap unavailable; FS-only landlock"
 		}
-		return domain.SandboxBackendLandlock, landlockRunner{}, degraded, reason, caps
+		return landlockBackend{}, domain.SandboxBackendLandlock, degraded, reason, caps
 	}
 	if hasBwrap {
-		return domain.SandboxBackendBwrap, bwrapRunner{}, false, "", []string{"bwrap", "fs-isolation", "network-control"}
+		return bwrapBackend{}, domain.SandboxBackendBwrap, false, "", []string{"bwrap", "fs-isolation", "network-control"}
 	}
-	return domain.SandboxBackendHostWeak, hostRunner{}, true, "neither landlock nor bubblewrap available", []string{"host"}
+	return hostBackend{}, domain.SandboxBackendHostWeak, true, "neither landlock nor bubblewrap available", []string{"host"}
 }
 
-type bwrapRunner struct{}
+type bwrapBackend struct{}
 
-func (bwrapRunner) name() domain.SandboxBackend { return domain.SandboxBackendBwrap }
+func (bwrapBackend) Name() domain.SandboxBackend { return domain.SandboxBackendBwrap }
 
-func (bwrapRunner) run(ctx context.Context, opts port.SandboxRunOptions, cfg domain.ConfigSandboxSection) ([]byte, error) {
+func (bwrapBackend) Close() error { return nil }
+
+func (bwrapBackend) Run(ctx context.Context, opts port.SandboxRunOptions, cfg domain.ConfigSandboxSection) ([]byte, error) {
 	workdir, err := filepath.Abs(opts.WorkDir)
 	if err != nil {
 		return nil, fmt.Errorf("sandbox: workdir: %w", err)
@@ -109,11 +150,13 @@ func (bwrapRunner) run(ctx context.Context, opts port.SandboxRunOptions, cfg dom
 	return out, err
 }
 
-type landlockRunner struct{}
+type landlockBackend struct{}
 
-func (landlockRunner) name() domain.SandboxBackend { return domain.SandboxBackendLandlock }
+func (landlockBackend) Name() domain.SandboxBackend { return domain.SandboxBackendLandlock }
 
-func (landlockRunner) run(ctx context.Context, opts port.SandboxRunOptions, cfg domain.ConfigSandboxSection) ([]byte, error) {
+func (landlockBackend) Close() error { return nil }
+
+func (landlockBackend) Run(ctx context.Context, opts port.SandboxRunOptions, cfg domain.ConfigSandboxSection) ([]byte, error) {
 	workdir, err := filepath.Abs(opts.WorkDir)
 	if err != nil {
 		return nil, fmt.Errorf("sandbox: workdir: %w", err)

@@ -8,14 +8,13 @@ import (
 
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
-	"danmo-work/core/runtime/egress"
 )
 
 type ExecShell struct {
+	// Sandbox is the unified sandbox facade (interface + factory). All backends
+	// — seatbelt, landlock, bwrap, win-token, wsl2, podman, docker,
+	// apple-container, host-weak — run through this single interface.
 	Sandbox port.Sandbox
-	// Runner routes to LocalOS sandbox or per-project OCI container.
-	// When nil, falls back to Sandbox (or host).
-	Runner port.ExecutionBackend
 }
 
 func (h *ExecShell) Name() string                { return "exec_shell" }
@@ -69,40 +68,25 @@ func (h *ExecShell) Execute(ctx context.Context, input map[string]any) (domain.T
 
 	var out []byte
 	var err error
-	if h.Runner != nil {
-		opts := port.ExecRunOptions{
-			ProjectID: projectID,
-			SandboxRunOptions: port.SandboxRunOptions{
-				Command:      cmdStr,
-				WorkDir:      workDir,
-				Timeout:      timeout,
-				AllowNetwork: allowNet,
-			},
-		}
-		if grantedDomain != "" {
-			opts.ExtraDomains = []string{grantedDomain}
-		}
-		if h.Sandbox != nil {
-			if u := strings.TrimSpace(h.Sandbox.ProxyURL()); u != "" {
-				opts.AllowlistProxy = egress.ProxyAddrFromURL(u)
-			}
-		}
-		out, err = h.Runner.Run(ctx, opts)
-	} else {
+	if h.Sandbox != nil {
 		opts := port.SandboxRunOptions{
 			Command:      cmdStr,
 			WorkDir:      workDir,
+			ProjectID:    projectID,
 			Timeout:      timeout,
 			AllowNetwork: allowNet,
 		}
 		if grantedDomain != "" {
 			opts.ExtraDomains = []string{grantedDomain}
 		}
-		if h.Sandbox != nil {
-			out, err = h.Sandbox.Run(ctx, opts)
-		} else {
-			out, err = hostRunShell(ctx, opts)
-		}
+		out, err = h.Sandbox.Run(ctx, opts)
+	} else {
+		out, err = hostRunShell(ctx, port.SandboxRunOptions{
+			Command:      cmdStr,
+			WorkDir:      workDir,
+			Timeout:      timeout,
+			AllowNetwork: allowNet,
+		})
 	}
 
 	content := strings.TrimSpace(string(out))

@@ -30,18 +30,29 @@ runtime:
   #     action: ask
   #   - pattern: "exec_shell"
   #     action: ask
-  # OS sandbox for exec_shell (Seatbelt / Landlock|bwrap / win-token|WSL2).
+  # Unified sandbox backends for exec_shell. All backends share one interface:
+  #   auto (probe best OS sandbox) | seatbelt | landlock | bwrap | win-token |
+  #   wsl2 | podman | docker | apple-container | host-weak (direct OS execution)
   # Modes: read-only | workspace-write | danger-full-access
   # Network: deny | allow | allowlist
   # allowlist: OS net stays open so the process can reach a host-side loopback proxy;
   #   only hosts in allowlist_domains are permitted (exact or "*.example.com").
   #   Empty allowlist_domains fails closed (treated as deny). Clients that ignore
   #   HTTP(S)_PROXY / ALL_PROXY can bypass; v1 does not add iptables/pf redirection.
-  # Backend: empty = auto-probe; or seatbelt | landlock | bwrap | win-token | wsl2 | host-weak
+  # Container backends (podman/docker/apple-container) run one long-lived container
+  # per project. The image tar is NOT shipped in app packages — download
+  # danmo-work-env-linux-*.tar.gz from GitHub Releases into ~/.danmo-work/env/
+  # (or set WORK_ENV_TAR / tar_path). Never registry-pulled; runtime only load.
+  #   image/workspace_mount/resources apply only to container backends.
+  #   workspace_mount: "" (or "same") = host project abs path so file tools & shell agree.
+  #   resources: empty = unlimited (no host auto-infer); set cpus/memory in Settings.
   # Shell (Windows host/win-token only): auto | bash | cmd
   # auto prefers bundled/system Microsoft Coreutils with cmd, then Git Bash, else cmd.
-  # WSL2 always uses bash inside WSL.
+  # WSL2 always uses bash inside WSL. Container backends always use sh inside the image.
   # Windows desktop NSIS installs Coreutils by default into ~/.danmo-work/bin/coreutils/.
+  # When the sandbox is disabled (or danger-full-access), the factory returns the
+  # host-weak backend (direct OS execution).
+  # Legacy runtime.environment container settings are migrated here on load.
   sandbox:
     enabled: true
     mode: "workspace-write"
@@ -61,20 +72,10 @@ runtime:
     #   - "pypi.org"
     backend: ""
     shell: "auto"
-  # Optional OCI execution environment (one long-lived container per project).
-  # Image tar is NOT shipped in app packages — download danmo-work-env-linux-*.tar.gz
-  # from GitHub Releases into ~/.danmo-work/env/ (or set WORK_ENV_TAR / tar_path).
-  # Never registry-pulled; runtime only load (podman|docker|apple-container).
-  # backend: local (default) | container
-  # engine: auto | podman | docker | apple-container
-  # resources: empty = unlimited (no host auto-infer); set cpus/memory in Settings
-  environment:
-    backend: "local"
-    engine: "auto"
+    # ── container-backend params (ignored unless backend is a container engine) ──
     image: "localhost/danmo-work-env:bundled"
-    # workspace_mount: ""  # empty/same = host project abs path (file tools & shell agree)
-    # workspace_mount: "/workspace"  # optional fixed in-container path
-    workspace_mount: ""
+    # tar_path: ""  # override tar discovery (WORK_ENV_TAR / ~/.danmo-work/env/ / out/env/)
+    workspace_mount: ""  # empty/same = host project abs path; or a fixed in-container path
     resources:
       cpus: ""      # e.g. "2" — empty = unlimited
       memory: ""    # e.g. "2g" — empty = unlimited

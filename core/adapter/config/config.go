@@ -210,7 +210,43 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 			cfg.Runtime.Memory.ReadTopK = 10
 		}
 	}
+	migrateSandboxBackends(&cfg)
 	return &cfg, nil
+}
+
+// migrateSandboxBackends folds the legacy runtime.environment section into the
+// unified runtime.sandbox backends. Container engines (podman / docker /
+// apple-container) are now first-class sandbox backends; their params live
+// under runtime.sandbox. The legacy section is cleared so the next save writes
+// the unified schema.
+func migrateSandboxBackends(cfg *domain.ConfigFile) {
+	if cfg.Runtime.Environment == nil {
+		return
+	}
+	env := cfg.Runtime.Environment
+	sb := &cfg.Runtime.Sandbox
+	switch strings.ToLower(strings.TrimSpace(string(env.Backend))) {
+	case "container", "oci":
+		if strings.TrimSpace(sb.Backend) == "" {
+			switch env.Engine {
+			case domain.EnvironmentEnginePodman, domain.EnvironmentEngineDocker, domain.EnvironmentEngineAppleContainer:
+				sb.Backend = string(env.Engine)
+			}
+		}
+		if strings.TrimSpace(sb.Image) == "" && strings.TrimSpace(env.Image) != "" {
+			sb.Image = env.Image
+		}
+		if strings.TrimSpace(sb.TarPath) == "" && strings.TrimSpace(env.TarPath) != "" {
+			sb.TarPath = env.TarPath
+		}
+		if strings.TrimSpace(sb.WorkspaceMount) == "" && strings.TrimSpace(env.WorkspaceMount) != "" {
+			sb.WorkspaceMount = env.WorkspaceMount
+		}
+		if sb.Resources == (domain.EnvironmentResources{}) && env.Resources != (domain.EnvironmentResources{}) {
+			sb.Resources = env.Resources
+		}
+	}
+	cfg.Runtime.Environment = nil
 }
 
 // migrateLegacyModelLimits reads pre-rename llm.model_limits entries.

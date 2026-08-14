@@ -21,7 +21,7 @@ import { providerBadge, customProviderBadge } from '@/utils/provider-icon'
 import Skeleton from '@/components/common/Skeleton.vue'
 import { useAppUpdater } from '@/composables/useAppUpdater'
 import { isTauriRuntime } from '@/utils/desktop'
-import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider, ModelConfig, ConfigMarketSection, MarketSourceConfig } from '@/types/mission'
+import type { LLMProviderType, LLMProviderConfig, LLMModelRef, LLMProviderPreset, SearchProvider, ModelConfig, ConfigMarketSection, MarketSourceConfig, SandboxBackendInfo } from '@/types/mission'
 
 type SettingsTab = 'runtime' | 'models' | 'modelConfig' | 'search' | 'market' | 'weixin' | 'feishu' | 'wecom' | 'qq' | 'hub' | 'appearance' | 'about'
 
@@ -183,8 +183,9 @@ const runtimeForm = ref({
   sandboxAllowlistDomains: '',
   sandboxBackend: '',
   sandboxShell: 'auto',
-  envBackend: 'local' as 'local' | 'container',
-  envEngine: 'auto' as 'auto' | 'podman' | 'docker' | 'apple-container',
+  envImage: '',
+  envTarPath: '',
+  envWorkspaceMount: '',
   envCpus: '',
   envMemory: '',
   browserEnabled: true,
@@ -242,6 +243,19 @@ const showGitBashHint = computed(() => {
   if (st.shell && st.shell !== 'cmd') return false
   return true
 })
+
+const CONTAINER_BACKEND_NAMES = ['podman', 'docker', 'apple-container']
+
+// All probed backends, flattened for the settings page (platform-relevant only).
+const sandboxBackends = computed(() => runtimeConfig.sandboxStatus?.backends ?? [])
+
+const isContainerBackend = computed(() => CONTAINER_BACKEND_NAMES.includes(runtimeForm.value.sandboxBackend))
+
+function backendLabel(b: SandboxBackendInfo) {
+  const label = t(`settings.sandboxBackend_${b.name}`, b.name)
+  const unavail = !b.available && b.reason ? ` — ${b.reason}` : ''
+  return `${label}${unavail}`
+}
 
 const ALLOWLIST_PRESET_GROUPS: {
   id: string
@@ -1423,25 +1437,150 @@ onUnmounted(() => {
               />
             </label>
             <template v-if="runtimeForm.sandboxEnabled">
-              <div class="settings-form-row">
-                <div class="settings-field settings-field--half">
-                  <span class="settings-field__label">{{ $t('settings.sandboxMode') }}</span>
-                  <DqSelect v-model="runtimeForm.sandboxMode">
-                    <DqOption value="read-only" :label="$t('settings.sandboxModeReadOnly')" />
-                    <DqOption value="workspace-write" :label="$t('settings.sandboxModeWorkspaceWrite')" />
-                    <DqOption value="danger-full-access" :label="$t('settings.sandboxModeDanger')" />
-                  </DqSelect>
-                </div>
-                <div class="settings-field settings-field--half">
-                  <span class="settings-field__label">{{ $t('settings.sandboxNetwork') }}</span>
-                  <DqSelect v-model="runtimeForm.sandboxNetwork">
-                    <DqOption value="deny" :label="$t('settings.sandboxNetworkDeny')" />
-                    <DqOption value="allowlist" :label="$t('settings.sandboxNetworkAllowlistRecommended')" />
-                    <DqOption value="allow" :label="$t('settings.sandboxNetworkAllow')" />
-                  </DqSelect>
-                </div>
+              <div class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.sandboxBackend') }}</span>
+                <DqSelect v-model="runtimeForm.sandboxBackend">
+                  <DqOption value="" :label="$t('settings.sandboxBackendAuto')" />
+                  <DqOption
+                    v-for="b in sandboxBackends"
+                    :key="b.name"
+                    :value="b.name"
+                    :disabled="!b.available"
+                    :label="backendLabel(b)"
+                  />
+                </DqSelect>
               </div>
-              <p class="settings-form-group__desc">{{ $t('settings.sandboxNetworkDesc') }}</p>
+              <p class="settings-form-group__desc">{{ $t('settings.sandboxBackendDesc') }}</p>
+
+              <!-- OS sandbox backend params -->
+              <template v-if="!isContainerBackend">
+                <div class="settings-form-row">
+                  <div class="settings-field settings-field--half">
+                    <span class="settings-field__label">{{ $t('settings.sandboxMode') }}</span>
+                    <DqSelect v-model="runtimeForm.sandboxMode">
+                      <DqOption value="read-only" :label="$t('settings.sandboxModeReadOnly')" />
+                      <DqOption value="workspace-write" :label="$t('settings.sandboxModeWorkspaceWrite')" />
+                      <DqOption value="danger-full-access" :label="$t('settings.sandboxModeDanger')" />
+                    </DqSelect>
+                  </div>
+                  <div class="settings-field settings-field--half">
+                    <span class="settings-field__label">{{ $t('settings.sandboxNetwork') }}</span>
+                    <DqSelect v-model="runtimeForm.sandboxNetwork">
+                      <DqOption value="deny" :label="$t('settings.sandboxNetworkDeny')" />
+                      <DqOption value="allowlist" :label="$t('settings.sandboxNetworkAllowlistRecommended')" />
+                      <DqOption value="allow" :label="$t('settings.sandboxNetworkAllow')" />
+                    </DqSelect>
+                  </div>
+                </div>
+                <p class="settings-form-group__desc">{{ $t('settings.sandboxNetworkDesc') }}</p>
+                <div class="settings-form-row">
+                  <div class="settings-field settings-field--half">
+                    <span class="settings-field__label">{{ $t('settings.sandboxShell') }}</span>
+                    <DqSelect v-model="runtimeForm.sandboxShell">
+                      <DqOption value="auto" :label="$t('settings.sandboxShellAuto')" />
+                      <DqOption value="bash" :label="$t('settings.sandboxShellBash')" />
+                      <DqOption value="cmd" :label="$t('settings.sandboxShellCmd')" />
+                    </DqSelect>
+                  </div>
+                </div>
+                <p class="settings-form-group__desc">{{ $t('settings.sandboxShellDesc') }}</p>
+              </template>
+
+              <!-- Container backend params (podman / docker / apple-container) -->
+              <template v-else>
+                <div class="settings-form-row">
+                  <div class="settings-field settings-field--half">
+                    <span class="settings-field__label">{{ $t('settings.sandboxNetwork') }}</span>
+                    <DqSelect v-model="runtimeForm.sandboxNetwork">
+                      <DqOption value="deny" :label="$t('settings.sandboxNetworkDeny')" />
+                      <DqOption value="allowlist" :label="$t('settings.sandboxNetworkAllowlistRecommended')" />
+                      <DqOption value="allow" :label="$t('settings.sandboxNetworkAllow')" />
+                    </DqSelect>
+                  </div>
+                  <div class="settings-field settings-field--half">
+                    <span class="settings-field__label">{{ $t('settings.envImage') }}</span>
+                    <DqInput v-model="runtimeForm.envImage" :placeholder="$t('settings.envImagePlaceholder')" />
+                  </div>
+                </div>
+                <p class="settings-form-group__desc">{{ $t('settings.sandboxNetworkDesc') }}</p>
+                <div class="settings-form-row">
+                  <div class="settings-field settings-field--half">
+                    <span class="settings-field__label">{{ $t('settings.envWorkspaceMount') }}</span>
+                    <DqInput
+                      v-model="runtimeForm.envWorkspaceMount"
+                      :placeholder="$t('settings.envWorkspaceMountPlaceholder')"
+                    />
+                  </div>
+                  <div class="settings-field settings-field--half">
+                    <span class="settings-field__label">{{ $t('settings.envTarPath') }}</span>
+                    <DqInput
+                      v-model="runtimeForm.envTarPath"
+                      :placeholder="$t('settings.envTarPathPlaceholder')"
+                    />
+                  </div>
+                </div>
+                <p class="settings-form-group__desc">{{ $t('settings.envTarVariantsDesc') }}</p>
+                <div
+                  v-for="v in envTarVariants"
+                  :key="v.arch"
+                  class="settings-form-row"
+                  style="align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px"
+                >
+                  <DqButton
+                    size="sm"
+                    :loading="runtimeConfig.downloadingTar === v.arch"
+                    :disabled="!!runtimeConfig.downloadingTar"
+                    @click="downloadEnvTar(v.arch)"
+                  >
+                    {{
+                      (v.present
+                        ? $t('settings.envTarRedownloadArch', { arch: v.arch })
+                        : $t('settings.envTarDownloadArch', { arch: v.arch }))
+                        + (v.recommended ? ` (${$t('settings.envTarRecommended')})` : '')
+                    }}
+                  </DqButton>
+                  <a
+                    v-if="v.downloadUrl"
+                    class="settings-link"
+                    :href="v.downloadUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {{ v.assetName }}
+                  </a>
+                  <span v-if="v.present" class="settings-form-group__desc" style="margin: 0">
+                    {{ $t('settings.envTarInstalled', {
+                      path: v.path || '',
+                      size: formatTarBytes(v.bytes || 0),
+                    }) }}
+                  </span>
+                  <span v-else class="settings-form-group__desc" style="margin: 0">
+                    {{ $t('settings.envTarMissingArch', { arch: v.arch }) }}
+                  </span>
+                </div>
+                <p class="settings-form-group__desc">{{ $t('settings.envResourcesDesc') }}</p>
+                <div class="settings-form-row">
+                  <div class="settings-field settings-field--half">
+                    <span class="settings-field__label">{{ $t('settings.envCpus') }}</span>
+                    <DqInput v-model="runtimeForm.envCpus" :placeholder="$t('settings.envCpusPlaceholder')" />
+                  </div>
+                  <div class="settings-field settings-field--half">
+                    <span class="settings-field__label">{{ $t('settings.envMemory') }}</span>
+                    <DqInput v-model="runtimeForm.envMemory" :placeholder="$t('settings.envMemoryPlaceholder')" />
+                  </div>
+                </div>
+                <div v-if="environmentStatusText" class="settings-sandbox-status">
+                  <span class="settings-field__label">{{ $t('settings.envStatus') }}</span>
+                  <code class="settings-sandbox-status__value">{{ environmentStatusText }}</code>
+                  <p
+                    v-if="runtimeConfig.environmentStatus?.degraded && runtimeConfig.environmentStatus.degradedReason"
+                    class="settings-sandbox-status__degraded"
+                  >
+                    {{ $t('settings.sandboxDegraded') }}: {{ runtimeConfig.environmentStatus.degradedReason }}
+                  </p>
+                </div>
+              </template>
+
               <template v-if="runtimeForm.sandboxNetwork === 'allowlist'">
                 <div class="settings-field">
                   <span class="settings-field__label">{{ $t('settings.sandboxAllowlistDomains') }}</span>
@@ -1473,17 +1612,7 @@ onUnmounted(() => {
                 </div>
                 <p class="settings-form-group__desc">{{ $t('settings.sandboxAllowlistDomainsDesc') }}</p>
               </template>
-              <div class="settings-form-row">
-                <div class="settings-field settings-field--half">
-                  <span class="settings-field__label">{{ $t('settings.sandboxShell') }}</span>
-                  <DqSelect v-model="runtimeForm.sandboxShell">
-                    <DqOption value="auto" :label="$t('settings.sandboxShellAuto')" />
-                    <DqOption value="bash" :label="$t('settings.sandboxShellBash')" />
-                    <DqOption value="cmd" :label="$t('settings.sandboxShellCmd')" />
-                  </DqSelect>
-                </div>
-              </div>
-              <p class="settings-form-group__desc">{{ $t('settings.sandboxShellDesc') }}</p>
+
               <div v-if="sandboxStatusText" class="settings-sandbox-status">
                 <span class="settings-field__label">{{ $t('settings.sandboxStatus') }}</span>
                 <code class="settings-sandbox-status__value">{{ sandboxStatusText }}</code>
@@ -1495,87 +1624,6 @@ onUnmounted(() => {
                 </p>
                 <p v-if="showGitBashHint" class="settings-sandbox-status__degraded">
                   {{ $t('settings.sandboxShellHint') }}
-                </p>
-              </div>
-            </template>
-            <p class="settings-form-group__desc">{{ $t('settings.envBackendDesc') }}</p>
-            <div class="settings-form-row">
-              <div class="settings-field settings-field--half">
-                <span class="settings-field__label">{{ $t('settings.envBackend') }}</span>
-                <DqSelect v-model="runtimeForm.envBackend">
-                  <DqOption value="local" :label="$t('settings.envBackendLocal')" />
-                  <DqOption value="container" :label="$t('settings.envBackendContainer')" />
-                </DqSelect>
-              </div>
-              <div v-if="runtimeForm.envBackend === 'container'" class="settings-field settings-field--half">
-                <span class="settings-field__label">{{ $t('settings.envEngine') }}</span>
-                <DqSelect v-model="runtimeForm.envEngine">
-                  <DqOption value="auto" :label="$t('settings.envEngineAuto')" />
-                  <DqOption value="podman" label="Podman" />
-                  <DqOption value="docker" label="Docker" />
-                  <DqOption value="apple-container" :label="$t('settings.envEngineApple')" />
-                </DqSelect>
-              </div>
-            </div>
-            <template v-if="runtimeForm.envBackend === 'container'">
-              <p class="settings-form-group__desc">{{ $t('settings.envTarVariantsDesc') }}</p>
-              <div
-                v-for="v in envTarVariants"
-                :key="v.arch"
-                class="settings-form-row"
-                style="align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px"
-              >
-                <DqButton
-                  size="sm"
-                  :loading="runtimeConfig.downloadingTar === v.arch"
-                  :disabled="!!runtimeConfig.downloadingTar"
-                  @click="downloadEnvTar(v.arch)"
-                >
-                  {{
-                    (v.present
-                      ? $t('settings.envTarRedownloadArch', { arch: v.arch })
-                      : $t('settings.envTarDownloadArch', { arch: v.arch }))
-                      + (v.recommended ? ` (${$t('settings.envTarRecommended')})` : '')
-                  }}
-                </DqButton>
-                <a
-                  v-if="v.downloadUrl"
-                  class="settings-link"
-                  :href="v.downloadUrl"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {{ v.assetName }}
-                </a>
-                <span v-if="v.present" class="settings-form-group__desc" style="margin: 0">
-                  {{ $t('settings.envTarInstalled', {
-                    path: v.path || '',
-                    size: formatTarBytes(v.bytes || 0),
-                  }) }}
-                </span>
-                <span v-else class="settings-form-group__desc" style="margin: 0">
-                  {{ $t('settings.envTarMissingArch', { arch: v.arch }) }}
-                </span>
-              </div>
-              <p class="settings-form-group__desc">{{ $t('settings.envResourcesDesc') }}</p>
-              <div class="settings-form-row">
-                <div class="settings-field settings-field--half">
-                  <span class="settings-field__label">{{ $t('settings.envCpus') }}</span>
-                  <DqInput v-model="runtimeForm.envCpus" :placeholder="$t('settings.envCpusPlaceholder')" />
-                </div>
-                <div class="settings-field settings-field--half">
-                  <span class="settings-field__label">{{ $t('settings.envMemory') }}</span>
-                  <DqInput v-model="runtimeForm.envMemory" :placeholder="$t('settings.envMemoryPlaceholder')" />
-                </div>
-              </div>
-              <div v-if="environmentStatusText" class="settings-sandbox-status">
-                <span class="settings-field__label">{{ $t('settings.envStatus') }}</span>
-                <code class="settings-sandbox-status__value">{{ environmentStatusText }}</code>
-                <p
-                  v-if="runtimeConfig.environmentStatus?.degraded && runtimeConfig.environmentStatus.degradedReason"
-                  class="settings-sandbox-status__degraded"
-                >
-                  {{ $t('settings.sandboxDegraded') }}: {{ runtimeConfig.environmentStatus.degradedReason }}
                 </p>
               </div>
             </template>

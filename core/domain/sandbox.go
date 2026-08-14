@@ -19,18 +19,35 @@ const (
 	SandboxNetworkAllowlist SandboxNetwork = "allowlist"
 )
 
-// SandboxBackend identifies the OS enforcement mechanism in use.
+// SandboxBackend identifies the enforcement mechanism in use. All backends —
+// OS sandboxes (seatbelt / landlock / bwrap / win-token / wsl2), OCI container
+// engines (podman / docker / apple-container), and direct host execution
+// (host-weak) — implement the same backend interface and are produced by the
+// sandbox factory.
 type SandboxBackend string
 
 const (
-	SandboxBackendSeatbelt SandboxBackend = "seatbelt"
-	SandboxBackendLandlock SandboxBackend = "landlock"
-	SandboxBackendBwrap    SandboxBackend = "bwrap"
-	SandboxBackendWinToken SandboxBackend = "win-token"
-	SandboxBackendWSL2     SandboxBackend = "wsl2"
-	SandboxBackendHostWeak SandboxBackend = "host-weak"
-	SandboxBackendDisabled SandboxBackend = "disabled"
+	SandboxBackendSeatbelt       SandboxBackend = "seatbelt"
+	SandboxBackendLandlock       SandboxBackend = "landlock"
+	SandboxBackendBwrap          SandboxBackend = "bwrap"
+	SandboxBackendWinToken       SandboxBackend = "win-token"
+	SandboxBackendWSL2           SandboxBackend = "wsl2"
+	SandboxBackendPodman         SandboxBackend = "podman"
+	SandboxBackendDocker         SandboxBackend = "docker"
+	SandboxBackendAppleContainer SandboxBackend = "apple-container"
+	SandboxBackendHostWeak       SandboxBackend = "host-weak"
+	SandboxBackendDisabled       SandboxBackend = "disabled"
 )
+
+// IsContainerBackend reports whether the backend runs commands in an OCI
+// container engine instead of an OS-level sandbox.
+func IsContainerBackend(b SandboxBackend) bool {
+	switch b {
+	case SandboxBackendPodman, SandboxBackendDocker, SandboxBackendAppleContainer:
+		return true
+	}
+	return false
+}
 
 // SandboxShellPreference selects the host shell interpreter for exec_shell.
 // Applies to win-token / host-weak paths on Windows; WSL2 backend always uses bash inside WSL.
@@ -48,12 +65,37 @@ type ConfigSandboxSection struct {
 	// AllowlistDomains is used when Network=allowlist. Exact hosts or "*.example.com" suffixes.
 	// Empty with allowlist fails closed (treated as deny).
 	AllowlistDomains []string `json:"allowlistDomains,omitempty" mapstructure:"allowlist_domains" yaml:"allowlist_domains,omitempty"`
-	// Backend forces a backend when non-empty (e.g. "bwrap", "wsl2", "host-weak").
-	// Empty means auto-probe.
+	// Backend selects one unified backend: auto (probe best OS sandbox) |
+	// seatbelt | landlock | bwrap | win-token | wsl2 | podman | docker |
+	// apple-container | host-weak. Container engines are only used when
+	// explicitly selected. Empty means auto.
 	Backend string `json:"backend,omitempty" mapstructure:"backend" yaml:"backend,omitempty"`
 	// Shell selects the Windows host interpreter: auto | bash | cmd. Empty means auto.
-	// Ignored for WSL2 backend (always bash via wsl). Unix always uses sh.
+	// Ignored for WSL2 (always bash via wsl) and container backends. Unix always uses sh.
 	Shell string `json:"shell,omitempty" mapstructure:"shell" yaml:"shell,omitempty"`
+	// Container params (only used when Backend is a container engine):
+	// Image is the local tag after load (default localhost/danmo-work-env:bundled).
+	Image string `json:"image,omitempty" mapstructure:"image" yaml:"image,omitempty"`
+	// TarPath overrides discovery of the optional OCI env tar (user-downloaded
+	// Release asset, not shipped inside the app package). Empty = auto.
+	TarPath string `json:"tarPath,omitempty" mapstructure:"tar_path" yaml:"tar_path,omitempty"`
+	// WorkspaceMount is the path inside the container. Empty / "same" = use the
+	// host project absolute path so file tools and exec_shell share paths.
+	WorkspaceMount string `json:"workspaceMount,omitempty" mapstructure:"workspace_mount" yaml:"workspace_mount,omitempty"`
+	// Resources: default unlimited; optional user overrides (Settings / config).
+	Resources EnvironmentResources `json:"resources,omitempty" mapstructure:"resources" yaml:"resources,omitempty"`
+}
+
+// SandboxBackendInfo describes one probed backend for the settings page.
+type SandboxBackendInfo struct {
+	Name         SandboxBackend `json:"name"`
+	Available    bool           `json:"available"`
+	Reason       string         `json:"reason,omitempty"`
+	Capabilities []string       `json:"capabilities,omitempty"`
+	// Container is true for OCI engine backends (podman/docker/apple-container).
+	Container bool `json:"container,omitempty"`
+	// AutoPreferred marks the backend the auto probe would select.
+	AutoPreferred bool `json:"autoPreferred,omitempty"`
 }
 
 // SandboxStatus is the probed runtime sandbox capability surface.
@@ -78,4 +120,6 @@ type SandboxStatus struct {
 	ShellPath string `json:"shellPath,omitempty"`
 	// CoreutilsBin is the Windows Coreutils applet directory on PATH (ls.exe, cat.exe, …); empty when unavailable.
 	CoreutilsBin string `json:"coreutilsBin,omitempty"`
+	// Backends lists every probed backend available on this host (settings page).
+	Backends []SandboxBackendInfo `json:"backends,omitempty"`
 }

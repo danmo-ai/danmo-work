@@ -226,6 +226,14 @@ export interface ConfigFile {
       allowlistDomains?: string[]
       backend?: string
       shell?: 'auto' | 'bash' | 'cmd' | string
+      image?: string
+      tarPath?: string
+      workspaceMount?: string
+      resources?: {
+        cpus?: string
+        memory?: string
+        pids?: number
+      }
     }
     environment?: {
       backend?: 'local' | 'container' | string
@@ -334,6 +342,15 @@ export interface ConfigMarketSection {
   sources: MarketSourceConfig[]
 }
 
+export interface SandboxBackendInfo {
+  name: string
+  available: boolean
+  reason?: string
+  capabilities?: string[]
+  container?: boolean
+  autoPreferred?: boolean
+}
+
 export interface SandboxStatus {
   enabled: boolean
   mode: string
@@ -349,6 +366,7 @@ export interface SandboxStatus {
   shell?: string
   shellPath?: string
   coreutilsBin?: string
+  backends?: SandboxBackendInfo[]
 }
 
 export interface EnvironmentTarVariant {

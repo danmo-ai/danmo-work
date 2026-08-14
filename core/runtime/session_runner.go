@@ -289,7 +289,7 @@ func (e *Engine) environmentStatus() domain.EnvironmentStatus {
 	if ex == nil {
 		return domain.EnvironmentStatus{}
 	}
-	return ex.Status()
+	return ex.EnvironmentStatus()
 }
 
 func (e *Engine) effectiveIsolation() domain.EffectiveIsolation {
@@ -303,7 +303,7 @@ func (e *Engine) effectiveIsolation() domain.EffectiveIsolation {
 	}
 	envSt := domain.EnvironmentStatus{}
 	if ex != nil {
-		envSt = ex.Status()
+		envSt = ex.EnvironmentStatus()
 	}
 	return domain.ComputeEffectiveIsolation(sbSt, envSt)
 }

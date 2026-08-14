@@ -1298,9 +1298,6 @@ func updateConfig(h *Handler) gin.HandlerFunc {
 		if h.Sandbox != nil && req.Runtime != nil {
 			h.Sandbox.Configure(cfg.Runtime.Sandbox)
 		}
-		if h.Execution != nil && req.Runtime != nil {
-			h.Execution.Configure(cfg.Runtime.Environment, cfg.Runtime.Sandbox)
-		}
 		if h.Browser != nil && req.Runtime != nil {
 			h.Browser.Configure(cfg.Runtime.Browser)
 		}
@@ -1350,11 +1347,6 @@ func getEnvironmentStatus(h *Handler) gin.HandlerFunc {
 			})
 			return
 		}
-		if h.Config != nil {
-			if cfg, err := h.Config.Get(c); err == nil {
-				h.Execution.Configure(cfg.Runtime.Environment, cfg.Runtime.Sandbox)
-			}
-		}
 		c.JSON(http.StatusOK, h.Execution.StatusWithTar(Version))
 	}
 }
@@ -1377,11 +1369,6 @@ func downloadEnvironmentTar(h *Handler) gin.HandlerFunc {
 		}
 		if h.Execution != nil {
 			h.Execution.NotifyTarInstalled()
-			if h.Config != nil {
-				if cfg, err := h.Config.Get(c); err == nil {
-					h.Execution.Configure(cfg.Runtime.Environment, cfg.Runtime.Sandbox)
-				}
-			}
 		}
 		st := domain.EnvironmentStatus{}
 		if h.Execution != nil {

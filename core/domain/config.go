@@ -44,19 +44,19 @@ type ConfigInstanceSection struct {
 }
 
 type ConfigRuntimeSection struct {
-	AutoApprove     bool                     `json:"autoApprove" mapstructure:"auto_approve"`
-	PermissionMode  PermissionMode           `json:"permissionMode" mapstructure:"permission_mode"`
-	PermissionRules []PermissionRule         `json:"permissionRules,omitempty" mapstructure:"permission_rules" yaml:"permission_rules,omitempty"`
-	Sandbox         ConfigSandboxSection     `json:"sandbox" mapstructure:"sandbox"`
-	Environment     ConfigEnvironmentSection `json:"environment" mapstructure:"environment"`
-	Browser         ConfigBrowserSection     `json:"browser" mapstructure:"browser"`
-	Turn            ConfigTurnSection        `json:"turn" mapstructure:"turn"`
-	Team            ConfigTeamSection        `json:"team" mapstructure:"team"`
-	Tools           ConfigToolsSection       `json:"tools" mapstructure:"tools"`
-	Memory          ConfigMemorySection      `json:"memory" mapstructure:"memory"`
-	Table           ConfigTableSection       `json:"table" mapstructure:"table"`
-	Knowledge       ConfigKnowledgeSection   `json:"knowledge" mapstructure:"knowledge"`
-	Compaction      ConfigCompactionSection  `json:"compaction" mapstructure:"compaction"`
+	AutoApprove     bool                      `json:"autoApprove" mapstructure:"auto_approve"`
+	PermissionMode  PermissionMode            `json:"permissionMode" mapstructure:"permission_mode"`
+	PermissionRules []PermissionRule          `json:"permissionRules,omitempty" mapstructure:"permission_rules" yaml:"permission_rules,omitempty"`
+	Sandbox         ConfigSandboxSection      `json:"sandbox" mapstructure:"sandbox"`
+	Environment     *ConfigEnvironmentSection `json:"environment,omitempty" mapstructure:"environment" yaml:"environment,omitempty"`
+	Browser         ConfigBrowserSection      `json:"browser" mapstructure:"browser"`
+	Turn            ConfigTurnSection         `json:"turn" mapstructure:"turn"`
+	Team            ConfigTeamSection         `json:"team" mapstructure:"team"`
+	Tools           ConfigToolsSection        `json:"tools" mapstructure:"tools"`
+	Memory          ConfigMemorySection       `json:"memory" mapstructure:"memory"`
+	Table           ConfigTableSection        `json:"table" mapstructure:"table"`
+	Knowledge       ConfigKnowledgeSection    `json:"knowledge" mapstructure:"knowledge"`
+	Compaction      ConfigCompactionSection   `json:"compaction" mapstructure:"compaction"`
 }
 
 type ConfigCompactionSection struct {

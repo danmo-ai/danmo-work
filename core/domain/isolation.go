@@ -34,6 +34,13 @@ func ComputeEffectiveIsolation(sb SandboxStatus, env EnvironmentStatus) Effectiv
 		out.Source = IsolationContainer
 		return out
 	}
+	// Unified backends: container engines may be reported directly via the
+	// sandbox status (podman/docker/apple-container backends).
+	if sb.Enabled && IsContainerBackend(sb.Backend) && !sb.Degraded {
+		out.Strong = true
+		out.Source = IsolationContainer
+		return out
+	}
 	if isStrongOSSandbox(sb) {
 		out.Strong = true
 		out.Source = IsolationOSSandbox

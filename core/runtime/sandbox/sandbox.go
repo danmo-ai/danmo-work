@@ -1,6 +1,8 @@
 // Package sandbox provides OS-level process isolation for agent tool execution.
-// Backends align with mainstream coding agents: Seatbelt (macOS), Landlock/seccomp
-// with bubblewrap fallback (Linux), and restricted tokens (Windows).
+// All backends — Seatbelt (macOS), Landlock/seccomp with bubblewrap fallback
+// (Linux), restricted tokens / WSL2 (Windows), OCI container engines (podman,
+// docker, apple-container), and direct host execution (host-weak) — implement
+// the same backend interface and are built by BackendFactory.
 package sandbox
 
 import (
@@ -13,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"danmo-work/core/adapter/container"
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
 	"danmo-work/core/runtime/egress"
@@ -25,20 +28,17 @@ const (
 	reexecArg = "__dq-sandbox-landlock"
 )
 
-// Manager selects and runs the best available sandbox backend.
+// Manager selects and runs the sandbox backend via BackendFactory.
 type Manager struct {
 	mu             sync.RWMutex
 	cfg            domain.ConfigSandboxSection
 	status         domain.SandboxStatus
-	runner         runner
+	backend        Backend
+	osBackend      Backend // auto-probed OS sandbox (fallback for degraded containers)
+	factory        *BackendFactory
 	proxy          *netproxy.Server
 	sessionDomains map[string][]string // sessionID → Hard grants (scope=session)
 	turnDomains    map[string][]string // turnID → once-scope Hard grants
-}
-
-type runner interface {
-	name() domain.SandboxBackend
-	run(ctx context.Context, opts port.SandboxRunOptions, cfg domain.ConfigSandboxSection) ([]byte, error)
 }
 
 // New probes the host and returns a Manager. cfg may be partially filled;
@@ -47,6 +47,7 @@ func New(cfg domain.ConfigSandboxSection) *Manager {
 	cfg = normalizeConfig(cfg)
 	m := &Manager{
 		cfg:            cfg,
+		factory:        NewBackendFactory(),
 		sessionDomains: make(map[string][]string),
 		turnDomains:    make(map[string][]string),
 	}
@@ -81,11 +82,40 @@ func (m *Manager) Status() domain.SandboxStatus {
 	return m.status
 }
 
-// Close stops the allowlist proxy if running.
+// Close stops the allowlist proxy and tears down the backend.
 func (m *Manager) Close() error {
 	m.mu.Lock()
+	r := m.backend
+	err := m.stopProxyLocked()
+	m.mu.Unlock()
+	if r != nil {
+		if cerr := r.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}
+	return err
+}
+
+// Teardown stops and removes the per-project container (no-op for non-container
+// backends).
+func (m *Manager) Teardown(ctx context.Context, projectID string) error {
+	m.mu.RLock()
+	r := m.backend
+	m.mu.RUnlock()
+	if cs, ok := r.(containerState); ok {
+		return cs.Teardown(ctx, projectID)
+	}
+	return nil
+}
+
+// NotifyTarInstalled re-resolves the env tar path after a Settings download.
+func (m *Manager) NotifyTarInstalled() {
+	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.stopProxyLocked()
+	if cs, ok := m.backend.(containerState); ok {
+		cs.NotifyTarInstalled()
+		m.reprobeLocked()
+	}
 }
 
 // GrantSessionDomains merges hosts into the Hard allowlist for one session.
@@ -235,7 +265,8 @@ func (m *Manager) Run(ctx context.Context, opts port.SandboxRunOptions) ([]byte,
 
 	m.mu.RLock()
 	cfg := m.cfg
-	r := m.runner
+	r := m.backend
+	os := m.osBackend
 	status := m.status
 	proxyAddr := ""
 	if status.AllowlistActive && m.proxy != nil {
@@ -265,13 +296,101 @@ func (m *Manager) Run(ctx context.Context, opts port.SandboxRunOptions) ([]byte,
 		}()
 	}
 
-	if !cfg.Enabled || cfg.Mode == domain.SandboxModeDangerFullAccess || status.Backend == domain.SandboxBackendDisabled {
-		return runHost(ctx, opts, cfg, status.Backend)
-	}
 	if r == nil {
 		return runHost(ctx, opts, cfg, status.Backend)
 	}
-	return r.run(ctx, opts, cfg)
+	// Container backends degrade to the auto-probed OS sandbox when
+	// self-degraded (env tar missing / engine unreachable), mirroring the
+	// legacy local fallback.
+	if cs, ok := r.(containerState); ok && cs.Degraded() {
+		if os != nil {
+			return os.Run(ctx, opts, cfg)
+		}
+		return runHost(ctx, opts, cfg, status.Backend)
+	}
+	return r.Run(ctx, opts, cfg)
+}
+
+// EnvironmentStatus reports the container execution view. Local/empty when no
+// container backend is active.
+func (m *Manager) EnvironmentStatus() domain.EnvironmentStatus {
+	m.mu.RLock()
+	cfg := m.cfg
+	r := m.backend
+	m.mu.RUnlock()
+
+	cs, ok := r.(containerState)
+	if !ok {
+		return domain.EnvironmentStatus{Backend: domain.EnvironmentBackendLocal}
+	}
+	st := domain.EnvironmentStatus{
+		Backend:        domain.EnvironmentBackendContainer,
+		Engine:         cs.RuntimeName(),
+		Image:          cfg.Image,
+		ImageLoaded:    cs.ImageReady(),
+		TarPath:        container.ResolveTarPath(cfg.TarPath),
+		WorkspaceMount: cfg.WorkspaceMount,
+		Resources:      cfg.Resources,
+		ActiveProjects: cs.ActiveProjects(),
+	}
+	if strings.TrimSpace(st.Image) == "" {
+		st.Image = defaultContainerImage
+	}
+	if strings.TrimSpace(st.WorkspaceMount) == "" {
+		st.WorkspaceMount = "same-as-host"
+	}
+	if cs.Degraded() {
+		st.Degraded = true
+		st.DegradedReason = cs.DegradedReason()
+		st.Backend = domain.EnvironmentBackendLocal // effective
+	}
+	return st
+}
+
+// StatusWithTar fills tar download/install fields (version from server build).
+func (m *Manager) StatusWithTar(version string) domain.EnvironmentStatus {
+	st := m.EnvironmentStatus()
+	info := container.InspectTar(version)
+	st.TarPresent = info.Present
+	st.TarBytes = info.Bytes
+	st.TarArch = info.Arch
+	st.DownloadURL = info.DownloadURL
+	st.AssetName = info.AssetName
+	st.TarVariants = tarVariantsFrom(version)
+	if info.Path != "" {
+		st.TarPath = info.Path
+	}
+	if info.Present {
+		m.NotifyTarInstalled()
+		st = m.EnvironmentStatus()
+		st.TarPresent = info.Present
+		st.TarBytes = info.Bytes
+		st.TarArch = info.Arch
+		st.DownloadURL = info.DownloadURL
+		st.AssetName = info.AssetName
+		st.TarVariants = tarVariantsFrom(version)
+		if info.Path != "" {
+			st.TarPath = info.Path
+		}
+	}
+	return st
+}
+
+func tarVariantsFrom(version string) []domain.EnvironmentTarVariant {
+	list := container.ListTarVariants(version)
+	out := make([]domain.EnvironmentTarVariant, 0, len(list))
+	for _, t := range list {
+		out = append(out, domain.EnvironmentTarVariant{
+			Arch:        t.Arch,
+			Present:     t.Present,
+			Path:        t.Path,
+			Bytes:       t.Bytes,
+			DownloadURL: t.DownloadURL,
+			AssetName:   t.AssetName,
+			Recommended: t.Recommended,
+		})
+	}
+	return out
 }
 
 func (m *Manager) reprobe() {
@@ -287,6 +406,7 @@ func (m *Manager) reprobeLocked() {
 		Mode:     cfg.Mode,
 		Network:  cfg.Network,
 		Platform: runtime.GOOS,
+		Backends: m.factory.Available(cfg),
 	}
 
 	allowlistActive, allowlistReason := m.syncProxyLocked(cfg)
@@ -299,30 +419,44 @@ func (m *Manager) reprobeLocked() {
 	}
 
 	if !cfg.Enabled {
+		// Sandbox off: the factory returns direct host execution.
 		_ = m.stopProxyLocked()
 		st.AllowlistActive = false
 		st.AllowlistProxy = ""
-		st.Backend = domain.SandboxBackendDisabled
-		st.Capabilities = []string{"host"}
+		m.backend, st.Backend, st.Degraded, st.DegradedReason, st.Capabilities =
+			m.factory.Build(cfg, false)
+		m.osBackend = hostBackend{}
 		applyShellStatus(&st, resolveShell(cfg, st.Backend))
 		m.status = st
-		m.runner = hostRunner{}
-		return
-	}
-	if cfg.Mode == domain.SandboxModeDangerFullAccess {
-		_ = m.stopProxyLocked()
-		st.AllowlistActive = false
-		st.AllowlistProxy = ""
-		st.Backend = domain.SandboxBackendDisabled
-		st.Capabilities = []string{"full-access"}
-		applyShellStatus(&st, resolveShell(cfg, st.Backend))
-		m.status = st
-		m.runner = hostRunner{}
 		return
 	}
 
-	backend, r, degraded, reason, caps := selectBackend(cfg, allowlistActive)
-	st.Backend = backend
+	backend, name, degraded, reason, caps := m.factory.Build(cfg, allowlistActive)
+	// OS fallback used when a container backend is unavailable/degraded, so the
+	// fallback boundary is still the OS sandbox (mirrors legacy local fallback).
+	osFallback, osName, _, _, _ := selectOSBackend("auto", cfg, allowlistActive)
+	m.osBackend = osFallback
+
+	requested := domain.SandboxBackend(normalizeBackendName(cfg.Backend))
+	switch {
+	case domain.IsContainerBackend(requested) && name != requested:
+		// Engine missing: the factory degraded to host-weak. Prefer the OS
+		// sandbox as the fallback boundary and report it truthfully.
+		backend = osFallback
+		name = osName
+		degraded = true
+		reason = string(requested) + " backend unavailable (" + reason + "); falling back to " + string(osName)
+		caps = []string{string(osName)}
+	case domain.IsContainerBackend(requested):
+		if cs, ok := backend.(containerState); ok && cs.Degraded() {
+			degraded = true
+			reason = joinReason(reason, cs.DegradedReason()+"; falling back to "+string(osName))
+			// Report the effective boundary; recovers to the engine after tar install.
+			name = osName
+		}
+	}
+
+	st.Backend = name
 	st.Degraded = degraded
 	st.DegradedReason = reason
 	st.Capabilities = caps
@@ -337,9 +471,19 @@ func (m *Manager) reprobeLocked() {
 	if allowlistActive {
 		st.Capabilities = append(st.Capabilities, "allowlist-proxy")
 	}
-	applyShellStatus(&st, resolveShell(cfg, backend))
+	applyShellStatus(&st, resolveShell(cfg, name))
 	m.status = st
-	m.runner = r
+	m.backend = backend
+}
+
+func joinReason(a, b string) string {
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	return a + "; " + b
 }
 
 // syncProxyLocked starts/stops the allowlist proxy. Caller holds m.mu.
@@ -398,8 +542,6 @@ func sameStringSlice(a, b []string) bool {
 	return true
 }
 
-// selectBackend is implemented per-OS in sandbox_*.go files.
-
 func filterEnv(environ []string) []string {
 	// Drop secrets that should not leak into sandboxed shells by default.
 	denyPrefix := []string{
@@ -432,14 +574,6 @@ func networkAllowed(cfg domain.ConfigSandboxSection, opts port.SandboxRunOptions
 // needNetDeny reports whether backend selection should prefer network isolation.
 func needNetDeny(cfg domain.ConfigSandboxSection, allowlistProxyActive bool) bool {
 	return egress.NeedNetDeny(cfg.Network, allowlistProxyActive)
-}
-
-type hostRunner struct{}
-
-func (hostRunner) name() domain.SandboxBackend { return domain.SandboxBackendHostWeak }
-
-func (hostRunner) run(ctx context.Context, opts port.SandboxRunOptions, cfg domain.ConfigSandboxSection) ([]byte, error) {
-	return runHost(ctx, opts, cfg, domain.SandboxBackendHostWeak)
 }
 
 func runHost(ctx context.Context, opts port.SandboxRunOptions, cfg domain.ConfigSandboxSection, backend domain.SandboxBackend) ([]byte, error) {

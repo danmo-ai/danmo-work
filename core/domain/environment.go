@@ -34,9 +34,10 @@ type EnvironmentResources struct {
 	Pids int `json:"pids,omitempty" mapstructure:"pids" yaml:"pids"`
 }
 
-// ConfigEnvironmentSection is the optional OCI / local execution environment.
-// Container mode loads a user-downloaded CI image tar locally — never registry
-// pull, and the tar is not embedded in app release packages.
+// ConfigEnvironmentSection is the legacy optional OCI / local execution
+// environment section. Deprecated: container engines are now unified sandbox
+// backends selected via runtime.sandbox.backend. Legacy values are migrated
+// into ConfigSandboxSection on load and this section is cleared on save.
 type ConfigEnvironmentSection struct {
 	// Backend: local (default) | container
 	Backend EnvironmentBackend `json:"backend" mapstructure:"backend" yaml:"backend"`

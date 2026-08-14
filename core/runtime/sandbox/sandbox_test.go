@@ -44,7 +44,8 @@ func TestDangerFullAccessUsesHost(t *testing.T) {
 		Mode:    domain.SandboxModeDangerFullAccess,
 	})
 	st := m.Status()
-	if st.Backend != domain.SandboxBackendDisabled {
+	// Factory returns the host-weak backend when the sandbox is effectively off.
+	if st.Backend != domain.SandboxBackendHostWeak {
 		t.Fatalf("backend=%s", st.Backend)
 	}
 }
