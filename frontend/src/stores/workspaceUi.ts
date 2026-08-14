@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import type { OfficeKind, OfficeMode } from '@/utils/office-route'
 import { isWorkbenchId, type WorkbenchId } from '@/types/workbench'
 
-export type RightWorkspaceTab = 'plan' | 'files' | 'memory' | 'tables' | 'changes' | 'terminal'
+export type RightWorkspaceTab = 'plan' | 'files' | 'memory' | 'tables' | 'changes' | 'terminal' | 'trajectory'
 export type LayoutMode = 'chat' | 'stage' | 'immersive'
 
 const ACTIVE_WORKBENCH_KEY = 'app-active-workbench'

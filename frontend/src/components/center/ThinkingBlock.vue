@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 const props = defineProps<{
   text: string
   expanded: boolean
   seq: number
+  running?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -17,16 +18,59 @@ function formatLen(s: string): string {
   return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
 }
 
+function latestLine(s: string): string {
+  const t = s.trimEnd()
+  const i = t.lastIndexOf('\n')
+  return i === -1 ? t : t.slice(i + 1)
+}
+
 /** Full text for CSS ellipsis — fills the row to the trailing meta. */
-const preview = computed(() => props.text.replace(/\s+/g, ' ').trim())
+const preview = computed(() => {
+  const clean = props.text.replace(/\s+/g, ' ').trim()
+  return props.running ? latestLine(clean) : clean
+})
+
+const previewRef = ref<HTMLElement | null>(null)
+
+/** Frame-throttled tail follow (every 3 frames) — streams never fight the render loop. */
+let pendingFrame: number | null = null
+function scheduleTailScroll() {
+  if (pendingFrame !== null) return
+  let remaining = 3
+  const advance = () => {
+    remaining -= 1
+    if (remaining > 0) {
+      pendingFrame = requestAnimationFrame(advance)
+      return
+    }
+    pendingFrame = null
+    const el = previewRef.value
+    if (el) el.scrollLeft = el.scrollWidth - el.clientWidth
+  }
+  pendingFrame = requestAnimationFrame(advance)
+}
+
+watch(preview, () => {
+  if (!props.running) {
+    const el = previewRef.value
+    if (el) el.scrollLeft = 0
+    return
+  }
+  scheduleTailScroll()
+})
+
+onBeforeUnmount(() => {
+  if (pendingFrame !== null) cancelAnimationFrame(pendingFrame)
+})
 </script>
 
 <template>
-  <div class="thinking-block" :class="{ 'is-expanded': expanded }">
+  <div class="thinking-block" :class="{ 'is-expanded': expanded, 'is-running': running }">
     <button type="button" class="thinking-block__header" @click="emit('toggle', seq)">
-      <span v-if="!expanded" class="thinking-block__preview">{{ preview }}</span>
+      <span v-if="!expanded" ref="previewRef" class="thinking-block__preview">{{ preview }}</span>
       <span v-else class="thinking-block__hint">思考过程</span>
       <span class="thinking-block__trail">
+        <span v-if="running" class="thinking-block__live-dot" />
         <span class="thinking-block__meta">{{ formatLen(text) }}</span>
         <svg
           class="thinking-block__chevron"
@@ -99,6 +143,25 @@ const preview = computed(() => props.text.replace(/\s+/g, ' ').trim())
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+}
+
+.thinking-block__live-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--dq-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 18%, transparent);
+  animation: thinking-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 .thinking-block__meta {

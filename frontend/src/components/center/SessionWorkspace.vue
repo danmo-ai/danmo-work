@@ -31,6 +31,8 @@ import {
   Terminal,
   Library,
   Grid,
+  ListOrdered,
+  Check,
 } from '@danqing/dq-shell'
 import type { RightWorkspaceTab } from '@/stores/workspaceUi'
 import { renderMarkdown } from '@/utils/markdown-render'
@@ -56,6 +58,7 @@ const rightPanelRef = ref<InstanceType<typeof RightWorkspacePanel> | null>(null)
 const { tokensForTurn } = useSessionContextUsage()
 const isEditingTitle = ref(false)
 const editingTitle = ref('')
+const copiedId = ref(false)
 const composerRef = ref<InstanceType<typeof FloatingComposer> | null>(null)
 
 const bodyRef = ref<HTMLElement | null>(null)
@@ -79,6 +82,7 @@ const rightDrawerTitle = computed(() => {
     tables: t('sessions.tabTables'),
     changes: t('sessions.tabChanges'),
     terminal: t('sessions.tabTerminal'),
+    trajectory: t('sessions.tabTrajectory'),
   }
   return map[rightTab.value]
 })
@@ -107,6 +111,7 @@ const rightIconItems = computed(() => {
       badge: changesCount.value > 0 ? changesCount.value : undefined,
     },
     { value: 'terminal' as const, label: t('sessions.tabTerminal'), icon: Terminal },
+    { value: 'trajectory' as const, label: t('sessions.tabTrajectory'), icon: ListOrdered },
   ]
 })
 
@@ -232,6 +237,11 @@ function autoScrollToBottom(force = false) {
       el.scrollTop = el.scrollHeight
     }
   })
+}
+
+function backToBottom() {
+  userScrolledUp.value = false
+  autoScrollToBottom(true)
 }
 
 watch(
@@ -1463,6 +1473,10 @@ async function copySessionId() {
   if (!sessions.currentSession) return
   try {
     await navigator.clipboard.writeText(sessions.currentSession.id)
+    copiedId.value = true
+    window.setTimeout(() => {
+      copiedId.value = false
+    }, 1600)
     toast.success(t('sessions.copySessionIdDone'))
   } catch {
     toast.error(t('sessions.copySessionIdFailed'))
@@ -1611,11 +1625,13 @@ function onTitleKeydown(e: KeyboardEvent) {
           <button
             type="button"
             class="session-workspace__copy-btn"
+            :class="{ 'is-copied': copiedId }"
             :title="t('sessions.copySessionId')"
             :aria-label="t('sessions.copySessionId')"
             @click="copySessionId"
           >
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <Check v-if="copiedId" width="16" height="16" :stroke-width="2" class="session-workspace__copy-check" />
+            <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
               <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
             </svg>
@@ -1628,7 +1644,14 @@ function onTitleKeydown(e: KeyboardEvent) {
         />
       </div>
       <div class="session-workspace__actions">
-        <DqButton v-if="sessions.runningTurnId" type="warning" size="sm" @click="cancelRunning">
+        <DqButton
+          v-if="sessions.runningTurnId"
+          type="warning"
+          size="sm"
+          plain
+          class="session-workspace__stop"
+          @click="cancelRunning"
+        >
           {{ t('sessions.cancelRunning') }}
         </DqButton>
         <div class="session-workspace__tools" role="toolbar" :aria-label="t('sessions.rightWorkspace')">
@@ -1790,6 +1813,7 @@ function onTitleKeydown(e: KeyboardEvent) {
                     :text="finalText(ev)"
                     :expanded="isThinkingExpanded(ev.seq)"
                     :seq="ev.seq"
+                    :running="turn?.status === 'running'"
                     @toggle="toggleThinking"
                   />
                 </template>
@@ -1872,7 +1896,21 @@ function onTitleKeydown(e: KeyboardEvent) {
       </div>
 
       <ApprovalRail :anchors="approvalAnchors" @jump="jumpToApprovalAnchor" />
-      
+
+      <button
+        v-if="userScrolledUp && sessions.currentSession"
+        type="button"
+        class="session-workspace__to-bottom"
+        :style="{ bottom: `${composerOverlayPx + 16}px` }"
+        :title="t('sessions.toBottom')"
+        :aria-label="t('sessions.toBottom')"
+        @click="backToBottom"
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
       </div>
 
       <DocumentStage
@@ -1893,7 +1931,7 @@ function onTitleKeydown(e: KeyboardEvent) {
       :open="rightDrawerOpen"
       class="session-workspace__drawer"
       direction="rtl"
-      size="min(380px, 92vw)"
+      :size="rightTab === 'trajectory' ? 'min(900px, 96vw)' : 'min(380px, 92vw)'"
       :title="rightDrawerTitle"
       @update:open="workspaceUi.setRightDrawerOpen"
     >
@@ -1901,6 +1939,7 @@ function onTitleKeydown(e: KeyboardEvent) {
         ref="rightPanelRef"
         v-model:tab="rightTab"
         :stream-events="sessions.streamEvents"
+        :turns="sessions.turns"
         :plan-turn-id="planTurnId"
         :project-id="sessions.selectedProjectId"
         :changes-count="workspaceUi.changesCount"
@@ -1996,6 +2035,18 @@ function onTitleKeydown(e: KeyboardEvent) {
   flex-shrink: 0;
 }
 
+.session-workspace__stop {
+  border-color: var(--dq-warning-surface-border);
+  color: var(--dq-warning);
+  background: transparent;
+}
+
+.session-workspace__stop:hover:not(:disabled) {
+  background: var(--dq-warning-surface);
+  border-color: var(--dq-warning-border-hover);
+  color: var(--dq-warning);
+}
+
 .session-workspace__tools {
   display: flex;
   align-items: center;
@@ -2084,6 +2135,10 @@ function onTitleKeydown(e: KeyboardEvent) {
   color: var(--dq-accent);
 }
 
+.session-workspace__copy-check {
+  color: var(--dq-success);
+}
+
 .session-workspace__body {
   flex: 1;
   min-height: 0;
@@ -2129,6 +2184,30 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 .session-workspace__scroll.has-approval-rail {
   padding-right: 64px;
+}
+
+.session-workspace__to-bottom {
+  position: absolute;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--dq-border);
+  border-radius: 50%;
+  background: var(--dq-surface-elevated);
+  color: var(--dq-label-secondary);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.session-workspace__to-bottom:hover {
+  color: var(--dq-label-primary);
+  border-color: var(--dq-border-strong);
 }
 
 /* Right-side anchors for pending approval / ask_user events */

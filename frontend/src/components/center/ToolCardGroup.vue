@@ -151,6 +151,46 @@ const statusHint = computed(() => {
 .tool-group.is-running .tool-group__dot {
   background: var(--dq-accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 22%, transparent);
+  animation: tool-dot-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes tool-dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.tool-group.is-running .tool-group__label {
+  position: relative;
+  overflow: hidden;
+}
+
+.tool-group.is-running .tool-group__label::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--dq-accent) 8%, transparent),
+    transparent
+  );
+  animation: tool-sweep 1.8s ease-in-out infinite;
+}
+
+@keyframes tool-sweep {
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 100%;
+  }
 }
 
 .tool-group.is-error .tool-group__dot {

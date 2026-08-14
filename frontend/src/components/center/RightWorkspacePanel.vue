@@ -15,7 +15,8 @@ import MemoryPanel from '@/components/center/MemoryPanel.vue'
 import TablesPanel from '@/components/center/TablesPanel.vue'
 import ChangesPanel from '@/components/center/ChangesPanel.vue'
 import TerminalPanel from '@/components/center/TerminalPanel.vue'
-import type { StreamEvent } from '@/types/mission'
+import TrajectoryPanel from '@/components/center/TrajectoryPanel.vue'
+import type { StreamEvent, TurnLog } from '@/types/mission'
 import type { RightWorkspaceTab } from '@/stores/workspaceUi'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 
@@ -23,6 +24,7 @@ export type RightTab = RightWorkspaceTab
 
 const props = defineProps<{
   streamEvents: StreamEvent[]
+  turns: TurnLog[]
   planTurnId?: string | null
   projectId: string | null
   agentId?: string | null
@@ -74,6 +76,7 @@ const tabTitle = computed(() => {
     tables: t('sessions.tabTables'),
     changes: t('sessions.tabChanges'),
     terminal: t('sessions.tabTerminal'),
+    trajectory: t('sessions.tabTrajectory'),
   }
   return map[rightTab.value]
 })
@@ -152,6 +155,12 @@ defineExpose({
           :active="true"
         />
       </template>
+
+      <TrajectoryPanel
+        v-else-if="rightTab === 'trajectory'"
+        :stream-events="streamEvents"
+        :turns="turns"
+      />
     </div>
   </div>
 </template>
