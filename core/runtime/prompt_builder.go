@@ -51,6 +51,8 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 	b.WriteString("\n\n")
 	b.WriteString(buildMCPToolNamingPolicy())
 	b.WriteString("\n\n")
+	b.WriteString(buildProjectContextPolicy())
+	b.WriteString("\n\n")
 	b.WriteString(buildRuntimeEnvironment(sandboxStatus, envStatus))
 	if planMode {
 		b.WriteString("\n\n")
@@ -81,7 +83,7 @@ Delegation in plan mode:
 
 Workflow:
 1. Understand the goal, constraints, and success criteria. Call ask_user if anything important is ambiguous.
-2. Explore the codebase with glob/grep first, then read_file the relevant files. Cite evidence as path:line (or ranges).
+2. Read workspace-root instruction files first if present: AGENTS.md (agent instructions), README.md (overview/build commands), plus CLAUDE.md / .cursorrules. Then explore the codebase with glob/grep, and read_file the relevant files. Cite evidence as path:line (or ranges).
 3. Research external docs or knowledge bases only if the chosen approach depends on unfamiliar APIs, libraries, or best practices.
 4. Optionally delegate parallel read-only investigation to sub-agents.
 5. Synthesize the simplest approach that meets the requirements. Note only 1-2 rejected alternatives when the trade-off genuinely matters.
@@ -216,6 +218,18 @@ MCP tools are exposed to you as function names: mcp_<server>_<tool>
 - Prefer the exact name from the tool list. Do not invent mcp_* names that are not listed.
 - If several servers expose the same short tool name, pick the server that matches the task (see [MCP:…] prefix / server slug).
 </mcp-tool-naming>`
+}
+
+func buildProjectContextPolicy() string {
+	return `<project-context-policy>
+For coding tasks inside a project workspace, when the intent, conventions, entry points, or build/test commands are unclear, look for instruction files at the workspace root BEFORE exploring the codebase:
+
+- AGENTS.md — agent/team instructions and project-specific workflows (follow it first)
+- README.md — project overview, build/run commands, architecture notes
+- Also check CLAUDE.md / .cursorrules if present
+
+Read them with read_file (or delegate to explorer) and follow their conventions. Do NOT ask the user for information that is already documented there. Cite them as evidence when they drive your decisions.
+</project-context-policy>`
 }
 
 // buildRuntimeEnvironment returns a block describing the runtime OS / shell environment.

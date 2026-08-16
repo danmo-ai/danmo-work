@@ -99,6 +99,12 @@ func TestBuildSystemPromptPolicies(t *testing.T) {
 	if !strings.Contains(noDelegate, "<mcp-tool-naming>") || !strings.Contains(noDelegate, "mcp_<server>_<tool>") {
 		t.Fatal("mcp-tool-naming policy is global")
 	}
+	if !strings.Contains(noDelegate, "<project-context-policy>") {
+		t.Fatal("project-context-policy is global")
+	}
+	if !strings.Contains(noDelegate, "AGENTS.md") || !strings.Contains(noDelegate, "README.md") {
+		t.Fatalf("project-context-policy should guide reading AGENTS.md / README.md:\n%s", noDelegate)
+	}
 
 	// CanDelegate with empty peer list still gets the policy (no roster).
 	emptyPeers := buildSystemPrompt("persona", nil, nil, true, false, "", "", "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
@@ -123,6 +129,9 @@ func TestBuildSystemPromptPlanMode(t *testing.T) {
 	}
 	if !strings.Contains(plan, "delegate_agent") {
 		t.Fatal("expected delegate_agent to be allowed in plan mode")
+	}
+	if !strings.Contains(plan, "AGENTS.md") || !strings.Contains(plan, "README.md") {
+		t.Fatal("expected plan-mode workflow to guide reading AGENTS.md / README.md first")
 	}
 }
 
