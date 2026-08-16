@@ -16,6 +16,8 @@ skills:
 tools:
   - tool_id: read_file
     risk_level: low
+  - tool_id: read_image
+    risk_level: low
   - tool_id: grep
     risk_level: low
   - tool_id: glob

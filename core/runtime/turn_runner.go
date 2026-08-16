@@ -686,10 +686,35 @@ func (p *TurnRunner) commitToolResults(ctx context.Context, tctx TurnContext, sl
 			})
 			p.recordFileChanges(tctx, slot.call.ID, slot.call.Name, slot.call.Arguments, slot.result)
 		}
-		msgs = append(msgs, Message{Role: RoleTool, ToolCallID: slot.call.ID, Name: slot.call.Name, Content: slot.content})
+		msgs = append(msgs, Message{
+			Role:       RoleTool,
+			ToolCallID: slot.call.ID,
+			Name:       slot.call.Name,
+			Content:    slot.content,
+			Parts:      toolResultParts(slot.result),
+		})
 		p.logToolResult(slot.call.ID, slot.call.Name, slot.content)
 	}
 	return msgs
+}
+
+// toolResultParts converts tool-result multimodal parts into message parts.
+func toolResultParts(result domain.ToolResult) []ContentPart {
+	if len(result.Parts) == 0 {
+		return nil
+	}
+	parts := make([]ContentPart, 0, len(result.Parts))
+	for _, p := range result.Parts {
+		if p.Type != "image" || p.Data == "" {
+			continue
+		}
+		parts = append(parts, ContentPart{
+			Type:     p.Type,
+			MimeType: p.MimeType,
+			Data:     p.Data,
+		})
+	}
+	return parts
 }
 
 // gateToolCall runs permission / approval for one call. On success with exec=true,

@@ -80,9 +80,10 @@ func (a Agent) InheritsAmbient() bool {
 // intersection of its own tool bindings and this set.
 var PlanModeAllowedToolIDs = map[string]struct{}{
 	// Codebase exploration
-	"read_file": {},
-	"grep":      {},
-	"glob":      {},
+	"read_file":  {},
+	"read_image": {},
+	"grep":       {},
+	"glob":       {},
 	// External research
 	"web_search": {},
 	"web_fetch":  {},

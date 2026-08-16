@@ -76,7 +76,7 @@ func (p *AnthropicMessagesClient) Chat(ctx context.Context, req port.LLMChatRequ
 			msg["content"] = []map[string]any{{
 				"type":        "tool_result",
 				"tool_use_id": m.ToolCallID,
-				"content":     m.Content,
+				"content":     anthropicUserContent(m),
 			}}
 		} else {
 			msg["content"] = anthropicUserContent(m)

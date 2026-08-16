@@ -101,7 +101,7 @@ func buildResponsesBody(req port.LLMChatRequest, effort string) (map[string]any,
 			input = append(input, map[string]any{
 				"type":    "function_call_output",
 				"call_id": m.ToolCallID,
-				"output":  m.Content,
+				"output":  openaiToolOutput(m),
 			})
 		case "assistant":
 			if len(m.ToolCalls) > 0 {

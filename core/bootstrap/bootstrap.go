@@ -264,6 +264,11 @@ func New(cfg Config) *Core {
 	br := dqbrowser.New(appCfg.Runtime.Browser)
 	eng.RegisterTool(&builtin.ExecShell{Sandbox: sb})
 	eng.RegisterTool(&builtin.ReadFile{})
+	eng.RegisterTool(&builtin.ReadImage{
+		SupportsImage: func(modelID string) bool {
+			return modelCfg.SupportsVision(modelID)
+		},
+	})
 	eng.RegisterTool(&builtin.Edit{})
 	eng.RegisterTool(&builtin.Write{})
 	eng.RegisterTool(&builtin.FileOp{})

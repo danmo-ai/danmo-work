@@ -47,3 +47,54 @@ func TestOpenAIUserContent_WithImage(t *testing.T) {
 		t.Fatalf("url: %#v", img)
 	}
 }
+
+func TestAnthropicToolResult_WithImage(t *testing.T) {
+	out := anthropicUserContent(port.ChatMessage{
+		Role:       "tool",
+		ToolCallID: "call_1",
+		Content:    "Read image",
+		Parts: []port.ChatContentPart{{
+			Type: "image", MimeType: "image/png", Data: "abc",
+		}},
+	})
+	arr, ok := out.([]map[string]any)
+	if !ok || len(arr) != 2 {
+		t.Fatalf("expected 2 content blocks, got %#v", out)
+	}
+	if arr[0]["type"] != "text" || arr[1]["type"] != "image" {
+		t.Fatalf("unexpected blocks: %#v", arr)
+	}
+}
+
+func TestOpenAIToolOutput_WithImage(t *testing.T) {
+	out := openaiToolOutput(port.ChatMessage{
+		Role:       "tool",
+		ToolCallID: "call_1",
+		Content:    "Read image",
+		Parts: []port.ChatContentPart{{
+			Type: "image", MimeType: "image/gif", Data: "gifdata",
+		}},
+	})
+	arr, ok := out.([]map[string]any)
+	if !ok || len(arr) != 2 {
+		t.Fatalf("expected 2 content blocks, got %#v", out)
+	}
+	if arr[0]["type"] != "input_text" {
+		t.Fatalf("first block: %#v", arr[0])
+	}
+	img, _ := arr[1]["image_url"].(map[string]any)
+	if img["url"] != "data:image/gif;base64,gifdata" {
+		t.Fatalf("url: %#v", img)
+	}
+}
+
+func TestOpenAIToolOutput_TextOnly(t *testing.T) {
+	out := openaiToolOutput(port.ChatMessage{
+		Role:       "tool",
+		ToolCallID: "call_1",
+		Content:    "done",
+	})
+	if out != "done" {
+		t.Fatalf("expected plain string, got %#v", out)
+	}
+}
