@@ -63,6 +63,9 @@ case "$(uname -s)" in
     "$SCRIPT_DIR/stage_first_launch.sh" linux "$DQ_ROOT/desktop/src-tauri/resources/first_launch" || true
     ;;
 esac
+# Fetch/stage bundled ripgrep (grep tool engine); cached and non-fatal so dev
+# works offline (grep falls back to the pure-Go walker).
+"$SCRIPT_DIR/fetch_ripgrep.sh" "$DQ_ROOT/desktop/src-tauri/resources/rg" || true
 echo "==> Sidecar binary: $SIDECAR_PATH"
 echo ""
 

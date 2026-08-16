@@ -17,6 +17,7 @@ import (
 // ResolveRipgrepBin returns the path to a usable ripgrep binary, or "".
 // Order: WORK_RIPGREP_BIN → ~/.danmo-work/bin/rg → executable siblings
 // (dev tree, bundled desktop resources) → PATH.
+// Auto-detected candidates must be ≥1MB so truncated downloads are skipped.
 func ResolveRipgrepBin() string {
 	if p := strings.TrimSpace(os.Getenv("WORK_RIPGREP_BIN")); p != "" {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
@@ -27,9 +28,12 @@ func ResolveRipgrepBin() string {
 	if runtime.GOOS == "windows" {
 		name = "rg.exe"
 	}
+	usable := func(p string) bool {
+		st, err := os.Stat(p)
+		return err == nil && !st.IsDir() && st.Size() >= 1024*1024
+	}
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		p := filepath.Join(home, ".danmo-work", "bin", name)
-		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+		if p := filepath.Join(home, ".danmo-work", "bin", name); usable(p) {
 			return p
 		}
 	}
@@ -42,7 +46,7 @@ func ResolveRipgrepBin() string {
 			// Tauri resource layout next to the sidecar / app exe.
 			filepath.Join(dir, "..", "resources", "rg", name),
 		} {
-			if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			if usable(p) {
 				return p
 			}
 		}
