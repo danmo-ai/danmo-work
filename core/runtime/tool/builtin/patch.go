@@ -109,12 +109,16 @@ type filePatch struct {
 	moveTo      string // relative rename target (begin-patch)
 	searchBased bool
 	oldData     []byte
+	oldText     string        // decoded/normalized original content (updates)
+	meta        textFileMeta  // decoded encoding/line ending (updates)
+	mode        os.FileMode   // original permission bits (updates)
 }
 
 type pendingWrite struct {
 	path    string
 	data    []byte
 	oldData []byte
+	mode    os.FileMode
 }
 
 func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.ToolResult, error) {
@@ -196,7 +200,10 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 				return domain.ToolResult{}, fmt.Errorf("cannot read file %q for deletion: %w", fp.relPath, readErr)
 			}
 			fp.oldData = data
-			writes = append(writes, pendingWrite{path: fp.path, data: nil, oldData: data})
+			if info, statErr := os.Stat(fp.path); statErr == nil {
+				fp.mode = info.Mode().Perm()
+			}
+			writes = append(writes, pendingWrite{path: fp.path, data: nil, oldData: data, mode: fp.mode})
 			continue
 		}
 
@@ -207,11 +214,20 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 			if readErr != nil {
 				return domain.ToolResult{}, fmt.Errorf("cannot read file %q: %w. Hint: use *** Add File for new files, or check the relative path", fp.relPath, readErr)
 			}
+			text, meta, decErr := decodeTextFile(data)
+			if decErr != nil {
+				return domain.ToolResult{}, fmt.Errorf("cannot patch %q: %w", fp.relPath, decErr)
+			}
 			fp.oldData = data
+			fp.meta = meta
+			if info, statErr := os.Stat(fp.path); statErr == nil {
+				fp.mode = info.Mode().Perm()
+			}
+			fp.oldText = text
 
-			lines := splitPatchFileLines(string(data))
+			lines := splitPatchFileLines(text)
 			if _, applyErr := applyHunks(lines, fp.hunks, fuzz); applyErr != nil {
-				return domain.ToolResult{}, fmt.Errorf("cannot apply patch to %q: %w\n\n%s", fp.relPath, applyErr, patchApplyHint(string(data), fp.hunks))
+				return domain.ToolResult{}, fmt.Errorf("cannot apply patch to %q: %w\n\n%s", fp.relPath, applyErr, patchApplyHint(text, fp.hunks))
 			}
 		}
 	}
@@ -238,7 +254,7 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 			lines := ([]string)(nil)
 			newLines, _ = applyHunks(lines, fp.hunks, fuzz)
 		} else {
-			lines := splitPatchFileLines(string(fp.oldData))
+			lines := splitPatchFileLines(fp.oldText)
 			newLines, _ = applyHunks(lines, fp.hunks, fuzz)
 		}
 
@@ -254,13 +270,20 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 			}
 		}
 
+		var payload []byte
+		if fp.isCreate {
+			payload = []byte(newContent)
+		} else {
+			payload = encodeTextFile(newContent, fp.meta)
+		}
 		writes = append(writes, pendingWrite{
 			path:    finalPath,
-			data:    []byte(newContent),
+			data:    payload,
 			oldData: fp.oldData,
+			mode:    fp.mode,
 		})
 
-		if err := os.WriteFile(finalPath, []byte(newContent), 0644); err != nil {
+		if err := writeFilePreserving(finalPath, payload); err != nil {
 			h.rollbackWrites(writes)
 			return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", finalRel, err)
 		}
@@ -282,13 +305,16 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 		if fp.moveTo != "" {
 			msg = fmt.Sprintf("Patched %q → moved to %q (%d hunks)", fp.relPath, finalRel, len(fp.hunks))
 		}
+		if !fp.isCreate {
+			msg += encodingNote(fp.meta)
+		}
 		results = append(results, msg)
 		op := "update"
 		oldStr := ""
 		if fp.isCreate {
 			op = "create"
 		} else {
-			oldStr = string(fp.oldData)
+			oldStr = fp.oldText
 		}
 		diff := generateUnifiedDiff(finalRel, oldStr, newContent)
 		changeMeta = append(changeMeta, map[string]any{
@@ -311,7 +337,11 @@ func (h *ApplyPatch) rollbackWrites(writes []pendingWrite) {
 			}
 			os.Remove(w.path)
 		} else {
-			os.WriteFile(w.path, w.oldData, 0644)
+			mode := os.FileMode(0o644)
+			if w.mode != 0 {
+				mode = w.mode
+			}
+			os.WriteFile(w.path, w.oldData, mode)
 		}
 	}
 }

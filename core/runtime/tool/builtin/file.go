@@ -87,6 +87,12 @@ func (h *ReadFile) Execute(_ context.Context, input map[string]any) (domain.Tool
 		return domain.ToolResult{Content: fmt.Sprintf("[Binary file not displayed: %s (%d bytes)]", path, len(data))}, nil
 	}
 
+	text, meta, decErr := decodeTextFile(data)
+	if decErr != nil {
+		return domain.ToolResult{Content: fmt.Sprintf("[Binary file not displayed: %s (%d bytes, %v)]", path, len(data), decErr)}, nil
+	}
+	encNote := encodingNote(meta)
+
 	noteReadFile(input, resolvedPath)
 
 	offset := optionalIntField(input, "offset")
@@ -101,7 +107,7 @@ func (h *ReadFile) Execute(_ context.Context, input map[string]any) (domain.Tool
 		limit = maxReadLines
 	}
 
-	lines := splitLines(string(data))
+	lines := splitLines(text)
 	startIdx := offset
 	if startIdx >= len(lines) {
 		return domain.ToolResult{}, fmt.Errorf("offset %d exceeds file length of %d lines", offset, len(lines))
@@ -112,6 +118,9 @@ func (h *ReadFile) Execute(_ context.Context, input map[string]any) (domain.Tool
 	}
 
 	var b strings.Builder
+	if encNote != "" {
+		b.WriteString("[Note: file decoded from " + string(meta.Encoding) + "; line endings normalized to \\n]\n")
+	}
 	for i := startIdx; i < endIdx; i++ {
 		line := lines[i]
 		if len(line) > maxLineLength {

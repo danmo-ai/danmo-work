@@ -73,15 +73,21 @@ func (h *Write) Execute(_ context.Context, input map[string]any) (domain.ToolRes
 	}
 
 	// Check for existing file: require read-first
-	existingData, fileExists := ([]byte)(nil), false
+	existingText, existingMeta, fileExists := "", textFileMeta{}, false
+	encPreserved := false
 	if info, statErr := os.Stat(resolvedPath); statErr == nil && !info.IsDir() {
 		fileExists = true
 		if err := requireFreshRead(input, resolvedPath); err != nil {
 			return domain.ToolResult{}, err
 		}
-		data, readErr := os.ReadFile(resolvedPath)
-		if readErr == nil {
-			existingData = data
+		if data, readErr := os.ReadFile(resolvedPath); readErr == nil {
+			if text, meta, decErr := decodeTextFile(data); decErr == nil {
+				existingText = text
+				existingMeta = meta
+				encPreserved = true
+			} else {
+				existingText = string(data)
+			}
 		}
 	}
 
@@ -90,22 +96,26 @@ func (h *Write) Execute(_ context.Context, input map[string]any) (domain.ToolRes
 		return domain.ToolResult{}, fmt.Errorf("cannot create directory %q: %w", dir, err)
 	}
 
-	if err := os.WriteFile(resolvedPath, []byte(content), 0644); err != nil {
+	payload := []byte(content)
+	encNote := ""
+	if encPreserved {
+		payload = encodeTextFile(content, existingMeta)
+		encNote = encodingNote(existingMeta)
+	}
+	if err := writeFilePreserving(resolvedPath, payload); err != nil {
 		return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", resolvedPath, err)
 	}
 	// Own write updates the snapshot so a later edit/write in this turn does not
 	// fail with "changed since last read" unless something else touched the file.
 	noteReadFile(input, resolvedPath)
 
-	msg := fmt.Sprintf("Wrote file %q (%d bytes)", path, len(content))
+	msg := fmt.Sprintf("Wrote file %q (%d bytes)", path, len(payload))
 	op := "create"
 	diff := ""
 	if fileExists {
 		op = "update"
-		if existingData != nil {
-			diff = generateUnifiedDiff(path, string(existingData), content)
-			msg += "\n" + diff
-		}
+		diff = generateUnifiedDiff(path, existingText, content)
+		msg += encNote + "\n" + diff
 	}
 
 	return domain.ToolResult{
@@ -114,7 +124,7 @@ func (h *Write) Execute(_ context.Context, input map[string]any) (domain.ToolRes
 			"path":          path,
 			"op":            op,
 			"diff":          diff,
-			"bytes_written": len(content),
+			"bytes_written": len(payload),
 			"overwrote":     fileExists,
 		},
 	}, nil

@@ -121,7 +121,7 @@ func (h *FileOp) Execute(_ context.Context, input map[string]any) (domain.ToolRe
 		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
 			return domain.ToolResult{}, fmt.Errorf("cannot copy file %q: %w", path, err)
 		}
-		if err := os.WriteFile(dest, data, 0644); err != nil {
+		if err := os.WriteFile(dest, data, info.Mode().Perm()); err != nil {
 			return domain.ToolResult{}, fmt.Errorf("cannot copy file %q: %w", path, err)
 		}
 		return domain.ToolResult{
@@ -201,7 +201,7 @@ func copyDirTree(src, dst string) (int, error) {
 		case d.Type()&os.ModeSymlink != 0:
 			return fmt.Errorf("cannot copy symlink %q inside directory %q", rel, src)
 		default:
-			if err := copyFile(p, target); err != nil {
+			if err := copyFileWithMode(p, target, d); err != nil {
 				return err
 			}
 			count++
@@ -214,7 +214,7 @@ func copyDirTree(src, dst string) (int, error) {
 	return count, nil
 }
 
-func copyFile(src, dst string) error {
+func copyFileWithMode(src, dst string, entry os.DirEntry) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -223,7 +223,11 @@ func copyFile(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		return err
 	}
-	out, err := os.Create(dst)
+	mode := os.FileMode(0o644)
+	if info, statErr := entry.Info(); statErr == nil {
+		mode = info.Mode().Perm()
+	}
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return err
 	}

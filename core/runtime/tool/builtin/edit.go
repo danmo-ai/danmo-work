@@ -83,7 +83,10 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 	if err != nil {
 		return domain.ToolResult{}, fmt.Errorf("cannot read file %q: %w", resolvedPath, err)
 	}
-	content := string(data)
+	content, meta, err := decodeTextFile(data)
+	if err != nil {
+		return domain.ToolResult{}, fmt.Errorf("cannot edit %q: %w", relPath, err)
+	}
 
 	replacement, count, matchErr := tryExactReplace(content, oldStr, newStr, replaceAll)
 
@@ -113,7 +116,7 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 		return domain.ToolResult{}, err
 	}
 
-	if err := os.WriteFile(resolvedPath, []byte(replacement), 0644); err != nil {
+	if err := writeFilePreserving(resolvedPath, encodeTextFile(replacement, meta)); err != nil {
 		return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", resolvedPath, err)
 	}
 	// Own write updates the snapshot so a later edit in this turn does not
@@ -121,14 +124,17 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 	noteReadFile(input, resolvedPath)
 
 	diff := generateUnifiedDiff(relPath, content, replacement)
+	encNote := encodingNote(meta)
 	return domain.ToolResult{
-		Content: fmt.Sprintf("Edited file %q, replaced %d occurrence(s):\n%s", relPath, count, diff),
+		Content: fmt.Sprintf("Edited file %q, replaced %d occurrence(s):%s\n%s", relPath, count, encNote, diff),
 		Meta: map[string]any{
 			"path":          relPath,
 			"op":            "update",
 			"diff":          diff,
 			"replacements":  count,
 			"bytes_written": len(replacement),
+			"encoding":      string(meta.Encoding),
+			"line_ending":   meta.LineEnding,
 		},
 	}, nil
 }
