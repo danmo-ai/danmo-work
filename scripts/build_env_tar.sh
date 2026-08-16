@@ -64,13 +64,19 @@ else
     "$CONTEXT"
 fi
 
-# Also tag the canonical name for local load expectations on native arch builds.
-if [[ "$OUT_ARCH" == "$ARCH" ]]; then
-  "$ENGINE" tag "$IMAGE_TAG_ARCH" "${DQ_ENV_IMAGE_TAG:-localhost/danmo-work-env:bundled}" || true
+# Retag to the canonical name so the saved tar carries the expected tag
+# (runtime loads tars on machines where the canonical tag never existed).
+IMAGE_TAG="${DQ_ENV_IMAGE_TAG:-localhost/danmo-work-env:bundled}"
+if "$ENGINE" image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
+  SAVE_TAG="$IMAGE_TAG"
+elif "$ENGINE" tag "$IMAGE_TAG_ARCH" "$IMAGE_TAG" 2>/dev/null; then
+  SAVE_TAG="$IMAGE_TAG"
+else
+  SAVE_TAG="$IMAGE_TAG_ARCH"
 fi
 
-echo "==> Saving image → $OUT_TAR (gzipped)"
+echo "==> Saving image → $OUT_TAR (gzipped, tag=$SAVE_TAG)"
 rm -f "$OUT_TAR"
-"$ENGINE" save "$IMAGE_TAG_ARCH" | gzip -6 > "$OUT_TAR"
+"$ENGINE" save "$SAVE_TAG" | gzip -6 > "$OUT_TAR"
 ls -lh "$OUT_TAR"
-echo "==> Done (tag=$IMAGE_TAG_ARCH engine=$ENGINE arch=$OUT_ARCH)"
+echo "==> Done (tag=$SAVE_TAG engine=$ENGINE arch=$OUT_ARCH)"

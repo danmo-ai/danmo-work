@@ -72,6 +72,32 @@ func (e *CLIRuntime) EnsureTag(ctx context.Context, image string) error {
 	if ok {
 		return nil
 	}
+	// Tars built by scripts/build_env_tar.sh may carry an arch-suffixed tag
+	// (e.g. localhost/danmo-work-env:bundled-arm64). Retag the first match.
+	out, err := e.run(ctx, "image", "list", "--format", "{{.Repository}}:{{.Tag}}")
+	if err == nil {
+		for _, ref := range strings.Fields(out) {
+			ref = strings.Trim(ref, "'\"")
+			if ref == "" || ref == "<none>:<none>" || !strings.Contains(ref, "danmo-work-env") {
+				continue
+			}
+			if _, tagErr := e.run(ctx, "tag", ref, image); tagErr == nil {
+				if ok, _ := e.ImageExists(ctx, image); ok {
+					return nil
+				}
+			}
+		}
+	}
+	// Fallback: retag by image ID (untagged images after load).
+	if ids, err := e.run(ctx, "image", "list", "--quiet"); err == nil {
+		for _, id := range strings.Fields(ids) {
+			if _, tagErr := e.run(ctx, "tag", id, image); tagErr == nil {
+				if ok, _ := e.ImageExists(ctx, image); ok {
+					return nil
+				}
+			}
+		}
+	}
 	return fmt.Errorf("container: image %q not present after load (build/save with that tag)", image)
 }
 
