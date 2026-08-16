@@ -707,13 +707,47 @@ fn write_file_bytes(path: String, contents: Vec<u8>) -> Result<(), String> {
     fs::write(&path, contents).map_err(|e| format!("write {path}: {e}"))
 }
 
+/// Keeps the machine awake while an agent session is running. The underlying
+/// assertion (macOS IOPM / Windows SetThreadExecutionState / Linux systemd-inhibit)
+/// is released when the handle is dropped or the app exits.
+struct KeepAwakeState(Mutex<Option<keepawake::KeepAwake>>);
+
+#[tauri::command]
+fn prevent_sleep(state: tauri::State<'_, KeepAwakeState>) -> Result<(), String> {
+    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+    if guard.is_none() {
+        *guard = Some(
+            keepawake::Builder::default()
+                .idle(true)
+                .reason("Agent session running")
+                .app_name("Danmo Work")
+                .app_reverse_domain("com.danmo.work")
+                .create()
+                .map_err(|e| e.to_string())?,
+        );
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn allow_sleep(state: tauri::State<'_, KeepAwakeState>) -> Result<(), String> {
+    state.0.lock().map_err(|e| e.to_string())?.take();
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![open_external, write_file_bytes])
+        .manage(KeepAwakeState(Mutex::new(None)))
+        .invoke_handler(tauri::generate_handler![
+            open_external,
+            write_file_bytes,
+            prevent_sleep,
+            allow_sleep
+        ])
         .setup(|app| {
             handle_first_launch(&app.handle());
             if let Err(e) = spawn_backend(&app.handle()) {

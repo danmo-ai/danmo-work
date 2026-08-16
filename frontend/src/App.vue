@@ -10,6 +10,7 @@ import { useLLMStore } from '@/stores/llm'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import { useSessionActivityStore } from '@/stores/sessionActivity'
 import { initAppVersion, startSilentUpdateCheck } from '@/composables/useAppUpdater'
+import { useKeepAwake } from '@/composables/useKeepAwake'
 import { isTauriRuntime, waitForBackend } from '@/utils/desktop'
 import type { AppModule } from '@/types/app-module'
 
@@ -23,6 +24,7 @@ const workspaceUi = useWorkspaceUiStore()
 const sessionActivity = useSessionActivityStore()
 const bootstrapping = ref(isTauriRuntime())
 const bootError = ref('')
+const releaseKeepAwake = ref<(() => void) | undefined>(undefined)
 
 function onGlobalKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -73,6 +75,7 @@ onMounted(async () => {
     sessions.syncModelSelection(llm.models, new Set())
     await sessions.loadSessions()
     sessionActivity.startPolling()
+    releaseKeepAwake.value = useKeepAwake(() => sessionActivity.activeCount > 0)
   } catch (e) {
     bootError.value = e instanceof Error ? e.message : t('desktop.backendStartFailed')
   } finally {
@@ -82,6 +85,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   sessionActivity.stopPolling()
+  releaseKeepAwake.value?.()
   window.removeEventListener('keydown', onGlobalKeydown)
 })
 
