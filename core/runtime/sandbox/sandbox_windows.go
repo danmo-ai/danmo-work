@@ -41,11 +41,6 @@ func probeOSBackends() []domain.SandboxBackendInfo {
 			Available:    wslOK,
 			Capabilities: []string{"linux-userspace"},
 		},
-		{
-			Name:      domain.SandboxBackendHostWeak,
-			Available: true,
-			Reason:    "direct host execution",
-		},
 	}
 	if !tokenOK {
 		infos[0].Reason = "CreateRestrictedToken unavailable in this process"
@@ -158,7 +153,7 @@ func (winTokenBackend) Run(ctx context.Context, opts port.SandboxRunOptions, cfg
 
 	ctx, cancel := context.WithTimeout(ctx, opts.Timeout)
 	defer cancel()
-	sh := resolveShell(cfg, domain.SandboxBackendWinToken)
+	sh := resolveShell(domain.SandboxBackendWinToken)
 	cmd, err := shellCommandFor(ctx, opts.Command, sh)
 	if err != nil {
 		return nil, err

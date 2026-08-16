@@ -38,11 +38,6 @@ func probeOSBackends() []domain.SandboxBackendInfo {
 			Available:    hasBwrap,
 			Capabilities: []string{"fs-isolation", "network-control", "seccomp-via-bwrap"},
 		},
-		{
-			Name:      domain.SandboxBackendHostWeak,
-			Available: true,
-			Reason:    "direct host execution",
-		},
 	}
 	if !hasLL {
 		infos[0].Reason = "landlock unavailable (kernel < 5.13 or not enabled)"

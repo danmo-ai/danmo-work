@@ -12,7 +12,6 @@ export interface RuntimeForm {
   sandboxNetwork: 'deny' | 'allow' | 'allowlist'
   sandboxAllowlistDomains: string
   sandboxBackend: string
-  sandboxShell: string
   envImage: string
   envTarPath: string
   envWorkspaceMount: string
@@ -54,7 +53,6 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     sandboxNetwork: sb?.network ?? 'deny',
     sandboxAllowlistDomains: (sb?.allowlistDomains ?? []).join('\n'),
     sandboxBackend: sb?.backend ?? '',
-    sandboxShell: sb?.shell ?? 'auto',
     envImage: sb?.image ?? '',
     envTarPath: sb?.tarPath ?? '',
     envWorkspaceMount: sb?.workspaceMount ?? '',
@@ -166,7 +164,6 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
             .map((s) => s.trim())
             .filter(Boolean),
           backend: form.sandboxBackend || undefined,
-          shell: form.sandboxShell || undefined,
           image: containerSelected && form.envImage.trim() ? form.envImage.trim() : undefined,
           tarPath: containerSelected && form.envTarPath.trim() ? form.envTarPath.trim() : undefined,
           workspaceMount: containerSelected && form.envWorkspaceMount.trim() ? form.envWorkspaceMount.trim() : undefined,

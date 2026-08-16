@@ -225,7 +225,6 @@ export interface ConfigFile {
       network: 'deny' | 'allow' | 'allowlist'
       allowlistDomains?: string[]
       backend?: string
-      shell?: 'auto' | 'bash' | 'cmd' | string
       image?: string
       tarPath?: string
       workspaceMount?: string
@@ -425,7 +424,6 @@ export interface RuntimeConfigForm {
   sandboxNetwork: 'deny' | 'allow' | 'allowlist'
   sandboxAllowlistDomains?: string
   sandboxBackend?: string
-  sandboxShell?: 'auto' | 'bash' | 'cmd' | string
   browserEnabled?: boolean
   browserExecutablePath?: string
   browserCdpUrl?: string

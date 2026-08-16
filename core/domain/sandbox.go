@@ -49,14 +49,6 @@ func IsContainerBackend(b SandboxBackend) bool {
 	return false
 }
 
-// SandboxShellPreference selects the host shell interpreter for exec_shell.
-// Applies to win-token / host-weak paths on Windows; WSL2 backend always uses bash inside WSL.
-const (
-	SandboxShellAuto = "auto" // Windows: Coreutils+cmd when available, else Git Bash, else cmd; sh on Unix
-	SandboxShellBash = "bash" // require Git Bash on Windows (error if missing)
-	SandboxShellCmd  = "cmd"  // force cmd.exe on Windows (Coreutils still injected onto PATH when present)
-)
-
 // ConfigSandboxSection is persisted under runtime.sandbox in config.yaml.
 type ConfigSandboxSection struct {
 	Enabled bool           `json:"enabled" mapstructure:"enabled" yaml:"enabled"`
@@ -67,12 +59,13 @@ type ConfigSandboxSection struct {
 	AllowlistDomains []string `json:"allowlistDomains,omitempty" mapstructure:"allowlist_domains" yaml:"allowlist_domains,omitempty"`
 	// Backend selects one unified backend: auto (probe best OS sandbox) |
 	// seatbelt | landlock | bwrap | win-token | wsl2 | podman | docker |
-	// apple-container | host-weak. Container engines are only used when
-	// explicitly selected. Empty means auto.
+	// apple-container. Container engines are only used when explicitly
+	// selected. Empty means auto. Direct host execution (host-weak) is not
+	// selectable; it is the automatic fallback when the sandbox is disabled.
+	// The host shell interpreter is
+	// an internal detail of each backend (auto-resolved: Coreutils+cmd
+	// preferred, then Git Bash, else cmd on Windows; sh on Unix; bash in WSL2).
 	Backend string `json:"backend,omitempty" mapstructure:"backend" yaml:"backend,omitempty"`
-	// Shell selects the Windows host interpreter: auto | bash | cmd. Empty means auto.
-	// Ignored for WSL2 (always bash via wsl) and container backends. Unix always uses sh.
-	Shell string `json:"shell,omitempty" mapstructure:"shell" yaml:"shell,omitempty"`
 	// Container params (only used when Backend is a container engine):
 	// Image is the local tag after load (default localhost/danmo-work-env:bundled).
 	Image string `json:"image,omitempty" mapstructure:"image" yaml:"image,omitempty"`

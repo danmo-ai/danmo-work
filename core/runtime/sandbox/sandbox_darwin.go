@@ -27,11 +27,6 @@ func probeOSBackends() []domain.SandboxBackendInfo {
 			Available:    seatbeltOK,
 			Capabilities: []string{"fs-isolation", "network-control"},
 		},
-		{
-			Name:      domain.SandboxBackendHostWeak,
-			Available: true,
-			Reason:    "direct host execution",
-		},
 	}
 }
 

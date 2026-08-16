@@ -182,7 +182,6 @@ const runtimeForm = ref({
   sandboxNetwork: 'deny' as 'deny' | 'allow' | 'allowlist',
   sandboxAllowlistDomains: '',
   sandboxBackend: '',
-  sandboxShell: 'auto',
   envImage: '',
   envTarPath: '',
   envWorkspaceMount: '',
@@ -1426,8 +1425,8 @@ onUnmounted(() => {
           </div>
 
           <div class="settings-form-group">
-            <h3 class="settings-form-group__title">{{ $t('settings.runtimeAutoApprove') }}</h3>
-            <p class="settings-form-group__desc">{{ $t('settings.runtimeAutoApproveDesc') }}</p>
+            <h3 class="settings-form-group__title">{{ $t('settings.runtimeSandbox') }}</h3>
+            <p class="settings-form-group__desc">{{ $t('settings.sandboxBackendDesc') }}</p>
             <label class="settings-field settings-field--switch">
               <span class="settings-field__label">{{ $t('settings.sandboxEnabled') }}</span>
               <DqSwitch
@@ -1450,7 +1449,6 @@ onUnmounted(() => {
                   />
                 </DqSelect>
               </div>
-              <p class="settings-form-group__desc">{{ $t('settings.sandboxBackendDesc') }}</p>
 
               <!-- OS sandbox backend params -->
               <template v-if="!isContainerBackend">
@@ -1473,17 +1471,6 @@ onUnmounted(() => {
                   </div>
                 </div>
                 <p class="settings-form-group__desc">{{ $t('settings.sandboxNetworkDesc') }}</p>
-                <div class="settings-form-row">
-                  <div class="settings-field settings-field--half">
-                    <span class="settings-field__label">{{ $t('settings.sandboxShell') }}</span>
-                    <DqSelect v-model="runtimeForm.sandboxShell">
-                      <DqOption value="auto" :label="$t('settings.sandboxShellAuto')" />
-                      <DqOption value="bash" :label="$t('settings.sandboxShellBash')" />
-                      <DqOption value="cmd" :label="$t('settings.sandboxShellCmd')" />
-                    </DqSelect>
-                  </div>
-                </div>
-                <p class="settings-form-group__desc">{{ $t('settings.sandboxShellDesc') }}</p>
               </template>
 
               <!-- Container backend params (podman / docker / apple-container) -->
@@ -1627,6 +1614,10 @@ onUnmounted(() => {
                 </p>
               </div>
             </template>
+          </div>
+
+          <div class="settings-form-group">
+            <h3 class="settings-form-group__title">{{ $t('settings.runtimeBrowser') }}</h3>
             <p class="settings-form-group__desc">{{ $t('settings.browserEnabledDesc') }}</p>
             <label class="settings-field settings-field--switch">
               <span class="settings-field__label">{{ $t('settings.browserEnabled') }}</span>
@@ -1664,6 +1655,11 @@ onUnmounted(() => {
                 </p>
               </div>
             </template>
+          </div>
+
+          <div class="settings-form-group">
+            <h3 class="settings-form-group__title">{{ $t('settings.runtimeAutoApprove') }}</h3>
+            <p class="settings-form-group__desc">{{ $t('settings.runtimeAutoApproveDesc') }}</p>
             <label class="settings-field settings-field--switch">
               <span class="settings-field__label">{{ $t('settings.autoApprove') }}</span>
               <DqSwitch

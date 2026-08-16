@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"danmo-work/core/domain"
 	"danmo-work/core/port"
 	"danmo-work/core/runtime/sandbox"
 )
@@ -17,7 +16,7 @@ func hostRunShell(ctx context.Context, opts port.SandboxRunOptions) ([]byte, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd, err := sandbox.HostShellCommand(ctx, opts.Command, domain.ConfigSandboxSection{})
+	cmd, err := sandbox.HostShellCommand(ctx, opts.Command)
 	if err != nil {
 		return nil, err
 	}

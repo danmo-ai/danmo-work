@@ -62,7 +62,6 @@ func normalizeConfig(cfg domain.ConfigSandboxSection) domain.ConfigSandboxSectio
 	if cfg.Network == "" {
 		cfg.Network = domain.SandboxNetworkDeny
 	}
-	cfg.Shell = normalizeShellPref(cfg.Shell)
 	cfg.AllowlistDomains = netproxy.NormalizeDomains(cfg.AllowlistDomains)
 	return cfg
 }
@@ -426,7 +425,7 @@ func (m *Manager) reprobeLocked() {
 		m.backend, st.Backend, st.Degraded, st.DegradedReason, st.Capabilities =
 			m.factory.Build(cfg, false)
 		m.osBackend = hostBackend{}
-		applyShellStatus(&st, resolveShell(cfg, st.Backend))
+		applyShellStatus(&st, resolveShell(st.Backend))
 		m.status = st
 		return
 	}
@@ -471,7 +470,7 @@ func (m *Manager) reprobeLocked() {
 	if allowlistActive {
 		st.Capabilities = append(st.Capabilities, "allowlist-proxy")
 	}
-	applyShellStatus(&st, resolveShell(cfg, name))
+	applyShellStatus(&st, resolveShell(name))
 	m.status = st
 	m.backend = backend
 }
@@ -579,7 +578,7 @@ func needNetDeny(cfg domain.ConfigSandboxSection, allowlistProxyActive bool) boo
 func runHost(ctx context.Context, opts port.SandboxRunOptions, cfg domain.ConfigSandboxSection, backend domain.SandboxBackend) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, opts.Timeout)
 	defer cancel()
-	sh := resolveShell(cfg, backend)
+	sh := resolveShell(backend)
 	cmd, err := shellCommandFor(ctx, opts.Command, sh)
 	if err != nil {
 		return nil, err

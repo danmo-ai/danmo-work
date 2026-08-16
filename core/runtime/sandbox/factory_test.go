@@ -56,15 +56,15 @@ func TestFactoryContainerBackendMissingEngineDegrades(t *testing.T) {
 func TestFactoryAvailableListsBackends(t *testing.T) {
 	f := NewBackendFactory()
 	infos := f.Available(domain.ConfigSandboxSection{Enabled: true})
-	if len(infos) < 3 {
-		t.Fatalf("expected at least host-weak + 2 container engines, got %d", len(infos))
+	if len(infos) < 4 {
+		t.Fatalf("expected at least 1 OS backend + 3 container engines, got %d", len(infos))
 	}
 	seen := map[domain.SandboxBackend]bool{}
 	for _, i := range infos {
 		seen[i.Name] = true
 	}
-	if !seen[domain.SandboxBackendHostWeak] {
-		t.Fatal("host-weak should always be listed")
+	if seen[domain.SandboxBackendHostWeak] {
+		t.Fatal("host-weak should not be listed (sandbox off = host execution)")
 	}
 	if !seen[domain.SandboxBackendPodman] || !seen[domain.SandboxBackendDocker] || !seen[domain.SandboxBackendAppleContainer] {
 		t.Fatalf("container engines missing from list: %v", infos)

@@ -46,10 +46,11 @@ runtime:
   #   image/workspace_mount/resources apply only to container backends.
   #   workspace_mount: "" (or "same") = host project abs path so file tools & shell agree.
   #   resources: empty = unlimited (no host auto-infer); set cpus/memory in Settings.
-  # Shell (Windows host/win-token only): auto | bash | cmd
-  # auto prefers bundled/system Microsoft Coreutils with cmd, then Git Bash, else cmd.
-  # WSL2 always uses bash inside WSL. Container backends always use sh inside the image.
-  # Windows desktop NSIS installs Coreutils by default into ~/.danmo-work/bin/coreutils/.
+  # Shell interpreter is an internal backend detail (no setting): Windows host /
+  # win-token prefers bundled/system Microsoft Coreutils with cmd, then Git Bash,
+  # else cmd; WSL2 always uses bash inside Linux; container backends use sh;
+  # Unix uses sh. The Windows desktop NSIS installer ships Coreutils by default
+  # into ~/.danmo-work/bin/coreutils/.
   # When the sandbox is disabled (or danger-full-access), the factory returns the
   # host-weak backend (direct OS execution).
   # Legacy runtime.environment container settings are migrated here on load.
@@ -71,7 +72,6 @@ runtime:
     #   - "registry.npmjs.org"
     #   - "pypi.org"
     backend: ""
-    shell: "auto"
     # ── container-backend params (ignored unless backend is a container engine) ──
     image: "localhost/danmo-work-env:bundled"
     # tar_path: ""  # override tar discovery (WORK_ENV_TAR / ~/.danmo-work/env/ / out/env/)

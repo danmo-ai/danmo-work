@@ -2,12 +2,10 @@ package sandbox
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"danmo-work/core/domain"
 )
@@ -65,24 +63,12 @@ func fileExists(path string) bool {
 	return err == nil && !st.IsDir()
 }
 
-func normalizeShellPref(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	switch s {
-	case "", domain.SandboxShellAuto:
-		return domain.SandboxShellAuto
-	case domain.SandboxShellBash, domain.SandboxShellCmd:
-		return s
-	default:
-		return domain.SandboxShellAuto
-	}
-}
-
-// resolveShell picks the host shell for the given sandbox config and active backend.
-// When backend is WSL2, returns wsl-bash (execution stays in wslRunner).
-//
-// On Windows host / win-token paths, auto prefers bundled or system Microsoft Coreutils
-// with cmd.exe (POSIX utilities on PATH) over Git Bash. shell=bash still requires Git Bash.
-func resolveShell(cfg domain.ConfigSandboxSection, backend domain.SandboxBackend) resolvedShell {
+// resolveShell picks the host shell for the given sandbox backend. The shell
+// interpreter is an internal detail of each backend (no user setting):
+// WSL2 always runs bash inside Linux; on Windows host / win-token paths,
+// auto prefers bundled or system Microsoft Coreutils with cmd.exe (POSIX
+// utilities on PATH) over Git Bash, falling back to plain cmd; Unix uses sh.
+func resolveShell(backend domain.SandboxBackend) resolvedShell {
 	if backend == domain.SandboxBackendWSL2 {
 		return resolvedShell{
 			kind:  "wsl-bash",
@@ -93,7 +79,6 @@ func resolveShell(cfg domain.ConfigSandboxSection, backend domain.SandboxBackend
 		return resolvedShell{kind: "sh", label: "sh"}
 	}
 
-	pref := normalizeShellPref(cfg.Shell)
 	bashPath := findGitBash()
 	cuBin := findCoreutilsBin()
 
@@ -105,25 +90,14 @@ func resolveShell(cfg domain.ConfigSandboxSection, backend domain.SandboxBackend
 		return resolvedShell{kind: "cmd", label: label, coreutilsBin: cuBin}
 	}
 
-	switch pref {
-	case domain.SandboxShellCmd:
+	// auto: Coreutils+cmd first, then Git Bash, else plain cmd
+	if cuBin != "" {
 		return cmdWithCoreutils()
-	case domain.SandboxShellBash:
-		if bashPath == "" {
-			sh := cmdWithCoreutils()
-			sh.err = fmt.Errorf("runtime.sandbox.shell=bash but Git Bash was not found; install Git for Windows, use bundled Coreutils via shell=auto/cmd, or set runtime.sandbox.backend=wsl2")
-			return sh
-		}
-		return resolvedShell{kind: "git-bash", label: "bash (Git for Windows)", path: bashPath}
-	default: // auto: Coreutils+cmd first, then Git Bash, else plain cmd
-		if cuBin != "" {
-			return resolvedShell{kind: "cmd", label: "cmd (Coreutils)", coreutilsBin: cuBin}
-		}
-		if bashPath != "" {
-			return resolvedShell{kind: "git-bash", label: "bash (Git for Windows)", path: bashPath}
-		}
-		return resolvedShell{kind: "cmd", label: "cmd"}
 	}
+	if bashPath != "" {
+		return resolvedShell{kind: "git-bash", label: "bash (Git for Windows)", path: bashPath}
+	}
+	return resolvedShell{kind: "cmd", label: "cmd"}
 }
 
 func applyShellStatus(st *domain.SandboxStatus, sh resolvedShell) {
@@ -161,8 +135,8 @@ func shellCommandFor(ctx context.Context, command string, sh resolvedShell) (*ex
 
 // HostShellCommand builds an *exec.Cmd for host execution using the same resolve
 // rules as the sandbox manager (Coreutils+cmd or Git Bash on Windows when available).
-func HostShellCommand(ctx context.Context, command string, cfg domain.ConfigSandboxSection) (*exec.Cmd, error) {
-	sh := resolveShell(cfg, "")
+func HostShellCommand(ctx context.Context, command string) (*exec.Cmd, error) {
+	sh := resolveShell("")
 	cmd, err := shellCommandFor(ctx, command, sh)
 	if err != nil {
 		return nil, err
