@@ -75,7 +75,7 @@ onMounted(async () => {
     sessions.syncModelSelection(llm.models, new Set())
     await sessions.loadSessions()
     sessionActivity.startPolling()
-    releaseKeepAwake.value = useKeepAwake(() => sessionActivity.activeCount > 0)
+    releaseKeepAwake.value = useKeepAwake(() => sessionActivity.activeItems.some((i) => i.state === 'running'))
   } catch (e) {
     bootError.value = e instanceof Error ? e.message : t('desktop.backendStartFailed')
   } finally {
