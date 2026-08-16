@@ -2,6 +2,7 @@
   "bundle": {
     "resources": {
       "resources/coreutils/coreutils.exe": "coreutils/coreutils.exe",
+      "resources/rg/rg.exe": "rg/rg.exe",
       "resources/first_launch/post-install.ps1": "first_launch/post-install.ps1",
       "resources/first_launch/PLATFORM": "first_launch/PLATFORM"
     },

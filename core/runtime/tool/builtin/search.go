@@ -38,6 +38,7 @@ func (h *Grep) Schema() domain.ToolSchema {
 			"- Filter files by pattern with the include parameter (e.g. \"*.js\", \"*.{ts,tsx}\").\n" +
 			"- Use this tool when you need to find files containing specific patterns.\n" +
 			"- You can call multiple grep searches in parallel to batch lookups.\n" +
+			"- Respects .gitignore by default (set respect_gitignore=false to search ignored files).\n" +
 			"- Default exclusions: " + strings.Join(defaultExcludeDirs, ", ") + ".",
 		Parameters: map[string]any{
 			"type": "object",
@@ -48,6 +49,7 @@ func (h *Grep) Schema() domain.ToolSchema {
 				"context_lines":    map[string]any{"type": "integer", "description": "Number of context lines before and after each match (default: 0)"},
 				"case_insensitive": map[string]any{"type": "boolean", "description": "Perform case-insensitive matching (default: false)"},
 				"max":              map[string]any{"type": "integer", "description": "Maximum number of results (default: 100)"},
+				"respect_gitignore": map[string]any{"type": "boolean", "description": "Respect .gitignore / .ignore files (default: true)"},
 			},
 			"required": []string{"pattern"},
 		},
@@ -61,7 +63,7 @@ type grepMatch struct {
 	Context  []string `json:"context,omitempty"`
 }
 
-func (h *Grep) Execute(_ context.Context, input map[string]any) (domain.ToolResult, error) {
+func (h *Grep) Execute(ctx context.Context, input map[string]any) (domain.ToolResult, error) {
 	pattern, _ := input["pattern"].(string)
 	if pattern == "" {
 		return domain.ToolResult{}, fmt.Errorf("pattern is required")
@@ -94,6 +96,41 @@ func (h *Grep) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 	if maxResults <= 0 {
 		maxResults = 100
 	}
+	respectIgnore := optionalBoolField(input, "respect_gitignore", true)
+
+	// Prefer the bundled ripgrep binary (fast, .gitignore-aware); fall back
+	// to the pure-Go walker when it is unavailable or fails (e.g. a regex
+	// rg cannot parse).
+	if bin := ResolveRipgrepBin(); bin != "" {
+		rgPattern := input["pattern"].(string)
+		if caseInsensitive {
+			rgPattern = "(?i)" + rgPattern
+		}
+		results, count, rgErr := runRipgrep(ctx, bin, grepOpts{
+			pattern:         rgPattern,
+			root:            root,
+			include:         include,
+			contextLines:    contextLines,
+			caseInsensitive: caseInsensitive,
+			maxResults:      maxResults,
+			respectIgnore:   respectIgnore,
+		})
+		if rgErr == nil {
+			return domain.ToolResult{
+				Content: h.formatResults(results, contextLines, count, maxResults),
+				Meta: map[string]any{
+					"total_matches": count,
+					"truncated":     count >= maxResults,
+					"engine":        "ripgrep",
+				},
+			}, nil
+		}
+	}
+
+	ignoreRules := (*gitignoreRules)(nil)
+	if respectIgnore {
+		ignoreRules = loadGitignore(workDir)
+	}
 
 	var results []grepMatch
 	count := 0
@@ -107,7 +144,14 @@ func (h *Grep) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 						return filepath.SkipDir
 					}
 				}
+				if ignoreRules != nil && ignoreRules.ignoresDir(path) {
+					return filepath.SkipDir
+				}
 			}
+			return nil
+		}
+
+		if ignoreRules != nil && ignoreRules.ignoresFile(path) {
 			return nil
 		}
 
@@ -162,7 +206,7 @@ func (h *Grep) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 
 	return domain.ToolResult{
 		Content: h.formatResults(results, contextLines, count, maxResults),
-		Meta:    map[string]any{"total_matches": count, "truncated": count >= maxResults},
+		Meta:    map[string]any{"total_matches": count, "truncated": count >= maxResults, "engine": "go"},
 	}, nil
 }
 

@@ -14,7 +14,7 @@ export DQ_APP_NAME := $(APP_NAME)
 	frontend-install frontend-dev frontend-build frontend-typecheck \
 	check-layers test test-integration \
 	build-go build-server build-cli build-tui build-sidecar build build-all clean \
-	build-env-tar \
+	build-env-tar fetch-ripgrep \
 	pack-prereqs pack-macos-desktop pack-linux-desktop pack-windows-desktop \
 	eval-harbor-bin eval-harbor-base eval-harbor-sync-tb2 eval-harbor-smoke eval-harbor-suite eval-harbor-compare
 
@@ -43,7 +43,7 @@ help:
 	@echo "Frontend:  frontend-install | frontend-dev | frontend-build | frontend-typecheck"
 	@echo "Test:      check-layers | test | test-integration"
 	@echo "Eval:      eval-harbor-bin | eval-harbor-base | eval-harbor-sync-tb2 | eval-harbor-smoke | eval-harbor-suite | eval-harbor-compare"
-	@echo "Build:     build | build-all | build-go | build-server | build-cli | build-tui | build-sidecar | build-env-tar | clean"
+	@echo "Build:     build | build-all | build-go | build-server | build-cli | build-tui | build-sidecar | build-env-tar | fetch-ripgrep | clean"
 	@echo "Release:   pack-macos-desktop | pack-linux-desktop | pack-windows-desktop"
 
 # Backend only (for Go debugger or separate frontend)
@@ -130,6 +130,12 @@ pack-macos-desktop: pack-prereqs frontend-build
 build-env-tar:
 	@chmod +x scripts/*.sh
 	@./scripts/build_env_tar.sh
+
+# Fetch the official ripgrep binary for the host platform → out/rg/<target>/ + ~/.danmo-work/bin/
+# (grep tool engine; release packs stage it into the desktop bundle automatically).
+fetch-ripgrep:
+	@chmod +x scripts/*.sh
+	@./scripts/fetch_ripgrep.sh
 
 pack-linux-desktop: pack-prereqs frontend-build
 	@chmod +x scripts/*.sh

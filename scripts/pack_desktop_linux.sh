@@ -54,6 +54,9 @@ echo "==> Staging Linux first-launch script..."
 "$SCRIPT_DIR/stage_first_launch.sh" linux "$HOME/.danmo-work/first_launch"
 "$SCRIPT_DIR/stage_first_launch.sh" linux "$DQ_ROOT/desktop/src-tauri/resources/first_launch"
 
+echo "==> Staging bundled ripgrep (grep engine)..."
+"$SCRIPT_DIR/fetch_ripgrep.sh" "$DQ_ROOT/desktop/src-tauri/resources/rg"
+
 # Ensure only the target-tripled sidecar exists in bin/ to avoid duplicates in the bundle
 BIN_DIR="$DQ_ROOT/desktop/src-tauri/bin"
 rm -f "$BIN_DIR"/danmo-work-backend

@@ -49,6 +49,9 @@ echo "==> Staging macOS first-launch script..."
 "$SCRIPT_DIR/stage_first_launch.sh" darwin "$HOME/.danmo-work/first_launch"
 "$SCRIPT_DIR/stage_first_launch.sh" darwin "$DQ_ROOT/desktop/src-tauri/resources/first_launch"
 
+echo "==> Staging bundled ripgrep (grep engine)..."
+"$SCRIPT_DIR/fetch_ripgrep.sh" "$DQ_ROOT/desktop/src-tauri/resources/rg"
+
 echo "==> Tauri build ($APP_NAME) -> $CARGO_TARGET_DIR"
 # Build .app (+ updater artifacts when signing key is present)
 if has_tauri_signing_key; then

@@ -67,6 +67,16 @@ if [[ "${CU_SIZE:-0}" -lt 1000000 ]]; then
 fi
 echo "==> Coreutils OK: $CU_EXE ($(du -h "$CU_EXE" | cut -f1))"
 
+# Bundle ripgrep (grep engine) for Windows
+echo "==> Fetching bundled ripgrep..."
+"$SCRIPT_DIR/fetch_ripgrep.sh" "$DQ_ROOT/desktop/src-tauri/resources/rg"
+RG_EXE="$DQ_ROOT/desktop/src-tauri/resources/rg/rg.exe"
+if [[ ! -f "$RG_EXE" ]]; then
+  echo "ERROR: ripgrep is required for pack-windows-desktop but missing: $RG_EXE" >&2
+  exit 1
+fi
+echo "==> ripgrep OK: $RG_EXE ($(du -h "$RG_EXE" | cut -f1))"
+
 # Ensure only the target-tripled sidecar exists in bin/ to avoid duplicates in the bundle
 BIN_DIR="$DQ_ROOT/desktop/src-tauri/bin"
 rm -f "$BIN_DIR"/danmo-work-backend.exe
