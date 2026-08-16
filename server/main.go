@@ -42,6 +42,7 @@ func main() {
 	h := &apiv1.Handler{
 		Sessions:     core.Sessions,
 		Projects:     core.Projects,
+		Git:          core.Git,
 		LLMConfig:    core.LLMConfig,
 		Config:       core.ConfigManager,
 		SearchConfig: core.SearchConfig,

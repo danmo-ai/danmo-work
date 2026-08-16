@@ -117,6 +117,14 @@ func (m *Manager) NotifyTarInstalled() {
 	}
 }
 
+// SetGitCredentials attaches the git credential provider so container
+// backends bind-mount the derived credential file into project containers.
+func (m *Manager) SetGitCredentials(p port.GitCredentialProvider) {
+	m.mu.Lock()
+	m.factory.SetGitCredentials(p)
+	m.mu.Unlock()
+}
+
 // GrantSessionDomains merges hosts into the Hard allowlist for one session.
 func (m *Manager) GrantSessionDomains(sessionID string, domains []string) {
 	sessionID = strings.TrimSpace(sessionID)

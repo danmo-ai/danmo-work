@@ -93,6 +93,13 @@ func (e *CLIRuntime) CreateDetached(ctx context.Context, opts CreateOpts) error 
 	if opts.Network != "" {
 		args = append(args, "--network", opts.Network)
 	}
+	for _, b := range opts.Binds {
+		mode := "rw"
+		if b.ReadOnly {
+			mode = "ro"
+		}
+		args = append(args, "-v", b.Host+":"+b.Container+":"+mode)
+	}
 	args = append(args, resourceFlagsDocker(opts.Resources)...)
 	for _, ev := range opts.Env {
 		args = append(args, "-e", ev)

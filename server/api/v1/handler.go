@@ -27,6 +27,7 @@ var Version = "dev"
 type Handler struct {
 	Sessions      *service.SessionManager
 	Projects      *service.ProjectManager
+	Git           *service.GitManager
 	LLMConfig     *service.LLMConfigManager
 	Config        *service.ConfigManager
 	SearchConfig  *service.SearchConfigManager
@@ -127,6 +128,15 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/projects/:id/git-diff", getProjectGitDiff(h))
 	api.GET("/projects/:id/git-branches", getProjectGitBranches(h))
 	api.POST("/projects/:id/git-checkout", checkoutProjectGitBranch(h))
+	api.GET("/projects/:id/git-remotes", getProjectGitRemotes(h))
+	api.POST("/projects/:id/git-remote/add", addProjectGitRemote(h))
+	api.GET("/git-credentials", getGitCredentials(h))
+	api.POST("/projects/:id/git-credentials", putGitCredentials(h))
+	api.DELETE("/git-credentials", deleteGitCredential(h))
+	api.POST("/projects/:id/git-stage", stageProjectFiles(h))
+	api.POST("/projects/:id/git-commit", commitProjectGit(h))
+	api.GET("/projects/:id/git-log", getProjectGitLog(h))
+	api.GET("/projects/:id/git-stream", streamGitOp(h))
 	api.GET("/projects/:id/terminal", projectTerminal(h))
 	api.GET("/llm/configs", getLLMConfigs(h))
 	api.POST("/llm/configs", createLLMConfig(h))

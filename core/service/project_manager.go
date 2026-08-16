@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -445,10 +446,13 @@ type GitFileChange struct {
 }
 
 type GitChanges struct {
-	Branch  string           `json:"branch"`
-	Changes []*GitFileChange `json:"changes"`
-	Error   string           `json:"error,omitempty"`
-	Code    string           `json:"code,omitempty"` // git_missing | init_failed
+	Branch    string           `json:"branch"`
+	Ahead     int              `json:"ahead,omitempty"`
+	Behind    int              `json:"behind,omitempty"`
+	HasRemote bool             `json:"hasRemote,omitempty"`
+	Changes   []*GitFileChange `json:"changes"`
+	Error     string           `json:"error,omitempty"`
+	Code      string           `json:"code,omitempty"` // git_missing | init_failed
 }
 
 type GitBranches struct {
@@ -506,7 +510,12 @@ func (m *ProjectManager) projectWorkDir(ctx context.Context, projectID string) (
 	if root == "" {
 		root = filepath.Join(m.ProjectDir(projectID), "files")
 	}
-	return filepath.Clean(root), nil
+	root = filepath.Clean(root)
+	// Resolve symlinks so git root comparisons agree (e.g. macOS /var → /private/var).
+	if resolved, rerr := filepath.EvalSymlinks(root); rerr == nil {
+		root = resolved
+	}
+	return root, nil
 }
 
 func gitRepoRoot(dir string) (string, error) {
@@ -829,6 +838,13 @@ func parseGitStatus(output []byte, gitRoot, projectRoot, prefix string) *GitChan
 		if strings.HasPrefix(line, "## ") {
 			branchInfo := strings.TrimPrefix(line, "## ")
 			result.Branch = strings.Split(branchInfo, "...")[0]
+			if idx := strings.Index(branchInfo, "..."); idx >= 0 {
+				result.HasRemote = true
+				tail := branchInfo[idx+3:]
+				if i := strings.Index(tail, "["); i >= 0 && strings.HasSuffix(tail, "]") && len(tail) >= i+2 {
+					result.Ahead, result.Behind = parseAheadBehind(tail[i+1 : len(tail)-1])
+				}
+			}
 			continue
 		}
 		if len(line) < 3 {
@@ -904,4 +920,26 @@ func changeInRoot(file, gitRoot, projectRoot string) bool {
 	abs := filepath.Join(gitRoot, file)
 	abs = filepath.Clean(abs)
 	return strings.HasPrefix(abs, projectRoot) && (abs == projectRoot || strings.HasPrefix(abs, projectRoot+string(filepath.Separator)))
+}
+
+// parseAheadBehind extracts ahead/behind counts from "ahead 2, behind 1".
+func parseAheadBehind(s string) (ahead, behind int) {
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		fields := strings.Fields(part)
+		if len(fields) != 2 {
+			continue
+		}
+		n, err := strconv.Atoi(fields[1])
+		if err != nil {
+			continue
+		}
+		switch fields[0] {
+		case "ahead":
+			ahead = n
+		case "behind":
+			behind = n
+		}
+	}
+	return ahead, behind
 }

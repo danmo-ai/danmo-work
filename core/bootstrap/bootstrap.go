@@ -50,6 +50,7 @@ type Core struct {
 	Loader        *config.Loader
 	Sessions      *service.SessionManager
 	Projects      *service.ProjectManager
+	Git           *service.GitManager
 	LLMConfig     *service.LLMConfigManager
 	ConfigManager *service.ConfigManager
 	SearchConfig  *service.SearchConfigManager
@@ -135,6 +136,9 @@ func New(cfg Config) *Core {
 
 	pm := service.NewProjectManager(st, appCfg.Data.Dir)
 	ensureDefaultProject(pm)
+
+	gitMgr := service.NewGitManager(pm)
+	gitMgr.SetSecretStore(st.Secrets())
 
 	turnLog := turnlog.NewTurnLogStore(pm.ProjectDir)
 	agents := service.NewAgentManager(appCfg.Data.Dir)
@@ -251,6 +255,7 @@ func New(cfg Config) *Core {
 	sessions.SetEngine(eng)
 
 	sb := sandbox.New(appCfg.Runtime.Sandbox)
+	sb.SetGitCredentials(gitMgr)
 	eng.SetSandbox(sb)
 	mcpDialer.PrepareStdio = sb.PrepareMCPStdio
 	// The unified sandbox manager is also the execution backend (container
@@ -372,6 +377,7 @@ func New(cfg Config) *Core {
 		Loader:        loader,
 		Sessions:      sessions,
 		Projects:      pm,
+		Git:           gitMgr,
 		LLMConfig:     llmConfig,
 		ConfigManager: configManager,
 		SearchConfig:  searchConfig,

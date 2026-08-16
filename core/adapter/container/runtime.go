@@ -22,6 +22,13 @@ type Runtime interface {
 	Exec(ctx context.Context, name, workdir, command string, env []string) ([]byte, error)
 }
 
+// Bind mounts an additional host path into the container.
+type Bind struct {
+	Host      string
+	Container string
+	ReadOnly  bool
+}
+
 // CreateOpts configures a long-lived per-project container.
 type CreateOpts struct {
 	Name      string
@@ -30,5 +37,6 @@ type CreateOpts struct {
 	Mount     string // container path
 	Network   string // engine-specific; "" = default bridge/nat
 	Env       []string
+	Binds     []Bind
 	Resources domain.EnvironmentResources
 }

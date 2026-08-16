@@ -16,11 +16,22 @@ type BackendFactory struct {
 	// containerCache keeps container backend instances alive across reprobes
 	// so per-project containers and loaded images survive config saves.
 	containerCache map[string]*containerBackend
+	// credProvider materializes git credentials for container binds.
+	credProvider port.GitCredentialProvider
 }
 
 // NewBackendFactory returns a fresh backend factory.
 func NewBackendFactory() *BackendFactory {
 	return &BackendFactory{containerCache: make(map[string]*containerBackend)}
+}
+
+// SetGitCredentials attaches the git credential provider to existing and
+// future container backends.
+func (f *BackendFactory) SetGitCredentials(p port.GitCredentialProvider) {
+	f.credProvider = p
+	for _, b := range f.containerCache {
+		b.SetGitCredentials(p)
+	}
 }
 
 var _ port.BackendFactory = (*BackendFactory)(nil)
@@ -64,6 +75,7 @@ func (f *BackendFactory) Build(cfg domain.ConfigSandboxSection, allowlistProxyAc
 	case string(domain.SandboxBackendPodman), string(domain.SandboxBackendDocker), string(domain.SandboxBackendAppleContainer):
 		if cached, ok := f.containerCache[force]; ok {
 			cached.Configure(cfg)
+			cached.SetGitCredentials(f.credProvider)
 			return cached, domain.SandboxBackend(force), false, "", []string{force, "container-isolation", "fs-isolation", "network-control"}
 		}
 		b, err := newContainerBackend(domain.EnvironmentEngine(force), cfg)
@@ -71,6 +83,7 @@ func (f *BackendFactory) Build(cfg domain.ConfigSandboxSection, allowlistProxyAc
 			return hostBackend{}, domain.SandboxBackendHostWeak, true,
 				force + " backend unavailable: " + err.Error(), []string{"host"}
 		}
+		b.SetGitCredentials(f.credProvider)
 		f.containerCache[force] = b
 		return b, domain.SandboxBackend(force), false, "", []string{force, "container-isolation", "fs-isolation", "network-control"}
 	}

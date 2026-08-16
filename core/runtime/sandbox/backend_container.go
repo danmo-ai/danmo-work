@@ -18,25 +18,30 @@ const (
 	defaultContainerImage = "localhost/danmo-work-env:bundled"
 	// containerPref v2: workspace bind uses host abs path (not /workspace).
 	containerPref = "danmo-wp-"
+	// containerGitCredDir is the in-container path for the git credential bind.
+	containerGitCredDir = "/root/.danmo-git-cred"
+	// containerGitCredFile is the in-container path of the derived credentials file.
+	containerGitCredFile = containerGitCredDir + "/.git-credentials"
 )
 
 // containerBackend runs exec_shell in a per-project OCI container (podman,
 // docker, or apple-container). The image is loaded from a user-downloaded tar
 // — never a registry pull.
 type containerBackend struct {
-	mu          sync.Mutex
-	engine      domain.EnvironmentEngine
-	runtime     container.Runtime
-	image       string
-	tarPath     string
-	tarOverride string
-	mount       string
-	resources   domain.EnvironmentResources
-	imageReady  bool
-	tarMissing  bool
-	daemonDown  bool
-	daemonMsg   string
-	active      map[string]struct{}
+	mu           sync.Mutex
+	engine       domain.EnvironmentEngine
+	runtime      container.Runtime
+	image        string
+	tarPath      string
+	tarOverride  string
+	mount        string
+	resources    domain.EnvironmentResources
+	imageReady   bool
+	tarMissing   bool
+	daemonDown   bool
+	daemonMsg    string
+	active       map[string]struct{}
+	credProvider port.GitCredentialProvider
 }
 
 func newContainerBackend(engine domain.EnvironmentEngine, cfg domain.ConfigSandboxSection) (*containerBackend, error) {
@@ -51,6 +56,16 @@ func newContainerBackend(engine domain.EnvironmentEngine, cfg domain.ConfigSandb
 	}
 	b.Configure(cfg)
 	return b, nil
+}
+
+// SetGitCredentials attaches the credential provider used when creating
+// project containers. Containers created before credentials existed still see
+// updates: the provider dir is always bind-mounted and its file content
+// changes are visible live through the mount.
+func (b *containerBackend) SetGitCredentials(p port.GitCredentialProvider) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.credProvider = p
 }
 
 // Configure refreshes cfg-derived fields (image/tar/mount/resources) and
@@ -234,17 +249,38 @@ func (b *containerBackend) ensureProjectContainer(ctx context.Context, opts port
 		}
 	}
 
+	env := egress.BuildProxyEnv(nil, egress.ProxyEnvOpts{
+		ProxyAddr:    opts.AllowlistProxy,
+		Engine:       b.runtime.Name(),
+		ForContainer: true,
+	})
+	var binds []container.Bind
+	b.mu.Lock()
+	credProvider := b.credProvider
+	b.mu.Unlock()
+	if credProvider != nil {
+		if dir := credProvider.CredentialDir(); dir != "" {
+			binds = append(binds, container.Bind{
+				Host:      dir,
+				Container: containerGitCredDir,
+				ReadOnly:  true,
+			})
+			env = append(env,
+				"GIT_CONFIG_COUNT=2",
+				"GIT_CONFIG_KEY_0=credential.helper",
+				"GIT_CONFIG_VALUE_0=store --file="+containerGitCredFile,
+			)
+		}
+	}
+
 	create := container.CreateOpts{
-		Name:    name,
-		Image:   b.image,
-		WorkDir: workDir,
-		Mount:   mount,
-		Network: netMode,
-		Env: egress.BuildProxyEnv(nil, egress.ProxyEnvOpts{
-			ProxyAddr:    opts.AllowlistProxy,
-			Engine:       b.runtime.Name(),
-			ForContainer: true,
-		}),
+		Name:      name,
+		Image:     b.image,
+		WorkDir:   workDir,
+		Mount:     mount,
+		Network:   netMode,
+		Env:       env,
+		Binds:     binds,
 		Resources: b.resources,
 	}
 	if err := b.runtime.CreateDetached(ctx, create); err != nil {

@@ -361,6 +361,13 @@ func (e *AppleRuntime) CreateDetached(ctx context.Context, opts CreateOpts) erro
 		"--workdir", opts.Mount,
 		"-v", opts.WorkDir + ":" + opts.Mount,
 	}
+	for _, b := range opts.Binds {
+		mode := "rw"
+		if b.ReadOnly {
+			mode = "ro"
+		}
+		args = append(args, "-v", b.Host+":"+b.Container+":"+mode)
+	}
 	switch opts.Network {
 	case "", "default":
 		// default vmnet

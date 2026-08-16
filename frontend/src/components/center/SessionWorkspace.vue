@@ -1931,7 +1931,13 @@ function onTitleKeydown(e: KeyboardEvent) {
       :open="rightDrawerOpen"
       class="session-workspace__drawer"
       direction="rtl"
-      :size="rightTab === 'trajectory' ? 'min(900px, 96vw)' : 'min(380px, 92vw)'"
+      :size="
+        rightTab === 'trajectory'
+          ? 'min(900px, 96vw)'
+          : rightTab === 'changes'
+            ? 'min(520px, 92vw)'
+            : 'min(380px, 92vw)'
+      "
       :title="rightDrawerTitle"
       @update:open="workspaceUi.setRightDrawerOpen"
     >
