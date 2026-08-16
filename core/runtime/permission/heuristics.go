@@ -118,6 +118,15 @@ func EffectiveHTTPRequestRisk(base domain.RiskLevel, method string, headers map[
 	return base
 }
 
+// EffectiveFileOpRisk raises delete to high risk (irreversible); move/copy
+// keep the base medium risk. Callers pass handler.RiskLevel() as base.
+func EffectiveFileOpRisk(base domain.RiskLevel, action string) domain.RiskLevel {
+	if strings.EqualFold(strings.TrimSpace(action), "delete") {
+		return domain.RiskHigh
+	}
+	return base
+}
+
 var reURLHost = regexp.MustCompile(`(?i)https?://([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(:\d+)?`)
 var reHostToken = regexp.MustCompile(`(?i)\b([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+(com|org|net|io|dev|ai|co|cn|app|cloud)\b`)
 

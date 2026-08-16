@@ -184,6 +184,21 @@ func TestEffectiveHTTPRequestRisk(t *testing.T) {
 	}
 }
 
+func TestEffectiveFileOpRisk(t *testing.T) {
+	if got := EffectiveFileOpRisk(domain.RiskMedium, "move"); got != domain.RiskMedium {
+		t.Fatalf("move = %s", got)
+	}
+	if got := EffectiveFileOpRisk(domain.RiskMedium, "copy"); got != domain.RiskMedium {
+		t.Fatalf("copy = %s", got)
+	}
+	if got := EffectiveFileOpRisk(domain.RiskMedium, "delete"); got != domain.RiskHigh {
+		t.Fatalf("delete = %s", got)
+	}
+	if got := EffectiveFileOpRisk(domain.RiskMedium, " DELETE "); got != domain.RiskHigh {
+		t.Fatalf("padded delete = %s", got)
+	}
+}
+
 func TestGateExternalAsk(t *testing.T) {
 	g := NewGate(nil)
 	r := g.CheckRequest(Request{ToolName: "mcp_notion_search", Risk: domain.RiskExternal})

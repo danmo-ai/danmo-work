@@ -732,6 +732,10 @@ func (p *TurnRunner) gateToolCall(
 		method, _ := call.Arguments["method"].(string)
 		risk = permission.EffectiveHTTPRequestRisk(risk, method, permission.ParseHTTPHeadersFromArgs(call.Arguments))
 	}
+	if call.Name == "file_op" {
+		action, _ := call.Arguments["action"].(string)
+		risk = permission.EffectiveFileOpRisk(risk, action)
+	}
 	permResult := p.Perm.CheckRequest(permission.Request{
 		ToolName:            call.Name,
 		Risk:                risk,

@@ -31,7 +31,7 @@ Danmo Work 是一个**通用型 AI Work Agent**，兼具基本的 AI Coding 能�
 | 技能/能力 | `read_skill` / Skill 绑定：封装特定领域能力 |
 | 知识检索 | `search_kb` Tool：知识库检索，返回上下文（章级 BM25） |
 | 持久记忆 | `memory_update` / `memory_read`：跨会话事实（user / project / agent） |
-| 文件操作 | `read_file` / `write` / `edit` / `apply_patch` / `exec_shell` |
+| 文件操作 | `read_file` / `write` / `edit` / `apply_patch` / `file_op`（move/copy/delete）/ `exec_shell` |
 | 外部 API / 连接器 | `http_request`（通用 REST）/ **连接器**（产品名；实现多为 MCP）/ `web_fetch`·`web_search`；禁止一 API 一 builtin Tool |
 
 **关键设计**：所有 Tool 具有统一接口签名，模型通过 Tool Call 驱动整个系统循环。

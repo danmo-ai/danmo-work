@@ -26,6 +26,8 @@ tools:
     risk_level: medium
   - tool_id: apply_patch
     risk_level: medium
+  - tool_id: file_op
+    risk_level: medium
   - tool_id: todowrite
     risk_level: low
 knowledge: []

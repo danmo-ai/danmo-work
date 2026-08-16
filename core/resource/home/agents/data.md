@@ -15,6 +15,8 @@ tools:
     risk_level: low
   - tool_id: write
     risk_level: medium
+  - tool_id: file_op
+    risk_level: medium
   - tool_id: exec_shell
     risk_level: high
   - tool_id: todowrite
