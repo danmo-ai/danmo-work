@@ -778,7 +778,7 @@ func TestAppendCallTimeContextIsUserAndNotSystem(t *testing.T) {
 		{Role: "system", Content: "persona"},
 		{Role: "user", Content: "goal"},
 	}
-	out := appendCallTimeContext(base, "/tmp/work", "m1", "<active-todos>\nA\n</active-todos>")
+	out := appendCallTimeContext(base, "/tmp/work", "m1", false, "kb hit")
 	if len(out) != 3 {
 		t.Fatalf("len=%d", len(out))
 	}
@@ -789,11 +789,36 @@ func TestAppendCallTimeContextIsUserAndNotSystem(t *testing.T) {
 	if tail.Role != "user" {
 		t.Fatalf("call-time tail must be user, got %s", tail.Role)
 	}
-	if !strings.Contains(tail.Content, "<turn-context>") || !strings.Contains(tail.Content, "<active-todos>") {
-		t.Fatalf("tail missing blocks: %s", tail.Content)
+	if !strings.Contains(tail.Content, "<turn-context>") || !strings.Contains(tail.Content, "Model: m1") {
+		t.Fatalf("tail missing turn-context: %s", tail.Content)
+	}
+	if !strings.Contains(tail.Content, "kb hit") {
+		t.Fatalf("tail missing kb: %s", tail.Content)
+	}
+	if strings.Contains(tail.Content, "<plan-mode>") {
+		t.Fatal("plan-mode must be omitted when PlanMode=false")
 	}
 	if strings.Contains(tail.Content, "persona") {
 		t.Fatal("tail must not include system persona")
+	}
+}
+
+func TestAppendCallTimeContextIncludesPlanMode(t *testing.T) {
+	out := appendCallTimeContext(nil, "/tmp/work", "m1", true, "")
+	if len(out) != 1 || out[0].Role != "user" {
+		t.Fatalf("got %+v", out)
+	}
+	if !strings.Contains(out[0].Content, "<turn-context>") || !strings.Contains(out[0].Content, "<plan-mode>") {
+		t.Fatalf("expected turn-context + plan-mode:\n%s", out[0].Content)
+	}
+	if !strings.Contains(out[0].Content, "PLAN MODE") {
+		t.Fatal("expected PLAN MODE instruction")
+	}
+	if !strings.Contains(out[0].Content, "read_file") || !strings.Contains(out[0].Content, "delegate_agent") {
+		t.Fatal("expected plan-mode read-only tool list")
+	}
+	if !strings.Contains(out[0].Content, "AGENTS.md") {
+		t.Fatal("expected plan-mode workflow to mention AGENTS.md")
 	}
 }
 

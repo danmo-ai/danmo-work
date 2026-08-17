@@ -450,12 +450,12 @@ func TestFormatActiveTodosAndSystemPrompt(t *testing.T) {
 		t.Fatalf("formatActiveTodos=%q", block)
 	}
 
-	sys := buildSystemPrompt("persona", nil, nil, false, false, `{"summary":"x"}`, domain.SandboxStatus{}, domain.EnvironmentStatus{})
+	sys := buildSystemPrompt("persona", nil, nil, false, `{"summary":"x"}`, block, "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
 	if !contains(sys, "<compaction-checkpoint>") {
 		t.Error("expected compaction-checkpoint")
 	}
-	if contains(sys, "<active-todos>") {
-		t.Error("active-todos must not be in system prompt")
+	if !contains(sys, "<active-todos>") || !contains(sys, "[in_progress] A (high)") {
+		t.Errorf("expected active-todos in prompt, got %q", sys)
 	}
 	if !contains(sys, "<ask-user-policy>") || !contains(sys, "ask_user") {
 		t.Errorf("expected ask-user-policy in prompt, got %q", sys)

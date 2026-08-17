@@ -162,8 +162,8 @@ type TurnContext struct {
 	Path     []domain.TurnPathEntry
 	OnReport func(domain.Report)
 	Messages []Message
-	// EphemeralContext is call-time-only user content (todos, file-changes,
-	// knowledge hits) appended after <turn-context>. Not persisted.
+	// EphemeralContext is call-time-only user content (knowledge hits)
+	// appended after <turn-context>. Not persisted.
 	EphemeralContext string
 	// ClaimSteers loads durable soft-steer messages (status=steering) for this
 	// session. Called after parallel tools finish, before the next LLM call
@@ -296,7 +296,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 
 	messages := tctx.Messages
 
-	// Call-time user tail (turn-context + todos/file-changes/kb): appended only
+	// Call-time user tail (turn-context + plan-mode + kb): appended only
 	// for LLM calls, NOT persisted (KV cache: static system + history stay a
 	// stable prefix across steps and uncompressed turns).
 
@@ -346,7 +346,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepStarted, domain.StepPayload{Step: step})
 		llmReq := port.LLMChatRequest{
 			Model:    tctx.Model,
-			Messages: appendCallTimeContext(toPortMessages(messages), tctx.WorkDir, tctx.Model, tctx.EphemeralContext),
+			Messages: appendCallTimeContext(toPortMessages(messages), tctx.WorkDir, tctx.Model, tctx.PlanMode, tctx.EphemeralContext),
 			Tools:    tools,
 		}
 		if isLastStep {
@@ -1403,10 +1403,14 @@ func buildTurnContextMessage(workDir, model string) Message {
 	return Message{Role: RoleUser, Content: formatTurnContext(workDir, model)}
 }
 
-// appendCallTimeContext appends turn-context plus optional ephemeral blocks as a
-// trailing user message. Temporary — the original messages slice is not modified.
-func appendCallTimeContext(msgs []port.ChatMessage, workDir, model, extra string) []port.ChatMessage {
+// appendCallTimeContext appends turn-context, optional plan-mode, and extra
+// ephemeral blocks as a trailing user message. Temporary — the original
+// messages slice is not modified.
+func appendCallTimeContext(msgs []port.ChatMessage, workDir, model string, planMode bool, extra string) []port.ChatMessage {
 	content := formatTurnContext(workDir, model)
+	if planMode {
+		content += "\n\n" + buildPlanModePrompt()
+	}
 	if extra = strings.TrimSpace(extra); extra != "" {
 		content += "\n\n" + extra
 	}

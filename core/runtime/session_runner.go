@@ -616,7 +616,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 			fileChanges = formatFileChanges(checkpoint.FileChanges)
 		}
 
-		sys := buildSystemPrompt(agentPtr.SystemPrompt, skills, e.delegatableAgents(agentPtr), agentPtr.CanDelegate, s.PlanMode, checkpointText, e.sandboxStatus(), e.environmentStatus())
+		sys := buildSystemPrompt(agentPtr.SystemPrompt, skills, e.delegatableAgents(agentPtr), agentPtr.CanDelegate, checkpointText, activeTodos, fileChanges, e.sandboxStatus(), e.environmentStatus())
 		messages := []Message{{Role: RoleSystem, Content: sys}}
 
 		// Full session history from disk, including this turn's complete tool prefix.
@@ -637,7 +637,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 			Model: s.ModelID, MaxSteps: agentPtr.Steps, WorkDir: workDir, ProjectID: s.ProjectID, Messages: messages,
 			Path:             []domain.TurnPathEntry{{TurnID: turnID, AgentID: agentPtr.ID}},
 			PlanMode:         s.PlanMode,
-			EphemeralContext: joinNonEmpty(activeTodos, fileChanges, e.knowledgeHitsText(agentPtr, goal, cfg.knowledgeSearchTopK)),
+			EphemeralContext: e.knowledgeHitsText(agentPtr, goal, cfg.knowledgeSearchTopK),
 		})
 
 		e.clearSessionTurnMessages(sessionID)
@@ -1235,7 +1235,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		fileChanges = formatFileChanges(checkpoint.FileChanges)
 	}
 
-	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, planMode, checkpointText, e.sandboxStatus(), e.environmentStatus())
+	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, checkpointText, activeTodos, fileChanges, e.sandboxStatus(), e.environmentStatus())
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
 	}
@@ -1260,7 +1260,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		ProjectID:        projectID,
 		PlanMode:         planMode,
 		Messages:         messages,
-		EphemeralContext: joinNonEmpty(activeTodos, fileChanges, e.knowledgeHitsText(agent, goal, cfg.knowledgeSearchTopK)),
+		EphemeralContext: e.knowledgeHitsText(agent, goal, cfg.knowledgeSearchTopK),
 		Path:             []domain.TurnPathEntry{{TurnID: turnID, AgentID: agent.ID}},
 		ClaimSteers: func() []Message {
 			if e.sessions == nil {
@@ -1582,7 +1582,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent, planMode bool) *tool.Regi
 			childReg.Register(rs)
 			childRunner := e.spawnTurnRunner(childTurnID, childReg, skills, workerAgent.Tools)
 
-			sys := buildSystemPrompt(workerAgent.SystemPrompt, skills, nil, workerAgent.CanDelegate, planMode, "", e.sandboxStatus(), e.environmentStatus())
+			sys := buildSystemPrompt(workerAgent.SystemPrompt, skills, nil, workerAgent.CanDelegate, "", "", "", e.sandboxStatus(), e.environmentStatus())
 			messages := []Message{
 				{Role: RoleSystem, Content: sys},
 			}
@@ -1856,22 +1856,12 @@ func (e *Engine) knowledgeHitsText(agent domain.Agent, goal string, topK int) st
 	return strings.Join(hits, "\n")
 }
 
-func joinNonEmpty(parts ...string) string {
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if strings.TrimSpace(p) != "" {
-			out = append(out, p)
-		}
-	}
-	return strings.Join(out, "\n\n")
-}
-
 func (e *Engine) buildTurnMessages(sessionID string, agent domain.Agent, goal string, checkpointText string, planMode bool) []Message {
 	var skills []domain.Skill
 	if e.skills != nil {
 		skills = e.resolveAgentSkills(agent, e.dataDir)
 	}
-	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, planMode, checkpointText, e.sandboxStatus(), e.environmentStatus())
+	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, checkpointText, "", "", e.sandboxStatus(), e.environmentStatus())
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
 	}

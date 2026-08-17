@@ -10,7 +10,7 @@ import (
 	"danmo-work/core/domain"
 )
 
-func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, canDelegate bool, planMode bool, checkpoint string, sandboxStatus domain.SandboxStatus, envStatus domain.EnvironmentStatus) string {
+func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, canDelegate bool, checkpoint string, activeTodos string, fileChanges string, sandboxStatus domain.SandboxStatus, envStatus domain.EnvironmentStatus) string {
 	var b strings.Builder
 	b.WriteString(agentPersona)
 
@@ -41,15 +41,19 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 	b.WriteString(buildProjectContextPolicy())
 	b.WriteString("\n\n")
 	b.WriteString(buildRuntimeEnvironment(sandboxStatus, envStatus))
-	if planMode {
-		b.WriteString("\n\n")
-		b.WriteString(buildPlanModePrompt())
-	}
 	if checkpoint != "" {
 		b.WriteString("\n\n")
 		b.WriteString("<compaction-checkpoint>\n")
 		b.WriteString(checkpoint)
 		b.WriteString("\n</compaction-checkpoint>")
+	}
+	if activeTodos != "" {
+		b.WriteString("\n\n")
+		b.WriteString(activeTodos)
+	}
+	if fileChanges != "" {
+		b.WriteString("\n\n")
+		b.WriteString(fileChanges)
 	}
 
 	return b.String()

@@ -579,9 +579,9 @@ Tool 刚执行完时已按 `runtime.tools.max_output_chars` 做硬上限（§6.3
 ### 10.4 KV Cache 友好分区（设计目标）
 
 ```
-Zone A — Frozen:   [system] Agent Persona + 排序后的 skills/agents + 静态 policy + checkpoint（仅压缩时变）
+Zone A — Frozen:   [system] Agent Persona + 排序后的 skills/agents + 静态 policy + checkpoint/todos/file-changes（仅压缩时变）
 Zone B — Append:   保留区历史（未压缩则跨 turn 前缀不变）
-Zone C — Scratch:  当前 Turn user/tool + 调用末尾 ephemeral user（turn-context / todos / file-changes / kb）
+Zone C — Scratch:  当前 Turn user/tool + 调用末尾 ephemeral user（turn-context / plan-mode / kb）
 ```
 
 ---
