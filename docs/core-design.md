@@ -548,7 +548,7 @@ Tool 刚执行完时已按 `runtime.tools.max_output_chars` 做硬上限（§6.3
   1. 去重: 同 tool+input → 保留最新，旧结果摘要
   2. 渐进截断: 超大 tool result 截断并保留摘要
   3. 配对完整性: 过滤孤儿 tool_result
-  4. 头尾截断: 超 token 预算 → 删除最旧非 system 消息（assistant+tool_results 成对）
+  4. 头尾截断: 超高水位（MaxTokens * TriggerRatio）→ 删除最旧非 system 消息直到低水位 CutTokens（assistant+tool_results 成对；不删本轮 last user）
 ```
 
 ### 10.2 Session 级压缩（`CompactionManager`）
@@ -579,9 +579,9 @@ Tool 刚执行完时已按 `runtime.tools.max_output_chars` 做硬上限（§6.3
 ### 10.4 KV Cache 友好分区（设计目标）
 
 ```
-Zone A — Frozen:   [system] Agent Persona
-Zone B — Append:   Skill / Checkpoint 摘要 / 保留区历史
-Zone C — Scratch:  当前 Turn 的 user + Step 消息
+Zone A — Frozen:   [system] Agent Persona + 排序后的 skills/agents + 静态 policy + checkpoint（仅压缩时变）
+Zone B — Append:   保留区历史（未压缩则跨 turn 前缀不变）
+Zone C — Scratch:  当前 Turn user/tool + 调用末尾 ephemeral user（turn-context / todos / file-changes / kb）
 ```
 
 ---

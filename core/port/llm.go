@@ -64,9 +64,19 @@ type LLMChatResponse struct {
 }
 
 type LLMUsage struct {
-	PromptTokens     int
-	CompletionTokens int
-	TotalTokens      int
+	PromptTokens        int
+	CompletionTokens    int
+	TotalTokens         int
+	CacheReadTokens     int
+	CacheCreationTokens int
+}
+
+func (u *LLMUsage) Empty() bool {
+	if u == nil {
+		return true
+	}
+	return u.PromptTokens == 0 && u.CompletionTokens == 0 && u.TotalTokens == 0 &&
+		u.CacheReadTokens == 0 && u.CacheCreationTokens == 0
 }
 
 type LLMProvider interface {

@@ -105,7 +105,7 @@ func (p *OpenAIChatCompletionsClient) Chat(ctx context.Context, req port.LLMChat
 				"function": map[string]any{
 					"name":        t.Name,
 					"description": t.Description,
-					"parameters":   t.Parameters,
+					"parameters":  t.Parameters,
 				},
 			})
 		}
@@ -174,9 +174,12 @@ func parseChatCompletionsResponse(respBody []byte) (port.LLMChatResponse, error)
 			} `json:"message"`
 		} `json:"choices"`
 		Usage struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-			TotalTokens      int `json:"total_tokens"`
+			PromptTokens        int `json:"prompt_tokens"`
+			CompletionTokens    int `json:"completion_tokens"`
+			TotalTokens         int `json:"total_tokens"`
+			PromptTokensDetails struct {
+				CachedTokens int `json:"cached_tokens"`
+			} `json:"prompt_tokens_details"`
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
@@ -190,8 +193,9 @@ func parseChatCompletionsResponse(respBody []byte) (port.LLMChatResponse, error)
 		PromptTokens:     result.Usage.PromptTokens,
 		CompletionTokens: result.Usage.CompletionTokens,
 		TotalTokens:      result.Usage.TotalTokens,
+		CacheReadTokens:  result.Usage.PromptTokensDetails.CachedTokens,
 	}
-	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 && usage.TotalTokens == 0 {
+	if usage.Empty() {
 		usage = nil
 	}
 

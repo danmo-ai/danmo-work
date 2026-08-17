@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"sort"
 	"sync"
 
 	"danmo-work/core/domain"
@@ -84,7 +85,13 @@ func (r *Registry) RemoveServer(serverID string) {
 func (r *Registry) MountAllMCP() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for serverID, handlers := range r.mcpServers {
+	ids := make([]string, 0, len(r.mcpServers))
+	for serverID := range r.mcpServers {
+		ids = append(ids, serverID)
+	}
+	sort.Strings(ids)
+	for _, serverID := range ids {
+		handlers := r.mcpServers[serverID]
 		if ambient, ok := r.mcpAmbient[serverID]; ok && !ambient {
 			continue
 		}

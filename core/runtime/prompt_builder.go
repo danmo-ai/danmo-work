@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"danmo-work/core/domain"
 )
 
-func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, canDelegate bool, planMode bool, checkpoint string, activeTodos string, fileChanges string, sandboxStatus domain.SandboxStatus, envStatus domain.EnvironmentStatus) string {
+func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList []domain.Agent, canDelegate bool, planMode bool, checkpoint string, sandboxStatus domain.SandboxStatus, envStatus domain.EnvironmentStatus) string {
 	var b strings.Builder
 	b.WriteString(agentPersona)
 
@@ -25,20 +26,6 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 			b.WriteString("\n\n")
 			b.WriteString(agentMeta)
 		}
-	}
-	if checkpoint != "" {
-		b.WriteString("\n\n")
-		b.WriteString("<compaction-checkpoint>\n")
-		b.WriteString(checkpoint)
-		b.WriteString("\n</compaction-checkpoint>")
-	}
-	if activeTodos != "" {
-		b.WriteString("\n\n")
-		b.WriteString(activeTodos)
-	}
-	if fileChanges != "" {
-		b.WriteString("\n\n")
-		b.WriteString(fileChanges)
 	}
 	b.WriteString("\n\n")
 	b.WriteString(buildAskUserPolicy())
@@ -57,6 +44,12 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 	if planMode {
 		b.WriteString("\n\n")
 		b.WriteString(buildPlanModePrompt())
+	}
+	if checkpoint != "" {
+		b.WriteString("\n\n")
+		b.WriteString("<compaction-checkpoint>\n")
+		b.WriteString(checkpoint)
+		b.WriteString("\n</compaction-checkpoint>")
 	}
 
 	return b.String()
@@ -297,17 +290,32 @@ func buildRuntimeEnvironment(st domain.SandboxStatus, envSt domain.EnvironmentSt
 	return b.String()
 }
 
+func skillPromptSortKey(sk domain.Skill) string {
+	if sk.ID != "" {
+		return sk.ID
+	}
+	return sk.PromptPath
+}
+
 func buildSkillMetadata(skills []domain.Skill) string {
 	if len(skills) == 0 {
 		return ""
 	}
+	skills = append([]domain.Skill(nil), skills...)
+	sort.Slice(skills, func(i, j int) bool {
+		return skillPromptSortKey(skills[i]) < skillPromptSortKey(skills[j])
+	})
 	var b strings.Builder
 	b.WriteString("<available_skills>\n")
 	b.WriteString("  <!-- Use read_skill with the skill id from <path>: read_skill(path=\"<path>\") -->\n")
 	b.WriteString("  <!-- Resource files: read_skill(path=\"<path>/references/file.md\") — never bare references/… -->\n")
 	for _, sk := range skills {
 		fmt.Fprintf(&b, "  <skill>\n")
-		fmt.Fprintf(&b, "    <path>%s</path>\n", escapeXML(sk.PromptPath))
+		path := sk.PromptPath
+		if path == "" {
+			path = sk.ID
+		}
+		fmt.Fprintf(&b, "    <path>%s</path>\n", escapeXML(path))
 		if sk.Name != "" && sk.Name != sk.ID {
 			fmt.Fprintf(&b, "    <name>%s</name>\n", escapeXML(sk.Name))
 		}
@@ -328,6 +336,8 @@ func buildAgentMetadata(agents []domain.Agent) string {
 	if len(agents) == 0 {
 		return ""
 	}
+	agents = append([]domain.Agent(nil), agents...)
+	sort.Slice(agents, func(i, j int) bool { return agents[i].ID < agents[j].ID })
 	var b strings.Builder
 	b.WriteString("<available_agents>\n")
 	b.WriteString("  <!-- Delegate work to these agents with delegate_agent(agent_id=..., goal=...) -->\n")
@@ -353,16 +363,23 @@ func skillToolSchemas(skills []domain.Skill, toolBindings []domain.ToolBinding) 
 			toolSet[tid] = struct{}{}
 		}
 	}
-	var schemas []domain.ToolSchema
+	ids := make([]string, 0, len(toolSet))
 	for tid := range toolSet {
-		if tb, ok := bindings[tid]; ok {
-			schemas = append(schemas, domain.ToolSchema{
-				Name:        tb.ToolID,
-				Description: tb.ToolID,
-				Parameters:  map[string]any{"type": "object", "properties": map[string]any{}},
-				RiskLevel:   tb.RiskLevel,
-			})
+		ids = append(ids, tid)
+	}
+	sort.Strings(ids)
+	var schemas []domain.ToolSchema
+	for _, tid := range ids {
+		tb, ok := bindings[tid]
+		if !ok {
+			continue
 		}
+		schemas = append(schemas, domain.ToolSchema{
+			Name:        tb.ToolID,
+			Description: tb.ToolID,
+			Parameters:  map[string]any{"type": "object", "properties": map[string]any{}},
+			RiskLevel:   tb.RiskLevel,
+		})
 	}
 	return schemas
 }

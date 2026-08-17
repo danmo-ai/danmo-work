@@ -578,9 +578,9 @@ func TestEnforceToolPairingStripsPartialAssistantBatch(t *testing.T) {
 
 type panicToolHandler struct{}
 
-func (h *panicToolHandler) Name() string                      { return "boom" }
-func (h *panicToolHandler) RiskLevel() domain.RiskLevel       { return domain.RiskLow }
-func (h *panicToolHandler) Describe(map[string]any) string    { return "boom" }
+func (h *panicToolHandler) Name() string                   { return "boom" }
+func (h *panicToolHandler) RiskLevel() domain.RiskLevel    { return domain.RiskLow }
+func (h *panicToolHandler) Describe(map[string]any) string { return "boom" }
 func (h *panicToolHandler) Schema() domain.ToolSchema {
 	return domain.ToolSchema{Name: "boom", Parameters: map[string]any{"type": "object"}}
 }
@@ -675,6 +675,106 @@ func TestSnipHeadPreservesGoalAndTurnWorkUnderExtremeBudget(t *testing.T) {
 	}
 	if !foundWork {
 		t.Fatalf("this-turn work after the goal removed; out=%+v", out)
+	}
+}
+
+func TestCompactMessagesSnipsToLowWaterAndDoesNotRetrigger(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, nil, nil, nil)
+	pad := strings.Repeat("word ", 80) // ~100 tokens per message (chars/4)
+	cfg := turnRunCfg{
+		compactionMaxTokens:    400,
+		compactionTriggerRatio: 0.5, // high water = 200
+		compactionCutTokens:    80,  // low water
+		toolTruncateChars:      20000,
+		keepRecentToolSteps:    3,
+	}
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "old-a " + pad},
+		{Role: RoleAssistant, Content: "old-a-out " + pad},
+		{Role: RoleUser, Content: "old-b " + pad},
+		{Role: RoleAssistant, Content: "old-b-out " + pad},
+		{Role: RoleUser, Content: "current goal must survive"},
+		{Role: RoleAssistant, Content: "this turn work"},
+	}
+	if estimateTurnTokens(msgs) <= highWaterTokens(cfg) {
+		t.Fatalf("fixture too small: tokens=%d high=%d", estimateTurnTokens(msgs), highWaterTokens(cfg))
+	}
+	out := tr.compactMessages(msgs, cfg)
+	got := estimateTurnTokens(out)
+	if got > cfg.compactionCutTokens {
+		t.Fatalf("expected <= low water %d, got %d out=%+v", cfg.compactionCutTokens, got, out)
+	}
+	foundGoal := false
+	for _, m := range out {
+		if m.Role == RoleUser && m.Content == "current goal must survive" {
+			foundGoal = true
+		}
+	}
+	if !foundGoal {
+		t.Fatal("last user goal must survive low-water snip")
+	}
+
+	// Still under high water after a small append: do not snip again.
+	out2 := append(append([]Message(nil), out...), Message{Role: RoleAssistant, Content: "tiny"})
+	again := tr.compactMessages(out2, cfg)
+	if len(again) != len(out2) {
+		t.Fatalf("second compact should be a no-op under high water; before=%d after=%d", len(out2), len(again))
+	}
+}
+
+func TestCompactMessagesStopsAtLastUserWhenTurnExceedsLowWater(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, nil, nil, nil)
+	pad := strings.Repeat("word ", 200)
+	cfg := turnRunCfg{
+		compactionMaxTokens:    400,
+		compactionTriggerRatio: 0.5,
+		compactionCutTokens:    20,
+		toolTruncateChars:      20000,
+		keepRecentToolSteps:    3,
+	}
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "old " + pad},
+		{Role: RoleUser, Content: "current goal " + pad},
+		{Role: RoleAssistant, Content: "this turn work " + pad},
+	}
+	out := tr.compactMessages(msgs, cfg)
+	foundGoal, foundWork := false, false
+	for _, m := range out {
+		if m.Role == RoleUser && strings.HasPrefix(m.Content, "current goal") {
+			foundGoal = true
+		}
+		if m.Role == RoleAssistant && strings.HasPrefix(m.Content, "this turn work") {
+			foundWork = true
+		}
+	}
+	if !foundGoal || !foundWork {
+		t.Fatalf("goal+turn work must survive even if they exceed low water; out=%+v", out)
+	}
+}
+
+func TestAppendCallTimeContextIsUserAndNotSystem(t *testing.T) {
+	base := []port.ChatMessage{
+		{Role: "system", Content: "persona"},
+		{Role: "user", Content: "goal"},
+	}
+	out := appendCallTimeContext(base, "/tmp/work", "m1", "<active-todos>\nA\n</active-todos>")
+	if len(out) != 3 {
+		t.Fatalf("len=%d", len(out))
+	}
+	if out[0].Role != "system" || strings.Contains(out[0].Content, "<turn-context>") {
+		t.Fatalf("system must stay static, got %+v", out[0])
+	}
+	tail := out[len(out)-1]
+	if tail.Role != "user" {
+		t.Fatalf("call-time tail must be user, got %s", tail.Role)
+	}
+	if !strings.Contains(tail.Content, "<turn-context>") || !strings.Contains(tail.Content, "<active-todos>") {
+		t.Fatalf("tail missing blocks: %s", tail.Content)
+	}
+	if strings.Contains(tail.Content, "persona") {
+		t.Fatal("tail must not include system persona")
 	}
 }
 

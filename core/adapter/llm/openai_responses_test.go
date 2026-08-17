@@ -109,7 +109,7 @@ func TestParseResponsesBody_TextAndUsage(t *testing.T) {
 		"output": [
 			{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]}
 		],
-		"usage": {"input_tokens": 11, "output_tokens": 2, "total_tokens": 13}
+		"usage": {"input_tokens": 11, "output_tokens": 2, "total_tokens": 13, "input_tokens_details": {"cached_tokens": 4}}
 	}`)
 	resp, err := parseResponsesBody(raw)
 	if err != nil {
@@ -123,6 +123,9 @@ func TestParseResponsesBody_TextAndUsage(t *testing.T) {
 	}
 	if resp.Usage == nil || resp.Usage.PromptTokens != 11 || resp.Usage.CompletionTokens != 2 {
 		t.Errorf("usage: %+v", resp.Usage)
+	}
+	if resp.Usage.CacheReadTokens != 4 {
+		t.Errorf("cache read: %+v", resp.Usage)
 	}
 }
 

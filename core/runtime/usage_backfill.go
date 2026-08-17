@@ -44,14 +44,8 @@ func BackfillUsageFromStreamEvents(ctx context.Context, usage port.UsageRepo, se
 			if err := json.Unmarshal(ev.Payload, &p); err != nil {
 				continue
 			}
-			d := domain.UsageDelta{
-				PromptTokens:     p.PromptTokens,
-				CompletionTokens: p.CompletionTokens,
-				TotalTokens:      p.TotalTokens,
-				Model:            p.Model,
-				AgentID:          p.AgentID,
-			}.Normalize()
-			if d.TotalTokens == 0 && d.PromptTokens == 0 && d.CompletionTokens == 0 {
+			d := p.Delta()
+			if d.Empty() {
 				continue
 			}
 			at := ev.CreatedAt

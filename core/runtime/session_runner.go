@@ -58,16 +58,16 @@ type Engine struct {
 	mcpCaller     port.MCPCaller
 	// githubMCPReady reports whether the builtin github connector has usable auth.
 	githubMCPReady func(ctx context.Context) bool
-	dataDir       string
-	turnMessages  map[string][]Message
-	mu            sync.Mutex
-	approvalWait  map[string]chan ApprovalOutcome
-	approvalMeta  map[string]approvalMeta
-	sessionPerm   map[string]sessionPermState
-	askUserWait   map[string]chan string
-	cancel        map[string]context.CancelFunc
-	activeTurns   map[string]string // session ID -> in-flight turn ID
-	readSkill     *builtin.ReadSkill
+	dataDir        string
+	turnMessages   map[string][]Message
+	mu             sync.Mutex
+	approvalWait   map[string]chan ApprovalOutcome
+	approvalMeta   map[string]approvalMeta
+	sessionPerm    map[string]sessionPermState
+	askUserWait    map[string]chan string
+	cancel         map[string]context.CancelFunc
+	activeTurns    map[string]string // session ID -> in-flight turn ID
+	readSkill      *builtin.ReadSkill
 	// preTurnSnapshot runs before tools (AI review). Optional.
 	preTurnSnapshot func(ctx context.Context, projectID, sessionID, turnID, userInput string, extraPaths []string)
 }
@@ -79,8 +79,8 @@ type approvalMeta struct {
 }
 
 type sessionPermState struct {
-	AllowNetwork    bool
-	AllowedDomains  []string
+	AllowNetwork   bool
+	AllowedDomains []string
 }
 
 // ApprovalOutcome is returned when a pending approval is resolved.
@@ -616,15 +616,8 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 			fileChanges = formatFileChanges(checkpoint.FileChanges)
 		}
 
-		sys := buildSystemPrompt(agentPtr.SystemPrompt, skills, e.delegatableAgents(agentPtr), agentPtr.CanDelegate, s.PlanMode, checkpointText, activeTodos, fileChanges, e.sandboxStatus(), e.environmentStatus())
+		sys := buildSystemPrompt(agentPtr.SystemPrompt, skills, e.delegatableAgents(agentPtr), agentPtr.CanDelegate, s.PlanMode, checkpointText, e.sandboxStatus(), e.environmentStatus())
 		messages := []Message{{Role: RoleSystem, Content: sys}}
-		if hits := e.knowledge.Search(agentPtr.KnowledgeIDs, goal, cfg.knowledgeSearchTopK); len(hits) > 0 {
-			content := ""
-			for _, h := range hits {
-				content += h + "\n"
-			}
-			messages = append(messages, Message{Role: RoleSystem, Content: content})
-		}
 
 		// Full session history from disk, including this turn's complete tool prefix.
 		history := e.loadRetainedHistory(sessionID, checkpoint)
@@ -642,8 +635,9 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 		rep, _, err := runner.Run(turnCtx, TurnContext{
 			SessionID: sessionID, TurnID: turnID, Agent: agentPtr,
 			Model: s.ModelID, MaxSteps: agentPtr.Steps, WorkDir: workDir, ProjectID: s.ProjectID, Messages: messages,
-			Path: []domain.TurnPathEntry{{TurnID: turnID, AgentID: agentPtr.ID}},
-			PlanMode: s.PlanMode,
+			Path:             []domain.TurnPathEntry{{TurnID: turnID, AgentID: agentPtr.ID}},
+			PlanMode:         s.PlanMode,
+			EphemeralContext: joinNonEmpty(activeTodos, fileChanges, e.knowledgeHitsText(agentPtr, goal, cfg.knowledgeSearchTopK)),
 		})
 
 		e.clearSessionTurnMessages(sessionID)
@@ -1241,17 +1235,9 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		fileChanges = formatFileChanges(checkpoint.FileChanges)
 	}
 
-	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, planMode, checkpointText, activeTodos, fileChanges, e.sandboxStatus(), e.environmentStatus())
+	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, planMode, checkpointText, e.sandboxStatus(), e.environmentStatus())
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
-	}
-
-	if hits := e.knowledge.Search(agent.KnowledgeIDs, goal, cfg.knowledgeSearchTopK); len(hits) > 0 {
-		content := ""
-		for _, h := range hits {
-			content += h + "\n"
-		}
-		messages = append(messages, Message{Role: RoleSystem, Content: content})
 	}
 
 	// Cross-turn history: full LLM messages from turn log (compaction bounds the window).
@@ -1265,16 +1251,17 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 	workDir := e.resolveWorkDir(ctx, projectID)
 
 	rep, turnMsgs, err := runner.Run(ctx, TurnContext{
-		SessionID: sessionID,
-		TurnID:    turnID,
-		Agent:     agent,
-		Model:     modelID,
-		MaxSteps:  agent.Steps,
-		WorkDir:   workDir,
-		ProjectID: projectID,
-		PlanMode:  planMode,
-		Messages:  messages,
-		Path:      []domain.TurnPathEntry{{TurnID: turnID, AgentID: agent.ID}},
+		SessionID:        sessionID,
+		TurnID:           turnID,
+		Agent:            agent,
+		Model:            modelID,
+		MaxSteps:         agent.Steps,
+		WorkDir:          workDir,
+		ProjectID:        projectID,
+		PlanMode:         planMode,
+		Messages:         messages,
+		EphemeralContext: joinNonEmpty(activeTodos, fileChanges, e.knowledgeHitsText(agent, goal, cfg.knowledgeSearchTopK)),
+		Path:             []domain.TurnPathEntry{{TurnID: turnID, AgentID: agent.ID}},
 		ClaimSteers: func() []Message {
 			if e.sessions == nil {
 				return nil
@@ -1595,19 +1582,13 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent, planMode bool) *tool.Regi
 			childReg.Register(rs)
 			childRunner := e.spawnTurnRunner(childTurnID, childReg, skills, workerAgent.Tools)
 
-			sys := buildSystemPrompt(workerAgent.SystemPrompt, skills, nil, workerAgent.CanDelegate, planMode, "", "", "", e.sandboxStatus(), e.environmentStatus())
+			sys := buildSystemPrompt(workerAgent.SystemPrompt, skills, nil, workerAgent.CanDelegate, planMode, "", e.sandboxStatus(), e.environmentStatus())
 			messages := []Message{
 				{Role: RoleSystem, Content: sys},
 			}
-			if hits := e.knowledge.Search(workerAgent.KnowledgeIDs, goal, cfg.knowledgeSearchTopK); len(hits) > 0 {
-				content := ""
-				for _, h := range hits {
-					content += h + "\n"
-				}
-				messages = append(messages, Message{Role: RoleSystem, Content: content})
-			}
 			messages = append(messages, Message{Role: RoleUser, Content: goal})
 			childCtx.Messages = messages
+			childCtx.EphemeralContext = e.knowledgeHitsText(workerAgent, goal, cfg.knowledgeSearchTopK)
 
 			// Nested tool-run log for zip/debug only — not parent LLM history.
 			e.turnLog.CreateNested(childTurnID, sessionID, projectID, workerAgent.ID, goal)
@@ -1864,23 +1845,35 @@ func (e *Engine) ResolveAskUser(askID, answer string) error {
 	}
 }
 
+func (e *Engine) knowledgeHitsText(agent domain.Agent, goal string, topK int) string {
+	if e.knowledge == nil {
+		return ""
+	}
+	hits := e.knowledge.Search(agent.KnowledgeIDs, goal, topK)
+	if len(hits) == 0 {
+		return ""
+	}
+	return strings.Join(hits, "\n")
+}
+
+func joinNonEmpty(parts ...string) string {
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if strings.TrimSpace(p) != "" {
+			out = append(out, p)
+		}
+	}
+	return strings.Join(out, "\n\n")
+}
+
 func (e *Engine) buildTurnMessages(sessionID string, agent domain.Agent, goal string, checkpointText string, planMode bool) []Message {
-	cfg := e.loadRunCfg(context.Background())
 	var skills []domain.Skill
 	if e.skills != nil {
 		skills = e.resolveAgentSkills(agent, e.dataDir)
 	}
-	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, planMode, checkpointText, "", "", e.sandboxStatus(), e.environmentStatus())
+	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, planMode, checkpointText, e.sandboxStatus(), e.environmentStatus())
 	messages := []Message{
 		{Role: RoleSystem, Content: sys},
-	}
-
-	if hits := e.knowledge.Search(agent.KnowledgeIDs, goal, cfg.knowledgeSearchTopK); len(hits) > 0 {
-		content := ""
-		for _, h := range hits {
-			content += h + "\n"
-		}
-		messages = append(messages, Message{Role: RoleSystem, Content: content})
 	}
 
 	e.mu.Lock()
