@@ -276,6 +276,7 @@ export interface ConfigFile {
       model: string
       maxTokens: number
       triggerRatio: number
+      lowWaterRatio?: number
       cutTokens: number
       turnInterval: number
       subInterval: number
@@ -440,6 +441,7 @@ export interface RuntimeConfigForm {
   compactionEnabled: boolean
   compactionMaxTokens: number
   compactionTriggerRatio: number
+  compactionLowWaterRatio: number
   compactionCutTokens: number
   compactionTurnInterval: number
   compactionSubInterval: number

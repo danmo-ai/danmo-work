@@ -548,7 +548,7 @@ Tool 刚执行完时已按 `runtime.tools.max_output_chars` 做硬上限（§6.3
   1. 去重: 同 tool+input → 保留最新，旧结果摘要
   2. 渐进截断: 超大 tool result 截断并保留摘要
   3. 配对完整性: 过滤孤儿 tool_result
-  4. 头尾截断: 超高水位（MaxTokens * TriggerRatio）→ 删除最旧非 system 消息直到低水位 CutTokens（assistant+tool_results 成对；不删本轮 last user）
+  4. 头尾截断: 超高水位（MaxTokens * TriggerRatio）→ 删除最旧非 system 消息直到低水位（MaxTokens * LowWaterRatio；assistant+tool_results 成对；不删本轮 last user）
 ```
 
 ### 10.2 Session 级压缩（`CompactionManager`）
@@ -564,7 +564,7 @@ Tool 刚执行完时已按 `runtime.tools.max_output_chars` 做硬上限（§6.3
 事件: context.compacted
 ```
 
-配置见 `domain.ConfigCompactionSection`（enabled、maxTokens、triggerRatio、cutTokens、turnInterval、subInterval、toolTruncate）。
+配置见 `domain.ConfigCompactionSection`（enabled、maxTokens、triggerRatio、lowWaterRatio、cutTokens、turnInterval、subInterval、toolTruncate）。Turn 内裁剪用 triggerRatio / lowWaterRatio；Session 压缩保留窗口用 cutTokens。
 
 ### 10.3 记忆 vs 压缩 vs 知识库
 

@@ -203,6 +203,7 @@ const runtimeForm = ref({
   compactionEnabled: true,
   compactionMaxTokens: 128000,
   compactionTriggerRatio: 0.85,
+  compactionLowWaterRatio: 0.70,
   compactionCutTokens: 16000,
   compactionTurnInterval: 6,
   compactionSubInterval: 4,
@@ -1710,12 +1711,21 @@ onUnmounted(() => {
               </div>
               <div class="settings-form-row">
                 <div class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.compactionLowWaterRatio') }}</span>
+                  <div class="slider-row">
+                    <DqSlider v-model="runtimeForm.compactionLowWaterRatio" :min="0.1" :max="1.0" :step="0.05" />
+                    <span class="slider-row__value">{{ runtimeForm.compactionLowWaterRatio }}</span>
+                  </div>
+                </div>
+                <div class="settings-field settings-field--half">
                   <span class="settings-field__label">{{ $t('settings.compactionCutTokens') }}</span>
                   <div class="slider-row">
                     <DqSlider v-model="runtimeForm.compactionCutTokens" :min="1000" :max="64000" :step="1000" />
                     <span class="slider-row__value">{{ runtimeForm.compactionCutTokens }}</span>
                   </div>
                 </div>
+              </div>
+              <div class="settings-form-row">
                 <div class="settings-field settings-field--half">
                   <span class="settings-field__label">{{ $t('settings.compactionToolTruncate') }}</span>
                   <div class="slider-row">
@@ -1723,8 +1733,6 @@ onUnmounted(() => {
                     <span class="slider-row__value">{{ runtimeForm.compactionToolTruncate }}</span>
                   </div>
                 </div>
-              </div>
-              <div class="settings-form-row">
                 <div class="settings-field settings-field--half">
                   <span class="settings-field__label">{{ $t('settings.compactionKeepRecentToolSteps') }}</span>
                   <div class="slider-row">

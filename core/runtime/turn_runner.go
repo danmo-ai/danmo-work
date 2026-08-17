@@ -207,18 +207,18 @@ type doomTurnState struct {
 }
 
 type turnRunCfg struct {
-	autoApprove            bool
-	permissionMode         domain.PermissionMode
-	doomLoopThreshold      int
-	maxStepsDefault        int
-	maxLLMFailures         int
-	maxToolOutputChars     int
-	compactionEnabled      bool
-	compactionMaxTokens    int
-	compactionTriggerRatio float64
-	compactionCutTokens    int
-	toolTruncateChars      int
-	keepRecentToolSteps    int
+	autoApprove             bool
+	permissionMode          domain.PermissionMode
+	doomLoopThreshold       int
+	maxStepsDefault         int
+	maxLLMFailures          int
+	maxToolOutputChars      int
+	compactionEnabled       bool
+	compactionMaxTokens     int
+	compactionTriggerRatio  float64
+	compactionLowWaterRatio float64
+	toolTruncateChars       int
+	keepRecentToolSteps     int
 }
 
 func NewTurnRunner(llm port.LLMProvider, stream port.EventStream, perm *permission.Gate, reg *tool.Registry, configStore port.ConfigStore) *TurnRunner {
@@ -231,15 +231,15 @@ func NewTurnRunner(llm port.LLMProvider, stream port.EventStream, perm *permissi
 
 func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 	cfg := turnRunCfg{
-		doomLoopThreshold:      10,
-		maxStepsDefault:        200,
-		maxLLMFailures:         3,
-		maxToolOutputChars:     defaultMaxToolOutputChars,
-		compactionMaxTokens:    128000,
-		compactionTriggerRatio: 0.85,
-		compactionCutTokens:    16000,
-		toolTruncateChars:      turnToolTextMaxChars,
-		keepRecentToolSteps:    defaultKeepRecentToolSteps,
+		doomLoopThreshold:       10,
+		maxStepsDefault:         200,
+		maxLLMFailures:          3,
+		maxToolOutputChars:      defaultMaxToolOutputChars,
+		compactionMaxTokens:     128000,
+		compactionTriggerRatio:  0.85,
+		compactionLowWaterRatio: 0.70,
+		toolTruncateChars:       turnToolTextMaxChars,
+		keepRecentToolSteps:     defaultKeepRecentToolSteps,
 	}
 	if p.ConfigStore != nil {
 		if c, err := p.ConfigStore.Load(ctx); err == nil {
@@ -267,8 +267,8 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 			cfg.compactionEnabled = rt.Compaction.Enabled
 			cfg.compactionMaxTokens = rt.Compaction.MaxTokens
 			cfg.compactionTriggerRatio = rt.Compaction.TriggerRatio
-			if rt.Compaction.CutTokens > 0 {
-				cfg.compactionCutTokens = rt.Compaction.CutTokens
+			if rt.Compaction.LowWaterRatio > 0 {
+				cfg.compactionLowWaterRatio = rt.Compaction.LowWaterRatio
 			}
 			if rt.Compaction.ToolTruncate > 0 {
 				cfg.toolTruncateChars = rt.Compaction.ToolTruncate
@@ -1058,10 +1058,15 @@ func lowWaterTokens(cfg turnRunCfg) int {
 	if high <= 0 {
 		return 0
 	}
-	if cfg.compactionCutTokens <= 0 || cfg.compactionCutTokens >= high {
+	ratio := cfg.compactionLowWaterRatio
+	if ratio <= 0 {
+		ratio = 0.70
+	}
+	low := int(float64(cfg.compactionMaxTokens) * ratio)
+	if low <= 0 || low >= high {
 		return high
 	}
-	return cfg.compactionCutTokens
+	return low
 }
 
 func (p *TurnRunner) dedupToolResults(messages []Message) []Message {

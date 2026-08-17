@@ -64,10 +64,16 @@ type ConfigCompactionSection struct {
 	Model        string  `json:"model" mapstructure:"model"`
 	MaxTokens    int     `json:"maxTokens" mapstructure:"max_tokens"`
 	TriggerRatio float64 `json:"triggerRatio" mapstructure:"trigger_ratio"`
-	CutTokens    int     `json:"cutTokens" mapstructure:"cut_tokens"`
-	TurnInterval int     `json:"turnInterval" mapstructure:"turn_interval"`
-	SubInterval  int     `json:"subInterval" mapstructure:"sub_interval"`
-	ToolTruncate int     `json:"toolTruncate" mapstructure:"tool_truncate"`
+	// LowWaterRatio is the in-turn snipHead target as a fraction of MaxTokens.
+	// TriggerRatio is the high-water mark that starts clipping. Default 0.70.
+	// Separate from CutTokens, which is the session-compaction retain window.
+	LowWaterRatio float64 `json:"lowWaterRatio" mapstructure:"low_water_ratio"`
+	// CutTokens is how many recent estimated tokens session compaction keeps
+	// after summarizing older history. Default 16000.
+	CutTokens    int `json:"cutTokens" mapstructure:"cut_tokens"`
+	TurnInterval int `json:"turnInterval" mapstructure:"turn_interval"`
+	SubInterval  int `json:"subInterval" mapstructure:"sub_interval"`
+	ToolTruncate int `json:"toolTruncate" mapstructure:"tool_truncate"`
 	// KeepRecentToolSteps is how many latest LLM steps (assistant tool_call
 	// batches) keep full tool results during turn-internal truncation.
 	// Older steps are truncated to ToolTruncate. Default 3.

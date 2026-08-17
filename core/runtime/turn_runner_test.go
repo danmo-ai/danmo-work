@@ -682,11 +682,11 @@ func TestCompactMessagesSnipsToLowWaterAndDoesNotRetrigger(t *testing.T) {
 	tr := NewTurnRunner(nil, nil, nil, nil, nil)
 	pad := strings.Repeat("word ", 80) // ~100 tokens per message (chars/4)
 	cfg := turnRunCfg{
-		compactionMaxTokens:    400,
-		compactionTriggerRatio: 0.5, // high water = 200
-		compactionCutTokens:    80,  // low water
-		toolTruncateChars:      20000,
-		keepRecentToolSteps:    3,
+		compactionMaxTokens:     400,
+		compactionTriggerRatio:  0.5, // high water = 200
+		compactionLowWaterRatio: 0.2, // low water = 80
+		toolTruncateChars:       20000,
+		keepRecentToolSteps:     3,
 	}
 	msgs := []Message{
 		{Role: RoleSystem, Content: "sys"},
@@ -702,8 +702,9 @@ func TestCompactMessagesSnipsToLowWaterAndDoesNotRetrigger(t *testing.T) {
 	}
 	out := tr.compactMessages(msgs, cfg)
 	got := estimateTurnTokens(out)
-	if got > cfg.compactionCutTokens {
-		t.Fatalf("expected <= low water %d, got %d out=%+v", cfg.compactionCutTokens, got, out)
+	low := lowWaterTokens(cfg)
+	if got > low {
+		t.Fatalf("expected <= low water %d, got %d out=%+v", low, got, out)
 	}
 	foundGoal := false
 	for _, m := range out {
@@ -723,15 +724,33 @@ func TestCompactMessagesSnipsToLowWaterAndDoesNotRetrigger(t *testing.T) {
 	}
 }
 
+func TestLowWaterTokensUsesRatioNotCutTokens(t *testing.T) {
+	cfg := turnRunCfg{
+		compactionMaxTokens:     1000,
+		compactionTriggerRatio:  0.85,
+		compactionLowWaterRatio: 0.70,
+	}
+	if got, want := highWaterTokens(cfg), 850; got != want {
+		t.Fatalf("high=%d want %d", got, want)
+	}
+	if got, want := lowWaterTokens(cfg), 700; got != want {
+		t.Fatalf("low=%d want %d", got, want)
+	}
+	cfg.compactionLowWaterRatio = 0.90 // >= trigger → no hysteresis
+	if got := lowWaterTokens(cfg); got != highWaterTokens(cfg) {
+		t.Fatalf("low >= high should collapse to high, got %d", got)
+	}
+}
+
 func TestCompactMessagesStopsAtLastUserWhenTurnExceedsLowWater(t *testing.T) {
 	tr := NewTurnRunner(nil, nil, nil, nil, nil)
 	pad := strings.Repeat("word ", 200)
 	cfg := turnRunCfg{
-		compactionMaxTokens:    400,
-		compactionTriggerRatio: 0.5,
-		compactionCutTokens:    20,
-		toolTruncateChars:      20000,
-		keepRecentToolSteps:    3,
+		compactionMaxTokens:     400,
+		compactionTriggerRatio:  0.5,
+		compactionLowWaterRatio: 0.05,
+		toolTruncateChars:       20000,
+		keepRecentToolSteps:     3,
 	}
 	msgs := []Message{
 		{Role: RoleSystem, Content: "sys"},
