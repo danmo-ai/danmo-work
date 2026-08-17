@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -18,14 +19,14 @@ import (
 )
 
 const (
-	turnToolTextMaxChars         = 2000
-	defaultKeepRecentToolSteps   = 3
-	turnHugeResultThreshold      = 60000
-	defaultMaxToolOutputChars    = 50000
-	turnTokenEstimateDivisor     = 4
-	doomPatternWindow            = 8
-	doomDescribeMaxLen           = 200
-	toolErrorHint                = "\n[Analyze the error above and try a different approach.]"
+	turnToolTextMaxChars       = 2000
+	defaultKeepRecentToolSteps = 3
+	turnHugeResultThreshold    = 60000
+	defaultMaxToolOutputChars  = 50000
+	turnTokenEstimateDivisor   = 4
+	doomPatternWindow          = 8
+	doomDescribeMaxLen         = 200
+	toolErrorHint              = "\n[Analyze the error above and try a different approach.]"
 )
 
 const maxStepsPrompt = `<system-reminder>
@@ -89,8 +90,8 @@ func toPortMessages(msgs []Message) []port.ChatMessage {
 		}
 		out[i] = port.ChatMessage{
 			Role: string(m.Role), Content: m.Content, Parts: parts,
-			ToolCalls:        toPortToolCalls(m.ToolCalls),
-			ToolCallID:       m.ToolCallID, Name: m.Name,
+			ToolCalls:  toPortToolCalls(m.ToolCalls),
+			ToolCallID: m.ToolCallID, Name: m.Name,
 			ReasoningContent: m.ReasoningContent,
 		}
 	}
@@ -161,6 +162,9 @@ type TurnContext struct {
 	Path     []domain.TurnPathEntry
 	OnReport func(domain.Report)
 	Messages []Message
+	// EphemeralContext is call-time-only user content (knowledge hits)
+	// appended after <turn-context>. Not persisted.
+	EphemeralContext string
 	// ClaimSteers loads durable soft-steer messages (status=steering) for this
 	// session. Called after parallel tools finish, before the next LLM call
 	// (and when the model stops so a steer can keep the turn alive).
@@ -203,17 +207,18 @@ type doomTurnState struct {
 }
 
 type turnRunCfg struct {
-	autoApprove            bool
-	permissionMode         domain.PermissionMode
-	doomLoopThreshold      int
-	maxStepsDefault        int
-	maxLLMFailures         int
-	maxToolOutputChars     int
-	compactionEnabled      bool
-	compactionMaxTokens    int
-	compactionTriggerRatio float64
-	toolTruncateChars      int
-	keepRecentToolSteps    int
+	autoApprove             bool
+	permissionMode          domain.PermissionMode
+	doomLoopThreshold       int
+	maxStepsDefault         int
+	maxLLMFailures          int
+	maxToolOutputChars      int
+	compactionEnabled       bool
+	compactionMaxTokens     int
+	compactionTriggerRatio  float64
+	compactionLowWaterRatio float64
+	toolTruncateChars       int
+	keepRecentToolSteps     int
 }
 
 func NewTurnRunner(llm port.LLMProvider, stream port.EventStream, perm *permission.Gate, reg *tool.Registry, configStore port.ConfigStore) *TurnRunner {
@@ -226,14 +231,15 @@ func NewTurnRunner(llm port.LLMProvider, stream port.EventStream, perm *permissi
 
 func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 	cfg := turnRunCfg{
-		doomLoopThreshold:      10,
-		maxStepsDefault:        200,
-		maxLLMFailures:         3,
-		maxToolOutputChars:     defaultMaxToolOutputChars,
-		compactionMaxTokens:    128000,
-		compactionTriggerRatio: 0.85,
-		toolTruncateChars:      turnToolTextMaxChars,
-		keepRecentToolSteps:    defaultKeepRecentToolSteps,
+		doomLoopThreshold:       10,
+		maxStepsDefault:         200,
+		maxLLMFailures:          3,
+		maxToolOutputChars:      defaultMaxToolOutputChars,
+		compactionMaxTokens:     128000,
+		compactionTriggerRatio:  0.85,
+		compactionLowWaterRatio: 0.70,
+		toolTruncateChars:       turnToolTextMaxChars,
+		keepRecentToolSteps:     defaultKeepRecentToolSteps,
 	}
 	if p.ConfigStore != nil {
 		if c, err := p.ConfigStore.Load(ctx); err == nil {
@@ -261,6 +267,9 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 			cfg.compactionEnabled = rt.Compaction.Enabled
 			cfg.compactionMaxTokens = rt.Compaction.MaxTokens
 			cfg.compactionTriggerRatio = rt.Compaction.TriggerRatio
+			if rt.Compaction.LowWaterRatio > 0 {
+				cfg.compactionLowWaterRatio = rt.Compaction.LowWaterRatio
+			}
 			if rt.Compaction.ToolTruncate > 0 {
 				cfg.toolTruncateChars = rt.Compaction.ToolTruncate
 			}
@@ -287,9 +296,9 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 
 	messages := tctx.Messages
 
-	// Turn context: appended only for LLM calls, NOT persisted in messages
-	// (KV cache friendly: static system prompt prefix stays identical across turns).
-	turnCtxMsg := buildTurnContextMessage(tctx.WorkDir, tctx.Model)
+	// Call-time user tail (turn-context + plan-mode + kb): appended only
+	// for LLM calls, NOT persisted (KV cache: static system + history stay a
+	// stable prefix across steps and uncompressed turns).
 
 	tools := p.Registry.Schemas()
 	skillTools := skillToolSchemas(p.SkillList, p.ToolBindings)
@@ -337,7 +346,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepStarted, domain.StepPayload{Step: step})
 		llmReq := port.LLMChatRequest{
 			Model:    tctx.Model,
-			Messages: appendTurnContext(toPortMessages(messages), turnCtxMsg),
+			Messages: appendCallTimeContext(toPortMessages(messages), tctx.WorkDir, tctx.Model, tctx.PlanMode, tctx.EphemeralContext),
 			Tools:    tools,
 		}
 		if isLastStep {
@@ -371,11 +380,13 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 				maxPromptTokens = resp.Usage.PromptTokens
 			}
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventLLMUsage, domain.LLMUsagePayload{
-				PromptTokens:     resp.Usage.PromptTokens,
-				CompletionTokens: resp.Usage.CompletionTokens,
-				TotalTokens:      resp.Usage.TotalTokens,
-				Model:            tctx.Model,
-				AgentID:          tctx.Agent.ID,
+				PromptTokens:        resp.Usage.PromptTokens,
+				CompletionTokens:    resp.Usage.CompletionTokens,
+				TotalTokens:         resp.Usage.TotalTokens,
+				CacheReadTokens:     resp.Usage.CacheReadTokens,
+				CacheCreationTokens: resp.Usage.CacheCreationTokens,
+				Model:               tctx.Model,
+				AgentID:             tctx.Agent.ID,
 			})
 		}
 
@@ -1028,18 +1039,34 @@ func (p *TurnRunner) compactMessages(messages []Message, cfg turnRunCfg) []Messa
 	messages = p.dedupToolResults(messages)
 	messages = truncateToolResults(messages, cfg.toolTruncateChars, cfg.keepRecentToolSteps)
 	messages = p.enforceToolPairing(messages)
-	budget := budgetTokens(cfg)
-	if estimateTurnTokens(messages) > budget && budget > 0 {
-		messages = p.snipHead(messages, budget)
+	high := highWaterTokens(cfg)
+	if high > 0 && estimateTurnTokens(messages) > high {
+		messages = p.snipHead(messages, lowWaterTokens(cfg))
 	}
 	return messages
 }
 
-func budgetTokens(cfg turnRunCfg) int {
+func highWaterTokens(cfg turnRunCfg) int {
 	if cfg.compactionMaxTokens > 0 {
 		return int(float64(cfg.compactionMaxTokens) * cfg.compactionTriggerRatio)
 	}
 	return 0
+}
+
+func lowWaterTokens(cfg turnRunCfg) int {
+	high := highWaterTokens(cfg)
+	if high <= 0 {
+		return 0
+	}
+	ratio := cfg.compactionLowWaterRatio
+	if ratio <= 0 {
+		ratio = 0.70
+	}
+	low := int(float64(cfg.compactionMaxTokens) * ratio)
+	if low <= 0 || low >= high {
+		return high
+	}
+	return low
 }
 
 func (p *TurnRunner) dedupToolResults(messages []Message) []Message {
@@ -1361,23 +1388,34 @@ func filterSchemasByAllowed(schemas []domain.ToolSchema, allowed map[string]stru
 	return out
 }
 
-// buildTurnContextMessage creates a system message with dynamic per-turn context.
-// NOT persisted in messages — only appended temporarily for LLM calls.
-func buildTurnContextMessage(workDir, model string) Message {
+func formatTurnContext(workDir, model string) string {
 	now := time.Now()
-	content := "<turn-context>\n" +
+	return "<turn-context>\n" +
 		"Current time: " + now.Format("2006-01-02T15:04:05Z07:00") + " (" + now.Weekday().String() + ")\n" +
 		"Working directory: " + workDir + "\n" +
 		"Model: " + model + "\n" +
 		"</turn-context>"
-	return Message{Role: RoleSystem, Content: content}
 }
 
-// appendTurnContext appends the turn context message to the LLM request messages.
-// This is a temporary append — the original messages slice is not modified.
-func appendTurnContext(msgs []port.ChatMessage, tc Message) []port.ChatMessage {
+// buildTurnContextMessage creates a user message with dynamic per-call context.
+// NOT persisted in messages — only appended temporarily for LLM calls.
+func buildTurnContextMessage(workDir, model string) Message {
+	return Message{Role: RoleUser, Content: formatTurnContext(workDir, model)}
+}
+
+// appendCallTimeContext appends turn-context, optional plan-mode, and extra
+// ephemeral blocks as a trailing user message. Temporary — the original
+// messages slice is not modified.
+func appendCallTimeContext(msgs []port.ChatMessage, workDir, model string, planMode bool, extra string) []port.ChatMessage {
+	content := formatTurnContext(workDir, model)
+	if planMode {
+		content += "\n\n" + buildPlanModePrompt()
+	}
+	if extra = strings.TrimSpace(extra); extra != "" {
+		content += "\n\n" + extra
+	}
 	out := make([]port.ChatMessage, len(msgs)+1)
 	copy(out, msgs)
-	out[len(msgs)] = port.ChatMessage{Role: string(tc.Role), Content: tc.Content}
+	out[len(msgs)] = port.ChatMessage{Role: "user", Content: content}
 	return out
 }

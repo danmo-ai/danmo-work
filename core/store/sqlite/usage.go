@@ -16,36 +16,40 @@ import (
 )
 
 type usageRollupModel struct {
-	Grain            string    `gorm:"primaryKey;size:16"`
-	RefID            string    `gorm:"column:ref_id;primaryKey;size:256"`
-	ProjectID        string    `gorm:"column:project_id;index;size:128"`
-	SessionID        string    `gorm:"column:session_id;index;size:128"`
-	Model            string    `gorm:"column:model;index;size:256"`
-	AgentID          string    `gorm:"column:agent_id;index;size:128"`
-	PromptTokens     int       `gorm:"column:prompt_tokens"`
-	CompletionTokens int       `gorm:"column:completion_tokens"`
-	TotalTokens      int       `gorm:"column:total_tokens"`
-	CallCount        int       `gorm:"column:call_count"`
-	MaxPromptTokens  int       `gorm:"column:max_prompt_tokens"`
-	UpdatedAt        time.Time `gorm:"column:updated_at;index"`
+	Grain               string    `gorm:"primaryKey;size:16"`
+	RefID               string    `gorm:"column:ref_id;primaryKey;size:256"`
+	ProjectID           string    `gorm:"column:project_id;index;size:128"`
+	SessionID           string    `gorm:"column:session_id;index;size:128"`
+	Model               string    `gorm:"column:model;index;size:256"`
+	AgentID             string    `gorm:"column:agent_id;index;size:128"`
+	PromptTokens        int       `gorm:"column:prompt_tokens"`
+	CompletionTokens    int       `gorm:"column:completion_tokens"`
+	TotalTokens         int       `gorm:"column:total_tokens"`
+	CacheReadTokens     int       `gorm:"column:cache_read_tokens"`
+	CacheCreationTokens int       `gorm:"column:cache_creation_tokens"`
+	CallCount           int       `gorm:"column:call_count"`
+	MaxPromptTokens     int       `gorm:"column:max_prompt_tokens"`
+	UpdatedAt           time.Time `gorm:"column:updated_at;index"`
 }
 
 func (usageRollupModel) TableName() string { return "llm_usage_rollups" }
 
 func usageRollupToDomain(m usageRollupModel) domain.UsageRollup {
 	return domain.UsageRollup{
-		Grain:            domain.UsageGrain(m.Grain),
-		RefID:            m.RefID,
-		ProjectID:        m.ProjectID,
-		SessionID:        m.SessionID,
-		Model:            m.Model,
-		AgentID:          m.AgentID,
-		PromptTokens:     m.PromptTokens,
-		CompletionTokens: m.CompletionTokens,
-		TotalTokens:      m.TotalTokens,
-		CallCount:        m.CallCount,
-		MaxPromptTokens:  m.MaxPromptTokens,
-		UpdatedAt:        m.UpdatedAt,
+		Grain:               domain.UsageGrain(m.Grain),
+		RefID:               m.RefID,
+		ProjectID:           m.ProjectID,
+		SessionID:           m.SessionID,
+		Model:               m.Model,
+		AgentID:             m.AgentID,
+		PromptTokens:        m.PromptTokens,
+		CompletionTokens:    m.CompletionTokens,
+		TotalTokens:         m.TotalTokens,
+		CacheReadTokens:     m.CacheReadTokens,
+		CacheCreationTokens: m.CacheCreationTokens,
+		CallCount:           m.CallCount,
+		MaxPromptTokens:     m.MaxPromptTokens,
+		UpdatedAt:           m.UpdatedAt,
 	}
 }
 
@@ -55,7 +59,7 @@ func (s *Store) Usage() port.UsageRepo { return &usageRepo{s} }
 
 func (r *usageRepo) AddDelta(ctx context.Context, turnID, sessionID, projectID string, delta domain.UsageDelta, at time.Time) error {
 	delta = delta.Normalize()
-	if delta.PromptTokens == 0 && delta.CompletionTokens == 0 && delta.TotalTokens == 0 {
+	if delta.Empty() {
 		return nil
 	}
 	if at.IsZero() {
@@ -133,32 +137,36 @@ func upsertUsageDelta(tx *gorm.DB, grain domain.UsageGrain, refID, projectID, se
 		}
 	}
 	row := usageRollupModel{
-		Grain:            string(grain),
-		RefID:            refID,
-		ProjectID:        projectID,
-		SessionID:        sessionID,
-		Model:            model,
-		AgentID:          agentID,
-		PromptTokens:     delta.PromptTokens,
-		CompletionTokens: delta.CompletionTokens,
-		TotalTokens:      delta.TotalTokens,
-		CallCount:        1,
-		MaxPromptTokens:  delta.PromptTokens,
-		UpdatedAt:        at,
+		Grain:               string(grain),
+		RefID:               refID,
+		ProjectID:           projectID,
+		SessionID:           sessionID,
+		Model:               model,
+		AgentID:             agentID,
+		PromptTokens:        delta.PromptTokens,
+		CompletionTokens:    delta.CompletionTokens,
+		TotalTokens:         delta.TotalTokens,
+		CacheReadTokens:     delta.CacheReadTokens,
+		CacheCreationTokens: delta.CacheCreationTokens,
+		CallCount:           1,
+		MaxPromptTokens:     delta.PromptTokens,
+		UpdatedAt:           at,
 	}
 	return tx.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "grain"}, {Name: "ref_id"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
-			"prompt_tokens":     gorm.Expr("prompt_tokens + ?", delta.PromptTokens),
-			"completion_tokens": gorm.Expr("completion_tokens + ?", delta.CompletionTokens),
-			"total_tokens":      gorm.Expr("total_tokens + ?", delta.TotalTokens),
-			"call_count":        gorm.Expr("call_count + 1"),
-			"max_prompt_tokens": gorm.Expr("MAX(max_prompt_tokens, ?)", delta.PromptTokens),
-			"updated_at":        at,
-			"project_id":        projectID,
-			"session_id":        sessionID,
-			"model":             model,
-			"agent_id":          agentID,
+			"prompt_tokens":         gorm.Expr("prompt_tokens + ?", delta.PromptTokens),
+			"completion_tokens":     gorm.Expr("completion_tokens + ?", delta.CompletionTokens),
+			"total_tokens":          gorm.Expr("total_tokens + ?", delta.TotalTokens),
+			"cache_read_tokens":     gorm.Expr("cache_read_tokens + ?", delta.CacheReadTokens),
+			"cache_creation_tokens": gorm.Expr("cache_creation_tokens + ?", delta.CacheCreationTokens),
+			"call_count":            gorm.Expr("call_count + 1"),
+			"max_prompt_tokens":     gorm.Expr("MAX(max_prompt_tokens, ?)", delta.PromptTokens),
+			"updated_at":            at,
+			"project_id":            projectID,
+			"session_id":            sessionID,
+			"model":                 model,
+			"agent_id":              agentID,
 		}),
 	}).Create(&row).Error
 }
@@ -220,11 +228,13 @@ func (r *usageRepo) ListByProject(ctx context.Context, projectID string, grain d
 
 func summaryFromRollup(u domain.UsageRollup) domain.UsageSummary {
 	return domain.UsageSummary{
-		PromptTokens:     u.PromptTokens,
-		CompletionTokens: u.CompletionTokens,
-		TotalTokens:      u.TotalTokens,
-		CallCount:        u.CallCount,
-		MaxPromptTokens:  u.MaxPromptTokens,
+		PromptTokens:        u.PromptTokens,
+		CompletionTokens:    u.CompletionTokens,
+		TotalTokens:         u.TotalTokens,
+		CacheReadTokens:     u.CacheReadTokens,
+		CacheCreationTokens: u.CacheCreationTokens,
+		CallCount:           u.CallCount,
+		MaxPromptTokens:     u.MaxPromptTokens,
 	}
 }
 
@@ -276,6 +286,8 @@ func (r *usageRepo) SummarizeScope(ctx context.Context, projectID, model string)
 			sum.PromptTokens += m.PromptTokens
 			sum.CompletionTokens += m.CompletionTokens
 			sum.TotalTokens += m.TotalTokens
+			sum.CacheReadTokens += m.CacheReadTokens
+			sum.CacheCreationTokens += m.CacheCreationTokens
 			sum.CallCount += m.CallCount
 			if m.MaxPromptTokens > sum.MaxPromptTokens {
 				sum.MaxPromptTokens = m.MaxPromptTokens
@@ -409,6 +421,8 @@ func (r *usageRepo) Series(ctx context.Context, filter domain.UsageSeriesFilter)
 		p.PromptTokens += m.PromptTokens
 		p.CompletionTokens += m.CompletionTokens
 		p.TotalTokens += m.TotalTokens
+		p.CacheReadTokens += m.CacheReadTokens
+		p.CacheCreationTokens += m.CacheCreationTokens
 		p.CallCount += m.CallCount
 		if filter.Model != "" {
 			p.Model = m.Model

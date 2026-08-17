@@ -15,11 +15,13 @@ const (
 
 // UsageDelta is a single LLM call's token contribution to rollups.
 type UsageDelta struct {
-	PromptTokens     int
-	CompletionTokens int
-	TotalTokens      int
-	Model            string
-	AgentID          string
+	PromptTokens        int
+	CompletionTokens    int
+	TotalTokens         int
+	CacheReadTokens     int
+	CacheCreationTokens int
+	Model               string
+	AgentID             string
 }
 
 // Normalize fills TotalTokens from prompt+completion when the API omitted it.
@@ -30,31 +32,40 @@ func (d UsageDelta) Normalize() UsageDelta {
 	return d
 }
 
+func (d UsageDelta) Empty() bool {
+	return d.PromptTokens == 0 && d.CompletionTokens == 0 && d.TotalTokens == 0 &&
+		d.CacheReadTokens == 0 && d.CacheCreationTokens == 0
+}
+
 // UsageRollup is one accumulated row (turn / session / project / model / agent).
 type UsageRollup struct {
-	Grain            UsageGrain `json:"grain"`
-	RefID            string     `json:"refId"`
-	ProjectID        string     `json:"projectId,omitempty"`
-	SessionID        string     `json:"sessionId,omitempty"`
-	Model            string     `json:"model,omitempty"`
-	AgentID          string     `json:"agentId,omitempty"`
-	PromptTokens     int        `json:"promptTokens"`
-	CompletionTokens int        `json:"completionTokens"`
-	TotalTokens      int        `json:"totalTokens"`
-	CallCount        int        `json:"callCount"`
-	MaxPromptTokens  int        `json:"maxPromptTokens,omitempty"`
-	UpdatedAt        time.Time  `json:"updatedAt"`
+	Grain               UsageGrain `json:"grain"`
+	RefID               string     `json:"refId"`
+	ProjectID           string     `json:"projectId,omitempty"`
+	SessionID           string     `json:"sessionId,omitempty"`
+	Model               string     `json:"model,omitempty"`
+	AgentID             string     `json:"agentId,omitempty"`
+	PromptTokens        int        `json:"promptTokens"`
+	CompletionTokens    int        `json:"completionTokens"`
+	TotalTokens         int        `json:"totalTokens"`
+	CacheReadTokens     int        `json:"cacheReadTokens,omitempty"`
+	CacheCreationTokens int        `json:"cacheCreationTokens,omitempty"`
+	CallCount           int        `json:"callCount"`
+	MaxPromptTokens     int        `json:"maxPromptTokens,omitempty"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
 }
 
 // UsageSummary is aggregated token totals.
 type UsageSummary struct {
-	PromptTokens     int `json:"promptTokens"`
-	CompletionTokens int `json:"completionTokens"`
-	TotalTokens      int `json:"totalTokens"`
-	CallCount        int `json:"callCount"`
-	MaxPromptTokens  int `json:"maxPromptTokens,omitempty"`
-	TurnCount        int `json:"turnCount"`
-	AvgTurnTokens    int `json:"avgTurnTokens,omitempty"` // TotalTokens / TurnCount when TurnCount > 0
+	PromptTokens        int `json:"promptTokens"`
+	CompletionTokens    int `json:"completionTokens"`
+	TotalTokens         int `json:"totalTokens"`
+	CacheReadTokens     int `json:"cacheReadTokens,omitempty"`
+	CacheCreationTokens int `json:"cacheCreationTokens,omitempty"`
+	CallCount           int `json:"callCount"`
+	MaxPromptTokens     int `json:"maxPromptTokens,omitempty"`
+	TurnCount           int `json:"turnCount"`
+	AvgTurnTokens       int `json:"avgTurnTokens,omitempty"` // TotalTokens / TurnCount when TurnCount > 0
 }
 
 // FinalizeAvgTurnTokens fills AvgTurnTokens from TotalTokens / TurnCount.
@@ -99,13 +110,15 @@ type UsageSeriesFilter struct {
 
 // UsageSeriesPoint is one period bucket.
 type UsageSeriesPoint struct {
-	PeriodStart      time.Time `json:"periodStart"`
-	PromptTokens     int       `json:"promptTokens"`
-	CompletionTokens int       `json:"completionTokens"`
-	TotalTokens      int       `json:"totalTokens"`
-	CallCount        int       `json:"callCount"`
-	Model            string    `json:"model,omitempty"`
-	AgentID          string    `json:"agentId,omitempty"`
+	PeriodStart         time.Time `json:"periodStart"`
+	PromptTokens        int       `json:"promptTokens"`
+	CompletionTokens    int       `json:"completionTokens"`
+	TotalTokens         int       `json:"totalTokens"`
+	CacheReadTokens     int       `json:"cacheReadTokens,omitempty"`
+	CacheCreationTokens int       `json:"cacheCreationTokens,omitempty"`
+	CallCount           int       `json:"callCount"`
+	Model               string    `json:"model,omitempty"`
+	AgentID             string    `json:"agentId,omitempty"`
 }
 
 // ModelRollupRefID builds the rollup ref for a model row (project-scoped when projectID set).

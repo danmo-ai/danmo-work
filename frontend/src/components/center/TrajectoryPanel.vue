@@ -281,6 +281,16 @@ function stateLabel(state: RowState): string {
   return map[state]
 }
 
+function llmUsageLabel(p: Record<string, unknown>): string {
+  const parts = [formatTokenCount(Number(p?.totalTokens ?? 0))]
+  const cache = Number(p?.cacheReadTokens ?? 0)
+  if (cache > 0) {
+    parts.push(`${formatTokenCount(cache)} ${t('sessions.trajectory.fieldCacheRead')}`)
+  }
+  if (p?.model) parts.push(String(p.model))
+  return parts.join(' · ')
+}
+
 function buildRow(ev: StreamEvent, startTime: number | null, turnIndex: number): TrajRow {
   const p = asRecord(ev.payload)
   const base = {
@@ -373,7 +383,7 @@ function buildRow(ev: StreamEvent, startTime: number | null, turnIndex: number):
       return mk(
         'system',
         'muted',
-        `${formatTokenCount(Number(p?.totalTokens ?? 0))}${p?.model ? ` · ${String(p?.model)}` : ''}`,
+        llmUsageLabel(p),
         prettyJSON(p),
         true,
       )
@@ -1008,6 +1018,12 @@ const selectedSummaryFields = computed<Array<[string, string]>>(() => {
     fields.push([t('sessions.trajectory.fieldInputTokens'), formatTokenCount(Number(p?.promptTokens ?? 0))])
     fields.push([t('sessions.trajectory.fieldOutputTokens'), formatTokenCount(Number(p?.completionTokens ?? 0))])
     fields.push([t('sessions.trajectory.fieldTotalTokens'), formatTokenCount(Number(p?.totalTokens ?? 0))])
+    if (Number(p?.cacheReadTokens ?? 0) > 0) {
+      fields.push([t('sessions.trajectory.fieldCacheRead'), formatTokenCount(Number(p.cacheReadTokens))])
+    }
+    if (Number(p?.cacheCreationTokens ?? 0) > 0) {
+      fields.push([t('sessions.trajectory.fieldCacheWrite'), formatTokenCount(Number(p.cacheCreationTokens))])
+    }
   }
   if (row.kind === 'error') {
     const message = str(p?.message)

@@ -63,11 +63,25 @@ type ErrorPayload struct {
 }
 
 type LLMUsagePayload struct {
-	PromptTokens     int    `json:"promptTokens,omitempty"`
-	CompletionTokens int    `json:"completionTokens,omitempty"`
-	TotalTokens      int    `json:"totalTokens,omitempty"`
-	Model            string `json:"model,omitempty"`
-	AgentID          string `json:"agentId,omitempty"`
+	PromptTokens        int    `json:"promptTokens,omitempty"`
+	CompletionTokens    int    `json:"completionTokens,omitempty"`
+	TotalTokens         int    `json:"totalTokens,omitempty"`
+	CacheReadTokens     int    `json:"cacheReadTokens,omitempty"`
+	CacheCreationTokens int    `json:"cacheCreationTokens,omitempty"`
+	Model               string `json:"model,omitempty"`
+	AgentID             string `json:"agentId,omitempty"`
+}
+
+func (p LLMUsagePayload) Delta() UsageDelta {
+	return UsageDelta{
+		PromptTokens:        p.PromptTokens,
+		CompletionTokens:    p.CompletionTokens,
+		TotalTokens:         p.TotalTokens,
+		CacheReadTokens:     p.CacheReadTokens,
+		CacheCreationTokens: p.CacheCreationTokens,
+		Model:               p.Model,
+		AgentID:             p.AgentID,
+	}.Normalize()
 }
 
 type SessionCompletedPayload struct {
@@ -96,11 +110,11 @@ type CapabilityActivatedPayload struct {
 }
 
 type AskUserPayload struct {
-	AskID      string            `json:"askId"`
-	CallID     string            `json:"callId"`
-	Question   string            `json:"question"`
-	Options    []string          `json:"options,omitempty"`
-	DefaultOpt string            `json:"defaultOption,omitempty"`
+	AskID      string             `json:"askId"`
+	CallID     string             `json:"callId"`
+	Question   string             `json:"question"`
+	Options    []string           `json:"options,omitempty"`
+	DefaultOpt string             `json:"defaultOption,omitempty"`
 	FormFields []AskUserFormField `json:"formFields,omitempty"`
 }
 
@@ -108,10 +122,10 @@ type AskUserPayload struct {
 type AskUserFormField struct {
 	Name        string   `json:"name"`
 	Label       string   `json:"label"`
-	Type        string   `json:"type"`                  // "text" | "number" | "select" | "boolean"
+	Type        string   `json:"type"` // "text" | "number" | "select" | "boolean"
 	Required    bool     `json:"required,omitempty"`
 	Default     any      `json:"default,omitempty"`
-	Options     []string `json:"options,omitempty"`     // for select type
+	Options     []string `json:"options,omitempty"` // for select type
 	Placeholder string   `json:"placeholder,omitempty"`
 }
 

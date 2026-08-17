@@ -31,13 +31,13 @@ func testCompactionConfig(enabled bool, turnInterval, subInterval, maxTokens, cu
 		cfg: &domain.ConfigFile{
 			Runtime: domain.ConfigRuntimeSection{
 				Compaction: domain.ConfigCompactionSection{
-					Enabled:       enabled,
-					TurnInterval:  turnInterval,
-					SubInterval:   subInterval,
-					MaxTokens:     maxTokens,
-					CutTokens:     cutTokens,
-					TriggerRatio:  0.85,
-					ToolTruncate:  2000,
+					Enabled:      enabled,
+					TurnInterval: turnInterval,
+					SubInterval:  subInterval,
+					MaxTokens:    maxTokens,
+					CutTokens:    cutTokens,
+					TriggerRatio: 0.85,
+					ToolTruncate: 2000,
 				},
 			},
 		},
@@ -450,7 +450,7 @@ func TestFormatActiveTodosAndSystemPrompt(t *testing.T) {
 		t.Fatalf("formatActiveTodos=%q", block)
 	}
 
-	sys := buildSystemPrompt("persona", nil, nil, false, false, `{"summary":"x"}`, block, "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
+	sys := buildSystemPrompt("persona", nil, nil, false, `{"summary":"x"}`, block, "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
 	if !contains(sys, "<compaction-checkpoint>") {
 		t.Error("expected compaction-checkpoint")
 	}
@@ -545,4 +545,3 @@ func TestCompactToRetainStoresSkip(t *testing.T) {
 		t.Fatalf("cursor: turn=%q skip=%d", cp.RetainFromTurnID, cp.RetainSkipMessages)
 	}
 }
-

@@ -27,6 +27,7 @@ func TestUsageSinkOnLLMUsageEvent(t *testing.T) {
 
 	stream.Publish(ctx, "sess-a", "turn-a", domain.EventLLMUsage, domain.LLMUsagePayload{
 		PromptTokens: 40, CompletionTokens: 10, TotalTokens: 50,
+		CacheReadTokens: 12, CacheCreationTokens: 3,
 		Model: "deepseek-v4", AgentID: "default",
 	})
 
@@ -36,6 +37,9 @@ func TestUsageSinkOnLLMUsageEvent(t *testing.T) {
 	}
 	if sess.TotalTokens != 50 || sess.CallCount != 1 {
 		t.Fatalf("session: %+v", sess)
+	}
+	if sess.CacheReadTokens != 12 || sess.CacheCreationTokens != 3 {
+		t.Fatalf("session cache: %+v", sess)
 	}
 	models, err := st.Usage().ListByProject(ctx, "proj-a", domain.UsageGrainModel)
 	if err != nil {

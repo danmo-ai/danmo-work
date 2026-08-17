@@ -19,7 +19,7 @@ func TestUsageRepoAddDeltaRollupAndSeries(t *testing.T) {
 	day1 := time.Date(2026, 8, 1, 10, 0, 0, 0, time.UTC)
 	day2 := time.Date(2026, 8, 2, 10, 0, 0, 0, time.UTC)
 
-	d1 := domain.UsageDelta{PromptTokens: 100, CompletionTokens: 20, Model: "m1", AgentID: "agent-a"}
+	d1 := domain.UsageDelta{PromptTokens: 100, CompletionTokens: 20, CacheReadTokens: 40, CacheCreationTokens: 5, Model: "m1", AgentID: "agent-a"}
 	if err := repo.AddDelta(ctx, "turn-1", "sess-1", "proj-1", d1, day1); err != nil {
 		t.Fatal(err)
 	}
@@ -38,6 +38,9 @@ func TestUsageRepoAddDeltaRollupAndSeries(t *testing.T) {
 	}
 	if turn.PromptTokens != 150 || turn.CompletionTokens != 30 || turn.TotalTokens != 180 || turn.CallCount != 2 {
 		t.Fatalf("turn-1 rollup: %+v", turn)
+	}
+	if turn.CacheReadTokens != 40 || turn.CacheCreationTokens != 5 {
+		t.Fatalf("turn-1 cache: %+v", turn)
 	}
 	if !turn.UpdatedAt.Equal(day2) {
 		t.Fatalf("turn updated_at want day2, got %v", turn.UpdatedAt)

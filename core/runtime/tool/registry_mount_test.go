@@ -2,6 +2,7 @@ package tool
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"danmo-work/core/domain"
@@ -17,6 +18,26 @@ func (h *stubHandler) RiskLevel() domain.RiskLevel    { return domain.RiskLow }
 func (h *stubHandler) Describe(map[string]any) string { return h.name }
 func (h *stubHandler) Execute(context.Context, map[string]any) (domain.ToolResult, error) {
 	return domain.ToolResult{}, nil
+}
+
+func TestMountAllMCPSortsServerIDs(t *testing.T) {
+	r := NewRegistry()
+	r.RegisterServer("zeta", &stubHandler{name: "mcp_zeta_a"})
+	r.RegisterServer("alpha", &stubHandler{name: "mcp_alpha_a"})
+	r.MountAllMCP()
+	schemas := r.Schemas()
+	if len(schemas) < 2 {
+		t.Fatalf("schemas=%+v", schemas)
+	}
+	var names []string
+	for _, s := range schemas {
+		if strings.HasPrefix(s.Name, "mcp_") {
+			names = append(names, s.Name)
+		}
+	}
+	if len(names) != 2 || names[0] != "mcp_alpha_a" || names[1] != "mcp_zeta_a" {
+		t.Fatalf("MCP tools should mount in server-id order, got %v", names)
+	}
 }
 
 func TestMountServersExactIDs(t *testing.T) {

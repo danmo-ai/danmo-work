@@ -44,7 +44,10 @@ function barTotal(pt: UsageSeriesPoint): number {
 const maxBar = computed(() => Math.max(1, ...series.value.map((p) => barTotal(p))))
 
 function barTip(pt: UsageSeriesPoint): string {
-  return `${t('usage.legendIn')} ${formatTokenCount(pt.promptTokens)} · ${t('usage.legendOut')} ${formatTokenCount(pt.completionTokens)} · Σ ${formatTokenCount(barTotal(pt))}`
+  const cache = pt.cacheReadTokens
+    ? ` · ${t('usage.legendCache')} ${formatTokenCount(pt.cacheReadTokens)}`
+    : ''
+  return `${t('usage.legendIn')} ${formatTokenCount(pt.promptTokens)} · ${t('usage.legendOut')} ${formatTokenCount(pt.completionTokens)}${cache} · Σ ${formatTokenCount(barTotal(pt))}`
 }
 
 const totals = computed(() => summary.value)
@@ -169,6 +172,14 @@ watch([period, projectId, modelFilter], () => {
         <div class="usage-card">
           <div class="usage-card__label">{{ t('usage.completionTokens') }}</div>
           <div class="usage-card__value">{{ formatTokenCount(totals.completionTokens) }}</div>
+        </div>
+        <div class="usage-card">
+          <div class="usage-card__label">{{ t('usage.cacheReadTokens') }}</div>
+          <div class="usage-card__value">{{ formatTokenCount(totals.cacheReadTokens || 0) }}</div>
+        </div>
+        <div class="usage-card">
+          <div class="usage-card__label">{{ t('usage.cacheCreationTokens') }}</div>
+          <div class="usage-card__value">{{ formatTokenCount(totals.cacheCreationTokens || 0) }}</div>
         </div>
         <div class="usage-card">
           <div class="usage-card__label">{{ t('usage.callCount') }}</div>

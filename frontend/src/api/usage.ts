@@ -4,6 +4,8 @@ export interface UsageSummary {
   promptTokens: number
   completionTokens: number
   totalTokens: number
+  cacheReadTokens?: number
+  cacheCreationTokens?: number
   callCount: number
   maxPromptTokens?: number
   turnCount: number
@@ -20,6 +22,8 @@ export interface UsageRollup {
   promptTokens: number
   completionTokens: number
   totalTokens: number
+  cacheReadTokens?: number
+  cacheCreationTokens?: number
   callCount: number
   maxPromptTokens?: number
   updatedAt: string
@@ -38,6 +42,8 @@ export interface UsageSeriesPoint {
   promptTokens: number
   completionTokens: number
   totalTokens: number
+  cacheReadTokens?: number
+  cacheCreationTokens?: number
   callCount: number
   model?: string
   agentId?: string

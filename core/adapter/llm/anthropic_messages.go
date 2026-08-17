@@ -48,11 +48,13 @@ func (p *AnthropicMessagesClient) Chat(ctx context.Context, req port.LLMChatRequ
 		return port.LLMChatResponse{}, fmt.Errorf("model not specified")
 	}
 
-	system := ""
+	var systemParts []string
 	messages := make([]map[string]any, 0, len(req.Messages))
 	for _, m := range req.Messages {
 		if m.Role == "system" {
-			system = m.Content
+			if strings.TrimSpace(m.Content) != "" {
+				systemParts = append(systemParts, m.Content)
+			}
 			continue
 		}
 		msg := map[string]any{
@@ -94,17 +96,29 @@ func (p *AnthropicMessagesClient) Chat(ctx context.Context, req port.LLMChatRequ
 	if _, ok := body["max_tokens"]; !ok {
 		body["max_tokens"] = 4096
 	}
-	if system != "" {
-		body["system"] = system
+	if len(systemParts) > 0 {
+		blocks := make([]map[string]any, 0, len(systemParts))
+		for i, text := range systemParts {
+			block := map[string]any{"type": "text", "text": text}
+			if i == len(systemParts)-1 {
+				block["cache_control"] = map[string]any{"type": "ephemeral"}
+			}
+			blocks = append(blocks, block)
+		}
+		body["system"] = blocks
 	}
 	if len(req.Tools) > 0 && req.ToolChoice != "none" {
 		var tools []map[string]any
-		for _, t := range req.Tools {
-			tools = append(tools, map[string]any{
+		for i, t := range req.Tools {
+			tool := map[string]any{
 				"name":         t.Name,
 				"description":  t.Description,
 				"input_schema": t.Parameters,
-			})
+			}
+			if i == len(req.Tools)-1 {
+				tool["cache_control"] = map[string]any{"type": "ephemeral"}
+			}
+			tools = append(tools, tool)
 		}
 		body["tools"] = tools
 	}
@@ -140,15 +154,17 @@ func (p *AnthropicMessagesClient) Chat(ctx context.Context, req port.LLMChatRequ
 
 	var result struct {
 		Content []struct {
-			Type   string `json:"type"`
-			Text   string `json:"text"`
-			ID     string `json:"id"`
-			Name   string `json:"name"`
-			Input  map[string]any
+			Type  string `json:"type"`
+			Text  string `json:"text"`
+			ID    string `json:"id"`
+			Name  string `json:"name"`
+			Input map[string]any
 		} `json:"content"`
 		Usage struct {
-			InputTokens  int `json:"input_tokens"`
-			OutputTokens int `json:"output_tokens"`
+			InputTokens              int `json:"input_tokens"`
+			OutputTokens             int `json:"output_tokens"`
+			CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+			CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
@@ -156,9 +172,14 @@ func (p *AnthropicMessagesClient) Chat(ctx context.Context, req port.LLMChatRequ
 	}
 
 	usage := &port.LLMUsage{
-		PromptTokens:     result.Usage.InputTokens,
-		CompletionTokens: result.Usage.OutputTokens,
-		TotalTokens:      result.Usage.InputTokens + result.Usage.OutputTokens,
+		PromptTokens:        result.Usage.InputTokens,
+		CompletionTokens:    result.Usage.OutputTokens,
+		TotalTokens:         result.Usage.InputTokens + result.Usage.OutputTokens,
+		CacheCreationTokens: result.Usage.CacheCreationInputTokens,
+		CacheReadTokens:     result.Usage.CacheReadInputTokens,
+	}
+	if usage.Empty() {
+		usage = nil
 	}
 
 	content := ""
@@ -206,4 +227,3 @@ func applyAnthropicGenParams(body map[string]any, gp *port.ModelGenParams) {
 		body["temperature"] = gp.Temperature
 	}
 }
-

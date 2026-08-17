@@ -33,6 +33,7 @@ export interface RuntimeForm {
   compactionEnabled: boolean
   compactionMaxTokens: number
   compactionTriggerRatio: number
+  compactionLowWaterRatio: number
   compactionCutTokens: number
   compactionTurnInterval: number
   compactionSubInterval: number
@@ -74,6 +75,7 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     compactionEnabled: rt.compaction?.enabled ?? true,
     compactionMaxTokens: rt.compaction?.maxTokens ?? 128000,
     compactionTriggerRatio: rt.compaction?.triggerRatio ?? 0.85,
+    compactionLowWaterRatio: rt.compaction?.lowWaterRatio ?? 0.70,
     compactionCutTokens: rt.compaction?.cutTokens ?? 16000,
     compactionTurnInterval: rt.compaction?.turnInterval ?? 6,
     compactionSubInterval: rt.compaction?.subInterval ?? 4,
@@ -204,6 +206,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
           model: '',
           maxTokens: form.compactionMaxTokens,
           triggerRatio: form.compactionTriggerRatio,
+          lowWaterRatio: form.compactionLowWaterRatio,
           cutTokens: form.compactionCutTokens,
           turnInterval: form.compactionTurnInterval,
           subInterval: form.compactionSubInterval,

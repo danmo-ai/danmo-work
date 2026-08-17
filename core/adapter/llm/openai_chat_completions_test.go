@@ -25,6 +25,9 @@ func TestOpenAIChatCompletionsClientParsesUsage(t *testing.T) {
 				"prompt_tokens":     10,
 				"completion_tokens": 5,
 				"total_tokens":      15,
+				"prompt_tokens_details": map[string]any{
+					"cached_tokens": 7,
+				},
 			},
 		})
 	}))
@@ -49,6 +52,9 @@ func TestOpenAIChatCompletionsClientParsesUsage(t *testing.T) {
 	}
 	if resp.Usage.TotalTokens != 15 {
 		t.Errorf("total tokens: got %d", resp.Usage.TotalTokens)
+	}
+	if resp.Usage.CacheReadTokens != 7 {
+		t.Errorf("cache read tokens: got %d", resp.Usage.CacheReadTokens)
 	}
 }
 
@@ -323,4 +329,3 @@ func TestOpenAIChatCompletionsClient_QwenDialectRequest(t *testing.T) {
 		t.Fatalf("resp reasoning: %q", resp.ReasoningContent)
 	}
 }
-

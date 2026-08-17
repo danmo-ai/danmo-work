@@ -154,7 +154,7 @@ func buildResponsesBody(req port.LLMChatRequest, effort string) (map[string]any,
 				"type":        "function",
 				"name":        t.Name,
 				"description": t.Description,
-				"parameters":   t.Parameters,
+				"parameters":  t.Parameters,
 			})
 		}
 		body["tools"] = tools
@@ -201,7 +201,7 @@ func responsesMessageContent(m port.ChatMessage) any {
 				mime = "image/png"
 			}
 			parts = append(parts, map[string]any{
-				"type": "input_image",
+				"type":      "input_image",
 				"image_url": fmt.Sprintf("data:%s;base64,%s", mime, p.Data),
 			})
 		default:
@@ -243,9 +243,12 @@ func parseResponsesBody(respBody []byte) (port.LLMChatResponse, error) {
 			} `json:"summary"`
 		} `json:"output"`
 		Usage struct {
-			InputTokens  int `json:"input_tokens"`
-			OutputTokens int `json:"output_tokens"`
-			TotalTokens  int `json:"total_tokens"`
+			InputTokens        int `json:"input_tokens"`
+			OutputTokens       int `json:"output_tokens"`
+			TotalTokens        int `json:"total_tokens"`
+			InputTokensDetails struct {
+				CachedTokens int `json:"cached_tokens"`
+			} `json:"input_tokens_details"`
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
@@ -259,8 +262,9 @@ func parseResponsesBody(respBody []byte) (port.LLMChatResponse, error) {
 		PromptTokens:     result.Usage.InputTokens,
 		CompletionTokens: result.Usage.OutputTokens,
 		TotalTokens:      result.Usage.TotalTokens,
+		CacheReadTokens:  result.Usage.InputTokensDetails.CachedTokens,
 	}
-	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 && usage.TotalTokens == 0 {
+	if usage.Empty() {
 		usage = nil
 	}
 

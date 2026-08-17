@@ -14,9 +14,9 @@ import (
 // UsageSink accumulates llm.usage stream events into turn/session/project/model/agent rollups.
 // Wired onto StreamEventManager — does not live inside TurnRunner.
 type UsageSink struct {
-	usage    port.UsageRepo
-	sessions port.SessionRepo
-	mu       sync.Mutex
+	usage     port.UsageRepo
+	sessions  port.SessionRepo
+	mu        sync.Mutex
 	projCache map[string]string // sessionID -> projectID
 }
 
@@ -36,14 +36,8 @@ func (s *UsageSink) OnEvent(ctx context.Context, ev domain.StreamEvent) {
 	if err := json.Unmarshal(ev.Payload, &p); err != nil {
 		return
 	}
-	delta := domain.UsageDelta{
-		PromptTokens:     p.PromptTokens,
-		CompletionTokens: p.CompletionTokens,
-		TotalTokens:      p.TotalTokens,
-		Model:            p.Model,
-		AgentID:          p.AgentID,
-	}.Normalize()
-	if delta.PromptTokens == 0 && delta.CompletionTokens == 0 && delta.TotalTokens == 0 {
+	delta := p.Delta()
+	if delta.Empty() {
 		return
 	}
 	projectID := s.resolveProject(ctx, ev.SessionID)

@@ -578,9 +578,9 @@ func TestEnforceToolPairingStripsPartialAssistantBatch(t *testing.T) {
 
 type panicToolHandler struct{}
 
-func (h *panicToolHandler) Name() string                      { return "boom" }
-func (h *panicToolHandler) RiskLevel() domain.RiskLevel       { return domain.RiskLow }
-func (h *panicToolHandler) Describe(map[string]any) string    { return "boom" }
+func (h *panicToolHandler) Name() string                   { return "boom" }
+func (h *panicToolHandler) RiskLevel() domain.RiskLevel    { return domain.RiskLow }
+func (h *panicToolHandler) Describe(map[string]any) string { return "boom" }
 func (h *panicToolHandler) Schema() domain.ToolSchema {
 	return domain.ToolSchema{Name: "boom", Parameters: map[string]any{"type": "object"}}
 }
@@ -675,6 +675,150 @@ func TestSnipHeadPreservesGoalAndTurnWorkUnderExtremeBudget(t *testing.T) {
 	}
 	if !foundWork {
 		t.Fatalf("this-turn work after the goal removed; out=%+v", out)
+	}
+}
+
+func TestCompactMessagesSnipsToLowWaterAndDoesNotRetrigger(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, nil, nil, nil)
+	pad := strings.Repeat("word ", 80) // ~100 tokens per message (chars/4)
+	cfg := turnRunCfg{
+		compactionMaxTokens:     400,
+		compactionTriggerRatio:  0.5, // high water = 200
+		compactionLowWaterRatio: 0.2, // low water = 80
+		toolTruncateChars:       20000,
+		keepRecentToolSteps:     3,
+	}
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "old-a " + pad},
+		{Role: RoleAssistant, Content: "old-a-out " + pad},
+		{Role: RoleUser, Content: "old-b " + pad},
+		{Role: RoleAssistant, Content: "old-b-out " + pad},
+		{Role: RoleUser, Content: "current goal must survive"},
+		{Role: RoleAssistant, Content: "this turn work"},
+	}
+	if estimateTurnTokens(msgs) <= highWaterTokens(cfg) {
+		t.Fatalf("fixture too small: tokens=%d high=%d", estimateTurnTokens(msgs), highWaterTokens(cfg))
+	}
+	out := tr.compactMessages(msgs, cfg)
+	got := estimateTurnTokens(out)
+	low := lowWaterTokens(cfg)
+	if got > low {
+		t.Fatalf("expected <= low water %d, got %d out=%+v", low, got, out)
+	}
+	foundGoal := false
+	for _, m := range out {
+		if m.Role == RoleUser && m.Content == "current goal must survive" {
+			foundGoal = true
+		}
+	}
+	if !foundGoal {
+		t.Fatal("last user goal must survive low-water snip")
+	}
+
+	// Still under high water after a small append: do not snip again.
+	out2 := append(append([]Message(nil), out...), Message{Role: RoleAssistant, Content: "tiny"})
+	again := tr.compactMessages(out2, cfg)
+	if len(again) != len(out2) {
+		t.Fatalf("second compact should be a no-op under high water; before=%d after=%d", len(out2), len(again))
+	}
+}
+
+func TestLowWaterTokensUsesRatioNotCutTokens(t *testing.T) {
+	cfg := turnRunCfg{
+		compactionMaxTokens:     1000,
+		compactionTriggerRatio:  0.85,
+		compactionLowWaterRatio: 0.70,
+	}
+	if got, want := highWaterTokens(cfg), 850; got != want {
+		t.Fatalf("high=%d want %d", got, want)
+	}
+	if got, want := lowWaterTokens(cfg), 700; got != want {
+		t.Fatalf("low=%d want %d", got, want)
+	}
+	cfg.compactionLowWaterRatio = 0.90 // >= trigger → no hysteresis
+	if got := lowWaterTokens(cfg); got != highWaterTokens(cfg) {
+		t.Fatalf("low >= high should collapse to high, got %d", got)
+	}
+}
+
+func TestCompactMessagesStopsAtLastUserWhenTurnExceedsLowWater(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, nil, nil, nil)
+	pad := strings.Repeat("word ", 200)
+	cfg := turnRunCfg{
+		compactionMaxTokens:     400,
+		compactionTriggerRatio:  0.5,
+		compactionLowWaterRatio: 0.05,
+		toolTruncateChars:       20000,
+		keepRecentToolSteps:     3,
+	}
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "old " + pad},
+		{Role: RoleUser, Content: "current goal " + pad},
+		{Role: RoleAssistant, Content: "this turn work " + pad},
+	}
+	out := tr.compactMessages(msgs, cfg)
+	foundGoal, foundWork := false, false
+	for _, m := range out {
+		if m.Role == RoleUser && strings.HasPrefix(m.Content, "current goal") {
+			foundGoal = true
+		}
+		if m.Role == RoleAssistant && strings.HasPrefix(m.Content, "this turn work") {
+			foundWork = true
+		}
+	}
+	if !foundGoal || !foundWork {
+		t.Fatalf("goal+turn work must survive even if they exceed low water; out=%+v", out)
+	}
+}
+
+func TestAppendCallTimeContextIsUserAndNotSystem(t *testing.T) {
+	base := []port.ChatMessage{
+		{Role: "system", Content: "persona"},
+		{Role: "user", Content: "goal"},
+	}
+	out := appendCallTimeContext(base, "/tmp/work", "m1", false, "kb hit")
+	if len(out) != 3 {
+		t.Fatalf("len=%d", len(out))
+	}
+	if out[0].Role != "system" || strings.Contains(out[0].Content, "<turn-context>") {
+		t.Fatalf("system must stay static, got %+v", out[0])
+	}
+	tail := out[len(out)-1]
+	if tail.Role != "user" {
+		t.Fatalf("call-time tail must be user, got %s", tail.Role)
+	}
+	if !strings.Contains(tail.Content, "<turn-context>") || !strings.Contains(tail.Content, "Model: m1") {
+		t.Fatalf("tail missing turn-context: %s", tail.Content)
+	}
+	if !strings.Contains(tail.Content, "kb hit") {
+		t.Fatalf("tail missing kb: %s", tail.Content)
+	}
+	if strings.Contains(tail.Content, "<plan-mode>") {
+		t.Fatal("plan-mode must be omitted when PlanMode=false")
+	}
+	if strings.Contains(tail.Content, "persona") {
+		t.Fatal("tail must not include system persona")
+	}
+}
+
+func TestAppendCallTimeContextIncludesPlanMode(t *testing.T) {
+	out := appendCallTimeContext(nil, "/tmp/work", "m1", true, "")
+	if len(out) != 1 || out[0].Role != "user" {
+		t.Fatalf("got %+v", out)
+	}
+	if !strings.Contains(out[0].Content, "<turn-context>") || !strings.Contains(out[0].Content, "<plan-mode>") {
+		t.Fatalf("expected turn-context + plan-mode:\n%s", out[0].Content)
+	}
+	if !strings.Contains(out[0].Content, "PLAN MODE") {
+		t.Fatal("expected PLAN MODE instruction")
+	}
+	if !strings.Contains(out[0].Content, "read_file") || !strings.Contains(out[0].Content, "delegate_agent") {
+		t.Fatal("expected plan-mode read-only tool list")
+	}
+	if !strings.Contains(out[0].Content, "AGENTS.md") {
+		t.Fatal("expected plan-mode workflow to mention AGENTS.md")
 	}
 }
 

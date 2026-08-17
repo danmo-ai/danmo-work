@@ -78,7 +78,7 @@ func TestBuildSkillMetadataEmpty(t *testing.T) {
 func TestBuildSystemPromptPolicies(t *testing.T) {
 	peers := []domain.Agent{{ID: "explorer", Name: "Explorer", Description: "Explore code"}}
 
-	withDelegate := buildSystemPrompt("persona", nil, peers, true, false, "", "", "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
+	withDelegate := buildSystemPrompt("persona", nil, peers, true, "", "", "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
 	if !strings.Contains(withDelegate, "<ask-user-policy>") {
 		t.Fatal("expected ask-user-policy")
 	}
@@ -89,7 +89,7 @@ func TestBuildSystemPromptPolicies(t *testing.T) {
 		t.Fatalf("expected available_agents roster:\n%s", withDelegate)
 	}
 
-	noDelegate := buildSystemPrompt("persona", nil, peers, false, false, "", "", "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
+	noDelegate := buildSystemPrompt("persona", nil, peers, false, "", "", "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
 	if strings.Contains(noDelegate, "<delegation-policy>") || strings.Contains(noDelegate, "<available_agents>") {
 		t.Fatal("delegation blocks must not appear when canDelegate=false")
 	}
@@ -107,7 +107,7 @@ func TestBuildSystemPromptPolicies(t *testing.T) {
 	}
 
 	// CanDelegate with empty peer list still gets the policy (no roster).
-	emptyPeers := buildSystemPrompt("persona", nil, nil, true, false, "", "", "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
+	emptyPeers := buildSystemPrompt("persona", nil, nil, true, "", "", "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
 	if !strings.Contains(emptyPeers, "<delegation-policy>") {
 		t.Fatal("expected delegation-policy even with no peers")
 	}
@@ -116,22 +116,10 @@ func TestBuildSystemPromptPolicies(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPromptPlanMode(t *testing.T) {
-	plan := buildSystemPrompt("persona", nil, nil, false, true, "", "", "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
-	if !strings.Contains(plan, "<plan-mode>") {
-		t.Fatal("expected plan-mode block")
-	}
-	if !strings.Contains(plan, "PLAN MODE") {
-		t.Fatal("expected PLAN MODE instruction")
-	}
-	if !strings.Contains(plan, "read_file") || !strings.Contains(plan, "grep") || !strings.Contains(plan, "glob") {
-		t.Fatal("expected plan-mode read-only tool list")
-	}
-	if !strings.Contains(plan, "delegate_agent") {
-		t.Fatal("expected delegate_agent to be allowed in plan mode")
-	}
-	if !strings.Contains(plan, "AGENTS.md") || !strings.Contains(plan, "README.md") {
-		t.Fatal("expected plan-mode workflow to guide reading AGENTS.md / README.md first")
+func TestBuildSystemPromptOmitsPlanMode(t *testing.T) {
+	sys := buildSystemPrompt("persona", nil, nil, false, "", "", "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
+	if strings.Contains(sys, "<plan-mode>") {
+		t.Fatal("plan-mode belongs in turn-context, not the system prompt")
 	}
 }
 
@@ -155,5 +143,81 @@ func TestBuildRuntimeEnvironmentContainer(t *testing.T) {
 	local := buildRuntimeEnvironment(domain.SandboxStatus{}, domain.EnvironmentStatus{})
 	if strings.Contains(local, "OCI container") {
 		t.Fatal("container block must not appear for local backend")
+	}
+}
+
+func TestBuildSkillMetadataSortsByID(t *testing.T) {
+	out := buildSkillMetadata([]domain.Skill{
+		{ID: "zeta", Description: "z"},
+		{ID: "alpha", Description: "a"},
+		{ID: "mu", Description: "m"},
+	})
+	alpha := strings.Index(out, "<path>alpha</path>")
+	mu := strings.Index(out, "<path>mu</path>")
+	zeta := strings.Index(out, "<path>zeta</path>")
+	if alpha < 0 || mu < 0 || zeta < 0 || !(alpha < mu && mu < zeta) {
+		t.Fatalf("skills should be sorted by id, got:\n%s", out)
+	}
+}
+
+func TestBuildAgentMetadataSortsByID(t *testing.T) {
+	out := buildAgentMetadata([]domain.Agent{
+		{ID: "writer", Name: "Writer", Description: "w"},
+		{ID: "explorer", Name: "Explorer", Description: "e"},
+	})
+	exp := strings.Index(out, "<id>explorer</id>")
+	wr := strings.Index(out, "<id>writer</id>")
+	if exp < 0 || wr < 0 || exp > wr {
+		t.Fatalf("agents should be sorted by id, got:\n%s", out)
+	}
+}
+
+func TestBuildSystemPromptCheckpointAfterPolicies(t *testing.T) {
+	todos := "<active-todos>\n1. [in_progress] A (high)\n</active-todos>"
+	files := "<session-file-changes>\n- update core/foo.go (edit) turns=t1\n</session-file-changes>"
+	sys := buildSystemPrompt("persona", nil, nil, false, `{"summary":"x"}`, todos, files, domain.SandboxStatus{}, domain.EnvironmentStatus{})
+	policy := strings.Index(sys, "<ask-user-policy>")
+	runtime := strings.Index(sys, "<runtime-environment>")
+	cp := strings.Index(sys, "<compaction-checkpoint>")
+	todoIdx := strings.Index(sys, "<active-todos>")
+	fileIdx := strings.Index(sys, "<session-file-changes>")
+	if policy < 0 || runtime < 0 || cp < 0 || todoIdx < 0 || fileIdx < 0 {
+		t.Fatalf("missing blocks:\n%s", sys)
+	}
+	if !(policy < runtime && runtime < cp && cp < todoIdx && todoIdx < fileIdx) {
+		t.Fatalf("snapshot blocks should follow static policies, got policy=%d runtime=%d cp=%d todos=%d files=%d", policy, runtime, cp, todoIdx, fileIdx)
+	}
+	if strings.Contains(sys, "<turn-context>") || strings.Contains(sys, "<plan-mode>") {
+		t.Fatalf("turn-context/plan-mode must not be in system prompt:\n%s", sys)
+	}
+}
+
+func TestBuildSystemPromptDeterministic(t *testing.T) {
+	skills := []domain.Skill{
+		{ID: "b", Description: "b"},
+		{ID: "a", Description: "a"},
+	}
+	agents := []domain.Agent{
+		{ID: "z", Name: "Z", Description: "z"},
+		{ID: "y", Name: "Y", Description: "y"},
+	}
+	a := buildSystemPrompt("p", skills, agents, true, "cp", "", "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
+	b := buildSystemPrompt("p", []domain.Skill{skills[1], skills[0]}, []domain.Agent{agents[1], agents[0]}, true, "cp", "", "", domain.SandboxStatus{}, domain.EnvironmentStatus{})
+	if a != b {
+		t.Fatal("same resources in different order must produce identical system prompt")
+	}
+}
+
+func TestSkillToolSchemasSortedByID(t *testing.T) {
+	skills := []domain.Skill{
+		{ID: "s1", ToolIDs: []string{"write", "read_file"}},
+	}
+	bindings := []domain.ToolBinding{
+		{ToolID: "write"},
+		{ToolID: "read_file"},
+	}
+	got := skillToolSchemas(skills, bindings)
+	if len(got) != 2 || got[0].Name != "read_file" || got[1].Name != "write" {
+		t.Fatalf("expected read_file then write, got %+v", got)
 	}
 }
