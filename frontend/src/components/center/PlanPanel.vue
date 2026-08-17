@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { StreamEvent } from '@/types/mission'
 
 const props = defineProps<{
   streamEvents: StreamEvent[]
   planTurnId?: string | null
 }>()
+
+const { t } = useI18n()
 
 interface TodoItem {
   content: string
@@ -36,15 +39,15 @@ const todos = computed<TodoItem[]>(() => {
 
 const groups = computed(() => {
   const items = todos.value
-  const inProgress = items.filter((t) => t.status === 'in_progress')
-  const pending = items.filter((t) => t.status === 'pending')
-  const cancelled = items.filter((t) => t.status === 'cancelled')
-  const completed = items.filter((t) => t.status === 'completed')
+  const inProgress = items.filter((item) => item.status === 'in_progress')
+  const pending = items.filter((item) => item.status === 'pending')
+  const cancelled = items.filter((item) => item.status === 'cancelled')
+  const completed = items.filter((item) => item.status === 'completed')
   return [
-    { key: 'in_progress', label: '进行中', items: inProgress },
-    { key: 'pending', label: '待处理', items: pending },
-    { key: 'cancelled', label: '已取消', items: cancelled },
-    { key: 'completed', label: '已完成', items: completed },
+    { key: 'in_progress', label: t('sessions.plan.inProgress'), items: inProgress },
+    { key: 'pending', label: t('sessions.plan.pending'), items: pending },
+    { key: 'cancelled', label: t('sessions.cancelled'), items: cancelled },
+    { key: 'completed', label: t('sessions.completed'), items: completed },
   ].filter((g) => g.items.length > 0)
 })
 
@@ -52,10 +55,10 @@ const stats = computed(() => {
   const items = todos.value
   return {
     total: items.length,
-    inProgress: items.filter((t) => t.status === 'in_progress').length,
-    pending: items.filter((t) => t.status === 'pending').length,
-    completed: items.filter((t) => t.status === 'completed').length,
-    cancelled: items.filter((t) => t.status === 'cancelled').length,
+    inProgress: items.filter((item) => item.status === 'in_progress').length,
+    pending: items.filter((item) => item.status === 'pending').length,
+    completed: items.filter((item) => item.status === 'completed').length,
+    cancelled: items.filter((item) => item.status === 'cancelled').length,
   }
 })
 
@@ -75,6 +78,12 @@ function priorityColor(priority: TodoItem['priority']): string {
     case 'low': return 'var(--dq-label-quaternary)'
   }
 }
+
+const progressText = computed(() => {
+  const base = `${stats.value.completed}/${stats.value.total} ${t('sessions.completed')}`
+  if (stats.value.inProgress <= 0) return base
+  return `${base} · ${stats.value.inProgress} ${t('sessions.plan.inProgress')}`
+})
 </script>
 
 <template>
@@ -93,8 +102,8 @@ function priorityColor(priority: TodoItem['priority']): string {
       <div class="plan-panel__empty-icon">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       </div>
-      <p>暂无计划</p>
-      <p class="plan-panel__hint">Agent 会在复杂任务时自动生成计划</p>
+      <p>{{ t('sessions.plan.empty') }}</p>
+      <p class="plan-panel__hint">{{ t('sessions.plan.emptyHint') }}</p>
     </div>
 
     <div v-else class="plan-panel__list">
@@ -130,7 +139,7 @@ function priorityColor(priority: TodoItem['priority']): string {
           :style="{ width: stats.total ? (stats.completed / stats.total * 100) + '%' : '0%' }"
         />
       </div>
-      <span class="plan-panel__progress-text">{{ stats.completed }}/{{ stats.total }} 已完成{{ stats.inProgress > 0 ? ` · ${stats.inProgress} 进行中` : '' }}</span>
+      <span class="plan-panel__progress-text">{{ progressText }}</span>
     </div>
   </aside>
 </template>

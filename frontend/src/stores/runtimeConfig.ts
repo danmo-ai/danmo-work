@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
+import { i18n } from '@/i18n'
 import type { ConfigFile, UpdateConfigFileRequest, SandboxStatus, BrowserStatus, EnvironmentStatus } from '@/types/mission'
 
 export interface RuntimeForm {
@@ -119,10 +120,10 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
         body: JSON.stringify(arch ? { arch } : {}),
       })
       environmentStatus.value = res.status
-      toast.success(arch ? `环境镜像已下载 (${arch})` : '环境镜像已下载')
+      toast.success(arch ? i18n.global.t('settings.envTarDownloadedArch', { arch }) : i18n.global.t('settings.envTarDownloaded'))
       return res.status
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '下载失败')
+      toast.error(e instanceof Error ? e.message : i18n.global.t('common.downloadFailed'))
       throw e
     } finally {
       downloadingTar.value = null
@@ -221,9 +222,9 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
       })
       config.value = formFromRuntime(cfg.runtime)
       await Promise.all([loadSandboxStatus(), loadEnvironmentStatus(), loadBrowserStatus()])
-      toast.success('运行时配置已保存')
+      toast.success(i18n.global.t('settings.runtimeSaved'))
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '保存失败')
+      toast.error(e instanceof Error ? e.message : i18n.global.t('common.saveFailed'))
       throw e
     } finally {
       saving.value = false

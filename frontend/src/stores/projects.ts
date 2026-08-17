@@ -2,22 +2,27 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { fetchJSON, asArray } from '@/api/client'
 import { toast } from '@/utils/feedback'
+import { i18n } from '@/i18n'
+import { uiLocale } from '@/stores/locale'
 import type { Project } from '@/types'
 
 export const useProjectsStore = defineStore('projects', () => {
   const projects = ref<Project[]>([])
   const loading = ref(false)
 
-  const sortedProjects = computed(() =>
-    [...projects.value].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.createdAt.localeCompare(b.createdAt)),
-  )
+  const sortedProjects = computed(() => {
+    const locale = uiLocale()
+    return [...projects.value].sort(
+      (a, b) => a.name.localeCompare(b.name, locale) || a.createdAt.localeCompare(b.createdAt),
+    )
+  })
 
   async function loadProjects() {
     loading.value = true
     try {
       projects.value = asArray(await fetchJSON<Project[]>('/projects'))
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '加载项目失败')
+      toast.error(e instanceof Error ? e.message : i18n.global.t('navigation.loadProjectsFailed'))
       projects.value = []
     } finally {
       loading.value = false

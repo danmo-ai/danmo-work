@@ -667,7 +667,7 @@ const {
 /** Drill-in crumbs are always two levels: 全部 Turn / current turn.
  *  Do not walk parentTurnId into the trail (that made parent→sub look like three). */
 const breadcrumbs = computed(() => {
-  const path: { id: string | null; label: string }[] = [{ id: null, label: '全部 Turn' }]
+  const path: { id: string | null; label: string }[] = [{ id: null, label: t('sessions.allTurns') }]
   if (!currentTurnId.value) return path
   const turn = turnMap.value[currentTurnId.value]
   if (!turn) return path
@@ -842,7 +842,7 @@ watchEffect(() => {
           turnId: e.turnId || '',
           kind: 'permission',
           pending: true,
-          label: tool ? `待审批 · ${tool}` : '待审批',
+          label: tool ? t('sessions.pendingApprovalWithTool', { tool }) : t('navigation.sessionNeedsApproval'),
           topPercent: Math.min(92, Math.max(6, (e.seq / maxSeq) * 100)),
         })
       } else if (e.type === 'ask_user.pending') {
@@ -854,7 +854,7 @@ watchEffect(() => {
           turnId: e.turnId || '',
           kind: 'ask',
           pending: true,
-          label: q ? `待回答 · ${q.slice(0, 36)}` : '待回答',
+          label: q ? t('sessions.pendingAskWithQ', { q: q.slice(0, 36) }) : t('navigation.sessionNeedsAsk'),
           topPercent: Math.min(92, Math.max(6, (e.seq / maxSeq) * 100)),
         })
       }
@@ -948,10 +948,10 @@ watch(
 
 const statusLabel = computed(() => {
   const s = sessions.currentSession?.status
-  if (s === 'completed') return '已完成'
-  if (s === 'failed') return '失败'
-  if (s === 'active') return '运行中'
-  if (s === 'archived') return '已归档'
+  if (s === 'completed') return t('sessions.completed')
+  if (s === 'failed') return t('sessions.failed')
+  if (s === 'active') return t('sessions.running')
+  if (s === 'archived') return t('sessions.archived')
   return s ?? ''
 })
 
@@ -1045,7 +1045,7 @@ function compactionSummary(ev: StreamEvent): string {
   const before = Number(p?.tokensBefore ?? 0)
   const after = Number(p?.tokensAfter ?? 0)
   const path = String(p?.filePath ?? '')
-  return `压缩了 ${turns} 轮, tokens ${before} → ${after}, 文件: ${path}`
+  return t('sessions.compactionDetail', { turns, before, after, path })
 }
 
 function usageText(ev: StreamEvent): string {
@@ -1064,10 +1064,10 @@ function errorText(ev: StreamEvent): string {
 }
 
 function toolStatus(ev: StreamEvent): string {
-  if (ev.type === 'tool.running') return '执行中'
-  if (ev.type === 'tool.completed') return '完成'
-  if (ev.type === 'tool.error') return '错误'
-  if (ev.type === 'tool.pending') return '待执行'
+  if (ev.type === 'tool.running') return t('sessions.toolStatusRunning')
+  if (ev.type === 'tool.completed') return t('sessions.toolStatusCompleted')
+  if (ev.type === 'tool.error') return t('sessions.toolStatusError')
+  if (ev.type === 'tool.pending') return t('sessions.toolStatusPending')
   return ''
 }
 
@@ -1080,10 +1080,10 @@ function toolStatusType(ev: StreamEvent): 'info' | 'success' | 'danger' | 'warni
 }
 
 function toolCardStatusLabel(status: string): string {
-  if (status === 'running') return '执行中'
-  if (status === 'completed') return '完成'
-  if (status === 'error') return '错误'
-  if (status === 'cancelled') return '已取消'
+  if (status === 'running') return t('sessions.toolStatusRunning')
+  if (status === 'completed') return t('sessions.toolStatusCompleted')
+  if (status === 'error') return t('sessions.toolStatusError')
+  if (status === 'cancelled') return t('sessions.toolStatusCancelled')
   return status
 }
 
@@ -1145,10 +1145,10 @@ function reportStatusType(ev: StreamEvent): string {
 
 function reportStatusLabel(ev: StreamEvent): string {
   const status = reportStatus(ev)
-  if (status === 'done') return '已完成'
-  if (status === 'failed') return '失败'
-  if (status === 'blocked') return '已阻塞'
-  return status || '未知'
+  if (status === 'done') return t('sessions.completed')
+  if (status === 'failed') return t('sessions.failed')
+  if (status === 'blocked') return t('sessions.blocked')
+  return status || t('common.unknown')
 }
 
 function reportConfidence(ev: StreamEvent): number | null {
@@ -1193,24 +1193,24 @@ function stepLabel(ev: StreamEvent, phase?: string): string {
   const p = asRecord(ev.payload)
   const title = String(p?.title ?? '')
   if (title) return title
-  if (phase === 'failed') return '执行失败'
-  if (phase === 'end') return '已完成'
-  return '思考中…'
+  if (phase === 'failed') return t('sessions.thinkingFailed')
+  if (phase === 'end') return t('sessions.completed')
+  return t('sessions.thinkingInProgress')
 }
 
 async function decide(ev: { payload: unknown }, approved: boolean, scope: 'once' | 'session' = 'once') {
   const p = asRecord(ev.payload)
   const id = String(p?.approvalId ?? p?.id ?? '')
   if (!id) {
-    toast.error('审批 ID 缺失')
+    toast.error(t('sessions.approvalMissingId'))
     return
   }
   decidingApprovalIds.value = new Set(decidingApprovalIds.value).add(id)
   try {
     await sessions.decideApproval(id, approved, scope)
-    toast.success(approved ? (scope === 'session' ? '已允许本会话' : '已批准') : '已拒绝')
+    toast.success(approved ? (scope === 'session' ? t('sessions.allowedForSession') : t('sessions.approved')) : t('sessions.rejected'))
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : '审批失败')
+    toast.error(e instanceof Error ? e.message : t('sessions.approvalFailed'))
   } finally {
     const next = new Set(decidingApprovalIds.value)
     next.delete(id)
@@ -1406,15 +1406,15 @@ async function downloadTurnLog(turnId: string) {
     })
     if (!result.ok) return // user cancelled save dialog
     if (result.method === 'download') {
-      toast.success('已保存到浏览器默认下载目录')
+      toast.success(t('office.exportPdfDownloaded'))
     } else if (result.path) {
-      toast.success(`已保存：${result.path}`)
+      toast.success(t('office.exportPdfSaved', { path: result.path }))
     } else {
-      toast.success('Turn Log 已保存')
+      toast.success(t('sessions.turnLogSaved'))
     }
   } catch (e) {
     console.error('download turn log failed', e)
-    toast.error(e instanceof Error ? e.message : '下载失败')
+    toast.error(e instanceof Error ? e.message : t('common.downloadFailed'))
   }
 }
 
@@ -1432,9 +1432,9 @@ async function saveTitle() {
   }
   try {
     await sessions.updateSession(sessions.currentSession.id, { title })
-    toast.success('已保存')
+    toast.success(t('office.saved'))
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : '保存失败')
+    toast.error(e instanceof Error ? e.message : t('common.saveFailed'))
   }
   isEditingTitle.value = false
 }
@@ -1443,9 +1443,9 @@ async function archiveSession() {
   if (!sessions.currentSession) return
   try {
     await sessions.updateSession(sessions.currentSession.id, { status: 'archived' })
-    toast.success('已归档')
+    toast.success(t('sessions.archived'))
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : '归档失败')
+    toast.error(e instanceof Error ? e.message : t('sessions.archiveFailed'))
   }
 }
 
@@ -1453,9 +1453,9 @@ async function removeSession() {
   if (!sessions.currentSession) return
   try {
     await sessions.deleteSession(sessions.currentSession.id)
-    toast.success('已删除')
+    toast.success(t('navigation.deleted'))
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : '删除失败')
+    toast.error(e instanceof Error ? e.message : t('navigation.deleteFailed'))
   }
 }
 
@@ -1463,9 +1463,9 @@ async function cancelRunning() {
   if (!sessions.runningTurnId) return
   try {
     await sessions.cancelTurn(sessions.runningTurnId)
-    toast.success('已取消')
+    toast.success(t('sessions.cancelled'))
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : '取消失败')
+    toast.error(e instanceof Error ? e.message : t('composer.cancelFailed'))
   }
 }
 
@@ -1486,14 +1486,14 @@ async function copySessionId() {
 async function resumeTurn(turnId: string) {
   try {
     await sessions.resumeTurn(turnId)
-    toast.success('已恢复')
+    toast.success(t('sessions.restored'))
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : '恢复失败')
+    toast.error(e instanceof Error ? e.message : t('sessions.restoreFailed'))
   }
 }
 
 function formatTurnGoal(goal: string) {
-  return goal.trim().slice(0, 60) || '未命名 Turn'
+  return goal.trim().slice(0, 60) || t('sessions.untitledTurn')
 }
 
 // ── Turn summary computation ──
@@ -1736,7 +1736,7 @@ function onTitleKeydown(e: KeyboardEvent) {
         </div>
 
         <div v-else class="session-workspace__turns">
-          <nav v-if="breadcrumbs.length > 1" class="turn-breadcrumbs" aria-label="Turn 导航">
+          <nav v-if="breadcrumbs.length > 1" class="turn-breadcrumbs" :aria-label="t('sessions.turnNavAria')">
             <ol class="turn-breadcrumbs__list">
               <li
                 v-for="(crumb, index) in breadcrumbs"
@@ -1825,8 +1825,8 @@ function onTitleKeydown(e: KeyboardEvent) {
                 <template v-else-if="ev.type === 'report'">
                   <div class="turn__report-meta">
                     <DqTag :type="reportStatusType(ev)">{{ reportStatusLabel(ev) }}</DqTag>
-                    <span v-if="reportConfidence(ev) !== null" class="turn__report-meta-confidence">置信度 {{ reportConfidence(ev) }}</span>
-                    <span v-if="reportSteps(ev)" class="turn__report-meta-steps">{{ reportSteps(ev) }} 步</span>
+                    <span v-if="reportConfidence(ev) !== null" class="turn__report-meta-confidence">{{ t('sessions.reportConfidence', { n: reportConfidence(ev) }) }}</span>
+                    <span v-if="reportSteps(ev)" class="turn__report-meta-steps">{{ t('sessions.reportSteps', { n: reportSteps(ev) }) }}</span>
                     <div
                       v-if="shouldShowReportSummary(turn, ev)"
                       class="turn__report-meta-summary"
@@ -1873,7 +1873,7 @@ function onTitleKeydown(e: KeyboardEvent) {
                   <div class="turn__compaction">
                     <svg class="turn__compaction-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
                     <div class="turn__compaction-body">
-                      <div class="turn__compaction-title">上下文压缩</div>
+                      <div class="turn__compaction-title">{{ t('settings.runtimeCompaction') }}</div>
                       <div class="turn__compaction-detail">{{ compactionSummary(ev) }}</div>
                     </div>
                   </div>

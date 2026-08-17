@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchJSON, asArray } from '@/api/client'
 import { toast } from '@/utils/feedback'
+import { i18n } from '@/i18n'
 import type { ModelConfig } from '@/types/mission'
 
 interface ModelConfigsResponse {
@@ -52,9 +53,9 @@ export const useModelConfigStore = defineStore('modelConfig', () => {
       const parsed = parseModelConfigsResponse(data)
       models.value = parsed.models
       catalogDiverged.value = parsed.catalogDiverged
-      toast.success('模型参数已保存')
+      toast.success(i18n.global.t('settings.modelConfigSaved'))
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '保存失败')
+      toast.error(e instanceof Error ? e.message : i18n.global.t('common.saveFailed'))
       throw e
     } finally {
       saving.value = false
@@ -70,10 +71,10 @@ export const useModelConfigStore = defineStore('modelConfig', () => {
       const parsed = parseModelConfigsResponse(data)
       models.value = parsed.models
       catalogDiverged.value = false
-      toast.success('模型参数已重置为内置目录')
+      toast.success(i18n.global.t('settings.modelConfigReset'))
       return models.value
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '重置失败')
+      toast.error(e instanceof Error ? e.message : i18n.global.t('skills.resetFailed'))
       throw e
     } finally {
       saving.value = false

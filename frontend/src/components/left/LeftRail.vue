@@ -136,23 +136,23 @@ function selectSession(id: string) {
 async function archiveSession(id: string) {
   try {
     await sessions.updateSession(id, { status: 'archived' })
-    toast.success('已归档')
+    toast.success(t('sessions.archived'))
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : '归档失败')
+    toast.error(e instanceof Error ? e.message : t('sessions.archiveFailed'))
   }
 }
 
 async function deleteSession(id: string) {
   try {
-    await confirm('确定删除该会话？', '删除会话', { confirmButtonText: '删除', type: 'warning' })
+    await confirm(t('sessions.deleteConfirm'), t('sessions.deleteTitle'), { confirmButtonText: t('common.delete'), type: 'warning' })
   } catch {
     return
   }
   try {
     await sessions.deleteSession(id)
-    toast.success('已删除')
+    toast.success(t('navigation.deleted'))
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : '删除失败')
+    toast.error(e instanceof Error ? e.message : t('navigation.deleteFailed'))
   }
 }
 
@@ -549,7 +549,7 @@ watch(() => projects.projects.length, (len) => {
             <div v-else-if="sessionViewMode === 'tree' && !filteredProjects.length" class="module-sidebar__empty">{{ $t('navigation.noSearchResults') }}</div>
             <div v-else-if="sessionViewMode === 'board' && !boardGroups.length" class="module-sidebar__empty">{{ $t('navigation.boardEmpty') }}</div>
 
-            <nav v-else-if="sessionViewMode === 'board'" class="session-board" aria-label="会话看板">
+            <nav v-else-if="sessionViewMode === 'board'" class="session-board" :aria-label="t('navigation.sessionBoardAria')">
               <div v-for="g in boardGroups" :key="g.key" class="session-board__group">
                 <div class="session-board__label">
                   <span>{{ g.label }}</span>
@@ -585,7 +585,7 @@ watch(() => projects.projects.length, (len) => {
               </div>
             </nav>
 
-            <nav v-else class="project-tree" aria-label="项目列表">
+            <nav v-else class="project-tree" :aria-label="t('navigation.projectListAria')">
               <div v-for="p in filteredProjects" :key="p.id" class="project-tree__group">
                 <div class="project-tree__row" :class="{ 'is-active': false }" @click="toggleProject(p.id)">
                   <span class="project-tree__toggle" :class="{ 'is-expanded': expandedProjects.has(p.id) }">
@@ -619,7 +619,7 @@ watch(() => projects.projects.length, (len) => {
                       <DqIcon :size="14"><Plus /></DqIcon>
                     </button>
                     <DqDropdown class="project-tree__menu" @command="(cmd: string) => onProjectCommand(cmd, p)">
-                      <DqIconButton aria-label="项目菜单" @click.stop>
+                      <DqIconButton :aria-label="t('navigation.projectMenuAria')" @click.stop>
                         <DqIcon :size="14"><MoreFilled /></DqIcon>
                       </DqIconButton>
                       <template #dropdown>
@@ -663,7 +663,7 @@ watch(() => projects.projects.length, (len) => {
                       <span class="project-tree__session-time">{{ formatRelativeTime(t_.updatedAt || t_.createdAt) }}</span>
                     </button>
                     <DqDropdown @command="(cmd: string) => onSessionCommand(cmd, t_.id)">
-                      <button type="button" class="project-tree__session-action" title="会话操作" @click.stop>
+                      <button type="button" class="project-tree__session-action" :title="t('navigation.sessionActions')" @click.stop>
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
                           <circle cx="12" cy="5" r="1.5" />
                           <circle cx="12" cy="12" r="1.5" />
@@ -672,9 +672,9 @@ watch(() => projects.projects.length, (len) => {
                       </button>
                       <template #dropdown>
                         <DqDropdownMenu>
-                          <DqDropdownItem command="archive">归档</DqDropdownItem>
+                          <DqDropdownItem command="archive">{{ t('sessions.archive') }}</DqDropdownItem>
                           <DqDropdownItem command="delete">
-                            <span style="color:var(--dq-danger)">删除</span>
+                            <span style="color:var(--dq-danger)">{{ t('common.delete') }}</span>
                           </DqDropdownItem>
                         </DqDropdownMenu>
                       </template>
@@ -724,7 +724,7 @@ watch(() => projects.projects.length, (len) => {
                 <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
             </button>
-            <nav v-show="!resourcesCollapsed" class="module-sidebar__menu" aria-label="模块导航">
+            <nav v-show="!resourcesCollapsed" class="module-sidebar__menu" :aria-label="t('navigation.moduleNavAria')">
               <button
                 v-for="item in menuItems"
                 :key="item.module"
@@ -777,7 +777,7 @@ watch(() => projects.projects.length, (len) => {
         </footer>
       </aside>
 
-      <button type="button" class="module-sidebar__resize" aria-label="调整宽度" @pointerdown="onResizePointerDown" />
+      <button type="button" class="module-sidebar__resize" :aria-label="t('common.resizeWidth')" @pointerdown="onResizePointerDown" />
     </template>
   </div>
 </template>

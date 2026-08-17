@@ -8,7 +8,7 @@ import { confirm, toast } from '@/utils/feedback'
 
 const SELECTED_KB_KEY = 'app-selected-kb-id'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const knowledge = useKnowledgeStore()
 
 const selectedBaseId = ref('')
@@ -29,7 +29,7 @@ const baseFormDescription = ref('')
 const baseSaving = ref(false)
 
 const sortedBases = computed(() =>
-  [...knowledge.bases].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
+  [...knowledge.bases].sort((a, b) => a.name.localeCompare(b.name, locale.value)),
 )
 
 const selectedBase = computed(() => knowledge.bases.find((b) => b.id === selectedBaseId.value))

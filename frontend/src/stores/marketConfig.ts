@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
+import { i18n } from '@/i18n'
 import type { ConfigFile, ConfigMarketSection, MarketSourceConfig, UpdateConfigFileRequest } from '@/types/mission'
 
 function emptySource(): MarketSourceConfig {
@@ -122,9 +123,9 @@ export const useMarketConfigStore = defineStore('marketConfig', () => {
         body: JSON.stringify(req),
       })
       config.value = normalizeMarket(cfg.market)
-      toast.success('市场数据源已保存，重启后生效')
+      toast.success(i18n.global.t('settings.marketSaved'))
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '保存失败')
+      toast.error(e instanceof Error ? e.message : i18n.global.t('common.saveFailed'))
       throw e
     } finally {
       saving.value = false

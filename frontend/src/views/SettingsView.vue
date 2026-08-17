@@ -16,6 +16,8 @@ import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
 import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
 import type { ThemeId } from '@/stores/theme'
+import { useLocaleStore } from '@/stores/locale'
+import type { LocalePreference } from '@/stores/locale'
 import { toast, confirm } from '@/utils/feedback'
 import { providerBadge, customProviderBadge } from '@/utils/provider-icon'
 import Skeleton from '@/components/common/Skeleton.vue'
@@ -40,6 +42,31 @@ const remote = useRemoteStore()
 const sessions = useSessionsStore()
 const projects = useProjectsStore()
 const themeStore = useThemeStore()
+const localeStore = useLocaleStore()
+
+const LANGUAGE_OPTIONS: { id: LocalePreference; labelKey: string }[] = [
+  { id: 'system', labelKey: 'settings.languageSystem' },
+  { id: 'zh-CN', labelKey: 'settings.languageZhCN' },
+  { id: 'en', labelKey: 'settings.languageEn' },
+]
+
+const THEME_I18N_KEYS: Record<string, { label: string; desc: string }> = {
+  mac: { label: 'settings.themeMac', desc: 'settings.themeMacDesc' },
+  'mac-light': { label: 'settings.themeMacLight', desc: 'settings.themeMacLightDesc' },
+  'tokyo-night': { label: 'settings.themeTokyoNight', desc: 'settings.themeTokyoNightDesc' },
+  'nord-dark': { label: 'settings.themeNordDark', desc: 'settings.themeNordDarkDesc' },
+  'minimal-light': { label: 'settings.themeMinimalLight', desc: 'settings.themeMinimalLightDesc' },
+}
+
+function themeLabel(id: string): string {
+  const keys = THEME_I18N_KEYS[id]
+  return keys ? t(keys.label) : id
+}
+
+function themeDesc(id: string): string {
+  const keys = THEME_I18N_KEYS[id]
+  return keys ? t(keys.desc) : ''
+}
 
 const weixinForm = ref({
   enabled: false,
@@ -1289,30 +1316,50 @@ onUnmounted(() => {
           <p>{{ $t('settings.appearanceDesc') }}</p>
         </header>
 
-        <div class="theme-grid">
-          <button
-            v-for="theme in THEME_OPTIONS"
-            :key="theme.id"
-            type="button"
-            class="theme-card"
-            :class="{ 'is-active': themeStore.currentTheme === theme.id }"
-            @click="themeStore.setTheme(theme.id as ThemeId)"
-          >
-            <div class="theme-card__preview" :style="{ '--preview-accent': theme.accent }">
-              <div class="theme-card__preview-accent"></div>
-              <div class="theme-card__preview-surface"></div>
-              <div class="theme-card__preview-text"></div>
-            </div>
-            <div class="theme-card__info">
-              <span class="theme-card__name">{{ theme.label }}</span>
-              <span class="theme-card__desc">{{ theme.description }}</span>
-            </div>
-            <div v-if="themeStore.currentTheme === theme.id" class="theme-card__check">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-            </div>
-          </button>
+        <div class="settings-block">
+          <h3 class="settings-block__title">{{ $t('settings.language') }}</h3>
+          <p class="settings-block__desc">{{ $t('settings.languageDesc') }}</p>
+          <div class="language-options">
+            <button
+              v-for="opt in LANGUAGE_OPTIONS"
+              :key="opt.id"
+              type="button"
+              class="language-option"
+              :class="{ 'is-active': localeStore.preference === opt.id }"
+              @click="localeStore.setPreference(opt.id)"
+            >
+              {{ $t(opt.labelKey) }}
+            </button>
+          </div>
+        </div>
+
+        <div class="settings-block">
+          <h3 class="settings-block__title">{{ $t('settings.theme') }}</h3>
+          <div class="theme-grid">
+            <button
+              v-for="theme in THEME_OPTIONS"
+              :key="theme.id"
+              type="button"
+              class="theme-card"
+              :class="{ 'is-active': themeStore.currentTheme === theme.id }"
+              @click="themeStore.setTheme(theme.id as ThemeId)"
+            >
+              <div class="theme-card__preview" :style="{ '--preview-accent': theme.accent }">
+                <div class="theme-card__preview-accent"></div>
+                <div class="theme-card__preview-surface"></div>
+                <div class="theme-card__preview-text"></div>
+              </div>
+              <div class="theme-card__info">
+                <span class="theme-card__name">{{ themeLabel(theme.id) }}</span>
+                <span class="theme-card__desc">{{ themeDesc(theme.id) }}</span>
+              </div>
+              <div v-if="themeStore.currentTheme === theme.id" class="theme-card__check">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -3921,6 +3968,59 @@ onUnmounted(() => {
 /* Provider card border visibility */
 .provider-card {
   border-color: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
+}
+
+/* Appearance: language + theme blocks */
+.settings-block {
+  margin-top: 20px;
+}
+
+.settings-block:first-of-type {
+  margin-top: 0;
+}
+
+.settings-block__title {
+  margin: 0 0 4px;
+  font-size: var(--dq-font-size-body);
+  font-weight: 600;
+  color: var(--dq-label-primary);
+}
+
+.settings-block__desc {
+  margin: 0 0 12px;
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-tertiary);
+  line-height: 1.45;
+}
+
+.language-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.language-option {
+  padding: 8px 14px;
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 12%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dq-label-secondary);
+  font-size: var(--dq-font-size-body);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.language-option:hover {
+  border-color: color-mix(in srgb, var(--dq-accent) 40%, transparent);
+  color: var(--dq-label-primary);
+}
+
+.language-option.is-active {
+  border-color: var(--dq-accent);
+  background: color-mix(in srgb, var(--dq-accent) 12%, transparent);
+  color: var(--dq-label-primary);
+  font-weight: 600;
 }
 
 /* Theme grid */

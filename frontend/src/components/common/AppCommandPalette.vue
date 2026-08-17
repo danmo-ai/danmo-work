@@ -45,7 +45,7 @@ const actions = computed<PaletteAction[]>(() => [
     title: t('commandPalette.newSession'),
     group: t('commandPalette.groupSession'),
     shortcut: 'mod+n',
-    keywords: ['new', 'session', '新建'],
+    keywords: ['new', 'session', t('commandPalette.kwNew')],
     run: () => {
       sessions.startCompose(projects.sortedProjects[0]?.id ?? null)
       router.push({ name: 'sessions' })
@@ -57,7 +57,7 @@ const actions = computed<PaletteAction[]>(() => [
     group: t('commandPalette.groupSession'),
     shortcut: 'mod+.',
     disabled: !sessions.runningTurnId,
-    keywords: ['stop', 'cancel', '停止'],
+    keywords: ['stop', 'cancel', t('commandPalette.kwStop')],
     run: async () => {
       if (sessions.runningTurnId) await sessions.cancelTurn(sessions.runningTurnId)
     },
@@ -67,7 +67,7 @@ const actions = computed<PaletteAction[]>(() => [
     title: t('commandPalette.openSettings'),
     group: t('commandPalette.groupNavigate'),
     shortcut: 'mod+,',
-    keywords: ['settings', '设置'],
+    keywords: ['settings', t('commandPalette.kwSettings')],
     run: () => router.push({ name: 'settings' }),
   },
   {
@@ -116,7 +116,7 @@ const actions = computed<PaletteAction[]>(() => [
     id: 'stage.preview',
     title: t('commandPalette.openPreview'),
     group: t('commandPalette.groupNavigate'),
-    keywords: ['preview', 'browser', 'url', '预览', '浏览器'],
+    keywords: ['preview', 'browser', 'url', t('commandPalette.kwPreview'), t('commandPalette.kwBrowser')],
     run: () => {
       if (!sessions.selectedProjectId) return
       workspaceUi.openStage({ kind: 'preview', path: '', mode: 'view', url: '' })

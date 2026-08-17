@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -12,6 +13,7 @@ const props = defineProps<{
   active?: boolean
 }>()
 
+const { t } = useI18n()
 const containerRef = ref<HTMLElement | null>(null)
 const status = ref<'connecting' | 'connected' | 'closed' | 'error'>('connecting')
 const errorText = ref('')
@@ -121,7 +123,7 @@ function connect() {
     socket = new WebSocket(wsUrl())
   } catch (e) {
     status.value = 'error'
-    errorText.value = e instanceof Error ? e.message : '无法创建终端连接'
+    errorText.value = e instanceof Error ? e.message : t('sessions.terminal.createFailed')
     return
   }
   socket.binaryType = 'arraybuffer'
@@ -140,15 +142,15 @@ function connect() {
   }
   socket.onerror = () => {
     if (disposed || ws !== socket) return
-    errorText.value = '终端连接失败'
+    errorText.value = t('sessions.terminal.connectFailed')
   }
   socket.onclose = () => {
     if (disposed || ws !== socket) return
     status.value = status.value === 'connecting' ? 'error' : 'closed'
     if (status.value === 'error' && !errorText.value) {
-      errorText.value = '终端连接被关闭'
+      errorText.value = t('sessions.terminal.closed')
     }
-    term?.write('\r\n\x1b[90m[终端连接已断开]\x1b[0m\r\n')
+    term?.write(`\r\n\x1b[90m${t('sessions.terminal.disconnected')}\x1b[0m\r\n`)
   }
   ws = socket
 }
@@ -242,9 +244,9 @@ defineExpose({ refit: () => scheduleRefit(true) })
     <div ref="containerRef" class="terminal-panel__term" />
     <div v-if="status === 'closed' || status === 'error'" class="terminal-panel__overlay">
       <p v-if="errorText" class="terminal-panel__error">{{ errorText }}</p>
-      <DqButton size="sm" class="terminal-panel__reconnect" @click="reconnect">重新连接</DqButton>
+      <DqButton size="sm" class="terminal-panel__reconnect" @click="reconnect">{{ t('sessions.terminal.reconnect') }}</DqButton>
     </div>
-    <div v-else-if="status === 'connecting'" class="terminal-panel__status">正在连接终端…</div>
+    <div v-else-if="status === 'connecting'" class="terminal-panel__status">{{ t('sessions.terminal.connecting') }}</div>
   </div>
 </template>
 

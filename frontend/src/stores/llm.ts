@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { fetchJSON, asArray } from '@/api/client'
 import { toast } from '@/utils/feedback'
+import { i18n } from '@/i18n'
 import type { LLMProviderConfig, LLMModel, LLMModelRef, LLMProviderPreset, UpsertLLMProviderConfigRequest } from '@/types/mission'
 
 export const useLLMStore = defineStore('llm', () => {
@@ -61,9 +62,9 @@ export const useLLMStore = defineStore('llm', () => {
       })
       await loadConfigs()
       await loadModels()
-      toast.success('提供商已保存')
+      toast.success(i18n.global.t('settings.providerSaved'))
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '保存失败')
+      toast.error(e instanceof Error ? e.message : i18n.global.t('common.saveFailed'))
       throw e
     } finally {
       saving.value = false
@@ -79,9 +80,9 @@ export const useLLMStore = defineStore('llm', () => {
       })
       await loadConfigs()
       await loadModels()
-      toast.success('提供商已更新')
+      toast.success(i18n.global.t('settings.providerUpdated'))
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '更新失败')
+      toast.error(e instanceof Error ? e.message : i18n.global.t('common.updateFailed'))
       throw e
     } finally {
       saving.value = false
@@ -94,9 +95,9 @@ export const useLLMStore = defineStore('llm', () => {
       await fetchJSON(`/llm/configs/${encodeURIComponent(id)}`, { method: 'DELETE' })
       await loadConfigs()
       await loadModels()
-      toast.success('提供商已删除')
+      toast.success(i18n.global.t('settings.providerDeleted'))
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '删除失败')
+      toast.error(e instanceof Error ? e.message : i18n.global.t('navigation.deleteFailed'))
       throw e
     } finally {
       saving.value = false
@@ -110,12 +111,12 @@ export const useLLMStore = defineStore('llm', () => {
         `/llm/configs/${encodeURIComponent(configId)}/refresh-models`,
         { method: 'POST' },
       )
-      toast.success('模型列表已刷新')
+      toast.success(i18n.global.t('settings.modelsRefreshed'))
       await loadConfigs()
       await loadModels()
       return res?.models ?? []
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '刷新失败')
+      toast.error(e instanceof Error ? e.message : i18n.global.t('common.refreshFailed'))
       throw e
     } finally {
       saving.value = false
@@ -132,7 +133,7 @@ export const useLLMStore = defineStore('llm', () => {
       await loadModels()
       return res?.models ?? []
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '获取模型失败（可改为手动添加模型）')
+      toast.error(e instanceof Error ? e.message : i18n.global.t('settings.fetchModelsFailed'))
       throw e
     } finally {
       saving.value = false
@@ -148,7 +149,7 @@ export const useLLMStore = defineStore('llm', () => {
       await loadConfigs()
       await loadModels()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '更新模型状态失败')
+      toast.error(e instanceof Error ? e.message : i18n.global.t('settings.updateModelStatusFailed'))
       throw e
     }
   }

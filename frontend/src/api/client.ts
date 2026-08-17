@@ -1,4 +1,5 @@
 import { apiBaseUrl } from '@/utils/desktop'
+import { i18n } from '@/i18n'
 
 /** Go 空 slice 常序列化为 JSON null，列表接口统一归一成 [] */
 export function asArray<T>(data: T[] | null | undefined): T[] {
@@ -39,6 +40,12 @@ async function parseErrorMessage(res: Response): Promise<string> {
   return message
 }
 
+function networkError(url: string, networkErr: unknown): Error {
+  const detail =
+    networkErr instanceof Error ? networkErr.message : i18n.global.t('errors.unknown')
+  return new Error(i18n.global.t('errors.network', { url, detail }))
+}
+
 export async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
   // Resolve per request — module-load-time apiBaseUrl() can miss Tauri globals
   // and send /api calls to tauri://localhost (404 "not found").
@@ -50,7 +57,7 @@ export async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T>
       ...init,
     })
   } catch (networkErr) {
-    throw new Error(`网络请求失败: ${url} — ${networkErr instanceof Error ? networkErr.message : '未知错误'}`)
+    throw networkError(url, networkErr)
   }
   if (!res.ok) {
     throw new ApiError(await parseErrorMessage(res), res.status, path)
@@ -72,7 +79,7 @@ export async function uploadProjectFile(
   try {
     res = await fetch(url, { method: 'POST', body })
   } catch (networkErr) {
-    throw new Error(`网络请求失败: ${url} — ${networkErr instanceof Error ? networkErr.message : '未知错误'}`)
+    throw networkError(url, networkErr)
   }
   if (!res.ok) {
     throw new ApiError(await parseErrorMessage(res), res.status, path)

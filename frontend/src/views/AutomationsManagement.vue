@@ -7,7 +7,7 @@ import { useGlobalAgentsStore } from '@/stores/globalAgents'
 import { confirm, toast } from '@/utils/feedback'
 import type { Automation, AutomationTrigger } from '@/types'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const automations = useAutomationsStore()
 const agents = useGlobalAgentsStore()
 
@@ -40,7 +40,7 @@ const sortedAutomations = computed(() => {
   let list = [...automations.items]
   if (listFilter.value === 'current') list = list.filter((a) => a.enabled)
   else if (listFilter.value === 'paused') list = list.filter((a) => !a.enabled)
-  return list.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+  return list.sort((a, b) => a.name.localeCompare(b.name, locale.value))
 })
 const selected = computed(() => automations.items.find((a) => a.id === selectedId.value))
 const hasSelection = computed(() => isCreating.value || !!selectedId.value)

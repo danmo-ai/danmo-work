@@ -281,7 +281,7 @@ function stateLabel(state: RowState): string {
   return map[state]
 }
 
-function llmUsageLabel(p: Record<string, unknown>): string {
+function llmUsageLabel(p: Record<string, unknown> | null): string {
   const parts = [formatTokenCount(Number(p?.totalTokens ?? 0))]
   const cache = Number(p?.cacheReadTokens ?? 0)
   if (cache > 0) {
@@ -348,7 +348,7 @@ function buildRow(ev: StreamEvent, startTime: number | null, turnIndex: number):
     }
     case 'permission.decided': {
       const approved = p?.approved === true
-      return mk('permission', 'muted', approved ? '允许' : '拒绝', prettyJSON(p), true)
+      return mk('permission', 'muted', approved ? t('sessions.perm.allow') : t('sessions.perm.deny'), prettyJSON(p), true)
     }
     case 'ask_user.pending': {
       const callId = str(p?.callId)
@@ -394,9 +394,9 @@ function buildRow(ev: StreamEvent, startTime: number | null, turnIndex: number):
     case 'turn.started':
       return mk('system', 'muted', '', '', false)
     case 'turn.ended':
-      return mk('system', 'muted', `Turn 结束${p?.status ? ` · ${str(p.status)}` : ''}`, str(p?.summary), Boolean(str(p?.summary)))
+      return mk('system', 'muted', `${t('sessions.trajectory.turnEnded')}${p?.status ? ` · ${str(p.status)}` : ''}`, str(p?.summary), Boolean(str(p?.summary)))
     case 'turn.failed':
-      return mk('error', 'error', `Turn 失败${p?.message ? ` · ${str(p.message)}` : ''}`, prettyJSON(p), true)
+      return mk('error', 'error', `${t('sessions.trajectory.turnFailed')}${p?.message ? ` · ${str(p.message)}` : ''}`, prettyJSON(p), true)
     case 'session.completed':
       return mk('system', 'ok', str(p?.summary), str(p?.summary), Boolean(str(p?.summary)))
     case 'error':
@@ -1019,10 +1019,10 @@ const selectedSummaryFields = computed<Array<[string, string]>>(() => {
     fields.push([t('sessions.trajectory.fieldOutputTokens'), formatTokenCount(Number(p?.completionTokens ?? 0))])
     fields.push([t('sessions.trajectory.fieldTotalTokens'), formatTokenCount(Number(p?.totalTokens ?? 0))])
     if (Number(p?.cacheReadTokens ?? 0) > 0) {
-      fields.push([t('sessions.trajectory.fieldCacheRead'), formatTokenCount(Number(p.cacheReadTokens))])
+      fields.push([t('sessions.trajectory.fieldCacheRead'), formatTokenCount(Number(p?.cacheReadTokens))])
     }
     if (Number(p?.cacheCreationTokens ?? 0) > 0) {
-      fields.push([t('sessions.trajectory.fieldCacheWrite'), formatTokenCount(Number(p.cacheCreationTokens))])
+      fields.push([t('sessions.trajectory.fieldCacheWrite'), formatTokenCount(Number(p?.cacheCreationTokens))])
     }
   }
   if (row.kind === 'error') {
@@ -1462,7 +1462,7 @@ onBeforeUnmount(() => {
         <button
           type="button"
           class="trajectory__details-resize"
-          aria-label="调整宽度"
+          :aria-label="t('common.resizeWidth')"
           @pointerdown="startResize"
         />
         <div class="trajectory__details-header">
@@ -1485,7 +1485,7 @@ onBeforeUnmount(() => {
             <span aria-hidden="true">×</span>
           </button>
         </div>
-        <div class="trajectory__detail-tabs" role="tablist" aria-label="事件详情">
+        <div class="trajectory__detail-tabs" role="tablist" :aria-label="t('sessions.trajectory.detailsAria')">
           <button
             v-for="tab in selectedTabs"
             :key="tab.id"

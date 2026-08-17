@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { formatTokenCount } from '@/composables/useSessionContextUsage'
 import type { StreamTurn } from '@/composables/useStreamTurns'
 import UserMessageBlock from '@/components/center/UserMessageBlock.vue'
@@ -23,15 +24,17 @@ const emit = defineEmits<{
   download: []
 }>()
 
+const { t } = useI18n()
+
 function turnStatusLabel(status?: string) {
   const map: Record<string, string> = {
-    running: '运行中',
-    completed: '已完成',
-    done: '已完成',
-    failed: '失败',
-    cancelled: '已取消',
-    timeout: '超时',
-    blocked: '已阻塞',
+    running: t('sessions.running'),
+    completed: t('sessions.completed'),
+    done: t('sessions.completed'),
+    failed: t('sessions.failed'),
+    cancelled: t('sessions.cancelled'),
+    timeout: t('sessions.timeout'),
+    blocked: t('sessions.blocked'),
   }
   return status ? (map[status] ?? status) : ''
 }
@@ -61,8 +64,8 @@ const showStatus = () => {
           type="button"
           class="turn-section__collapse-btn"
           :class="{ 'is-collapsed': collapsed }"
-          :aria-label="collapsed ? '展开 Turn' : '折叠 Turn'"
-          :title="collapsed ? '展开 Turn' : '折叠 Turn'"
+          :aria-label="collapsed ? t('sessions.expandTurn') : t('sessions.collapseTurn')"
+          :title="collapsed ? t('sessions.expandTurn') : t('sessions.collapseTurn')"
           @click.stop="emit('toggle-collapse')"
         >
           <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -86,7 +89,7 @@ const showStatus = () => {
             {{ formatTokenCount(summary.tokensUsed) }}
           </span>
         </div>
-        <button type="button" class="turn-section__download-btn" title="下载 Turn Log" @click.stop="emit('download')">
+        <button type="button" class="turn-section__download-btn" :title="t('sessions.downloadTurnLog')" @click.stop="emit('download')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
             <polyline points="7 10 12 15 17 10" />

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { InspectElementPayload } from '@/types/element-attachment'
 
 const props = defineProps<{
@@ -13,6 +14,7 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
+const { t } = useI18n()
 const annotation = ref('')
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 
@@ -59,7 +61,7 @@ function shortSummary(): string {
 </script>
 
 <template>
-  <div v-if="open" class="el-annotate" role="dialog" aria-label="提交到创作器" @keydown="onKeydown">
+  <div v-if="open" class="el-annotate" role="dialog" :aria-label="t('sessions.annotate.submitTitle')" @keydown="onKeydown">
     <div class="el-annotate__backdrop" @click="cancel" />
     <div class="el-annotate__panel">
       <div class="el-annotate__header">
@@ -73,30 +75,30 @@ function shortSummary(): string {
           </svg>
         </span>
         <div class="el-annotate__title-wrap">
-          <div class="el-annotate__title">提交到创作器</div>
+          <div class="el-annotate__title">{{ t('sessions.annotate.submitTitle') }}</div>
           <div class="el-annotate__summary">{{ shortSummary() }}</div>
         </div>
       </div>
       <div v-if="payload?.screenshot" class="el-annotate__preview">
-        <img :src="payload.screenshot" alt="选中元素预览" class="el-annotate__preview-img" />
+        <img :src="payload.screenshot" :alt="t('sessions.annotate.previewAlt')" class="el-annotate__preview-img" />
       </div>
-      <label class="el-annotate__label" for="el-annotate-input">批注（可选）</label>
+      <label class="el-annotate__label" for="el-annotate-input">{{ t('sessions.annotate.label') }}</label>
       <textarea
         id="el-annotate-input"
         ref="inputRef"
         v-model="annotation"
         class="el-annotate__input"
         rows="3"
-        placeholder="例如：字号改大、左边距加大…"
+        :placeholder="t('sessions.annotate.placeholder')"
         @keydown="onKeydown"
       />
       <div class="el-annotate__actions">
-        <button type="button" class="el-annotate__btn el-annotate__btn--ghost" @click="cancel">取消</button>
+        <button type="button" class="el-annotate__btn el-annotate__btn--ghost" @click="cancel">{{ t('common.cancel') }}</button>
         <button type="button" class="el-annotate__btn el-annotate__btn--primary" @click="confirm">
-          提交到创作器
+          {{ t('sessions.annotate.submitTitle') }}
         </button>
       </div>
-      <div class="el-annotate__hint">⌘/Ctrl+Enter 确认 · Esc 取消</div>
+      <div class="el-annotate__hint">{{ t('sessions.annotate.hint') }}</div>
     </div>
   </div>
 </template>

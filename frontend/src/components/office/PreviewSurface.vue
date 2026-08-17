@@ -71,7 +71,7 @@ async function loadMdContent(urlOrPath: string) {
     const text = await resp.text()
     mdHtml.value = renderMarkdown(text)
   } catch (e) {
-    mdHtml.value = `<p style="color:red">加载 Markdown 失败: ${e}</p>`
+    mdHtml.value = `<p style="color:red">${t('office.mdLoadFailed', { error: e })}</p>`
   }
 }
 

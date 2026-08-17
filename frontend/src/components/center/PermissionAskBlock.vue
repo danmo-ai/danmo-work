@@ -32,21 +32,23 @@ const domain = computed(() => String(asRecord(props.payload)?.domain ?? ''))
 const reasonLabel = computed(() => {
   switch (reason.value) {
     case 'network':
-      return '需要完全出站（deny 逃生）'
+      return t('sessions.perm.needFullOutbound')
     case 'network_domain':
-      return domain.value ? `允许域名 ${domain.value}` : '允许新域名'
+      return domain.value
+        ? t('sessions.perm.allowDomain', { domain: domain.value })
+        : t('sessions.perm.allowNewDomain')
     case 'dangerous_command':
-      return '危险命令'
+      return t('sessions.perm.dangerousCommand')
     case 'unsandboxed':
-      return '未隔离环境'
+      return t('sessions.perm.unsandboxed')
     default:
-      return '需要确认'
+      return t('sessions.perm.needConfirm')
   }
 })
 
 const toolName = computed(() => {
   const p = asRecord(props.payload)
-  return String(p?.tool ?? p?.name ?? '未知工具')
+  return String(p?.tool ?? p?.name ?? t('sessions.perm.unknownTool'))
 })
 
 const description = computed(() => String(asRecord(props.payload)?.description ?? ''))
@@ -59,9 +61,9 @@ const allowsSession = computed(() => {
 })
 
 const sessionButtonLabel = computed(() => {
-  if (reason.value === 'network_domain') return '本会话允许此域名'
-  if (reason.value === 'network') return '本会话允许完全出站'
-  return '本会话允许'
+  if (reason.value === 'network_domain') return t('sessions.perm.allowDomainSession')
+  if (reason.value === 'network') return t('sessions.perm.allowFullOutboundSession')
+  return t('sessions.perm.allowSession')
 })
 
 const pending = computed(() => Boolean(props.showActions) && !props.decided)
@@ -76,7 +78,7 @@ const pending = computed(() => Boolean(props.showActions) && !props.decided)
     :title="`${reasonLabel}: ${toolName}`"
   >
     <span class="permission-ask__settled-dot" aria-hidden="true" />
-    <span class="permission-ask__settled-text">已处理 · {{ reasonLabel }}</span>
+    <span class="permission-ask__settled-text">{{ t('sessions.perm.settledWithReason', { reason: reasonLabel }) }}</span>
   </div>
 
   <div
@@ -91,7 +93,7 @@ const pending = computed(() => Boolean(props.showActions) && !props.decided)
         <path d="M7 11V7a5 5 0 0 1 10 0v4" />
       </svg>
       <div class="permission-ask__text">
-        <span class="permission-ask__badge">需处理</span>
+        <span class="permission-ask__badge">{{ t('sessions.perm.needsAction') }}</span>
         <span>
           <strong>{{ reasonLabel }}</strong>：
           <strong>{{ toolName }}</strong>
@@ -102,7 +104,7 @@ const pending = computed(() => Boolean(props.showActions) && !props.decided)
 
     <div v-if="pending" class="permission-ask__actions">
       <DqButton type="primary" size="sm" :disabled="deciding" @click="emit('decide', { decision: 'allow', scope: 'once' })">
-        允许一次
+        {{ t('sessions.perm.allowOnce') }}
       </DqButton>
       <DqButton
         v-if="allowsSession"
@@ -113,7 +115,7 @@ const pending = computed(() => Boolean(props.showActions) && !props.decided)
         {{ sessionButtonLabel }}
       </DqButton>
       <DqButton size="sm" :disabled="deciding" @click="emit('decide', { decision: 'deny', scope: 'once' })">
-        拒绝
+        {{ t('sessions.perm.deny') }}
       </DqButton>
     </div>
     <p v-else-if="!decided" class="permission-ask__hint">{{ t('sessions.decideInComposer') }}</p>

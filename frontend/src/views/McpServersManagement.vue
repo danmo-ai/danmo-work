@@ -13,7 +13,7 @@ import type { MCPAuthMode, MCPServer, MCPToolDef } from '@/types'
 type Transport = 'stdio' | 'sse' | 'streamable-http'
 type PageView = 'library' | 'market'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const route = useRoute()
 const mcp = useMcpServersStore()
 const marketStore = useMarketStore()
@@ -99,7 +99,7 @@ const discoveredTools = computed<MCPToolDef[]>(() => {
 })
 
 const sortedServers = computed(() =>
-  [...mcp.items].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
+  [...mcp.items].sort((a, b) => a.name.localeCompare(b.name, locale.value)),
 )
 const selected = computed(() => mcp.items.find((s) => s.id === selectedId.value))
 const marketSelected = computed(() => {

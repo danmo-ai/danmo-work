@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
   text: string
@@ -12,6 +13,7 @@ const emit = defineEmits<{
   toggle: [seq: number]
 }>()
 
+const { t } = useI18n()
 function formatLen(s: string): string {
   const n = s.length
   if (n < 1000) return String(n)
@@ -68,7 +70,7 @@ onBeforeUnmount(() => {
   <div class="thinking-block" :class="{ 'is-expanded': expanded, 'is-running': running }">
     <button type="button" class="thinking-block__header" @click="emit('toggle', seq)">
       <span v-if="!expanded" ref="previewRef" class="thinking-block__preview">{{ preview }}</span>
-      <span v-else class="thinking-block__hint">思考过程</span>
+      <span v-else class="thinking-block__hint">{{ t('sessions.thinkingProcess') }}</span>
       <span class="thinking-block__trail">
         <span v-if="running" class="thinking-block__live-dot" />
         <span class="thinking-block__meta">{{ formatLen(text) }}</span>

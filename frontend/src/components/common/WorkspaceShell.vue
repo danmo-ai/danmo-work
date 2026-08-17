@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+
 withDefaults(
   defineProps<{
     title?: string
@@ -34,7 +38,7 @@ defineEmits<{
       <template v-if="!customRail">
         <div class="resource-rail__head">
           <span class="resource-rail__count">{{ count }}</span>
-          <DqIconButton :aria-label="createLabel ?? '新建'" @click="$emit('create')">
+          <DqIconButton :aria-label="createLabel ?? t('common.new')" @click="$emit('create')">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 5v14M5 12h14" stroke-linecap="round" />
             </svg>
@@ -49,7 +53,7 @@ defineEmits<{
     <main class="resource-workspace">
       <div v-if="!hasSelection" class="resource-workspace__empty">
         <slot name="empty">
-          <DqEmpty description="选择或新建项目" />
+          <DqEmpty :description="t('navigation.selectOrCreateProject')" />
         </slot>
       </div>
       <template v-else>

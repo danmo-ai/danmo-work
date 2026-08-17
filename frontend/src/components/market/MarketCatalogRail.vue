@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue'
 import { useMarketStore } from '@/stores/market'
+import { uiLocale } from '@/stores/locale'
 import type { MarketListing } from '@/types'
 
 const props = defineProps<{
@@ -15,7 +16,7 @@ const items = computed(() =>
   store.catalog
     .filter((item) => item.kind === props.kind)
     .slice()
-    .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
+    .sort((a, b) => a.name.localeCompare(b.name, uiLocale())),
 )
 
 const availableItems = computed(() => items.value.filter((item) => !item.installed))

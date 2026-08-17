@@ -14,7 +14,7 @@ type ConfigTab = 'overview' | 'prompt' | 'skills' | 'tools' | 'knowledge'
 
 type AgentForm = Agent
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const globalAgents = useGlobalAgentsStore()
 const skills = useSkillsStore()
 const knowledge = useKnowledgeStore()
@@ -59,7 +59,7 @@ function emptyAgentForm(): AgentForm {
 const agentForm = ref<AgentForm>(emptyAgentForm())
 
 const sortedAgents = computed(() =>
-  [...globalAgents.items].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
+  [...globalAgents.items].sort((a, b) => a.name.localeCompare(b.name, locale.value)),
 )
 
 const primaryAgents = computed(() =>

@@ -14,7 +14,7 @@ import { useMarketStore } from '@/stores/market'
 type SkillTab = 'info' | 'body' | 'files' | 'tools'
 type PageView = 'library' | 'market'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const store = useSkillsStore()
 const projectsStore = useProjectsStore()
 const marketStore = useMarketStore()
@@ -63,7 +63,7 @@ function emptySkill(): Skill {
 }
 
 const sortedSkills = computed(() =>
-  [...store.items].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
+  [...store.items].sort((a, b) => a.name.localeCompare(b.name, locale.value)),
 )
 // Builtin = has embedded template (server marks builtin at read time). Keep
 // those in the Built-in group even if a market overwrite set marketSource.
@@ -264,7 +264,7 @@ async function refreshSelectedStatus() {
 
 async function doImport() {
   if (!importPath.value.trim()) {
-    toast.warning('请输入技能目录路径')
+    toast.warning(t('skills.importPathRequired'))
     return
   }
   try {

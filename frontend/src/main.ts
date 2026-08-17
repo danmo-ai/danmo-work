@@ -6,6 +6,7 @@ import { router } from './router'
 import { installDanQingUi } from './plugins/dq-ui'
 import { i18n } from './i18n'
 import { useThemeStore } from './stores/theme'
+import { useLocaleStore } from './stores/locale'
 import '@danqing/dq-tokens/dq-mac.css'
 import '@danqing/dq-tokens/dq-mac-light.css'
 import '@danqing/dq-tokens/dq-tokyo-night.css'
@@ -32,6 +33,7 @@ function isRecoverableRuntimeError(err: unknown): boolean {
     msg.includes('readonly database') ||
     msg.includes('database not writable') ||
     msg.includes('网络请求失败') ||
+    msg.includes('network request failed') ||
     msg.includes('failed to fetch') ||
     msg.includes('http ')
   )
@@ -69,9 +71,11 @@ app.use(router)
 app.use(i18n)
 installDanQingUi(app)
 
-// Initialize theme from stored preference
+// Initialize theme + locale from stored preference
 const themeStore = useThemeStore()
 themeStore.init()
+const localeStore = useLocaleStore()
+localeStore.init()
 
 app.mount('#app')
 

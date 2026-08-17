@@ -10,7 +10,7 @@ import MarketCatalogRail from '@/components/market/MarketCatalogRail.vue'
 
 type PageView = 'library' | 'market'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const store = usePluginsStore()
 const marketStore = useMarketStore()
 
@@ -31,7 +31,7 @@ onMounted(async () => {
 })
 
 const sortedPlugins = computed(() =>
-  [...store.items].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
+  [...store.items].sort((a, b) => a.name.localeCompare(b.name, locale.value)),
 )
 
 const selectedName = computed(() => store.selectedName)
