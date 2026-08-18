@@ -44,7 +44,7 @@ func (m *SessionManager) Create(ctx context.Context, req domain.CreateSessionReq
 	}
 	now := time.Now().UTC()
 	s := domain.Session{
-		ID:        fmt.Sprintf("session-%d", time.Now().UnixNano()),
+		ID:        NewID("session"),
 		Title:     strings.TrimSpace(req.Title),
 		ProjectID: req.ProjectID,
 		AgentID:   req.AgentID,
@@ -252,7 +252,7 @@ func (m *SessionManager) EnqueuePending(ctx context.Context, sessionID string, r
 	}
 	now := time.Now().UTC()
 	msg := domain.PendingMessage{
-		ID:          fmt.Sprintf("pending-%d", time.Now().UnixNano()),
+		ID:          NewID("pending"),
 		SessionID:   sessionID,
 		Content:     content,
 		Attachments: atts,

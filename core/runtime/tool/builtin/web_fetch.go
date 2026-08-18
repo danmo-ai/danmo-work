@@ -107,8 +107,15 @@ func (h *WebFetch) Execute(ctx context.Context, input map[string]any) (domain.To
 	cfg := h.currentConfig(ctx)
 	timeout := time.Duration(timeoutMs) * time.Millisecond
 
+	// The browser render path must honor the same egress allowlist as the HTTP
+	// path; only a session full-network grant (__sandbox_allow_network) relaxes it.
+	browserEgress := h.Egress
+	if v, ok := input["__sandbox_allow_network"].(bool); ok && v {
+		browserEgress = nil
+	}
+
 	if renderMode == "always" {
-		return h.fetchViaBrowser(ctx, urlStr, maxChars, timeout, cfg, 0, "")
+		return h.fetchViaBrowser(ctx, urlStr, maxChars, timeout, cfg, 0, "", browserEgress)
 	}
 
 	opts := withToolEgress(clientOpts(cfg.Proxy, cfg.UserAgent, timeout, false), h.Egress, input)
@@ -141,7 +148,7 @@ func (h *WebFetch) Execute(ctx context.Context, input map[string]any) (domain.To
 		extractor = ext
 		title = pageTitle
 		if spaHint && renderMode == "auto" && h.browserAvailable() {
-			br, err := h.fetchViaBrowser(ctx, urlStr, maxChars, timeout, cfg, statusCode, finalURL)
+			br, err := h.fetchViaBrowser(ctx, urlStr, maxChars, timeout, cfg, statusCode, finalURL, browserEgress)
 			if err == nil {
 				return br, nil
 			}
@@ -171,8 +178,12 @@ func (h *WebFetch) fetchViaBrowser(
 	cfg domain.SearchConfig,
 	httpStatus int,
 	hintFinal string,
+	eg HostEgressChecker,
 ) (domain.ToolResult, error) {
-	if err := assertPublicURL(urlStr); err != nil {
+	// Enforce SSRF + egress allowlist on the entry URL. Note the headless
+	// browser still follows in-page redirects and loads sub-resources on its
+	// own; those hops are not individually re-checked here.
+	if err := assertPublicURLWithEgress(urlStr, eg); err != nil {
 		return domain.ToolResult{}, err
 	}
 	if h.Browser == nil || !h.Browser.Status().Available {

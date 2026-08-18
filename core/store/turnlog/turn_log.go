@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -433,9 +434,15 @@ func (s *TurnLogStore) readEntriesLocked(filePath string) []map[string]any {
 	var all []map[string]any
 	for dec.More() {
 		var e map[string]any
-		if err := dec.Decode(&e); err == nil {
-			all = append(all, e)
+		if err := dec.Decode(&e); err != nil {
+			// A corrupt or truncated line (common after a crash leaves the
+			// last record half-written) leaves the decoder position
+			// unadvanced, so dec.More() would stay true forever and spin the
+			// CPU while holding s.mu. Stop at the first undecodable record and
+			// keep the well-formed prefix.
+			break
 		}
+		all = append(all, e)
 	}
 	return all
 }
@@ -896,9 +903,10 @@ func (s *TurnLogStore) ListEntries(turnID string) []EntryJSON {
 	entries := make([]EntryJSON, 0)
 	for dec.More() {
 		var e EntryJSON
-		if err := dec.Decode(&e); err == nil {
-			entries = append(entries, e)
+		if err := dec.Decode(&e); err != nil {
+			break // stop at first corrupt record; see readEntriesLocked
 		}
+		entries = append(entries, e)
 	}
 	return entries
 }
@@ -920,9 +928,10 @@ func LoadTurnLog(projector func(projectID string) string, projectID, sessionID s
 			dec := json.NewDecoder(f)
 			for dec.More() {
 				var e EntryJSON
-				if err := dec.Decode(&e); err == nil {
-					all = append(all, e)
+				if err := dec.Decode(&e); err != nil {
+					break // stop at first corrupt record; see readEntriesLocked
 				}
+				all = append(all, e)
 			}
 			f.Close()
 		}
@@ -931,8 +940,16 @@ func LoadTurnLog(projector func(projectID string) string, projectID, sessionID s
 }
 
 func (tf *turnFile) writeEntry(e TurnLogEntry) {
-	b, _ := json.Marshal(e)
-	tf.f.Write(append(b, '\n'))
+	b, err := json.Marshal(e)
+	if err != nil {
+		log.Printf("[turnlog] marshal entry seq=%d type=%s: %v", e.Seq, e.Type, err)
+		return
+	}
+	// Disk-full / closed-fd failures here mean history silently diverges from
+	// what the LLM saw; at minimum make the divergence visible in the log.
+	if _, err := tf.f.Write(append(b, '\n')); err != nil {
+		log.Printf("[turnlog] write entry seq=%d type=%s: %v", e.Seq, e.Type, err)
+	}
 }
 
 // loadTurnFileLocked returns an in-memory turnFile, rehydrating from disk when

@@ -171,23 +171,6 @@ func tryWhitespaceFuzzyReplace(content, oldStr, newStr string, replaceAll bool) 
 	return result, 1, nil
 }
 
-func checkDisproportionateMatch(content, oldStr string) error {
-	if oldStr == "" {
-		return nil
-	}
-	idx := strings.Index(content, oldStr)
-	if idx == -1 {
-		return nil
-	}
-	matchedLen := len(content[idx : idx+len(oldStr)])
-	oldLenMultiplied := 4 * len(oldStr)
-	if matchedLen > oldLenMultiplied && oldLenMultiplied > 0 || matchedLen > 500 {
-		return fmt.Errorf("disproportionate match: oldString matched a range of %d chars (original %d chars). Provide more specific oldString",
-			matchedLen, len(oldStr))
-	}
-	return nil
-}
-
 type closestMatch struct {
 	startLine int // 1-based
 	endLine   int

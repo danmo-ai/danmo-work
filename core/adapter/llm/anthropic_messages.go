@@ -62,6 +62,21 @@ func (p *AnthropicMessagesClient) Chat(ctx context.Context, req port.LLMChatRequ
 		}
 		if m.Role == "assistant" && len(m.ToolCalls) > 0 {
 			var contents []map[string]any
+			// Thinking-enabled requests require the assistant turn that carries
+			// tool_use to begin with the original thinking (or redacted_thinking)
+			// block, echoed back with its signature. Reconstruct it when present.
+			if m.ReasoningSignature != "" && m.ReasoningContent != "" {
+				contents = append(contents, map[string]any{
+					"type":      "thinking",
+					"thinking":  m.ReasoningContent,
+					"signature": m.ReasoningSignature,
+				})
+			} else if m.ReasoningRedacted != "" {
+				contents = append(contents, map[string]any{
+					"type": "redacted_thinking",
+					"data": m.ReasoningRedacted,
+				})
+			}
 			if m.Content != "" {
 				contents = append(contents, map[string]any{"type": "text", "text": m.Content})
 			}
@@ -75,6 +90,9 @@ func (p *AnthropicMessagesClient) Chat(ctx context.Context, req port.LLMChatRequ
 			}
 			msg["content"] = contents
 		} else if m.Role == "tool" {
+			// Anthropic has no "tool" role — tool_result blocks must be carried
+			// on a user message, otherwise the API rejects the request.
+			msg["role"] = "user"
 			msg["content"] = []map[string]any{{
 				"type":        "tool_result",
 				"tool_use_id": m.ToolCallID,
@@ -107,7 +125,11 @@ func (p *AnthropicMessagesClient) Chat(ctx context.Context, req port.LLMChatRequ
 		}
 		body["system"] = blocks
 	}
-	if len(req.Tools) > 0 && req.ToolChoice != "none" {
+	// Always declare tools when the request has them. A request whose history
+	// contains tool_use / tool_result blocks MUST define tools even when the
+	// caller wants to suppress further calls; dropping tools returns a 400.
+	// ToolChoice="none" is expressed via the tool_choice field instead.
+	if len(req.Tools) > 0 {
 		var tools []map[string]any
 		for i, t := range req.Tools {
 			tool := map[string]any{
@@ -121,9 +143,13 @@ func (p *AnthropicMessagesClient) Chat(ctx context.Context, req port.LLMChatRequ
 			tools = append(tools, tool)
 		}
 		body["tools"] = tools
+		if req.ToolChoice == "none" {
+			body["tool_choice"] = map[string]any{"type": "none"}
+		}
 	}
 
 	ApplyReasoningEffort(domain.LLMProviderAnthropic, effort, effortCfg, body)
+	reconcileAnthropicThinking(body)
 
 	b, err := json.Marshal(body)
 	if err != nil {
@@ -154,11 +180,14 @@ func (p *AnthropicMessagesClient) Chat(ctx context.Context, req port.LLMChatRequ
 
 	var result struct {
 		Content []struct {
-			Type  string `json:"type"`
-			Text  string `json:"text"`
-			ID    string `json:"id"`
-			Name  string `json:"name"`
-			Input map[string]any
+			Type      string `json:"type"`
+			Text      string `json:"text"`
+			ID        string `json:"id"`
+			Name      string `json:"name"`
+			Input     map[string]any
+			Thinking  string `json:"thinking"`
+			Signature string `json:"signature"`
+			Data      string `json:"data"`
 		} `json:"content"`
 		Usage struct {
 			InputTokens              int `json:"input_tokens"`
@@ -171,10 +200,14 @@ func (p *AnthropicMessagesClient) Chat(ctx context.Context, req port.LLMChatRequ
 		return port.LLMChatResponse{}, err
 	}
 
+	// Anthropic's input_tokens excludes cache read/write tokens, unlike OpenAI's
+	// prompt_tokens (which includes cached_tokens). Fold cache tokens into
+	// PromptTokens so it reflects true context occupancy — TurnRunner uses it to
+	// drive compaction, and cross-provider usage stays comparable.
 	usage := &port.LLMUsage{
-		PromptTokens:        result.Usage.InputTokens,
+		PromptTokens:        result.Usage.InputTokens + result.Usage.CacheReadInputTokens + result.Usage.CacheCreationInputTokens,
 		CompletionTokens:    result.Usage.OutputTokens,
-		TotalTokens:         result.Usage.InputTokens + result.Usage.OutputTokens,
+		TotalTokens:         result.Usage.InputTokens + result.Usage.CacheReadInputTokens + result.Usage.CacheCreationInputTokens + result.Usage.OutputTokens,
 		CacheCreationTokens: result.Usage.CacheCreationInputTokens,
 		CacheReadTokens:     result.Usage.CacheReadInputTokens,
 	}
@@ -183,11 +216,23 @@ func (p *AnthropicMessagesClient) Chat(ctx context.Context, req port.LLMChatRequ
 	}
 
 	content := ""
+	reasoning := ""
+	signature := ""
+	redacted := ""
 	var toolCalls []port.ChatToolCall
 	for _, c := range result.Content {
 		switch c.Type {
 		case "text":
 			content += c.Text
+		case "thinking":
+			reasoning += c.Thinking
+			if c.Signature != "" {
+				signature = c.Signature
+			}
+		case "redacted_thinking":
+			if c.Data != "" {
+				redacted = c.Data
+			}
 		case "tool_use":
 			if c.Input == nil {
 				return port.LLMChatResponse{}, fmt.Errorf("tool '%s' input is null", c.Name)
@@ -200,11 +245,58 @@ func (p *AnthropicMessagesClient) Chat(ctx context.Context, req port.LLMChatRequ
 		}
 	}
 
-	if len(toolCalls) > 0 {
-		return port.LLMChatResponse{ToolCalls: toolCalls, Usage: usage}, nil
-	}
+	// Preserve assistant text and reasoning even when tool calls are present so
+	// the model's pre-call narration is not silently dropped, and so the
+	// thinking block can be echoed back on the next request.
+	return port.LLMChatResponse{
+		Content:            content,
+		ReasoningContent:   reasoning,
+		ReasoningSignature: signature,
+		ReasoningRedacted:  redacted,
+		ToolCalls:          toolCalls,
+		Usage:              usage,
+		Done:               len(toolCalls) == 0,
+	}, nil
+}
 
-	return port.LLMChatResponse{Content: content, Usage: usage, Done: true}, nil
+// reconcileAnthropicThinking resolves constraints that Anthropic enforces once
+// extended thinking is enabled: max_tokens must exceed thinking.budget_tokens,
+// and temperature / top_p must not be set (only the default temperature=1 is
+// allowed). Without this, valid-looking configs return a 400.
+func reconcileAnthropicThinking(body map[string]any) {
+	thinking, ok := body["thinking"].(map[string]any)
+	if !ok {
+		return
+	}
+	delete(body, "temperature")
+	delete(body, "top_p")
+
+	budget := 0
+	switch v := thinking["budget_tokens"].(type) {
+	case int:
+		budget = v
+	case int64:
+		budget = int(v)
+	case float64:
+		budget = int(v)
+	}
+	if budget <= 0 {
+		return
+	}
+	maxTokens := 0
+	switch v := body["max_tokens"].(type) {
+	case int:
+		maxTokens = v
+	case int64:
+		maxTokens = int(v)
+	case float64:
+		maxTokens = int(v)
+	}
+	// max_tokens must be strictly greater than the thinking budget; leave room
+	// for the visible answer on top of the reasoning budget.
+	if maxTokens <= budget {
+		body["max_tokens"] = budget + 4096
+	}
 }
 
 // applyAnthropicGenParams writes Anthropic Messages sampling fields.

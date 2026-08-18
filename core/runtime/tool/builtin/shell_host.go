@@ -24,6 +24,10 @@ func hostRunShell(ctx context.Context, opts port.SandboxRunOptions) ([]byte, err
 	if opts.Env != nil {
 		cmd.Env = opts.Env
 	}
+	setProcGroup(cmd)
+	// Even after the process (group) is killed, Wait blocks while inherited
+	// pipes are held open by stray descendants; WaitDelay forces it to return.
+	cmd.WaitDelay = 5 * time.Second
 	out, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
 		return out, fmt.Errorf("command timed out after %s", timeout)

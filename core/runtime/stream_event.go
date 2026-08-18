@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -54,7 +55,11 @@ func (m *StreamEventManager) Publish(ctx context.Context, sessionID, turnID, typ
 		if ctx == nil || ctx.Err() != nil {
 			saveCtx = context.Background()
 		}
-		_ = m.store.Save(saveCtx, ev)
+		if err := m.store.Save(saveCtx, ev); err != nil {
+			// Lost events mean clients replaying history see gaps (stuck
+			// "running" turns); at minimum surface the failure.
+			log.Printf("[stream] save event %s/%s type=%s: %v", ev.SessionID, ev.TurnID, ev.Type, err)
+		}
 	}
 
 	m.mu.RLock()

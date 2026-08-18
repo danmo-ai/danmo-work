@@ -68,6 +68,11 @@ type Message struct {
 	ToolCallID       string        `json:"tool_call_id,omitempty"`
 	Name             string        `json:"name,omitempty"`
 	ReasoningContent string        `json:"reasoning_content,omitempty"`
+	// ReasoningSignature / ReasoningRedacted carry Anthropic thinking-block
+	// provenance so an assistant turn with tool_use can be replayed verbatim
+	// within the live tool loop (thinking-enabled requests require it).
+	ReasoningSignature string `json:"reasoning_signature,omitempty"`
+	ReasoningRedacted  string `json:"reasoning_redacted,omitempty"`
 }
 
 type ToolCall struct {
@@ -92,7 +97,9 @@ func toPortMessages(msgs []Message) []port.ChatMessage {
 			Role: string(m.Role), Content: m.Content, Parts: parts,
 			ToolCalls:  toPortToolCalls(m.ToolCalls),
 			ToolCallID: m.ToolCallID, Name: m.Name,
-			ReasoningContent: m.ReasoningContent,
+			ReasoningContent:   m.ReasoningContent,
+			ReasoningSignature: m.ReasoningSignature,
+			ReasoningRedacted:  m.ReasoningRedacted,
 		}
 	}
 	return out
@@ -354,6 +361,12 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		}
 		resp, err := p.LLM.Chat(ctx, llmReq)
 		if err != nil {
+			// A cancelled turn is not a transient LLM failure: surface the
+			// cancellation instead of persisting a synthetic retry message
+			// into the JSONL history and burning the failure budget.
+			if ctx.Err() != nil {
+				return domain.Report{}, messages, ctx.Err()
+			}
 			consecutiveLLMFailures++
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventError, domain.ErrorPayload{Message: err.Error(), Kind: "llm"})
 			if consecutiveLLMFailures >= cfg.maxLLMFailures {
@@ -372,6 +385,13 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			retryMsg := "[System: LLM call failed — " + err.Error() + ". Please retry or respond in text.]"
 			messages = append(messages, Message{Role: RoleUser, Content: retryMsg})
 			p.logUserMessage(retryMsg)
+			// Brief backoff so rate-limit / overload errors are not retried
+			// back-to-back into the same failure.
+			select {
+			case <-ctx.Done():
+				return domain.Report{}, messages, ctx.Err()
+			case <-time.After(time.Duration(consecutiveLLMFailures) * 2 * time.Second):
+			}
 			continue
 		}
 		consecutiveLLMFailures = 0
@@ -422,6 +442,9 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		if resp.ReasoningContent != "" {
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentThinking, domain.AgentThinkingPayload{Text: resp.ReasoningContent})
 		}
+		if resp.Content != "" {
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentMessage, domain.AgentMessagePayload{Text: resp.Content})
+		}
 
 		// IMPORTANT: Append the assistant message with tool_calls BEFORE any
 		// tool result messages. OpenAI-compatible APIs require the message
@@ -431,9 +454,12 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			assistantToolCalls[i] = ToolCall{ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments}
 		}
 		assistantMsg := Message{
-			Role:             RoleAssistant,
-			ToolCalls:        assistantToolCalls,
-			ReasoningContent: resp.ReasoningContent,
+			Role:               RoleAssistant,
+			Content:            resp.Content,
+			ToolCalls:          assistantToolCalls,
+			ReasoningContent:   resp.ReasoningContent,
+			ReasoningSignature: resp.ReasoningSignature,
+			ReasoningRedacted:  resp.ReasoningRedacted,
 		}
 		messages = append(messages, assistantMsg)
 		p.logAssistantMessage(assistantMsg)
@@ -696,6 +722,18 @@ func (p *TurnRunner) commitToolResults(ctx context.Context, tctx TurnContext, sl
 				Status: domain.ToolCompleted, Output: slot.content,
 			})
 			p.recordFileChanges(tctx, slot.call.ID, slot.call.Name, slot.call.Arguments, slot.result)
+		} else if !slot.doom {
+			// Unknown tools and soft denials never Execute and carry no
+			// errLabel; without a terminal event the UI tool spinner would
+			// stay open forever after the pending/running start events.
+			errText := slot.content
+			if len(errText) > 200 {
+				errText = errText[:truncateUTF8Boundary(errText, 200)] + "..."
+			}
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
+				CallID: slot.call.ID, Name: slot.call.Name, Description: slot.describe,
+				Status: domain.ToolError, Error: errText,
+			})
 		}
 		msgs = append(msgs, Message{
 			Role:       RoleTool,
@@ -1166,14 +1204,27 @@ func limitToolOutput(content string, maxChars int) string {
 	if maxChars <= 0 || len(content) <= maxChars {
 		return content
 	}
-	cut := maxChars
-	for cut > 0 && !utf8.ValidString(content[:cut]) {
+	cut := truncateUTF8Boundary(content, maxChars)
+	return content[:cut] + fmt.Sprintf("\n...[truncated, %d total chars]", len(content))
+}
+
+// truncateUTF8Boundary returns a cut point ≤ max that does not split a UTF-8
+// rune, backing up at most UTFMax-1 bytes. Content that is already invalid
+// UTF-8 around the boundary is cut at max as-is. (The previous implementation
+// re-validated the whole prefix per step — O(n²) on invalid input — and could
+// still land mid-rune.)
+func truncateUTF8Boundary(s string, max int) int {
+	if max >= len(s) {
+		return len(s)
+	}
+	cut := max
+	for cut > 0 && max-cut < utf8.UTFMax-1 && !utf8.RuneStart(s[cut]) {
 		cut--
 	}
-	if cut <= 0 {
-		cut = maxChars
+	if cut <= 0 || !utf8.RuneStart(s[cut]) {
+		return max
 	}
-	return content[:cut] + fmt.Sprintf("\n...[truncated, %d total chars]", len(content))
+	return cut
 }
 
 func (p *TurnRunner) enforceToolPairing(messages []Message) []Message {

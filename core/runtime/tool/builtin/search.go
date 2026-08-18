@@ -328,19 +328,20 @@ func (h *Glob) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 		return domain.ToolResult{}, fmt.Errorf("invalid glob: %w", err)
 	}
 
-	truncated := len(matches) > maxResults
+	totalMatches := len(matches)
+	truncated := totalMatches > maxResults
 	if truncated {
 		matches = matches[:maxResults]
 	}
 
 	result := strings.Join(matches, "\n")
 	if truncated {
-		result += fmt.Sprintf("\n\n[Truncated: %d/%d results shown. Use a more specific path/pattern]", maxResults, len(matches))
+		result += fmt.Sprintf("\n\n[Truncated: %d/%d results shown. Use a more specific path/pattern]", maxResults, totalMatches)
 	}
 
 	return domain.ToolResult{
 		Content: result,
-		Meta:    map[string]any{"total_matches": len(matches), "truncated": truncated},
+		Meta:    map[string]any{"total_matches": totalMatches, "truncated": truncated},
 	}, nil
 }
 

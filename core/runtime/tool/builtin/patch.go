@@ -164,7 +164,7 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 		fp.relPath = fp.path
 
 		if fp.isCreate {
-			fp.path, err = resolvePath(workDir, fp.path)
+			fp.path, err = resolveWritePath(workDir, fp.path)
 			if err != nil {
 				return domain.ToolResult{}, fmt.Errorf("cannot create file %q: %w", fp.relPath, err)
 			}
@@ -175,13 +175,13 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 				return domain.ToolResult{}, fmt.Errorf("cannot create parent dirs for %q: %w", fp.relPath, mkErr)
 			}
 		} else {
-			fp.path, err = resolvePath(workDir, fp.path)
+			fp.path, err = resolveWritePath(workDir, fp.path)
 			if err != nil {
 				return domain.ToolResult{}, fmt.Errorf("cannot resolve path %q: %w", fp.relPath, err)
 			}
 		}
 		if fp.moveTo != "" {
-			if _, moveErr := resolvePath(workDir, fp.moveTo); moveErr != nil {
+			if _, moveErr := resolveWritePath(workDir, fp.moveTo); moveErr != nil {
 				moveAbs := filepath.Clean(filepath.Join(workDir, fp.moveTo))
 				rel, relErr := filepath.Rel(workDir, moveAbs)
 				if relErr != nil || strings.HasPrefix(rel, "..") {
@@ -208,7 +208,14 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 		}
 
 		if fp.isCreate {
-			writes = append(writes, pendingWrite{path: fp.path, data: []byte{}, oldData: nil})
+			// With create_if_missing=true the target may already exist —
+			// capture its content so a rollback restores it instead of
+			// deleting the pre-existing file.
+			var prev []byte
+			if data, readErr := os.ReadFile(fp.path); readErr == nil {
+				prev = data
+			}
+			writes = append(writes, pendingWrite{path: fp.path, data: []byte{}, oldData: prev})
 		} else {
 			data, readErr := os.ReadFile(fp.path)
 			if readErr != nil {
@@ -250,12 +257,17 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 		}
 
 		var newLines []string
+		var applyErr error
 		if fp.isCreate {
-			lines := ([]string)(nil)
-			newLines, _ = applyHunks(lines, fp.hunks, fuzz)
+			// Create patches are not pre-validated in the read phase; a bad
+			// hunk here must fail loudly, not silently write an empty file.
+			newLines, applyErr = applyHunks(nil, fp.hunks, fuzz)
 		} else {
-			lines := splitPatchFileLines(fp.oldText)
-			newLines, _ = applyHunks(lines, fp.hunks, fuzz)
+			newLines, applyErr = applyHunks(splitPatchFileLines(fp.oldText), fp.hunks, fuzz)
+		}
+		if applyErr != nil {
+			h.rollbackWrites(writes)
+			return domain.ToolResult{}, fmt.Errorf("cannot apply patch to %q: %w", fp.relPath, applyErr)
 		}
 
 		newContent := joinPatchFileLines(newLines)
@@ -276,10 +288,16 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 		} else {
 			payload = encodeTextFile(newContent, fp.meta)
 		}
+		prevAtFinal := fp.oldData
+		if fp.moveTo != "" && finalPath != fp.path {
+			// The destination of a Move did not exist before this patch:
+			// rollback must remove it, not rewrite the source's old content there.
+			prevAtFinal = nil
+		}
 		writes = append(writes, pendingWrite{
 			path:    finalPath,
 			data:    payload,
-			oldData: fp.oldData,
+			oldData: prevAtFinal,
 			mode:    fp.mode,
 		})
 
@@ -292,6 +310,8 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 				h.rollbackWrites(writes)
 				return domain.ToolResult{}, fmt.Errorf("patched but failed to remove old path %q after Move to: %w", fp.relPath, rmErr)
 			}
+			// Register the source removal so a later failure restores it.
+			writes = append(writes, pendingWrite{path: fp.path, data: nil, oldData: fp.oldData, mode: fp.mode})
 		}
 		// Own write updates the snapshot so a later edit/write in this turn does not
 		// fail with "changed since last read" unless something else touched the file.

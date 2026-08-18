@@ -32,6 +32,7 @@ func repairJSONObject(raw []byte) ([]byte, error) {
 	}
 
 	var lastErr error
+	truncatedOnly := false
 	for _, c := range candidates {
 		closed := closeOpenJSON(c)
 		for _, attempt := range []string{c, closed} {
@@ -47,6 +48,15 @@ func repairJSONObject(raw []byte) ([]byte, error) {
 				lastErr = fmt.Errorf("arguments parsed to nil")
 				continue
 			}
+			// Parsing only succeeded after force-closing open strings/brackets:
+			// the payload was truncated mid-generation. Executing a tool with
+			// silently amputated arguments (e.g. half a file for `write`) is
+			// worse than failing — reject so the model retries.
+			if attempt == closed && closed != c {
+				truncatedOnly = true
+				lastErr = fmt.Errorf("tool arguments appear truncated (unbalanced JSON); refusing to execute with incomplete input")
+				continue
+			}
 			out, err := json.Marshal(obj)
 			if err != nil {
 				lastErr = err
@@ -55,7 +65,7 @@ func repairJSONObject(raw []byte) ([]byte, error) {
 			return out, nil
 		}
 	}
-	if lastErr != nil {
+	if truncatedOnly || lastErr != nil {
 		return nil, lastErr
 	}
 	return nil, fmt.Errorf("unable to repair json object")

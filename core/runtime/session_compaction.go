@@ -167,6 +167,13 @@ func (m *CompactionManager) ShouldCompact(sessionID string, turnCount int, token
 		}
 	}
 
+	// With real API usage and a known context limit, the token trigger above is
+	// authoritative — do not force an LLM summarization every N turns while the
+	// context is still well under budget.
+	if maxPromptTokens > 0 && contextLimit > 0 {
+		return false
+	}
+
 	// Turn-count-based trigger (fallback when token data is unreliable).
 	if cfg.turnInterval > 0 {
 		cp := m.getCheckpoint(sessionID)
@@ -546,7 +553,7 @@ func serializeConversation(messages []Message, truncateLen int) string {
 		case RoleTool:
 			content := m.Content
 			if truncateLen > 0 && len(content) > truncateLen {
-				content = content[:truncateLen] + "...(truncated)"
+				content = content[:truncateUTF8Boundary(content, truncateLen)] + "...(truncated)"
 			}
 			b.WriteString(fmt.Sprintf("[Tool result: %s]: %s\n\n", m.Name, content))
 		}

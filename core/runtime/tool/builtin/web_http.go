@@ -153,18 +153,80 @@ func newWebClient(opts webClientOpts) *http.Client {
 	}
 	jar, _ := cookiejar.New(nil)
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	usingProxy := false
 	if proxy := strings.TrimSpace(opts.Proxy); proxy != "" {
 		if u, err := url.Parse(proxy); err == nil {
 			transport.Proxy = http.ProxyURL(u)
+			usingProxy = true
 		}
 	} else {
 		transport.Proxy = http.ProxyFromEnvironment
 	}
-	return &http.Client{
+
+	guard := !opts.SkipSSRF && !testSkipSSRF
+	var eg HostEgressChecker
+	if guard && !opts.SkipEgress {
+		eg = opts.Egress
+	}
+
+	// Pin the dialled IP after validating it, closing the DNS-rebinding window
+	// (the SSRF pre-check and the dialler would otherwise resolve independently).
+	// Skipped when a proxy handles egress — the proxy enforces policy itself.
+	if guard && !usingProxy {
+		base := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+			if eg != nil {
+				if err := eg.CheckHost(host); err != nil {
+					return nil, err
+				}
+			}
+			ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+			if err != nil {
+				return nil, fmt.Errorf("dns lookup failed: %w", err)
+			}
+			if len(ips) == 0 {
+				return nil, fmt.Errorf("dns lookup returned no addresses")
+			}
+			for _, ipa := range ips {
+				if !isPublicIP(ipa.IP) {
+					return nil, fmt.Errorf("blocked: %s resolves to a private or local address", host)
+				}
+			}
+			var lastErr error
+			for _, ipa := range ips {
+				conn, derr := base.DialContext(ctx, network, net.JoinHostPort(ipa.IP.String(), port))
+				if derr == nil {
+					return conn, nil
+				}
+				lastErr = derr
+			}
+			return nil, lastErr
+		}
+	}
+
+	client := &http.Client{
 		Timeout:   timeout,
 		Jar:       jar,
 		Transport: transport,
 	}
+
+	// Re-validate every redirect hop: the initial SSRF/egress check only covers
+	// the first URL, so a 3xx to a private/internal address (cloud metadata,
+	// loopback services) would otherwise be followed blindly.
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("stopped after 10 redirects")
+		}
+		if !guard {
+			return nil
+		}
+		return assertPublicURLWithEgress(req.URL.String(), eg)
+	}
+	return client
 }
 
 func setBrowserGETHeaders(req *http.Request, opts webClientOpts) {

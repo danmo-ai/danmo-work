@@ -70,7 +70,7 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 	}
 
 	relPath := path
-	resolvedPath, err := resolvePath(workDirFromInput(input), path)
+	resolvedPath, err := resolveWritePath(workDirFromInput(input), path)
 	if err != nil {
 		return domain.ToolResult{}, err
 	}
@@ -110,10 +110,6 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 			return domain.ToolResult{}, fmt.Errorf("%w. Tip: widen oldString with surrounding unique context, or set replaceAll=true", matchErr)
 		}
 		return domain.ToolResult{}, matchErr
-	}
-
-	if err := checkDisproportionateMatch(content, oldStr); err != nil {
-		return domain.ToolResult{}, err
 	}
 
 	if err := writeFilePreserving(resolvedPath, encodeTextFile(replacement, meta)); err != nil {
