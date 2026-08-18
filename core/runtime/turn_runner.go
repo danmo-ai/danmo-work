@@ -361,6 +361,12 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		}
 		resp, err := p.LLM.Chat(ctx, llmReq)
 		if err != nil {
+			// A cancelled turn is not a transient LLM failure: surface the
+			// cancellation instead of persisting a synthetic retry message
+			// into the JSONL history and burning the failure budget.
+			if ctx.Err() != nil {
+				return domain.Report{}, messages, ctx.Err()
+			}
 			consecutiveLLMFailures++
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventError, domain.ErrorPayload{Message: err.Error(), Kind: "llm"})
 			if consecutiveLLMFailures >= cfg.maxLLMFailures {
@@ -379,6 +385,13 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			retryMsg := "[System: LLM call failed — " + err.Error() + ". Please retry or respond in text.]"
 			messages = append(messages, Message{Role: RoleUser, Content: retryMsg})
 			p.logUserMessage(retryMsg)
+			// Brief backoff so rate-limit / overload errors are not retried
+			// back-to-back into the same failure.
+			select {
+			case <-ctx.Done():
+				return domain.Report{}, messages, ctx.Err()
+			case <-time.After(time.Duration(consecutiveLLMFailures) * 2 * time.Second):
+			}
 			continue
 		}
 		consecutiveLLMFailures = 0
@@ -1179,14 +1192,27 @@ func limitToolOutput(content string, maxChars int) string {
 	if maxChars <= 0 || len(content) <= maxChars {
 		return content
 	}
-	cut := maxChars
-	for cut > 0 && !utf8.ValidString(content[:cut]) {
+	cut := truncateUTF8Boundary(content, maxChars)
+	return content[:cut] + fmt.Sprintf("\n...[truncated, %d total chars]", len(content))
+}
+
+// truncateUTF8Boundary returns a cut point ≤ max that does not split a UTF-8
+// rune, backing up at most UTFMax-1 bytes. Content that is already invalid
+// UTF-8 around the boundary is cut at max as-is. (The previous implementation
+// re-validated the whole prefix per step — O(n²) on invalid input — and could
+// still land mid-rune.)
+func truncateUTF8Boundary(s string, max int) int {
+	if max >= len(s) {
+		return len(s)
+	}
+	cut := max
+	for cut > 0 && max-cut < utf8.UTFMax-1 && !utf8.RuneStart(s[cut]) {
 		cut--
 	}
-	if cut <= 0 {
-		cut = maxChars
+	if cut <= 0 || !utf8.RuneStart(s[cut]) {
+		return max
 	}
-	return content[:cut] + fmt.Sprintf("\n...[truncated, %d total chars]", len(content))
+	return cut
 }
 
 func (p *TurnRunner) enforceToolPairing(messages []Message) []Message {

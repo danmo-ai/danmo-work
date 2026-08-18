@@ -414,7 +414,10 @@ func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments
 	}
 	go func() {
 		defer e.finishSessionTurn(s.ID, turnID)
-		turnCtx, cancel := context.WithCancel(context.Background())
+		// Do not use the incoming request ctx — it is cancelled when the HTTP
+		// handler returns, which would silently abort DB reads below.
+		bg := context.Background()
+		turnCtx, cancel := context.WithCancel(bg)
 		e.mu.Lock()
 		e.cancel[turnID] = cancel
 		e.mu.Unlock()
@@ -425,9 +428,10 @@ func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments
 			cancel()
 		}()
 
-		agent, err := e.agents.Get(ctx, s.AgentID)
+		agent, err := e.agents.Get(bg, s.AgentID)
 		if err != nil {
-			e.publishTurnFailed(ctx, s.ID, turnID, domain.TurnFailed, err.Error())
+			e.publishTurnFailed(bg, s.ID, turnID, domain.TurnFailed, err.Error())
+			e.updateSessionStatus(s.ID, domain.SessionStatusFailed)
 			return
 		}
 		agentPtr := *agent
@@ -453,6 +457,10 @@ func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, m
 		bg := context.Background()
 		s, err := e.sessions.Get(bg, sessionID)
 		if err != nil {
+			// Callers already hold turnID — a silent return would leave the UI
+			// waiting on a turn that never emits a terminal event.
+			e.publishTurnFailed(bg, sessionID, turnID, domain.TurnFailed, fmt.Sprintf("load session: %v", err))
+			e.updateSessionStatus(sessionID, domain.SessionStatusFailed)
 			return
 		}
 		targetAgentID := agentID
@@ -465,6 +473,8 @@ func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, m
 		}
 		agent, err := e.agents.Get(bg, targetAgentID)
 		if err != nil {
+			e.publishTurnFailed(bg, sessionID, turnID, domain.TurnFailed, fmt.Sprintf("load agent %s: %v", targetAgentID, err))
+			e.updateSessionStatus(sessionID, domain.SessionStatusFailed)
 			return
 		}
 		agentPtr := *agent
@@ -550,14 +560,23 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 	}
 	go func() {
 		defer e.finishSessionTurn(sessionID, turnID)
-		cfg := e.loadRunCfg(ctx)
+		// The caller's ctx (HTTP request / recovery scan) may be cancelled once
+		// ResumeTurn returns; all work in this goroutine uses background.
+		bg := context.Background()
+		cfg := e.loadRunCfg(bg)
 
-		s, err := e.sessions.Get(ctx, sessionID)
+		s, err := e.sessions.Get(bg, sessionID)
 		if err != nil {
+			// The turn row is already "running" (this is a resume) — a silent
+			// return would leave it a zombie again.
+			_ = e.turns.UpdateStatus(bg, turnID, domain.TurnFailed)
+			e.publishTurnFailed(bg, sessionID, turnID, domain.TurnFailed, fmt.Sprintf("load session: %v", err))
 			return
 		}
-		agent, err := e.agents.Get(ctx, s.AgentID)
+		agent, err := e.agents.Get(bg, s.AgentID)
 		if err != nil {
+			_ = e.turns.UpdateStatus(bg, turnID, domain.TurnFailed)
+			e.publishTurnFailed(bg, sessionID, turnID, domain.TurnFailed, fmt.Sprintf("load agent %s: %v", s.AgentID, err))
 			return
 		}
 		agentPtr := *agent
@@ -585,7 +604,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 			goal = g
 		}
 		if goal == "" {
-			if t, err := e.turns.Get(ctx, turnID); err == nil && t.Goal != "" {
+			if t, err := e.turns.Get(bg, turnID); err == nil && t.Goal != "" {
 				goal = t.Goal
 			}
 		}
@@ -1392,8 +1411,16 @@ func (e *Engine) afterTurn(sessionID, turnID, agentID string, rep domain.Report,
 		_ = e.turns.UpdateStatus(context.Background(), turnID, st)
 		return
 	}
-	e.updateSessionStatus(sessionID, domain.SessionStatusCompleted)
-	_ = e.turns.UpdateStatus(context.Background(), turnID, domain.TurnCompleted)
+	// Derive the DB status from the report exactly like the JSONL does
+	// (turnStatus): a report of failed/blocked (e.g. doom-loop abort) must not
+	// be persisted as "completed" while the turn log says "failed".
+	st := turnStatus(nil, rep)
+	sessionStatus := domain.SessionStatusCompleted
+	if st != domain.TurnCompleted {
+		sessionStatus = domain.SessionStatusFailed
+	}
+	e.updateSessionStatus(sessionID, sessionStatus)
+	_ = e.turns.UpdateStatus(context.Background(), turnID, st)
 	e.stream.Publish(context.Background(), sessionID, turnID, domain.EventSessionCompleted, domain.SessionCompletedPayload{
 		Summary: rep.Summary, Status: string(rep.Status),
 	})
