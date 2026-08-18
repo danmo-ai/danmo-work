@@ -24,6 +24,15 @@ type ChatMessage struct {
 	// ReasoningContent is prior-turn chain-of-thought to echo for dialects
 	// that require it (DeepSeek/Qwen/Kimi tool-call multi-turn).
 	ReasoningContent string
+	// ReasoningSignature is the opaque signature Anthropic returns with a
+	// thinking block. It must be echoed back verbatim alongside the thinking
+	// text when replaying an assistant turn that also carries tool_use, or the
+	// API rejects the request (thinking-enabled requests require the original
+	// thinking block to precede tool_use).
+	ReasoningSignature string
+	// ReasoningRedacted carries the opaque data of an Anthropic
+	// redacted_thinking block, echoed back verbatim on replay.
+	ReasoningRedacted string
 }
 
 type ChatToolCall struct {
@@ -56,11 +65,13 @@ type ModelGenParams struct {
 }
 
 type LLMChatResponse struct {
-	Content          string
-	ReasoningContent string // thinking/reasoning trace from reasoning models
-	ToolCalls        []ChatToolCall
-	Usage            *LLMUsage
-	Done             bool
+	Content            string
+	ReasoningContent   string // thinking/reasoning trace from reasoning models
+	ReasoningSignature string // Anthropic thinking-block signature (echo on replay)
+	ReasoningRedacted  string // Anthropic redacted_thinking data (echo on replay)
+	ToolCalls          []ChatToolCall
+	Usage              *LLMUsage
+	Done               bool
 }
 
 type LLMUsage struct {

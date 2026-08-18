@@ -68,6 +68,11 @@ type Message struct {
 	ToolCallID       string        `json:"tool_call_id,omitempty"`
 	Name             string        `json:"name,omitempty"`
 	ReasoningContent string        `json:"reasoning_content,omitempty"`
+	// ReasoningSignature / ReasoningRedacted carry Anthropic thinking-block
+	// provenance so an assistant turn with tool_use can be replayed verbatim
+	// within the live tool loop (thinking-enabled requests require it).
+	ReasoningSignature string `json:"reasoning_signature,omitempty"`
+	ReasoningRedacted  string `json:"reasoning_redacted,omitempty"`
 }
 
 type ToolCall struct {
@@ -92,7 +97,9 @@ func toPortMessages(msgs []Message) []port.ChatMessage {
 			Role: string(m.Role), Content: m.Content, Parts: parts,
 			ToolCalls:  toPortToolCalls(m.ToolCalls),
 			ToolCallID: m.ToolCallID, Name: m.Name,
-			ReasoningContent: m.ReasoningContent,
+			ReasoningContent:   m.ReasoningContent,
+			ReasoningSignature: m.ReasoningSignature,
+			ReasoningRedacted:  m.ReasoningRedacted,
 		}
 	}
 	return out
@@ -422,6 +429,9 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		if resp.ReasoningContent != "" {
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentThinking, domain.AgentThinkingPayload{Text: resp.ReasoningContent})
 		}
+		if resp.Content != "" {
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentMessage, domain.AgentMessagePayload{Text: resp.Content})
+		}
 
 		// IMPORTANT: Append the assistant message with tool_calls BEFORE any
 		// tool result messages. OpenAI-compatible APIs require the message
@@ -431,9 +441,12 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			assistantToolCalls[i] = ToolCall{ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments}
 		}
 		assistantMsg := Message{
-			Role:             RoleAssistant,
-			ToolCalls:        assistantToolCalls,
-			ReasoningContent: resp.ReasoningContent,
+			Role:               RoleAssistant,
+			Content:            resp.Content,
+			ToolCalls:          assistantToolCalls,
+			ReasoningContent:   resp.ReasoningContent,
+			ReasoningSignature: resp.ReasoningSignature,
+			ReasoningRedacted:  resp.ReasoningRedacted,
 		}
 		messages = append(messages, assistantMsg)
 		p.logAssistantMessage(assistantMsg)
