@@ -486,6 +486,7 @@ export const useSessionsStore = defineStore('sessions', () => {
   function mergeStreamEvents(events: StreamEvent[]): boolean {
     if (!Array.isArray(events) || events.length === 0) return false
     let changed = false
+    let pendingDirty = false
     for (const ev of events) {
       if (!ev || typeof ev.seq !== 'number') continue
       if (knownSeqs.has(ev.seq)) continue
@@ -493,10 +494,26 @@ export const useSessionsStore = defineStore('sessions', () => {
       streamEvents.value.push(ev)
       if (ev.seq > lastSeq) lastSeq = ev.seq
       changed = true
+      if (
+        ev.type === 'user.message' ||
+        ev.type === 'turn.ended' ||
+        ev.type === 'turn.failed' ||
+        ev.type === 'session.completed'
+      ) {
+        pendingDirty = true
+      }
     }
     if (changed) {
       streamEvents.value.sort((a, b) => a.seq - b.seq)
       hydrateDecidedApprovals(streamEvents.value)
+    }
+    // Soft-steer inject publishes user.message after ClaimSteering deletes the
+    // row. Drain-started turns do the same. Reload here (SSE and backfill) so
+    // the composer queue drops the item immediately — runningTurnId going
+    // null can miss when the next queued turn starts in the same tick, or
+    // when loadTurns races ahead of the DB status write.
+    if (pendingDirty && currentSessionId.value) {
+      void loadPending(currentSessionId.value)
     }
     return changed
   }

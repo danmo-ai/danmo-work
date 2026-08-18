@@ -638,6 +638,7 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 			Path:             []domain.TurnPathEntry{{TurnID: turnID, AgentID: agentPtr.ID}},
 			PlanMode:         s.PlanMode,
 			EphemeralContext: e.knowledgeHitsText(agentPtr, goal, cfg.knowledgeSearchTopK),
+			ClaimSteers:      func() []Message { return e.claimSteerMessages(sessionID) },
 		})
 
 		e.clearSessionTurnMessages(sessionID)
@@ -687,6 +688,25 @@ func (e *Engine) finishSessionTurn(sessionID, turnID string) {
 		}
 		go e.sessions.DrainPendingQueue(context.Background(), sessionID)
 	}
+}
+
+// claimSteerMessages loads and deletes durable soft-steer rows for a session.
+// Shared by StartTurn and ResumeTurn so an armed queue item is actually
+// injected (and therefore removed from the pending list) on either path.
+func (e *Engine) claimSteerMessages(sessionID string) []Message {
+	if e == nil || e.sessions == nil {
+		return nil
+	}
+	items, err := e.sessions.ClaimSteering(context.Background(), sessionID)
+	if err != nil {
+		log.Printf("[steer] claim session %s: %v", sessionID, err)
+		return nil
+	}
+	out := make([]Message, 0, len(items))
+	for _, it := range items {
+		out = append(out, userMessageFromAttachments(it.Content, it.Attachments))
+	}
+	return out
 }
 
 func historyHasUserGoal(history []Message, goal string) bool {
@@ -1262,21 +1282,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		Messages:         messages,
 		EphemeralContext: e.knowledgeHitsText(agent, goal, cfg.knowledgeSearchTopK),
 		Path:             []domain.TurnPathEntry{{TurnID: turnID, AgentID: agent.ID}},
-		ClaimSteers: func() []Message {
-			if e.sessions == nil {
-				return nil
-			}
-			items, err := e.sessions.ClaimSteering(context.Background(), sessionID)
-			if err != nil {
-				log.Printf("[steer] claim session %s: %v", sessionID, err)
-				return nil
-			}
-			out := make([]Message, 0, len(items))
-			for _, it := range items {
-				out = append(out, userMessageFromAttachments(it.Content, it.Attachments))
-			}
-			return out
-		},
+		ClaimSteers:      func() []Message { return e.claimSteerMessages(sessionID) },
 	})
 
 	// History lives on disk; drop any in-memory session buffer after the turn.
