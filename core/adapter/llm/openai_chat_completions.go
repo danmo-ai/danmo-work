@@ -63,7 +63,7 @@ func (p *OpenAIChatCompletionsClient) Chat(ctx context.Context, req port.LLMChat
 		// per OpenAI API spec. Empty string causes some providers (e.g. DeepSeek)
 		// to not recognize the message as a tool_calls carrier, making subsequent
 		// tool messages appear unpaired → 400 error.
-		if len(m.Parts) > 0 && len(m.ToolCalls) == 0 {
+		if len(m.Parts) > 0 && len(m.ToolCalls) == 0 && m.Role != "tool" {
 			msg["content"] = openaiUserContent(m)
 		} else if m.Content != "" || len(m.ToolCalls) == 0 {
 			msg["content"] = m.Content
@@ -90,6 +90,21 @@ func (p *OpenAIChatCompletionsClient) Chat(ctx context.Context, req port.LLMChat
 			msg["reasoning_content"] = m.ReasoningContent
 		}
 		messages = append(messages, msg)
+
+		// Chat Completions rejects image parts inside role=tool messages.
+		// Forward tool-result images in an immediately following user message
+		// so vision models still see them.
+		if m.Role == "tool" && hasImageParts(m.Parts) {
+			label := "[Image output of tool"
+			if m.Name != "" {
+				label += " " + m.Name
+			}
+			label += "]"
+			messages = append(messages, map[string]any{
+				"role":    "user",
+				"content": openaiUserContent(port.ChatMessage{Content: label, Parts: m.Parts}),
+			})
+		}
 	}
 
 	body := map[string]any{

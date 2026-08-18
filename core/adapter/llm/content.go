@@ -38,6 +38,16 @@ func anthropicUserContent(m port.ChatMessage) any {
 	return contents
 }
 
+// hasImageParts reports whether any content part is a non-empty image.
+func hasImageParts(parts []port.ChatContentPart) bool {
+	for _, p := range parts {
+		if p.Type == "image" && p.Data != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // openaiToolOutput builds a function_call_output value for the Responses API,
 // including image parts from tool results.
 func openaiToolOutput(m port.ChatMessage) any {
