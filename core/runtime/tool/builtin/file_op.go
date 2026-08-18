@@ -63,7 +63,7 @@ func (h *FileOp) Execute(_ context.Context, input map[string]any) (domain.ToolRe
 	}
 	workDir := workDirFromInput(input)
 
-	resolvedPath, err := resolvePath(workDir, path)
+	resolvedPath, err := resolveWritePath(workDir, path)
 	if err != nil {
 		return domain.ToolResult{}, err
 	}
@@ -165,7 +165,7 @@ func resolveOpDest(workDir string, input map[string]any) (resolved, display stri
 	if destPath == "" {
 		return "", "", fmt.Errorf("destination is required for move/copy")
 	}
-	dest, err := resolvePath(workDir, destPath)
+	dest, err := resolveWritePath(workDir, destPath)
 	if err != nil {
 		return "", "", err
 	}

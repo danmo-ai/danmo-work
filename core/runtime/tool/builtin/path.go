@@ -30,6 +30,51 @@ func resolvePath(workDir, path string) (string, error) {
 	return resolved, nil
 }
 
+// resolveWritePath is resolvePath plus a symlink-escape check for mutating
+// tools (write/edit/patch/file ops). The lexical containment check alone can
+// be bypassed by a symlink inside the project that points outside it; reads
+// intentionally keep following symlinks (pnpm-style layouts).
+func resolveWritePath(workDir, path string) (string, error) {
+	resolved, err := resolvePath(workDir, path)
+	if err != nil {
+		return "", err
+	}
+	if err := ensureNoSymlinkEscape(workDir, resolved); err != nil {
+		return "", err
+	}
+	return resolved, nil
+}
+
+// ensureNoSymlinkEscape verifies that target — or, when it does not exist yet,
+// its deepest existing ancestor — still lives inside workDir after resolving
+// symlinks (workDir itself is symlink-resolved for a fair comparison).
+func ensureNoSymlinkEscape(workDir, target string) error {
+	resolvedRoot, err := filepath.EvalSymlinks(workDir)
+	if err != nil {
+		// workDir missing/unreadable: let the actual file operation report it.
+		return nil
+	}
+	probe := target
+	for {
+		real, err := filepath.EvalSymlinks(probe)
+		if err == nil {
+			rel, rerr := filepath.Rel(resolvedRoot, real)
+			if rerr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+				return fmt.Errorf("path %q escapes the project directory via symlink", target)
+			}
+			return nil
+		}
+		if !os.IsNotExist(err) {
+			return nil // permission etc.: surface via the actual operation
+		}
+		parent := filepath.Dir(probe)
+		if parent == probe {
+			return nil
+		}
+		probe = parent
+	}
+}
+
 func workDirFromInput(input map[string]any) string {
 	s, _ := input["__work_dir"].(string)
 	return s

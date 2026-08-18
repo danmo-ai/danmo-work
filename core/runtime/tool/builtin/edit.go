@@ -70,7 +70,7 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 	}
 
 	relPath := path
-	resolvedPath, err := resolvePath(workDirFromInput(input), path)
+	resolvedPath, err := resolveWritePath(workDirFromInput(input), path)
 	if err != nil {
 		return domain.ToolResult{}, err
 	}

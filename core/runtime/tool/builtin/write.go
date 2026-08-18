@@ -57,7 +57,7 @@ func (h *Write) Execute(_ context.Context, input map[string]any) (domain.ToolRes
 		writeType = "file"
 	}
 
-	resolvedPath, err := resolvePath(workDirFromInput(input), path)
+	resolvedPath, err := resolveWritePath(workDirFromInput(input), path)
 	if err != nil {
 		return domain.ToolResult{}, err
 	}
