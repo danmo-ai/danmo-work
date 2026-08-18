@@ -29,7 +29,7 @@
 ## 约定
 
 - **主题切换**：使用 `applyDqTheme` / `THEME_OPTIONS` / `resolveDqThemeSlug`（见 `@danqing/dq-tokens`），经 `stores/theme.ts` 持久化；不要维护私有主题 class 列表。
-- **字号（跨主题统一）**：`caption` 12 / `body`=`prose` 14 / `title` 16。主题 CSS 禁止覆盖 `--dq-font-size-*`，也禁止把 rem token 设到 `html { font-size }`（会改变 rem 基准，mac 会比其它主题更小）。一页只用一个 `title`；区块与对话用 `body`；提示用 `caption`；层级靠字重/颜色。
+- **字号（跨主题统一）**：`caption` 12 / `body`=`prose` 13 / `title` 15。主题 CSS 禁止覆盖 `--dq-font-size-*`。一页只用一个 `title`；区块与对话用 `body`；提示用 `caption`；层级靠字重/颜色。
 - **间距 / 半径**：优先 `--dq-space-*`、`--dq-radius-*`；产品语义层仅保留仍在用的 `--work-*`（glass / surface / radius）。
 - **Size**：紧凑控件只用 `size="sm"`（禁止 `small` / `mini`）。
 - **Select**：Composer / 工具栏用 `size="sm" variant="ghost"`。

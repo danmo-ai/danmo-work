@@ -1,12 +1,12 @@
 /* Danmo Work — layout & glass surfaces (tokens from @danqing/dq-tokens)
 
-   Type scale (theme-invariant, matches dq-typography.css):
+   Type scale (macOS-dense, theme-invariant):
      caption 12  badges / timestamps / kbd / hints
-     body    14  UI + chat (sidebar, tools, forms, plan, stream)
-     prose   14  alias of body
-     title   16  one page/session title per view
+     body    13  UI + chat (sidebar, tools, forms, plan, stream)
+     prose   13  alias of body
+     title   15  one page/session title per view
    Hierarchy inside a page: prefer weight/color over extra sizes.
-   Never hardcode 10/11px. Never set a rem token as html { font-size }.
+   Never hardcode 10/11px.
 */
 
 /* Hide number input spinner arrows */
@@ -24,8 +24,7 @@ body.app-is-resizing {
   user-select: none;
 }
 
-/* Material tokens live in @danqing/dq-tokens — do not fork colors/radius here.
-   Type scale is pinned below (px) so rem-root mistakes in palette CSS cannot drift. */
+/* Material tokens live in @danqing/dq-tokens themes — do not fork here. */
 
 html,
 body,
@@ -37,22 +36,6 @@ body,
 /* Theme switch only — do not transition every element */
 html {
   transition: background-color 0.25s ease, color 0.25s ease;
-}
-
-/*
- * Keep 1rem = browser default (16px). dq-mac.css sets
- * `html { font-size: var(--dq-font-size-body) }` (0.875rem), which shrinks
- * the rem root and makes mac body ~12px while other themes stay 14px.
- * Pin the 4-step scale in px so palettes cannot rescale it.
- */
-html,
-html.dq-mac,
-html.dq-mac-ui {
-  font-size: 100%;
-  --dq-font-size-caption: 12px;
-  --dq-font-size-body: 14px;
-  --dq-font-size-prose: 14px;
-  --dq-font-size-title: 16px;
 }
 
 /* Native form controls (textarea/input) follow theme; without this, macOS
@@ -71,8 +54,6 @@ body {
   background-repeat: no-repeat;
   color: var(--dq-label-primary);
   font-family: var(--dq-font-sans);
-  font-size: var(--dq-font-size-body);
-  line-height: var(--dq-line-height-normal);
   /* Light themes: subpixel (auto). Antialiased only on dark — otherwise ink washes out. */
   -webkit-font-smoothing: auto;
   -moz-osx-font-smoothing: auto;
