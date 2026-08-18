@@ -112,10 +112,6 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 		return domain.ToolResult{}, matchErr
 	}
 
-	if err := checkDisproportionateMatch(content, oldStr); err != nil {
-		return domain.ToolResult{}, err
-	}
-
 	if err := writeFilePreserving(resolvedPath, encodeTextFile(replacement, meta)); err != nil {
 		return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", resolvedPath, err)
 	}
