@@ -722,6 +722,18 @@ func (p *TurnRunner) commitToolResults(ctx context.Context, tctx TurnContext, sl
 				Status: domain.ToolCompleted, Output: slot.content,
 			})
 			p.recordFileChanges(tctx, slot.call.ID, slot.call.Name, slot.call.Arguments, slot.result)
+		} else if !slot.doom {
+			// Unknown tools and soft denials never Execute and carry no
+			// errLabel; without a terminal event the UI tool spinner would
+			// stay open forever after the pending/running start events.
+			errText := slot.content
+			if len(errText) > 200 {
+				errText = errText[:truncateUTF8Boundary(errText, 200)] + "..."
+			}
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolError, domain.ToolPart{
+				CallID: slot.call.ID, Name: slot.call.Name, Description: slot.describe,
+				Status: domain.ToolError, Error: errText,
+			})
 		}
 		msgs = append(msgs, Message{
 			Role:       RoleTool,
