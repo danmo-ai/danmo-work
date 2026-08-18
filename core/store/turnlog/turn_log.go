@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -939,8 +940,16 @@ func LoadTurnLog(projector func(projectID string) string, projectID, sessionID s
 }
 
 func (tf *turnFile) writeEntry(e TurnLogEntry) {
-	b, _ := json.Marshal(e)
-	tf.f.Write(append(b, '\n'))
+	b, err := json.Marshal(e)
+	if err != nil {
+		log.Printf("[turnlog] marshal entry seq=%d type=%s: %v", e.Seq, e.Type, err)
+		return
+	}
+	// Disk-full / closed-fd failures here mean history silently diverges from
+	// what the LLM saw; at minimum make the divergence visible in the log.
+	if _, err := tf.f.Write(append(b, '\n')); err != nil {
+		log.Printf("[turnlog] write entry seq=%d type=%s: %v", e.Seq, e.Type, err)
+	}
 }
 
 // loadTurnFileLocked returns an in-memory turnFile, rehydrating from disk when
