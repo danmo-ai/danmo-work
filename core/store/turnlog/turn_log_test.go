@@ -4,11 +4,44 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"danmo-work/core/domain"
 )
+
+// TestReadEntriesStopsOnTruncatedRecord guards against a regression where a
+// corrupt/truncated final JSONL line made json.Decoder spin forever (dec.More()
+// stays true while Decode never advances), hanging recovery while holding s.mu.
+func TestReadEntriesStopsOnTruncatedRecord(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "_default", "sessions", "sess-x")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fp := filepath.Join(dir, "turn-x.jsonl")
+	// One valid record followed by a half-written record (crash mid-flush).
+	content := `{"seq":1,"type":"user","data":{"content":"hi"}}` + "\n" + `{"seq":2,"type":"assist`
+	if err := os.WriteFile(fp, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := NewTurnLogStore(testProjector(root))
+	done := make(chan int, 1)
+	go func() {
+		done <- len(s.readEntriesLocked(fp))
+	}()
+	select {
+	case n := <-done:
+		if n != 1 {
+			t.Fatalf("expected 1 valid entry from truncated file, got %d", n)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("readEntriesLocked hung on truncated JSONL (infinite decode loop)")
+	}
+}
 
 func testProjector(root string) func(string) string {
 	return func(projectID string) string {

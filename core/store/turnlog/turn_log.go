@@ -433,9 +433,15 @@ func (s *TurnLogStore) readEntriesLocked(filePath string) []map[string]any {
 	var all []map[string]any
 	for dec.More() {
 		var e map[string]any
-		if err := dec.Decode(&e); err == nil {
-			all = append(all, e)
+		if err := dec.Decode(&e); err != nil {
+			// A corrupt or truncated line (common after a crash leaves the
+			// last record half-written) leaves the decoder position
+			// unadvanced, so dec.More() would stay true forever and spin the
+			// CPU while holding s.mu. Stop at the first undecodable record and
+			// keep the well-formed prefix.
+			break
 		}
+		all = append(all, e)
 	}
 	return all
 }
@@ -896,9 +902,10 @@ func (s *TurnLogStore) ListEntries(turnID string) []EntryJSON {
 	entries := make([]EntryJSON, 0)
 	for dec.More() {
 		var e EntryJSON
-		if err := dec.Decode(&e); err == nil {
-			entries = append(entries, e)
+		if err := dec.Decode(&e); err != nil {
+			break // stop at first corrupt record; see readEntriesLocked
 		}
+		entries = append(entries, e)
 	}
 	return entries
 }
@@ -920,9 +927,10 @@ func LoadTurnLog(projector func(projectID string) string, projectID, sessionID s
 			dec := json.NewDecoder(f)
 			for dec.More() {
 				var e EntryJSON
-				if err := dec.Decode(&e); err == nil {
-					all = append(all, e)
+				if err := dec.Decode(&e); err != nil {
+					break // stop at first corrupt record; see readEntriesLocked
 				}
+				all = append(all, e)
 			}
 			f.Close()
 		}
