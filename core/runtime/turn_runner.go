@@ -876,10 +876,7 @@ func (p *TurnRunner) gateToolCall(
 		}
 	}
 
-	args = cloneMap(call.Arguments)
-	if args == nil {
-		args = map[string]any{}
-	}
+	args = sanitizeToolArgs(cloneMap(call.Arguments))
 	args["__session_id"] = tctx.SessionID
 	args["__turn_id"] = tctx.TurnID
 	args["__agent_id"] = tctx.Agent.ID
@@ -903,6 +900,24 @@ func (p *TurnRunner) gateToolCall(
 		args["__granted_domain"] = grantedDomain
 	}
 	return args, "", "", true, nil
+}
+
+// sanitizeToolArgs strips reserved runtime keys ("__" prefix) from
+// model-supplied tool arguments. Unconditionally-injected keys (__work_dir,
+// __session_id, …) are overwritten right after and were never forgeable, but
+// conditionally-injected grants like __sandbox_allow_network / __granted_domain
+// are only written when approved — without stripping, a model could emit them
+// in its own arguments and bypass the egress permission gate.
+func sanitizeToolArgs(args map[string]any) map[string]any {
+	if args == nil {
+		return map[string]any{}
+	}
+	for k := range args {
+		if strings.HasPrefix(k, "__") {
+			delete(args, k)
+		}
+	}
+	return args
 }
 
 // closeUnfinishedToolCalls appends cancelled tool results for any call in the

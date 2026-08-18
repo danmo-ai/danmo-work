@@ -407,39 +407,18 @@ func (e *Engine) RemoveMCPServer(serverID string) {
 
 func (e *Engine) StartSession(ctx context.Context, s domain.Session, attachments []domain.UserAttachment) {
 	turnID := newRuntimeID("turn")
-	atts := append([]domain.UserAttachment(nil), attachments...)
 	if err := e.reserveSessionTurn(s.ID, turnID); err != nil {
 		e.publishTurnFailed(ctx, s.ID, turnID, domain.TurnFailed, err.Error())
 		return
 	}
-	go func() {
-		defer e.finishSessionTurn(s.ID, turnID)
-		// Do not use the incoming request ctx — it is cancelled when the HTTP
-		// handler returns, which would silently abort DB reads below.
-		bg := context.Background()
-		turnCtx, cancel := context.WithCancel(bg)
-		e.mu.Lock()
-		e.cancel[turnID] = cancel
-		e.mu.Unlock()
-		defer func() {
-			e.mu.Lock()
-			delete(e.cancel, turnID)
-			e.mu.Unlock()
-			cancel()
-		}()
-
-		agent, err := e.agents.Get(bg, s.AgentID)
-		if err != nil {
-			e.publishTurnFailed(bg, s.ID, turnID, domain.TurnFailed, err.Error())
-			e.updateSessionStatus(s.ID, domain.SessionStatusFailed)
-			return
-		}
-		agentPtr := *agent
-
-		reg, skills := e.setupRegistry(s, agentPtr, s.PlanMode)
-		rep, err := e.runTurn(turnCtx, s.ID, turnID, s.Content, s.ModelID, s.ProjectID, agentPtr, reg, skills, atts, nil, s.PlanMode)
-		e.turnLog.EndTurn(turnID, turnStatus(err, rep))
-	}()
+	sess := s
+	e.launchTurn(turnLaunch{
+		sessionID:   s.ID,
+		turnID:      turnID,
+		session:     &sess,
+		goal:        s.Content,
+		attachments: append([]domain.UserAttachment(nil), attachments...),
+	})
 }
 
 func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, modelID string, attachments []domain.UserAttachment) (string, error) {
@@ -447,54 +426,115 @@ func (e *Engine) StartTurn(ctx context.Context, sessionID, userInput, agentID, m
 	if err := e.reserveSessionTurn(sessionID, turnID); err != nil {
 		return "", err
 	}
-	atts := append([]domain.UserAttachment(nil), attachments...)
-	extraSnap := service.SnapshotPathsFromCtx(ctx)
-	// Reset session status to active so UI shows "运行中"
+	// Set active synchronously so the UI shows "running" before this returns.
 	e.updateSessionStatus(sessionID, domain.SessionStatusActive)
-	go func() {
-		defer e.finishSessionTurn(sessionID, turnID)
-		// Do not use the HTTP request ctx — it is cancelled when StartTurn returns.
-		bg := context.Background()
-		s, err := e.sessions.Get(bg, sessionID)
-		if err != nil {
-			// Callers already hold turnID — a silent return would leave the UI
-			// waiting on a turn that never emits a terminal event.
-			e.publishTurnFailed(bg, sessionID, turnID, domain.TurnFailed, fmt.Sprintf("load session: %v", err))
-			e.updateSessionStatus(sessionID, domain.SessionStatusFailed)
-			return
-		}
-		targetAgentID := agentID
-		if targetAgentID == "" {
-			targetAgentID = s.AgentID
-		}
-		targetModelID := modelID
-		if targetModelID == "" {
-			targetModelID = s.ModelID
-		}
-		agent, err := e.agents.Get(bg, targetAgentID)
-		if err != nil {
-			e.publishTurnFailed(bg, sessionID, turnID, domain.TurnFailed, fmt.Sprintf("load agent %s: %v", targetAgentID, err))
-			e.updateSessionStatus(sessionID, domain.SessionStatusFailed)
-			return
-		}
-		agentPtr := *agent
+	e.launchTurn(turnLaunch{
+		sessionID:   sessionID,
+		turnID:      turnID,
+		agentID:     agentID,
+		modelID:     modelID,
+		goal:        userInput,
+		attachments: append([]domain.UserAttachment(nil), attachments...),
+		extraSnap:   service.SnapshotPathsFromCtx(ctx),
+	})
+	return turnID, nil
+}
 
-		turnCtx, cancel := context.WithCancel(context.Background())
+// turnLaunch describes one parent-session turn to run in the background.
+type turnLaunch struct {
+	sessionID   string
+	turnID      string
+	session     *domain.Session // preloaded (StartSession); nil = load from DB
+	agentID     string          // optional override of the session's agent
+	modelID     string          // optional override of the session's model
+	goal        string          // user input for new turns; recovered on resume
+	attachments []domain.UserAttachment
+	extraSnap   []string
+	resume      bool
+}
+
+// launchTurn owns the lifecycle scaffold shared by StartSession / StartTurn /
+// ResumeTurn: slot bookkeeping, cancel registration, session/agent loading
+// with loud failure, registry setup, run dispatch, and the single terminal
+// write (finalizeTurn). Entry points only assemble parameters, so lifecycle
+// bugs are fixed here exactly once. The caller must already hold the session
+// turn reservation (reserveSessionTurn).
+func (e *Engine) launchTurn(l turnLaunch) {
+	go func() {
+		defer e.finishSessionTurn(l.sessionID, l.turnID)
+		// Never the caller's HTTP/recovery ctx — it is cancelled as soon as
+		// the handler returns, which would silently abort the work below.
+		bg := context.Background()
+		turnCtx, cancel := context.WithCancel(bg)
 		e.mu.Lock()
-		e.cancel[turnID] = cancel
+		e.cancel[l.turnID] = cancel
 		e.mu.Unlock()
 		defer func() {
 			e.mu.Lock()
-			delete(e.cancel, turnID)
+			delete(e.cancel, l.turnID)
 			e.mu.Unlock()
 			cancel()
 		}()
 
+		var s domain.Session
+		if l.session != nil {
+			s = *l.session
+		} else {
+			loaded, err := e.sessions.Get(bg, l.sessionID)
+			if err != nil {
+				e.failTurnLaunch(l, fmt.Sprintf("load session: %v", err))
+				return
+			}
+			s = loaded
+		}
+		agentID := l.agentID
+		if agentID == "" {
+			agentID = s.AgentID
+		}
+		modelID := l.modelID
+		if modelID == "" {
+			modelID = s.ModelID
+		}
+		agent, err := e.agents.Get(bg, agentID)
+		if err != nil {
+			e.failTurnLaunch(l, fmt.Sprintf("load agent %s: %v", agentID, err))
+			return
+		}
+		agentPtr := *agent
+
+		e.updateSessionStatus(l.sessionID, domain.SessionStatusActive)
+
 		reg, skills := e.setupRegistry(s, agentPtr, s.PlanMode)
-		rep, err := e.runTurn(turnCtx, sessionID, turnID, userInput, targetModelID, s.ProjectID, agentPtr, reg, skills, atts, extraSnap, s.PlanMode)
-		e.turnLog.EndTurn(turnID, turnStatus(err, rep))
+		var rep domain.Report
+		var runErr error
+		if l.resume {
+			rep, runErr = e.runResumedTurn(turnCtx, s, agentPtr, l.turnID, reg, skills)
+		} else {
+			rep, runErr = e.runTurn(turnCtx, l.sessionID, l.turnID, l.goal, modelID, s.ProjectID, agentPtr, reg, skills, l.attachments, l.extraSnap, s.PlanMode)
+		}
+		e.finalizeTurn(l.sessionID, l.turnID, agentPtr.ID, rep, runErr, modelID)
 	}()
-	return turnID, nil
+}
+
+// failTurnLaunch surfaces a pre-run launch failure: terminal event, session
+// status, and — for resumes, whose DB row is already "running" — the turn
+// status. Callers already hold turnID; a silent return would leave the UI
+// waiting on a turn that never emits a terminal event.
+func (e *Engine) failTurnLaunch(l turnLaunch, msg string) {
+	bg := context.Background()
+	if l.resume {
+		_ = e.turns.UpdateStatus(bg, l.turnID, domain.TurnFailed)
+	}
+	e.publishTurnFailed(bg, l.sessionID, l.turnID, domain.TurnFailed, msg)
+	e.updateSessionStatus(l.sessionID, domain.SessionStatusFailed)
+}
+
+// finalizeTurn is the single terminal write path for a parent session turn:
+// the JSONL end entry, the DB turn/session status, and the terminal stream
+// event all derive from one turnStatus computation so they cannot diverge.
+func (e *Engine) finalizeTurn(sessionID, turnID, agentID string, rep domain.Report, err error, model string) {
+	e.turnLog.EndTurn(turnID, turnStatus(err, rep))
+	e.afterTurn(sessionID, turnID, agentID, rep, err, nil, model)
 }
 
 func (e *Engine) CancelTurn(ctx context.Context, turnID string) {
@@ -558,112 +598,84 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 	if err := e.reserveSessionTurn(sessionID, turnID); err != nil {
 		return err
 	}
-	go func() {
-		defer e.finishSessionTurn(sessionID, turnID)
-		// The caller's ctx (HTTP request / recovery scan) may be cancelled once
-		// ResumeTurn returns; all work in this goroutine uses background.
-		bg := context.Background()
-		cfg := e.loadRunCfg(bg)
-
-		s, err := e.sessions.Get(bg, sessionID)
-		if err != nil {
-			// The turn row is already "running" (this is a resume) — a silent
-			// return would leave it a zombie again.
-			_ = e.turns.UpdateStatus(bg, turnID, domain.TurnFailed)
-			e.publishTurnFailed(bg, sessionID, turnID, domain.TurnFailed, fmt.Sprintf("load session: %v", err))
-			return
-		}
-		agent, err := e.agents.Get(bg, s.AgentID)
-		if err != nil {
-			_ = e.turns.UpdateStatus(bg, turnID, domain.TurnFailed)
-			e.publishTurnFailed(bg, sessionID, turnID, domain.TurnFailed, fmt.Sprintf("load agent %s: %v", s.AgentID, err))
-			return
-		}
-		agentPtr := *agent
-
-		turnCtx, cancel := context.WithCancel(context.Background())
-		// Reset session status to active so UI shows "运行中" during resume
-		e.updateSessionStatus(sessionID, domain.SessionStatusActive)
-
-		e.mu.Lock()
-		e.cancel[turnID] = cancel
-		e.mu.Unlock()
-		defer func() {
-			e.mu.Lock()
-			delete(e.cancel, turnID)
-			e.mu.Unlock()
-			cancel()
-		}()
-
-		// Close crash-orphaned tool pairs before rebuilding history so resume
-		// sees real failures (same contract as RecoverRunning).
-		e.closeIncompleteToolPairs(sessionID, turnID)
-
-		goal := ""
-		if g, entries := e.turnLog.LoadForRecovery(turnID); g != "" || len(entries) > 0 {
-			goal = g
-		}
-		if goal == "" {
-			if t, err := e.turns.Get(bg, turnID); err == nil && t.Goal != "" {
-				goal = t.Goal
-			}
-		}
-		if goal == "" {
-			goal = s.Content
-		}
-
-		reg, skills := e.setupRegistry(s, agentPtr, s.PlanMode)
-		runner := e.spawnTurnRunner(turnID, reg, skills, agentPtr.Tools)
-		e.stream.Publish(turnCtx, sessionID, turnID, domain.EventTurnStarted, domain.TurnStartedPayload{
-			TurnID: turnID, AgentID: agentPtr.ID, Goal: goal,
-		})
-		e.stream.Publish(turnCtx, sessionID, turnID, domain.EventUserMessage, domain.UserMessagePayload{Content: goal})
-		// Create reopens existing JSONL for append (no duplicate start) when present.
-		_ = e.turnLog.Create(turnID, sessionID, s.ProjectID, agentPtr.ID, goal)
-		_ = e.turns.Create(turnCtx, domain.TurnLog{ID: turnID, SessionID: sessionID, AgentID: agentPtr.ID, Goal: goal, Status: domain.TurnRunning})
-		_ = e.turns.UpdateStatus(turnCtx, turnID, domain.TurnRunning)
-
-		checkpoint := e.compactionMgr.Recover(turnCtx, sessionID)
-		checkpointText := ""
-		activeTodos := ""
-		fileChanges := ""
-		if checkpoint != nil {
-			if checkpoint.Summary != "" {
-				checkpointText = checkpoint.Summary
-			}
-			activeTodos = formatActiveTodos(checkpoint.Todos)
-			fileChanges = formatFileChanges(checkpoint.FileChanges)
-		}
-
-		sys := buildSystemPrompt(agentPtr.SystemPrompt, skills, e.delegatableAgents(agentPtr), agentPtr.CanDelegate, checkpointText, activeTodos, fileChanges, e.sandboxStatus(), e.environmentStatus())
-		messages := []Message{{Role: RoleSystem, Content: sys}}
-
-		// Full session history from disk, including this turn's complete tool prefix.
-		history := e.loadRetainedHistory(sessionID, checkpoint)
-		messages = append(messages, history...)
-		// Deduplicate against THIS turn's JSONL only. Scanning the whole
-		// session history would false-positive when the goal text matches an
-		// earlier turn's user message and skip appending this turn's goal.
-		thisTurn := chatMessagesToRuntime(e.turnLog.LoadTurnMessages(turnID))
-		if !historyHasUserGoal(thisTurn, goal) {
-			e.turnLog.Append(turnID, "user", map[string]any{"content": goal})
-			messages = append(messages, Message{Role: RoleUser, Content: goal})
-		}
-
-		workDir := e.resolveWorkDir(turnCtx, s.ProjectID)
-		rep, _, err := runner.Run(turnCtx, TurnContext{
-			SessionID: sessionID, TurnID: turnID, Agent: agentPtr,
-			Model: s.ModelID, MaxSteps: agentPtr.Steps, WorkDir: workDir, ProjectID: s.ProjectID, Messages: messages,
-			Path:             []domain.TurnPathEntry{{TurnID: turnID, AgentID: agentPtr.ID}},
-			PlanMode:         s.PlanMode,
-			EphemeralContext: e.knowledgeHitsText(agentPtr, goal, cfg.knowledgeSearchTopK),
-		})
-
-		e.clearSessionTurnMessages(sessionID)
-		e.turnLog.EndTurn(turnID, turnStatus(err, rep))
-		e.afterTurn(sessionID, turnID, agentPtr.ID, rep, err, nil, s.ModelID)
-	}()
+	e.launchTurn(turnLaunch{sessionID: sessionID, turnID: turnID, resume: true})
 	return nil
+}
+
+// runResumedTurn re-enters a crashed/zombie turn: it closes orphaned tool
+// pairs, recovers the goal from JSONL → DB → session, reopens the JSONL for
+// append, and rebuilds history including this turn's completed tool prefix.
+// Terminal writes are the caller's job (launchTurn → finalizeTurn).
+func (e *Engine) runResumedTurn(ctx context.Context, s domain.Session, agent domain.Agent, turnID string, reg *tool.Registry, skills []domain.Skill) (domain.Report, error) {
+	sessionID := s.ID
+	bg := context.Background()
+	cfg := e.loadRunCfg(bg)
+
+	// Close crash-orphaned tool pairs before rebuilding history so resume
+	// sees real failures (same contract as RecoverRunning).
+	e.closeIncompleteToolPairs(sessionID, turnID)
+
+	goal := ""
+	if g, entries := e.turnLog.LoadForRecovery(turnID); g != "" || len(entries) > 0 {
+		goal = g
+	}
+	if goal == "" {
+		if t, err := e.turns.Get(bg, turnID); err == nil && t.Goal != "" {
+			goal = t.Goal
+		}
+	}
+	if goal == "" {
+		goal = s.Content
+	}
+
+	runner := e.spawnTurnRunner(turnID, reg, skills, agent.Tools)
+	e.stream.Publish(ctx, sessionID, turnID, domain.EventTurnStarted, domain.TurnStartedPayload{
+		TurnID: turnID, AgentID: agent.ID, Goal: goal,
+	})
+	e.stream.Publish(ctx, sessionID, turnID, domain.EventUserMessage, domain.UserMessagePayload{Content: goal})
+	// Create reopens existing JSONL for append (no duplicate start) when present.
+	_ = e.turnLog.Create(turnID, sessionID, s.ProjectID, agent.ID, goal)
+	_ = e.turns.Create(ctx, domain.TurnLog{ID: turnID, SessionID: sessionID, AgentID: agent.ID, Goal: goal, Status: domain.TurnRunning})
+	_ = e.turns.UpdateStatus(ctx, turnID, domain.TurnRunning)
+
+	checkpoint := e.compactionMgr.Recover(ctx, sessionID)
+	checkpointText := ""
+	activeTodos := ""
+	fileChanges := ""
+	if checkpoint != nil {
+		if checkpoint.Summary != "" {
+			checkpointText = checkpoint.Summary
+		}
+		activeTodos = formatActiveTodos(checkpoint.Todos)
+		fileChanges = formatFileChanges(checkpoint.FileChanges)
+	}
+
+	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, checkpointText, activeTodos, fileChanges, e.sandboxStatus(), e.environmentStatus())
+	messages := []Message{{Role: RoleSystem, Content: sys}}
+
+	// Full session history from disk, including this turn's complete tool prefix.
+	history := e.loadRetainedHistory(sessionID, checkpoint)
+	messages = append(messages, history...)
+	// Deduplicate against THIS turn's JSONL only. Scanning the whole
+	// session history would false-positive when the goal text matches an
+	// earlier turn's user message and skip appending this turn's goal.
+	thisTurn := chatMessagesToRuntime(e.turnLog.LoadTurnMessages(turnID))
+	if !historyHasUserGoal(thisTurn, goal) {
+		e.turnLog.Append(turnID, "user", map[string]any{"content": goal})
+		messages = append(messages, Message{Role: RoleUser, Content: goal})
+	}
+
+	workDir := e.resolveWorkDir(ctx, s.ProjectID)
+	rep, _, err := runner.Run(ctx, TurnContext{
+		SessionID: sessionID, TurnID: turnID, Agent: agent,
+		Model: s.ModelID, MaxSteps: agent.Steps, WorkDir: workDir, ProjectID: s.ProjectID, Messages: messages,
+		Path:             []domain.TurnPathEntry{{TurnID: turnID, AgentID: agent.ID}},
+		PlanMode:         s.PlanMode,
+		EphemeralContext: e.knowledgeHitsText(agent, goal, cfg.knowledgeSearchTopK),
+	})
+
+	e.clearSessionTurnMessages(sessionID)
+	return rep, err
 }
 
 func (e *Engine) reserveSessionTurn(sessionID, turnID string) error {
@@ -1303,7 +1315,7 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 	_ = turnMsgs
 	_ = userIdx
 
-	e.afterTurn(sessionID, turnID, agent.ID, rep, err, nil, modelID)
+	// Terminal writes are the caller's job (launchTurn → finalizeTurn).
 	return rep, err
 }
 
