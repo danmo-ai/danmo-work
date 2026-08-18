@@ -2,9 +2,9 @@
 
    Type scale (macOS-dense, theme-invariant):
      caption 12  badges / timestamps / kbd / hints
-     body    13  UI + chat (sidebar, tools, forms, plan, stream)
-     prose   13  alias of body
-     title   15  one page/session title per view
+     body    14  UI + chat (sidebar, tools, forms, plan, stream)
+     prose   14  alias of body
+     title   16  one page/session title per view
    Hierarchy inside a page: prefer weight/color over extra sizes.
    Never hardcode 10/11px.
 */
