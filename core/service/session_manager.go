@@ -361,7 +361,8 @@ func (m *SessionManager) SteerPending(ctx context.Context, sessionID, id string)
 		active = m.engine.ActiveTurnID(sessionID)
 	}
 	if active == "" {
-		// Idle: keep as queued and start a normal turn.
+		// Idle: keep as queued and start a normal turn. Drain synchronously so
+		// the steer HTTP response's pending list no longer includes this item.
 		if msg.Status == domain.PendingSteering {
 			msg.Status = domain.PendingQueued
 			msg.UpdatedAt = time.Now().UTC()
@@ -369,7 +370,7 @@ func (m *SessionManager) SteerPending(ctx context.Context, sessionID, id string)
 				return err
 			}
 		}
-		go m.DrainPendingQueue(context.Background(), sessionID)
+		m.DrainPendingQueue(ctx, sessionID)
 		return nil
 	}
 
