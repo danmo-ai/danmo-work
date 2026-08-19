@@ -10,8 +10,8 @@
 **Open-source AI work agent** — multi-agent, long-horizon work on your own machine. Coding, research, reports, slides, sheets, and automations all run on a single agent loop you can watch, correct, and resume. Self-hosted, MIT.
 
 - **The model orchestrates.** No workflow graphs to configure. Subagents (`delegate_agent`), questions (`ask_user`), and MCP connectors are all just tools the agent calls as it plans.
-- **Turn Log is state.** Every tool call is appended to JSONL. Recover from a crash, replay a turn, or edit a tool result and let the loop continue.
-- **Everywhere.** Web · Desktop (Tauri) · CLI · TUI · WeChat / Feishu / WeCom / QQ — one engine, tools always running on your machine.
+- **Turn Log is state.** Every tool call lands in SQLite (`history.db`). Recover from a crash, replay a turn, edit a tool result, or resume days later — JSONL is export-only.
+- **Everywhere.** Web · Desktop (Tauri) · CLI · TUI · Feishu / QQ / WeChat / WeCom — one engine, tools always running on your machine.
 
 [![Screenshot tour — multi-agent, Document Stage, browser preview, skills, sandbox, IM](docs/screenshots/carousel.gif)](docs/screenshots/carousel.html?lang=en)
 
@@ -25,15 +25,16 @@
 
 | | |
 |--|--|
-| **Multi-agent teams** | A lead agent summons built-in specialists — Document, Implementer, Researcher, Reviewer, GitHub, Novel Writing… — each in its own isolated context |
-| **Document Stage + AI Diff** | Docs, slides, and sheets on one canvas: propose → review diff → keep / revert / accept hunks. Markdown stays the source of truth |
-| **Humans in the loop** | `ask_user` is just another tool — with options and forms. Approval gates stop risky commands before they run |
-| **Plans are a tool too** | The plan is `todowrite`: the agent updates status as it works, marks items done only after verifying, and rewrites the plan when it drifts — not a one-time artifact that gathers dust |
-| **Durable memory & Table Store** | `memory_update` / `memory_read` across user / project / agent scopes; `table_*` schema-free business rows; Markdown knowledge bases with chapter-level search |
-| **Skills & connectors** | Skill market (official catalog, Tech Leads Club, ClawHub), disk-scanned custom skills, MCP connectors bound per agent |
-| **Real sandbox** | OS-level shell sandbox (Seatbelt / Landlock / bwrap / WSL2), network deny / domain allowlists, four permission modes |
-| **Automations** | Cron schedules and webhooks start agent turns in the background |
-| **Your model, your data** | Anthropic-native + OpenAI-compatible providers (OpenAI, DeepSeek, GLM, Qwen, Kimi, Gemini, Grok, local Ollama…). Data lives in `~/.danmo-work/` |
+| **Multi-agent teams** | **Team** lead delegates built-in specialists — Document, Implementer, Researcher, Reviewer, GitHub, Novel Writing… — each in an isolated sub-turn; main context stays lean |
+| **Document Stage + AI Diff** | Docs, slides, sheets, code, diff, and preview on one canvas — pre-turn snapshot → review hunks → keep / revert / accept; Markdown stays the source of truth |
+| **Humans in the loop** | `ask_user` with options and forms; approval gates before risky shell or external MCP — same flow in desktop and IM chats |
+| **Plans that stay alive** | `todowrite` is the plan: status updates as work proceeds, items marked done only after verification, rewritten when scope drifts |
+| **Memory, tables & knowledge** | `memory_*` across user / project / agent scopes; schema-free `table_*` rows in `store.db`; Markdown knowledge bases with chapter-level FTS |
+| **Skills & connectors** | Skill market (official catalog, Tech Leads Club, ClawHub), ambient disk skills (`~/.agents/skills/`, project folders), MCP connectors bound per agent |
+| **Real sandbox** | OS-level isolation (Seatbelt / Landlock / bwrap / WSL2) or optional Podman/Docker env; network deny / domain allowlist; four permission modes |
+| **Long-horizon sessions** | Turn log + stream events in `history.db`; compaction checkpoints; `RecoverRunning` after crashes; sessions can span days or weeks |
+| **Automations & IM** | Cron schedules and webhooks; Feishu / QQ / WeChat / WeCom outbound — progress cards, questions, and approvals in-channel |
+| **Your model, your data** | Anthropic-native + OpenAI-compatible (OpenAI, DeepSeek, GLM, Qwen, Kimi, Gemini, Grok, local Ollama…). Everything under `~/.danmo-work/` |
 
 ---
 
@@ -43,7 +44,7 @@ Three ideas run through the whole system (full architecture: [docs/core-design.m
 
 1. **Everything is a tool.** Files, shell, web, memory, tables, knowledge, subagents (`delegate_agent`), even humans (`ask_user`) share one interface. The model decides what to call and when.
 2. **The model orchestrates.** No developer-written control flow: the lead agent plans, delegates, and checks in with you on its own. Code and long-running work are the same loop at different depths — there is no mode switch.
-3. **Logs are state.** Each turn is an append-only JSONL trail of tool calls. Sessions can span days or weeks; recovery is built in, not bolted on.
+3. **Logs are state.** Each turn is an append-only trail in SQLite (`history.db`). Compaction checkpoints, crash recovery, and replay are built in — not bolted on.
 
 ### Experts & teams
 
@@ -66,11 +67,11 @@ The lead agent runs the session; specialists do focused work on demand, each in 
 
 Summon a specialist with `@` in the Composer, or just ask in plain language ("delegate the Document expert…"). The lead only sees the subagent's report, so the main context stays lean and KV-cache friendly. You can also build your own subagents in Teams, binding skills, tools, knowledge bases, and connectors.
 
-Beyond experts, the same library hosts **skills** (one-click workflows — document-writing, playable-slides, TDD, deep-research…) and **connectors** (MCP integrations). Install from the market, bind them per agent, or drop your own skills into `~/.danmo-work/skills/`.
+Beyond experts, the same library hosts **skills** (workflows — document-writing, playable-slides, TDD, deep-research…) and **connectors** (MCP integrations). Install from the market, bind per agent, or drop skills into `~/.danmo-work/skills/` or `~/.agents/skills/`.
 
 ### Document Stage
 
-Three panes — projects · agent stream · right panel (Plan / Files / Memory / Changes / Terminal) — around a central **Document Stage** whose toolbar follows the file kind (doc / slides / sheet / code / diff / preview). In Preview you can click a DOM element, annotate it, and send the exact HTML/CSS context to the Composer.
+Three panes — projects · agent stream · right panel (Plan / Files / Memory / Table Store / Git / Terminal / Trajectory) — around a central **Document Stage** whose toolbar follows the file kind (doc / slides / sheet / code / diff / preview). In **preview** mode you can click a DOM element, annotate it, and send exact HTML/CSS context to the Composer.
 
 Office files are co-edited as a normal agent turn with a review step:
 
@@ -81,8 +82,8 @@ Office files are co-edited as a normal agent turn with a review step:
 
 ### Safety
 
-- **Soft gate** — permission modes (`discuss` / `plan` / `interactive` / `auto`); risky commands ask before running
-- **Hard sandbox** — OS-level isolation for shell, network `deny` or domain allowlists
+- **Soft gate** — permission modes (`discuss` / `plan` / `interactive` / `auto`); risky commands and external MCP ask before running
+- **Hard sandbox** — OS-level isolation or optional Podman/Docker container env; network `deny`, open, or domain allowlist
 - `auto_approve` never silently approves dangerous commands; approvals render inside IM chats too
 
 ### Channels, remote & automations
@@ -121,7 +122,7 @@ Or download `Danmo.Work_*_arm64.dmg` from Releases. Not Apple-notarized yet — 
 
 ### First run
 
-Open the app, add an LLM API key in the UI (or `~/.danmo-work/config.yaml`), and pick a model. Projects, sessions, memories, and the rest are created for you under `~/.danmo-work/`.
+Open the app, add an LLM API key in the UI (or `~/.danmo-work/config.yaml`), and pick a model. Projects, sessions, and memories land under `~/.danmo-work/` (`work.db` control plane, `history.db` turn log, `store.db` table store).
 
 ### From source
 
