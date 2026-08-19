@@ -794,10 +794,12 @@ func (e *Engine) RecoverRunning(ctx context.Context) {
 		// LLM and UI see the same failed pairs a live Execute error would produce.
 		e.closeIncompleteToolPairs(t.SessionID, t.ID)
 
-		// Recoverable only when JSONL exists (start goal and/or complete tool pairs).
-		// DB Goal alone is not enough — injected zombies without work must stay failed.
-		goal, entries := e.turnLog.LoadForRecovery(t.ID)
-		if goal == "" && len(entries) == 0 {
+		// Recoverable only when the turn persisted at least one message entry.
+		// The goal alone (turns row) is not enough — a turn that crashed before
+		// logging its user message has no context worth replaying, and injected
+		// zombie rows without work must stay failed.
+		_, entries := e.turnLog.LoadForRecovery(t.ID)
+		if len(entries) == 0 {
 			log.Printf("[RecoverRunning] turn %s not recoverable, marking as failed", t.ID)
 			if err := e.turns.UpdateStatus(ctx, t.ID, domain.TurnFailed); err != nil {
 				log.Printf("[RecoverRunning] update turn %s status: %v", t.ID, err)

@@ -139,12 +139,14 @@ func (s *Store) migrate() error {
 		&memoryModel{},
 		&streamEventModel{},
 		&turnModel{},
+		&turnLogEntryModel{},
 		&secretModel{},
 		&automationModel{},
 		&weixinAccountModel{},
 		&weixinBindingModel{},
 		&channelBindingModel{},
 		&usageRollupModel{},
+		&appMetaModel{},
 	); err != nil {
 		return err
 	}
@@ -178,6 +180,7 @@ func (s *Store) Approvals() port.ApprovalRepo             { return &approvalRepo
 func (s *Store) PendingMessages() port.PendingMessageRepo { return &pendingMessageRepo{s} }
 func (s *Store) StreamEvents() port.StreamEventRepo       { return &streamEventRepo{s} }
 func (s *Store) Turns() port.TurnRepo                     { return &turnRepo{s} }
+func (s *Store) TurnLogs() port.TurnLogRepo               { return &turnLogRepo{s} }
 func (s *Store) Secrets() port.SecretStore                { return newSecretStore(s.db) }
 func (s *Store) Automations() port.AutomationRepo         { return &automationRepo{s} }
 func (s *Store) Memories() port.MemoryRepo                { return &memoryRepo{s} }

@@ -68,7 +68,7 @@ out/run/             # dev PIDs, logs, wrappers (DQ_DEV markers)
 | `WORK_CONFIG` | `~/.danmo-work/config.yaml` | YAML config path |
 | `WORK_DB_PATH` | `~/.danmo-work/work.db` | SQLite control-plane database |
 | `WORK_STORE_DB_PATH` | `~/.danmo-work/store.db` | SQLite agent table-store (data plane) |
-| `WORK_DATA_DIR` | `~/.danmo-work/data` | Projects / turn logs |
+| `WORK_DATA_DIR` | `~/.danmo-work/data` | Projects (turn history lives in `work.db`; JSONL is export-only) |
 | `DQ_BACKEND_PORT` | `7801` | Injected by dev scripts |
 | `DQ_FRONTEND_PORT` | `5801` | Injected by dev scripts |
 | `DQ_APP_NAME` | `danmo-work` | App name for build scripts |
@@ -80,10 +80,10 @@ Server, CLI, TUI, and desktop all use the same home by default:
 ```
 ~/.danmo-work/
   config.yaml
-  work.db        # control plane (sessions, memories, …)
+  work.db        # control plane + turn history (sessions, memories, turn_log_entries, …)
   store.db       # agent table-store data plane
   knowledge/     # knowledge-base Markdown source of truth
-  data/          # projects, turn logs
+  data/          # projects (legacy turn JSONL kept as inert backup after DB import)
   skills/        # optional user custom skills (scanned each turn)
   bin/           # desktop sidecar binary
   bin/coreutils/ # Windows: Microsoft Coreutils (default-installed by NSIS) + applet hardlinks

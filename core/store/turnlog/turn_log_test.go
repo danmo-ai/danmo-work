@@ -3,24 +3,37 @@ package turnlog
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"danmo-work/core/domain"
+	"danmo-work/core/port"
+	sqlitestore "danmo-work/core/store/sqlite"
 )
 
-// TestReadEntriesStopsOnTruncatedRecord guards against a regression where a
-// corrupt/truncated final JSONL line made json.Decoder spin forever (dec.More()
-// stays true while Decode never advances), hanging recovery while holding s.mu.
-func TestReadEntriesStopsOnTruncatedRecord(t *testing.T) {
-	root := t.TempDir()
-	dir := filepath.Join(root, "_default", "sessions", "sess-x")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+func newTestRepo(t *testing.T) port.TurnLogRepo {
+	t.Helper()
+	st, err := sqlitestore.New(filepath.Join(t.TempDir(), "work.db"))
+	if err != nil {
 		t.Fatal(err)
 	}
+	return st.TurnLogs()
+}
+
+func newTestStore(t *testing.T) *TurnLogStore {
+	t.Helper()
+	return NewTurnLogStore(newTestRepo(t))
+}
+
+// TestReadLegacyFileStopsOnTruncatedRecord guards against a regression where a
+// corrupt/truncated final JSONL line made json.Decoder spin forever (dec.More()
+// stays true while Decode never advances). The legacy import must keep the
+// well-formed prefix.
+func TestReadLegacyFileStopsOnTruncatedRecord(t *testing.T) {
+	dir := t.TempDir()
 	fp := filepath.Join(dir, "turn-x.jsonl")
 	// One valid record followed by a half-written record (crash mid-flush).
 	content := `{"seq":1,"type":"user","data":{"content":"hi"}}` + "\n" + `{"seq":2,"type":"assist`
@@ -28,27 +41,12 @@ func TestReadEntriesStopsOnTruncatedRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s := NewTurnLogStore(testProjector(root))
-	done := make(chan int, 1)
-	go func() {
-		done <- len(s.readEntriesLocked(fp))
-	}()
-	select {
-	case n := <-done:
-		if n != 1 {
-			t.Fatalf("expected 1 valid entry from truncated file, got %d", n)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("readEntriesLocked hung on truncated JSONL (infinite decode loop)")
+	_, _, _, entries, err := readLegacyFile(fp)
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-func testProjector(root string) func(string) string {
-	return func(projectID string) string {
-		if projectID == "" {
-			return root
-		}
-		return filepath.Join(root, projectID)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 valid entry from truncated file, got %d", len(entries))
 	}
 }
 
@@ -74,8 +72,7 @@ func countTypes(entries []map[string]any) (calls, results int) {
 }
 
 func TestListIncompleteToolCalls(t *testing.T) {
-	root := t.TempDir()
-	s := NewTurnLogStore(testProjector(root))
+	s := newTestStore(t)
 
 	if err := s.Create("turn-inc", "sess-1", "proj-a", "agent-1", "do"); err != nil {
 		t.Fatal(err)
@@ -136,8 +133,7 @@ func TestListIncompleteToolCalls(t *testing.T) {
 }
 
 func TestLoadForRecoveryDropsUnpairedTrailingToolCall(t *testing.T) {
-	root := t.TempDir()
-	s := NewTurnLogStore(testProjector(root))
+	s := newTestStore(t)
 
 	if err := s.Create("turn-1", "sess-1", "proj-a", "agent-1", "do stuff"); err != nil {
 		t.Fatal(err)
@@ -170,8 +166,7 @@ func TestLoadForRecoveryDropsUnpairedTrailingToolCall(t *testing.T) {
 }
 
 func TestLoadForRecoveryKeepsCompletePairs(t *testing.T) {
-	root := t.TempDir()
-	s := NewTurnLogStore(testProjector(root))
+	s := newTestStore(t)
 
 	if err := s.Create("turn-2", "sess-1", "proj-a", "agent-1", "goal"); err != nil {
 		t.Fatal(err)
@@ -190,8 +185,7 @@ func TestLoadForRecoveryKeepsCompletePairs(t *testing.T) {
 }
 
 func TestLoadForRecoveryStripsPartialAssistantBatch(t *testing.T) {
-	root := t.TempDir()
-	s := NewTurnLogStore(testProjector(root))
+	s := newTestStore(t)
 
 	if err := s.Create("turn-partial", "sess-1", "proj-a", "agent-1", "do"); err != nil {
 		t.Fatal(err)
@@ -224,8 +218,7 @@ func TestLoadForRecoveryStripsPartialAssistantBatch(t *testing.T) {
 }
 
 func TestCreateReopensWithoutDuplicateStart(t *testing.T) {
-	root := t.TempDir()
-	s := NewTurnLogStore(testProjector(root))
+	s := newTestStore(t)
 
 	if err := s.Create("turn-3", "sess-1", "proj-a", "agent-1", "goal"); err != nil {
 		t.Fatal(err)
@@ -233,7 +226,7 @@ func TestCreateReopensWithoutDuplicateStart(t *testing.T) {
 	writeToolPair(s, "turn-3", "c1", "read_file")
 	s.EndTurn("turn-3", domain.TurnCancelled)
 
-	// Resume: Create should reopen append, not write another start.
+	// Resume: Create must not duplicate meta or reset seq.
 	if err := s.Create("turn-3", "sess-1", "proj-a", "agent-1", "goal"); err != nil {
 		t.Fatal(err)
 	}
@@ -243,13 +236,13 @@ func TestCreateReopensWithoutDuplicateStart(t *testing.T) {
 	s.Append("turn-3", "tool_result", map[string]any{
 		"call_id": "c2", "name": "exec_shell", "output": "done",
 	})
-	s.EndTurn("turn-3", domain.TurnCompleted)
 
 	raw, err := s.LoadRawLog("turn-3")
 	if err != nil {
 		t.Fatal(err)
 	}
 	starts := 0
+	seqs := map[int]bool{}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	for dec.More() {
 		var e EntryJSON
@@ -259,6 +252,10 @@ func TestCreateReopensWithoutDuplicateStart(t *testing.T) {
 		if e.Type == "start" {
 			starts++
 		}
+		if seqs[e.Seq] {
+			t.Fatalf("duplicate seq %d after resume", e.Seq)
+		}
+		seqs[e.Seq] = true
 	}
 	if starts != 1 {
 		t.Fatalf("want exactly 1 start entry after resume, got %d", starts)
@@ -266,10 +263,9 @@ func TestCreateReopensWithoutDuplicateStart(t *testing.T) {
 }
 
 func TestLoadTurnLogZipFallsBackToStreamEvents(t *testing.T) {
-	root := t.TempDir()
-	s := NewTurnLogStore(testProjector(root))
+	s := newTestStore(t)
 
-	// No JSONL on disk — only stream events (historical turns / migration gaps).
+	// No log rows — only stream events (historical turns / migration gaps).
 	payload, _ := json.Marshal(domain.TurnStartedPayload{
 		TurnID: "turn-old", AgentID: "default", Goal: "hello",
 	})
@@ -295,7 +291,7 @@ func TestLoadTurnLogZipFallsBackToStreamEvents(t *testing.T) {
 		t.Fatalf("zip contents: %v", names)
 	}
 	if names["turn-old.jsonl"] {
-		t.Fatal("expected no jsonl when file missing")
+		t.Fatal("expected no jsonl when log rows missing")
 	}
 
 	var mf []TurnLogNode
@@ -318,8 +314,7 @@ func TestLoadTurnLogZipFallsBackToStreamEvents(t *testing.T) {
 }
 
 func TestLoadTurnLogZipIncludesJSONLAndEvents(t *testing.T) {
-	root := t.TempDir()
-	s := NewTurnLogStore(testProjector(root))
+	s := newTestStore(t)
 	if err := s.Create("turn-z", "sess-1", "proj-a", "agent-1", "goal"); err != nil {
 		t.Fatal(err)
 	}
@@ -347,30 +342,51 @@ func TestLoadTurnLogZipIncludesJSONLAndEvents(t *testing.T) {
 	if !names["manifest.json"] || !names["events.jsonl"] || !names["turn-z.jsonl"] {
 		t.Fatalf("zip contents: %v", names)
 	}
+
+	// The rendered JSONL must carry synthetic start/end lines from turn meta.
+	for _, f := range zr.File {
+		if f.Name != "turn-z.jsonl" {
+			continue
+		}
+		rc, _ := f.Open()
+		defer rc.Close()
+		var types []string
+		dec := json.NewDecoder(rc)
+		for dec.More() {
+			var e EntryJSON
+			if err := dec.Decode(&e); err != nil {
+				t.Fatal(err)
+			}
+			types = append(types, e.Type)
+		}
+		if len(types) < 4 || types[0] != "start" || types[len(types)-1] != "end" {
+			t.Fatalf("rendered jsonl types: %v", types)
+		}
+	}
 }
 
-func TestLoadForRecoveryRehydratesFromDisk(t *testing.T) {
-	root := t.TempDir()
-	s1 := NewTurnLogStore(testProjector(root))
-	if err := s1.Create("turn-4", "sess-1", "proj-a", "agent-1", "disk-goal"); err != nil {
+func TestLoadForRecoverySurvivesProcessRestart(t *testing.T) {
+	repo := newTestRepo(t)
+	s1 := NewTurnLogStore(repo)
+	if err := s1.Create("turn-4", "sess-1", "proj-a", "agent-1", "db-goal"); err != nil {
 		t.Fatal(err)
 	}
 	writeToolPair(s1, "turn-4", "c1", "read_file")
 	s1.EndTurn("turn-4", domain.TurnCancelled)
 
-	// Simulate process restart: new store, empty memory.
-	s2 := NewTurnLogStore(testProjector(root))
+	// Simulate process restart: new store over the same DB, empty memory.
+	s2 := NewTurnLogStore(repo)
 	goal, entries := s2.LoadForRecovery("turn-4")
-	if goal != "disk-goal" {
-		t.Fatalf("goal from disk: want %q, got %q", "disk-goal", goal)
+	if goal != "db-goal" {
+		t.Fatalf("goal from db: want %q, got %q", "db-goal", goal)
 	}
 	calls, results := countTypes(entries)
 	if calls != 1 || results != 1 {
-		t.Fatalf("disk recovery pairs: calls=%d results=%d", calls, results)
+		t.Fatalf("db recovery pairs: calls=%d results=%d", calls, results)
 	}
 
-	// Resume Create on fresh store should reopen existing file.
-	if err := s2.Create("turn-4", "sess-1", "proj-a", "agent-1", "disk-goal"); err != nil {
+	// Resume Create on the fresh store must continue seq, not restart it.
+	if err := s2.Create("turn-4", "sess-1", "proj-a", "agent-1", "db-goal"); err != nil {
 		t.Fatal(err)
 	}
 	s2.Append("turn-4", "tool_call", map[string]any{
@@ -379,20 +395,40 @@ func TestLoadForRecoveryRehydratesFromDisk(t *testing.T) {
 	s2.EndTurn("turn-4", domain.TurnCompleted)
 
 	listed := s2.ListEntries("turn-4")
-	starts := 0
-	for _, e := range listed {
-		if e.Type == "start" {
-			starts++
-		}
+	if len(listed) != 3 {
+		t.Fatalf("want 3 entries after resume, got %d %+v", len(listed), listed)
 	}
-	if starts != 1 {
-		t.Fatalf("after disk reopen want 1 start, got %d", starts)
+	seen := map[int]bool{}
+	for _, e := range listed {
+		if seen[e.Seq] {
+			t.Fatalf("duplicate seq after restart resume: %+v", listed)
+		}
+		seen[e.Seq] = true
+	}
+}
+
+func TestEndTurnDoesNotOverwriteCancelled(t *testing.T) {
+	repo := newTestRepo(t)
+	s := NewTurnLogStore(repo)
+	if err := s.Create("turn-c", "sess-1", "proj-a", "agent-1", "g"); err != nil {
+		t.Fatal(err)
+	}
+	// User cancel persists first; the late-finishing goroutine must not
+	// resurrect the turn as completed.
+	s.EndTurn("turn-c", domain.TurnCancelled)
+	s.EndTurn("turn-c", domain.TurnCompleted)
+
+	meta, ok, err := repo.GetTurnMeta(context.Background(), "turn-c")
+	if err != nil || !ok {
+		t.Fatalf("meta: ok=%v err=%v", ok, err)
+	}
+	if meta.Status != domain.TurnCancelled {
+		t.Fatalf("cancelled must win, got %s", meta.Status)
 	}
 }
 
 func TestLoadSessionMessagesRebuildsUserAssistantTools(t *testing.T) {
-	root := t.TempDir()
-	s := NewTurnLogStore(testProjector(root))
+	s := newTestStore(t)
 
 	if err := s.Create("turn-a", "sess-hist", "proj-a", "agent-1", "hello"); err != nil {
 		t.Fatal(err)
@@ -430,8 +466,7 @@ func TestLoadSessionMessagesRebuildsUserAssistantTools(t *testing.T) {
 }
 
 func TestLoadSessionMessagesIncludesFinalAssistant(t *testing.T) {
-	root := t.TempDir()
-	s := NewTurnLogStore(testProjector(root))
+	s := newTestStore(t)
 	_ = s.Create("turn-1", "sess-2", "proj-a", "a", "q")
 	s.Append("turn-1", "user", map[string]any{"content": "q"})
 	s.Append("turn-1", "assistant", map[string]any{
@@ -451,8 +486,7 @@ func TestLoadSessionMessagesIncludesFinalAssistant(t *testing.T) {
 }
 
 func TestLoadSessionMessagesSkipsNestedToolRunAndHonorsRetain(t *testing.T) {
-	root := t.TempDir()
-	s := NewTurnLogStore(testProjector(root))
+	s := newTestStore(t)
 
 	_ = s.Create("turn-1", "sess-3", "proj-a", "a", "one")
 	s.Append("turn-1", "user", map[string]any{"content": "one"})
@@ -464,7 +498,7 @@ func TestLoadSessionMessagesSkipsNestedToolRunAndHonorsRetain(t *testing.T) {
 	s.Append("turn-child", "assistant", map[string]any{"content": "child-secret"})
 	s.EndTurn("turn-child", domain.TurnCompleted)
 	if !s.IsNestedToolRun("turn-child") {
-		t.Fatal("expected nested tool-run log under tool_runs/")
+		t.Fatal("expected nested tool-run turn")
 	}
 
 	_ = s.Create("turn-2", "sess-3", "proj-a", "a", "two")
@@ -492,8 +526,7 @@ func TestLoadSessionMessagesSkipsNestedToolRunAndHonorsRetain(t *testing.T) {
 }
 
 func TestLoadSessionMessagesLegacyToolCall(t *testing.T) {
-	root := t.TempDir()
-	s := NewTurnLogStore(testProjector(root))
+	s := newTestStore(t)
 	_ = s.Create("turn-legacy", "sess-leg", "proj-a", "a", "g")
 	s.Append("turn-legacy", "user", map[string]any{"content": "g"})
 	writeToolPair(s, "turn-legacy", "c1", "read_file")
@@ -513,8 +546,7 @@ func TestLoadSessionMessagesLegacyToolCall(t *testing.T) {
 }
 
 func TestLoadSessionMessagesHonorsRetainSkip(t *testing.T) {
-	root := t.TempDir()
-	s := NewTurnLogStore(testProjector(root))
+	s := newTestStore(t)
 
 	_ = s.Create("turn-1", "sess-skip", "proj-a", "a", "g")
 	s.Append("turn-1", "user", map[string]any{"content": "u1"})
@@ -546,8 +578,7 @@ func TestLoadSessionMessagesHonorsRetainSkip(t *testing.T) {
 }
 
 func TestLoadSessionMessagesReordersLateToolResults(t *testing.T) {
-	root := t.TempDir()
-	s := NewTurnLogStore(testProjector(root))
+	s := newTestStore(t)
 
 	// Mirrors a corrupted Weixin turn log: http_request result arrived after an
 	// intervening foreign tool pair (cross-session Log race).
@@ -595,8 +626,7 @@ func TestLoadSessionMessagesReordersLateToolResults(t *testing.T) {
 }
 
 func TestLoadSessionMessagesRepairsRetainSkipInsideToolPair(t *testing.T) {
-	root := t.TempDir()
-	s := NewTurnLogStore(testProjector(root))
+	s := newTestStore(t)
 
 	_ = s.Create("turn-1", "sess-mid-pair", "proj-a", "a", "g")
 	s.Append("turn-1", "user", map[string]any{"content": "u1"})

@@ -140,7 +140,8 @@ func New(cfg Config) *Core {
 	gitMgr := service.NewGitManager(pm)
 	gitMgr.SetSecretStore(st.Secrets())
 
-	turnLog := turnlog.NewTurnLogStore(pm.ProjectDir)
+	turnLog := turnlog.NewTurnLogStore(st.TurnLogs())
+	migrateLegacyTurnLogs(st, pm)
 	agents := service.NewAgentManager(appCfg.Data.Dir)
 	skills := service.NewSkillManager(appCfg.Data.Dir)
 	knowledgeMgr := service.NewKnowledgeManager(
@@ -434,6 +435,33 @@ func (c *Core) Close() error {
 		}
 	}
 	return first
+}
+
+// migrateLegacyTurnLogs runs the one-time import of on-disk turn JSONL files
+// into the DB-backed turn log (single source of truth). Guarded by an
+// app_meta marker; on partial failure the marker is not set so the
+// idempotent import retries at next startup. Legacy files stay on disk as
+// inert backups. Must run before Engine.RecoverRunning.
+func migrateLegacyTurnLogs(st *sqlitestore.Store, pm *service.ProjectManager) {
+	const marker = "turnlog_jsonl_imported_v1"
+	ctx := context.Background()
+	if _, ok, err := st.AppMeta().Get(ctx, marker); err != nil || ok {
+		if err != nil {
+			log.Printf("[bootstrap] turnlog import marker: %v", err)
+		}
+		return
+	}
+	n, err := turnlog.ImportLegacyJSONL(ctx, st.TurnLogs(), pm.ProjectDir)
+	if err != nil {
+		log.Printf("[bootstrap] turnlog jsonl import (will retry next start): imported=%d err=%v", n, err)
+		return
+	}
+	if n > 0 {
+		log.Printf("[bootstrap] turnlog jsonl import: %d turns migrated to DB", n)
+	}
+	if err := st.AppMeta().Set(ctx, marker, "done"); err != nil {
+		log.Printf("[bootstrap] turnlog import marker set: %v", err)
+	}
 }
 
 func ensureDefaultProject(pm *service.ProjectManager) {

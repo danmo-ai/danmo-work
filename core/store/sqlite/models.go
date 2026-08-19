@@ -154,26 +154,41 @@ func streamEventToDomain(m streamEventModel) domain.StreamEvent {
 type turnModel struct {
 	ID        string `gorm:"primaryKey"`
 	SessionID string `gorm:"column:session_id;index"`
+	ProjectID string `gorm:"column:project_id"`
 	AgentID   string `gorm:"column:agent_id"`
 	Status    string
 	Goal      string
+	Nested    bool `gorm:"column:nested"`
 }
 
 func (turnModel) TableName() string { return "turns" }
 
 func turnToDomain(m turnModel) domain.TurnLog {
 	return domain.TurnLog{
-		ID: m.ID, SessionID: m.SessionID, AgentID: m.AgentID,
-		Status: domain.TurnStatus(m.Status), Goal: m.Goal,
+		ID: m.ID, SessionID: m.SessionID, ProjectID: m.ProjectID, AgentID: m.AgentID,
+		Status: domain.TurnStatus(m.Status), Goal: m.Goal, Nested: m.Nested,
 	}
 }
 
 func turnFromDomain(t domain.TurnLog) turnModel {
 	return turnModel{
-		ID: t.ID, SessionID: t.SessionID, AgentID: t.AgentID,
-		Status: string(t.Status), Goal: t.Goal,
+		ID: t.ID, SessionID: t.SessionID, ProjectID: t.ProjectID, AgentID: t.AgentID,
+		Status: string(t.Status), Goal: t.Goal, Nested: t.Nested,
 	}
 }
+
+// ---- Turn log entries (LLM history source of truth) ----
+
+type turnLogEntryModel struct {
+	ID        int64  `gorm:"primaryKey;autoIncrement"`
+	TurnID    string `gorm:"column:turn_id;uniqueIndex:idx_turn_log_entries_turn_seq,priority:1"`
+	Seq       int    `gorm:"column:seq;uniqueIndex:idx_turn_log_entries_turn_seq,priority:2"`
+	Type      string `gorm:"column:type"`
+	Data      string `gorm:"column:data"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+}
+
+func (turnLogEntryModel) TableName() string { return "turn_log_entries" }
 
 // ---- Helpers ----
 
