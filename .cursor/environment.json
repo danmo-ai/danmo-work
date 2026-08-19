@@ -1,0 +1,21 @@
+{
+  "name": "Danmo Work",
+  "install": "bash scripts/cloud-agent-setup.sh",
+  "repositoryDependencies": ["github.com/danmo-ai/dq-ui"],
+  "terminals": [
+    {
+      "name": "backend",
+      "command": "WORK_ADDR=0.0.0.0:7801 go run ./server",
+      "description": "Go API server on :7801 (control plane + agent runtime)."
+    },
+    {
+      "name": "frontend",
+      "command": "cd frontend && DQ_BACKEND_PORT=7801 DQ_FRONTEND_PORT=5801 npm run dev",
+      "description": "Vite dev server with HMR on :5801 (open http://localhost:5801/app/)."
+    }
+  ],
+  "ports": [
+    { "name": "backend", "port": 7801 },
+    { "name": "frontend", "port": 5801 }
+  ]
+}
