@@ -180,7 +180,7 @@ type TurnContext struct {
 
 type approvalGate interface {
 	WaitApproval(ctx context.Context, approvalID string) (ApprovalOutcome, error)
-	CreateApproval(sessionID, turnID, toolName, description, reason, domain string) string
+	CreateApproval(sessionID, turnID, toolName, description, reason, domain string) (string, error)
 }
 
 type TurnRunner struct {
@@ -834,7 +834,12 @@ func (p *TurnRunner) gateToolCall(
 	if decision == permission.DecisionAsk {
 		canAuto := cfg.autoApprove && permission.AutoApprovable(permResult.Reason)
 		if !canAuto && p.Approval != nil {
-			approvalID := p.Approval.CreateApproval(tctx.SessionID, tctx.TurnID, call.Name, describe, permResult.Reason, permResult.Domain)
+			approvalID, createErr := p.Approval.CreateApproval(tctx.SessionID, tctx.TurnID, call.Name, describe, permResult.Reason, permResult.Domain)
+			if createErr != nil {
+				// Without a persisted row the user can never decide (the API
+				// resolves against the DB), so fail the call instead of asking.
+				return nil, "approval could not be persisted: " + createErr.Error() + toolErrorHint, "approval persist failed", false, nil
+			}
 			scopeOpts := []string{"once"}
 			// Full-network session grant only in deny mode (ReasonNetwork).
 			// Domain grants use ReasonNetworkDomain with session scope.

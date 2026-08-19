@@ -1848,18 +1848,26 @@ func (e *Engine) settleAbandonedApproval(id, status string, approved bool) {
 	}
 	e.PublishPermissionDecided(a.SessionID, a.TurnID, id, approved, "once")
 }
-func (e *Engine) CreateApproval(sessionID, turnID, toolName, description, reason, hostDomain string) string {
+func (e *Engine) CreateApproval(sessionID, turnID, toolName, description, reason, hostDomain string) (string, error) {
 	id := newRuntimeID("appr")
 	ch := make(chan ApprovalOutcome, 1)
 	e.mu.Lock()
 	e.approvalWait[id] = ch
 	e.approvalMeta[id] = approvalMeta{SessionID: sessionID, Reason: reason, Domain: hostDomain}
 	e.mu.Unlock()
-	_ = e.approvals.Create(context.Background(), domain.Approval{
+	if err := e.approvals.Create(context.Background(), domain.Approval{
 		ID: id, SessionID: sessionID, TurnID: turnID, ToolName: toolName,
 		Summary: description, Description: description, Status: "pending", CreatedAt: time.Now().UTC(),
-	})
-	return id
+	}); err != nil {
+		// DecideApproval loads the DB row before resolving; without it the user
+		// could never answer and the turn would block in WaitApproval forever.
+		e.mu.Lock()
+		delete(e.approvalWait, id)
+		delete(e.approvalMeta, id)
+		e.mu.Unlock()
+		return "", fmt.Errorf("persist approval: %w", err)
+	}
+	return id, nil
 }
 
 func (e *Engine) ResolveAskUser(askID, answer string) error {

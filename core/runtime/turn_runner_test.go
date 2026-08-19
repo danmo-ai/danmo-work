@@ -433,8 +433,8 @@ func (g *mockApprovalGate) WaitApproval(_ context.Context, _ string) (ApprovalOu
 	return <-g.result, nil
 }
 
-func (g *mockApprovalGate) CreateApproval(_, _, _, _, _, _ string) string {
-	return "approval-1"
+func (g *mockApprovalGate) CreateApproval(_, _, _, _, _, _ string) (string, error) {
+	return "approval-1", nil
 }
 
 func validateToolMessagePairs(t *testing.T, msgs []Message, label string) {

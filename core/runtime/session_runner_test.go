@@ -134,7 +134,10 @@ func TestWaitApprovalCancelSettlesAbandonedApproval(t *testing.T) {
 		approvalMeta: make(map[string]approvalMeta),
 	}
 
-	id := e.CreateApproval("sess-appr", "turn-appr", "exec_shell", "rm -rf x", "high_risk", "")
+	id, err := e.CreateApproval("sess-appr", "turn-appr", "exec_shell", "rm -rf x", "high_risk", "")
+	if err != nil {
+		t.Fatalf("create approval: %v", err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -177,6 +180,43 @@ func TestWaitApprovalCancelSettlesAbandonedApproval(t *testing.T) {
 	a, _ = repo.Get(context.Background(), id)
 	if a.Status != "expired" {
 		t.Fatalf("late resolve must not resurrect approval, got %q", a.Status)
+	}
+}
+
+type failCreateApprovalRepo struct {
+	*memApprovalRepo
+}
+
+func (r *failCreateApprovalRepo) Create(context.Context, domain.Approval) error {
+	return errors.New("db locked")
+}
+
+// Regression: a failed approval INSERT must surface as an error and clean up
+// the waiter maps. Previously the error was swallowed — the UI showed the ask
+// buttons but DecideApproval could never find the row, so the turn hung in
+// WaitApproval until cancelled.
+func TestCreateApprovalPersistFailureCleansWaiters(t *testing.T) {
+	repo := &failCreateApprovalRepo{memApprovalRepo: newMemApprovalRepo()}
+	e := &Engine{
+		approvals:    service.NewApprovalManager(repo),
+		stream:       NewStreamEventManager(&memStreamRepo{}),
+		approvalWait: make(map[string]chan ApprovalOutcome),
+		approvalMeta: make(map[string]approvalMeta),
+	}
+
+	id, err := e.CreateApproval("sess-x", "turn-x", "exec_shell", "rm -rf x", "high_risk", "")
+	if err == nil {
+		t.Fatal("expected error when approval row cannot be persisted")
+	}
+	if id != "" {
+		t.Fatalf("expected empty id on persist failure, got %q", id)
+	}
+
+	e.mu.Lock()
+	nWait, nMeta := len(e.approvalWait), len(e.approvalMeta)
+	e.mu.Unlock()
+	if nWait != 0 || nMeta != 0 {
+		t.Fatalf("waiter maps must be cleaned up on persist failure: wait=%d meta=%d", nWait, nMeta)
 	}
 }
 
