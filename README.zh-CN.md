@@ -13,9 +13,9 @@
 - **Turn Log 就是状态。** 每次工具调用都追加写进 JSONL。进程崩了能恢复，回合能回放，甚至手动改掉一个工具结果，让循环接着往下走。
 - **入口随你挑。** Web · 桌面（Tauri）· CLI · TUI · 飞书 / QQ / 微信 / 企微——同一套引擎，工具永远跑在你自己的机器上。
 
-![产品演示（中文）](docs/demo/product-tour-zh.gif)
+[![产品截图轮播 — 多 Agent、Document Stage、浏览器预览、技能库、沙箱、IM](docs/screenshots/carousel.gif)](docs/screenshots/carousel.html?lang=zh)
 
-[交互演示](docs/demo/product-tour.html) · [MP4](docs/demo/product-tour-zh.mp4) · [Office 协作演示](docs/demo/office-coedit-tour.html?lang=zh&tour=1)
+[交互轮播（带说明）](docs/screenshots/carousel.html?lang=zh) · [架构演示](docs/demo/product-tour.html?lang=zh) · [Office 协作演示](docs/demo/office-coedit-tour.html?lang=zh&tour=1)
 
 > 代码、报告、幻灯片、表格、演示、自动化——一条链做完。
 
@@ -153,7 +153,8 @@ mkdir -p ~/.danmo-work && cp config.example.yaml ~/.danmo-work/config.yaml
 | [docs/core-design.md](docs/core-design.md) | Agent 架构、工具系统、通道、Document Stage |
 | [docs/experts.md](docs/experts.md) | 专家使用说明与内置清单 |
 | [docs/remote/README.md](docs/remote/README.md) | Remote Hub 配对与隧道协议 |
-| [docs/demo/README.md](docs/demo/README.md) | 产品演示 HTML / GIF / MP4 |
+| [docs/screenshots/README.md](docs/screenshots/README.md) | 产品截图轮播（README 头图） |
+| [docs/demo/README.md](docs/demo/README.md) | 架构演示 HTML / GIF / MP4 |
 | [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Terminal-Bench 2.0 评测套件 |
 | [AGENTS.md](AGENTS.md) | 贡献者速查 |
 | [config.example.yaml](config.example.yaml) | 完整配置参考 |

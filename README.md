@@ -13,9 +13,9 @@
 - **Turn Log is state.** Every tool call is appended to JSONL. Recover from a crash, replay a turn, or edit a tool result and let the loop continue.
 - **Everywhere.** Web · Desktop (Tauri) · CLI · TUI · WeChat / Feishu / WeCom / QQ — one engine, tools always running on your machine.
 
-![Product tour (EN)](docs/demo/product-tour-en.gif)
+[![Screenshot tour — multi-agent, Document Stage, browser preview, skills, sandbox, IM](docs/screenshots/carousel.gif)](docs/screenshots/carousel.html?lang=en)
 
-[Interactive tour](docs/demo/product-tour.html) · [MP4](docs/demo/product-tour-en.mp4) · [Office co-edit tour](docs/demo/office-coedit-tour.html?lang=en&tour=1)
+[Interactive carousel (captions)](docs/screenshots/carousel.html?lang=en) · [Architecture tour](docs/demo/product-tour.html?lang=en) · [Office co-edit tour](docs/demo/office-coedit-tour.html?lang=en&tour=1)
 
 > Code, reports, decks, sheets, demos, automations — on one trail.
 
@@ -154,7 +154,8 @@ Build, pack, test, env vars, and CI: [`AGENTS.md`](AGENTS.md). Architecture: [`d
 | [docs/core-design.md](docs/core-design.md) | Agent architecture, tool system, channels, Document Stage |
 | [docs/experts.md](docs/experts.md) | Expert usage and the built-in roster |
 | [docs/remote/README.md](docs/remote/README.md) | Remote Hub pairing and tunnel protocol |
-| [docs/demo/README.md](docs/demo/README.md) | Product tour HTML / GIF / MP4 |
+| [docs/screenshots/README.md](docs/screenshots/README.md) | Screenshot carousel (README hero) |
+| [docs/demo/README.md](docs/demo/README.md) | Architecture tour HTML / GIF / MP4 |
 | [evals/dq_harbor/README.md](evals/dq_harbor/README.md) | Terminal-Bench 2.0 eval harness |
 | [AGENTS.md](AGENTS.md) | Contributor quick reference |
 | [config.example.yaml](config.example.yaml) | Full config reference |
