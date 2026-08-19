@@ -9,8 +9,25 @@ import (
 	"danmo-work/core/adapter/llm"
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
+	sqlitestore "danmo-work/core/store/sqlite"
 	"danmo-work/core/store/turnlog"
 )
+
+// newArtifactTestStore opens a throwaway SQLite store backing the DB-based
+// checkpoint and file-change repositories.
+func newArtifactTestStore(t *testing.T) *sqlitestore.Store {
+	t.Helper()
+	st, err := sqlitestore.New(filepath.Join(t.TempDir(), "work.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+func newTestCheckpointStore(t *testing.T) *turnlog.CheckpointStore {
+	t.Helper()
+	return turnlog.NewCheckpointStore(newArtifactTestStore(t).Checkpoints())
+}
 
 type testConfigStore struct {
 	cfg *domain.ConfigFile
@@ -48,8 +65,7 @@ func testCompactionConfig(enabled bool, turnInterval, subInterval, maxTokens, cu
 func TestCompactionSummarizeUsesConfiguredModel(t *testing.T) {
 	mock := llm.NewMock().Finish("summary text")
 	stream := NewStreamEventManager(nil)
-	tmpDir := t.TempDir()
-	cpStore := turnlog.NewCheckpointStore(func(pid string) string { return filepath.Join(tmpDir, pid) })
+	cpStore := newTestCheckpointStore(t)
 	store := &testConfigStore{
 		cfg: &domain.ConfigFile{
 			Runtime: domain.ConfigRuntimeSection{
@@ -89,8 +105,7 @@ func TestCompactionShouldCompact(t *testing.T) {
 	mock := llm.NewMock().Finish("done")
 	stream := NewStreamEventManager(nil)
 
-	tmpDir := t.TempDir()
-	cpStore := turnlog.NewCheckpointStore(func(pid string) string { return filepath.Join(tmpDir, pid) })
+	cpStore := newTestCheckpointStore(t)
 	store := testCompactionConfig(true, 3, 2, 128000, 16000)
 	mgr := NewCompactionManager(mock, stream, store, cpStore, nil)
 
@@ -106,8 +121,7 @@ func TestCompactionShouldCompactWithActualUsage(t *testing.T) {
 	mock := llm.NewMock().Finish("done")
 	stream := NewStreamEventManager(nil)
 
-	tmpDir := t.TempDir()
-	cpStore := turnlog.NewCheckpointStore(func(pid string) string { return filepath.Join(tmpDir, pid) })
+	cpStore := newTestCheckpointStore(t)
 	// Config with model entry for deepseek-v4-flash: context=1M, maxOutput=384K
 	store := &testConfigStore{
 		cfg: &domain.ConfigFile{
@@ -227,8 +241,7 @@ func TestCompactionWithConfigModels(t *testing.T) {
 	mock := llm.NewMock().Finish("done")
 	stream := NewStreamEventManager(nil)
 
-	tmpDir := t.TempDir()
-	cpStore := turnlog.NewCheckpointStore(func(pid string) string { return filepath.Join(tmpDir, pid) })
+	cpStore := newTestCheckpointStore(t)
 
 	// Config with model generation param override
 	store := &testConfigStore{
@@ -270,8 +283,7 @@ func TestCompactionCompactAndRecover(t *testing.T) {
 	mock := llm.NewMock().Finish("done").Finish("done").
 		AddText("summary: test compaction completed")
 	stream := NewStreamEventManager(nil)
-	tmpDir := t.TempDir()
-	cpStore := turnlog.NewCheckpointStore(func(pid string) string { return filepath.Join(tmpDir, pid) })
+	cpStore := newTestCheckpointStore(t)
 
 	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 128000, 50), cpStore, nil)
 
@@ -357,8 +369,7 @@ func TestExtractLatestTodos(t *testing.T) {
 func TestCompactionPreservesTodos(t *testing.T) {
 	mock := llm.NewMock().AddText(`{"summary":"kept going"}`)
 	stream := NewStreamEventManager(nil)
-	tmpDir := t.TempDir()
-	cpStore := turnlog.NewCheckpointStore(func(pid string) string { return filepath.Join(tmpDir, pid) })
+	cpStore := newTestCheckpointStore(t)
 	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 128000, 50), cpStore, nil)
 
 	pad := string(make([]byte, 200))
@@ -398,8 +409,7 @@ func TestCompactionInheritsPrevTodos(t *testing.T) {
 		AddText(`{"summary":"first"}`).
 		AddText(`{"summary":"second"}`)
 	stream := NewStreamEventManager(nil)
-	tmpDir := t.TempDir()
-	cpStore := turnlog.NewCheckpointStore(func(pid string) string { return filepath.Join(tmpDir, pid) })
+	cpStore := newTestCheckpointStore(t)
 	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 128000, 50), cpStore, nil)
 
 	pad := string(make([]byte, 200))
@@ -528,8 +538,7 @@ func TestFindKeepStartSplitsOversizedTurn(t *testing.T) {
 func TestCompactToRetainStoresSkip(t *testing.T) {
 	mock := llm.NewMock().AddText("handoff note")
 	stream := NewStreamEventManager(nil)
-	tmpDir := t.TempDir()
-	cpStore := turnlog.NewCheckpointStore(func(pid string) string { return filepath.Join(tmpDir, pid) })
+	cpStore := newTestCheckpointStore(t)
 	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 128000, 50), cpStore, nil)
 
 	old := []Message{{Role: RoleUser, Content: "old work " + strings.Repeat("o", 200)}}

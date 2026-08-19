@@ -14,6 +14,7 @@ import (
 	"danmo-work/core/runtime/tool"
 	"danmo-work/core/runtime/tool/builtin"
 	"danmo-work/core/service"
+	sqlitestore "danmo-work/core/store/sqlite"
 	"danmo-work/core/store/turnlog"
 )
 
@@ -66,6 +67,19 @@ func (r *memStreamRepo) ListBySession(_ context.Context, sessionID string, since
 		}
 	}
 	return out, nil
+}
+
+func (r *memStreamRepo) DeleteBySession(_ context.Context, sessionID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	kept := r.events[:0]
+	for _, ev := range r.events {
+		if ev.SessionID != sessionID {
+			kept = append(kept, ev)
+		}
+	}
+	r.events = kept
+	return nil
 }
 
 func (r *memStreamRepo) MaxSeq() int64 {
@@ -429,13 +443,11 @@ func (s *memStream) ListSince(sessionID string, since int64) []domain.StreamEven
 }
 
 func TestCloseIncompleteToolPairsSettlesDelegateAndAskUser(t *testing.T) {
-	root := t.TempDir()
-	tls := turnlog.NewTurnLogStore(func(projectID string) string {
-		if projectID == "" {
-			return root
-		}
-		return filepath.Join(root, projectID)
-	})
+	st, err := sqlitestore.New(filepath.Join(t.TempDir(), "work.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tls := turnlog.NewTurnLogStore(st.TurnLogs())
 	turnLogs := service.NewTurnLogManager(tls)
 	stream := &memStream{}
 	repo := &memTurnRepo{turns: map[string]domain.TurnLog{

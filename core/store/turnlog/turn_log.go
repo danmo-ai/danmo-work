@@ -1,274 +1,144 @@
+// Package turnlog reconstructs LLM chat history from the DB-backed turn log
+// (single source of truth: turns + turn_log_entries in work.db) and renders
+// backward-compatible JSONL exports for debugging and zip download.
 package turnlog
 
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
 	"sync"
 
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
 )
 
-type TurnLogEntry struct {
-	Seq  int            `json:"seq"`
-	Type string         `json:"type"`
-	Data map[string]any `json:"data,omitempty"`
-}
-
 type TurnLogStore struct {
-	mu              sync.Mutex
-	projector       func(projectID string) string
-	logs            map[string]*turnFile
-	sessionProjects map[string]string
+	repo port.TurnLogRepo
+	mu   sync.Mutex
+	// seq caches the last used entry seq per turn so the hot Append path does
+	// not need a MAX(seq) query per message. DB rows remain the truth; the
+	// cache is lazily rehydrated (resume, process restart).
+	seq map[string]int
 }
 
-type turnFile struct {
-	log      *domain.TurnLog
-	f        *os.File
-	seq      int
-	filePath string
+func NewTurnLogStore(repo port.TurnLogRepo) *TurnLogStore {
+	return &TurnLogStore{repo: repo, seq: make(map[string]int)}
 }
 
-func NewTurnLogStore(projector func(projectID string) string) *TurnLogStore {
-	return &TurnLogStore{projector: projector, logs: make(map[string]*turnFile), sessionProjects: make(map[string]string)}
-}
-
-func (s *TurnLogStore) sessionsDir(projectID string) string {
-	return filepath.Join(s.projector(projectID), "sessions")
-}
-
-// Create opens a turn log for writing under sessions/{sessionID}/{turnID}.jsonl.
-// These session-level logs are the LLM history source for LoadSessionMessages.
-//
-// If the JSONL already exists (same-process resume after EndTurn, or process
-// restart with the file still on disk), it reopens for append and does NOT
-// write another "start" entry. Otherwise it creates a fresh file with start.
+// Create registers a turn in the log. Idempotent: on an existing turn it only
+// fills blank meta fields (resume after EndTurn or process restart) and never
+// resets the persisted status — explicit status transitions belong to
+// TurnRepo.UpdateStatus / EndTurn.
 func (s *TurnLogStore) Create(turnID, sessionID, projectID, agentID, goal string) error {
-	return s.create(turnID, sessionID, projectID, agentID, goal, "")
+	return s.create(turnID, sessionID, projectID, agentID, goal, false)
 }
 
-// CreateNested opens a debug log under sessions/{sessionID}/tool_runs/{turnID}.jsonl
-// for a nested tool execution (e.g. delegate_agent). Nested logs are for zip/debug
-// only and are never replayed as parent session LLM history.
+// CreateNested registers a nested tool-run turn (e.g. delegate_agent).
+// Nested logs are for zip/debug only and are never replayed as parent
+// session LLM history.
 func (s *TurnLogStore) CreateNested(turnID, sessionID, projectID, agentID, goal string) error {
-	return s.create(turnID, sessionID, projectID, agentID, goal, "tool_runs")
+	return s.create(turnID, sessionID, projectID, agentID, goal, true)
 }
 
-func (s *TurnLogStore) create(turnID, sessionID, projectID, agentID, goal, subdir string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func (s *TurnLogStore) create(turnID, sessionID, projectID, agentID, goal string, nested bool) error {
 	if projectID == "" {
 		projectID = "_default"
 	}
-	s.sessionProjects[sessionID] = projectID
-
-	if tf, ok := s.loadTurnFileLocked(turnID); ok {
-		if goal != "" && tf.log.Goal == "" {
-			tf.log.Goal = goal
-		}
-		if agentID != "" && tf.log.AgentID == "" {
-			tf.log.AgentID = agentID
-		}
-		tf.log.SessionID = sessionID
-		tf.log.Status = domain.TurnRunning
-		return s.reopenAppendLocked(tf)
-	}
-
-	dir := filepath.Join(s.sessionsDir(projectID), sessionID)
-	if subdir != "" {
-		dir = filepath.Join(dir, subdir)
-	}
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	ctx := context.Background()
+	if err := s.repo.UpsertTurnMeta(ctx, domain.TurnLog{
+		ID: turnID, SessionID: sessionID, ProjectID: projectID,
+		AgentID: agentID, Goal: goal, Status: domain.TurnRunning, Nested: nested,
+	}); err != nil {
 		return err
 	}
-
-	filePath := filepath.Join(dir, fmt.Sprintf("%s.jsonl", turnID))
-	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	maxSeq, err := s.repo.MaxSeq(ctx, turnID)
 	if err != nil {
 		return err
 	}
-
-	tf := &turnFile{
-		log:      &domain.TurnLog{ID: turnID, SessionID: sessionID, Status: domain.TurnRunning, AgentID: agentID, Goal: goal},
-		f:        f,
-		seq:      0,
-		filePath: filePath,
-	}
-	s.logs[turnID] = tf
-
-	tf.seq = 1
-	tf.writeEntry(TurnLogEntry{Seq: tf.seq, Type: "start", Data: map[string]any{"agent_id": agentID, "goal": goal}})
+	s.mu.Lock()
+	s.seq[turnID] = maxSeq
+	s.mu.Unlock()
 	return nil
 }
 
-// Append writes a single entry to the turn's JSONL log.
+// Append persists a single turn-log entry.
 //
 // Allowed types for LLM reconstruction: user, assistant, tool_result,
-// and legacy tool_call. start/end are written by Create / EndTurn.
+// and legacy tool_call. Turn start/end live in the turns table.
 //
 // Do NOT call Append with diagnostic or audit types (e.g. "llm_error",
 // "step", "permission_*"). Use Stream Events (port.EventStream) for those.
 func (s *TurnLogStore) Append(turnID, typ string, data map[string]any) {
+	ctx := context.Background()
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	tf, ok := s.logs[turnID]
-	if !ok || tf.f == nil {
-		return
-	}
-	tf.seq++
-	tf.writeEntry(TurnLogEntry{Seq: tf.seq, Type: typ, Data: data})
-}
-
-func (s *TurnLogStore) EndTurn(turnID string, status domain.TurnStatus) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	tf, ok := s.logs[turnID]
+	seq, ok := s.seq[turnID]
 	if !ok {
-		return
-	}
-	tf.log.Status = status
-	if tf.f != nil {
-		tf.seq++
-		mapStatus := map[string]any{"status": string(status)}
-		tf.writeEntry(TurnLogEntry{Seq: tf.seq, Type: "end", Data: mapStatus})
-		_ = tf.f.Close()
-		tf.f = nil
-	}
-}
-
-func (s *TurnLogStore) LastTurn(sessionID string) (turnID string, status domain.TurnStatus) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	dir := s.sessionDir(sessionID)
-	entries, _ := os.ReadDir(dir)
-	for i := len(entries) - 1; i >= 0; i-- {
-		name := entries[i].Name()
-		if len(name) > 6 && name[len(name)-6:] == ".jsonl" {
-			id := name[:len(name)-6]
-			if tf, ok := s.logs[id]; ok {
-				return tf.log.ID, tf.log.Status
-			}
+		max, err := s.repo.MaxSeq(ctx, turnID)
+		if err != nil {
+			s.mu.Unlock()
+			log.Printf("[turnlog] append %s type=%s: max seq: %v", turnID, typ, err)
+			return
 		}
+		seq = max
 	}
-	return "", ""
+	seq++
+	s.seq[turnID] = seq
+	s.mu.Unlock()
+
+	if err := s.repo.AppendEntry(ctx, port.TurnLogEntryRecord{
+		TurnID: turnID, Seq: seq, Type: typ, Data: data,
+	}); err != nil {
+		// A failed append means history silently diverges from what the LLM
+		// saw; at minimum make the divergence visible in the log.
+		log.Printf("[turnlog] append %s seq=%d type=%s: %v", turnID, seq, typ, err)
+	}
 }
 
-func (s *TurnLogStore) ListTurns(sessionID string) []domain.TurnLog {
+// EndTurn records the terminal status. The repo never overwrites an existing
+// terminal status (a concurrent CancelTurn wins over the finishing goroutine).
+func (s *TurnLogStore) EndTurn(turnID string, status domain.TurnStatus) {
+	if err := s.repo.EndTurn(context.Background(), turnID, status); err != nil {
+		log.Printf("[turnlog] end turn %s status=%s: %v", turnID, status, err)
+	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	ids := s.listTurnIDsLocked(sessionID)
-	out := make([]domain.TurnLog, 0, len(ids))
-	for _, id := range ids {
-		if _, ok := s.loadTurnFileLocked(id); ok {
-			if tf, ok := s.logs[id]; ok {
-				out = append(out, *tf.log)
-			}
-		}
-	}
-	return out
+	delete(s.seq, turnID)
+	s.mu.Unlock()
 }
 
+// ListTurnIDs returns the session's non-nested turn IDs in ascending order.
+// Nested tool_runs logs are excluded from session LLM history replay.
 func (s *TurnLogStore) ListTurnIDs(sessionID string) []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.listTurnIDsLocked(sessionID)
-}
-
-func (s *TurnLogStore) listTurnIDsLocked(sessionID string) []string {
-	dir := s.sessionDir(sessionID)
-	entries, err := os.ReadDir(dir)
+	ids, err := s.repo.ListSessionTurnIDs(context.Background(), sessionID, false)
 	if err != nil {
+		log.Printf("[turnlog] list turn ids session=%s: %v", sessionID, err)
 		return nil
 	}
-	var ids []string
-	for _, entry := range entries {
-		// Only top-level *.jsonl — nested tool_runs/ logs are excluded from
-		// session LLM history replay.
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if len(name) > 6 && name[len(name)-6:] == ".jsonl" {
-			ids = append(ids, name[:len(name)-6])
-		}
-	}
-	sort.Strings(ids)
 	return ids
 }
 
-func (s *TurnLogStore) LastStatus(sessionID string) domain.TurnStatus {
-	_, status := s.LastTurn(sessionID)
-	return status
-}
-
-func (s *TurnLogStore) sessionDir(sessionID string) string {
-	if pid, ok := s.sessionProjects[sessionID]; ok {
-		return filepath.Join(s.sessionsDir(pid), sessionID)
-	}
-	projectIDs, _ := os.ReadDir(s.projector(""))
-	for _, e := range projectIDs {
-		if !e.IsDir() {
-			continue
-		}
-		sessionsRoot := filepath.Join(s.projector(e.Name()), "sessions")
-		entries, err := os.ReadDir(sessionsRoot)
-		if err != nil {
-			continue
-		}
-		for _, se := range entries {
-			if se.IsDir() && se.Name() == sessionID {
-				s.sessionProjects[sessionID] = e.Name()
-				return filepath.Join(sessionsRoot, sessionID)
-			}
-		}
-	}
-	dir := filepath.Join(s.sessionsDir("_default"), sessionID)
-	os.MkdirAll(dir, 0755)
-	return dir
-}
-
-type EntryJSON struct {
-	Seq  int            `json:"seq"`
-	Type string         `json:"type"`
-	Data map[string]any `json:"data,omitempty"`
-}
-
 func (s *TurnLogStore) LoadForRecovery(turnID string) (goal string, entries []map[string]any) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	tf, ok := s.loadTurnFileLocked(turnID)
-	if !ok {
+	ctx := context.Background()
+	meta, ok, err := s.repo.GetTurnMeta(ctx, turnID)
+	if err != nil {
+		log.Printf("[turnlog] load for recovery %s: %v", turnID, err)
 		return "", nil
 	}
-	goal = tf.log.Goal
-
-	all := s.readEntriesLocked(tf.filePath)
-	entries = trimIncompleteTurnEntries(all)
-	return goal, entries
+	if ok {
+		goal = meta.Goal
+	}
+	all := s.entryMaps(ctx, turnID)
+	return goal, trimIncompleteTurnEntries(all)
 }
 
-// ListIncompleteToolCalls returns tool invocations present in the raw JSONL
+// ListIncompleteToolCalls returns tool invocations present in the raw log
 // that do not yet have a matching tool_result. Recovery uses this as the
 // authoritative open set before writing synthetic failures and resuming.
 func (s *TurnLogStore) ListIncompleteToolCalls(turnID string) []port.IncompleteToolCall {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	tf, ok := s.loadTurnFileLocked(turnID)
-	if !ok {
-		return nil
-	}
-	return listIncompleteToolCalls(s.readEntriesLocked(tf.filePath))
+	return listIncompleteToolCalls(s.entryMaps(context.Background(), turnID))
 }
 
 func listIncompleteToolCalls(all []map[string]any) []port.IncompleteToolCall {
@@ -314,21 +184,24 @@ func listIncompleteToolCalls(all []map[string]any) []port.IncompleteToolCall {
 	return out
 }
 
-// LoadSessionMessages rebuilds full LLM chat history from session turn JSONL.
-// If retainFromTurnID is non-empty, only that turn and later turns are included
-// (compaction window). retainSkipMessages drops leading messages inside the
-// first retained turn so mid-turn cuts can land on tool-pair boundaries.
+// LoadSessionMessages rebuilds full LLM chat history from the session's turn
+// log. If retainFromTurnID is non-empty, only that turn and later turns are
+// included (compaction window). retainSkipMessages drops leading messages
+// inside the first retained turn so mid-turn cuts can land on tool-pair
+// boundaries.
 func (s *TurnLogStore) LoadSessionMessages(sessionID, retainFromTurnID string, retainSkipMessages int) []port.ChatMessage {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	ids := s.listTurnIDsLocked(sessionID)
+	ctx := context.Background()
+	ids, err := s.repo.ListSessionTurnIDs(ctx, sessionID, false)
+	if err != nil {
+		log.Printf("[turnlog] load session messages %s: %v", sessionID, err)
+		return nil
+	}
 	var out []port.ChatMessage
 	for _, id := range ids {
 		if retainFromTurnID != "" && id < retainFromTurnID {
 			continue
 		}
-		msgs := s.loadTurnMessagesLocked(id)
+		msgs := s.loadTurnMessages(ctx, id)
 		if id == retainFromTurnID && retainSkipMessages > 0 {
 			if retainSkipMessages >= len(msgs) {
 				continue
@@ -396,55 +269,284 @@ func keepCompleteChatToolPairs(messages []port.ChatMessage) []port.ChatMessage {
 }
 
 func (s *TurnLogStore) LoadTurnMessages(turnID string) []port.ChatMessage {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.loadTurnMessagesLocked(turnID)
+	return s.loadTurnMessages(context.Background(), turnID)
 }
 
-func (s *TurnLogStore) loadTurnMessagesLocked(turnID string) []port.ChatMessage {
-	tf, ok := s.loadTurnFileLocked(turnID)
-	if !ok {
-		return nil
-	}
-	entries := trimIncompleteTurnEntries(s.readEntriesLocked(tf.filePath))
+func (s *TurnLogStore) loadTurnMessages(ctx context.Context, turnID string) []port.ChatMessage {
+	entries := trimIncompleteTurnEntries(s.entryMaps(ctx, turnID))
 	return entriesToChatMessages(entries)
 }
 
-// IsNestedToolRun reports whether this turn log lives under tool_runs/
-// (nested tool execution). Such turns are not parent session LLM history and
-// must not be auto-resumed by RecoverRunning.
+// IsNestedToolRun reports whether this turn is a nested tool execution.
+// Such turns are not parent session LLM history and must not be auto-resumed
+// by RecoverRunning.
 func (s *TurnLogStore) IsNestedToolRun(turnID string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	tf, ok := s.loadTurnFileLocked(turnID)
-	if !ok {
+	meta, ok, err := s.repo.GetTurnMeta(context.Background(), turnID)
+	if err != nil {
+		log.Printf("[turnlog] is nested tool run %s: %v", turnID, err)
 		return false
 	}
-	return strings.Contains(filepath.ToSlash(tf.filePath), "/tool_runs/")
+	return ok && meta.Nested
 }
 
-func (s *TurnLogStore) readEntriesLocked(filePath string) []map[string]any {
-	f, err := os.Open(filePath)
+// ListSessionEntries returns every entry of every non-nested turn in the
+// session, ordered by turn then seq (debug/inspection).
+func (s *TurnLogStore) ListSessionEntries(sessionID string) []port.TurnLogEntryRecord {
+	ctx := context.Background()
+	ids, err := s.repo.ListSessionTurnIDs(ctx, sessionID, false)
 	if err != nil {
+		log.Printf("[turnlog] list session entries %s: %v", sessionID, err)
 		return nil
 	}
-	defer f.Close()
-
-	dec := json.NewDecoder(f)
-	var all []map[string]any
-	for dec.More() {
-		var e map[string]any
-		if err := dec.Decode(&e); err != nil {
-			// A corrupt or truncated line (common after a crash leaves the
-			// last record half-written) leaves the decoder position
-			// unadvanced, so dec.More() would stay true forever and spin the
-			// CPU while holding s.mu. Stop at the first undecodable record and
-			// keep the well-formed prefix.
-			break
+	var out []port.TurnLogEntryRecord
+	for _, id := range ids {
+		entries, err := s.repo.ListEntries(ctx, id)
+		if err != nil {
+			log.Printf("[turnlog] list entries %s: %v", id, err)
+			continue
 		}
-		all = append(all, e)
+		out = append(out, entries...)
 	}
-	return all
+	return out
+}
+
+// entryMaps loads a turn's entries in the generic {seq,type,data} map shape
+// consumed by the trim/reconstruction helpers.
+func (s *TurnLogStore) entryMaps(ctx context.Context, turnID string) []map[string]any {
+	entries, err := s.repo.ListEntries(ctx, turnID)
+	if err != nil {
+		log.Printf("[turnlog] list entries %s: %v", turnID, err)
+		return nil
+	}
+	return recordsToMaps(entries)
+}
+
+func recordsToMaps(entries []port.TurnLogEntryRecord) []map[string]any {
+	out := make([]map[string]any, 0, len(entries))
+	for _, e := range entries {
+		m := map[string]any{"seq": e.Seq, "type": e.Type}
+		if e.Data != nil {
+			m["data"] = e.Data
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+type EntryJSON struct {
+	Seq  int            `json:"seq"`
+	Type string         `json:"type"`
+	Data map[string]any `json:"data,omitempty"`
+}
+
+// ListEntries returns a turn's raw entries (without synthetic start/end).
+func (s *TurnLogStore) ListEntries(turnID string) []EntryJSON {
+	entries, err := s.repo.ListEntries(context.Background(), turnID)
+	if err != nil {
+		log.Printf("[turnlog] list entries %s: %v", turnID, err)
+		return nil
+	}
+	out := make([]EntryJSON, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, EntryJSON{Seq: e.Seq, Type: e.Type, Data: e.Data})
+	}
+	return out
+}
+
+// LoadRawLog renders the turn's log as JSONL bytes in the legacy on-disk
+// format (synthetic "start"/"end" lines from turn meta plus the entry rows).
+func (s *TurnLogStore) LoadRawLog(turnID string) ([]byte, error) {
+	ctx := context.Background()
+	meta, hasMeta, err := s.repo.GetTurnMeta(ctx, turnID)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := s.repo.ListEntries(ctx, turnID)
+	if err != nil {
+		return nil, err
+	}
+	if !hasMeta && len(entries) == 0 {
+		return nil, fmt.Errorf("turn log not found: %s", turnID)
+	}
+	return renderTurnJSONL(meta, entries), nil
+}
+
+// renderTurnJSONL renders the legacy JSONL file format from DB rows:
+// a "start" line (seq 0), the entries, and an "end" line when the turn
+// reached a terminal status.
+func renderTurnJSONL(meta domain.TurnLog, entries []port.TurnLogEntryRecord) []byte {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	lastSeq := 0
+	_ = enc.Encode(EntryJSON{Seq: 0, Type: "start", Data: map[string]any{
+		"agent_id": meta.AgentID, "goal": meta.Goal,
+	}})
+	for _, e := range entries {
+		_ = enc.Encode(EntryJSON{Seq: e.Seq, Type: e.Type, Data: e.Data})
+		if e.Seq > lastSeq {
+			lastSeq = e.Seq
+		}
+	}
+	if meta.Status != "" && meta.Status != domain.TurnRunning {
+		_ = enc.Encode(EntryJSON{Seq: lastSeq + 1, Type: "end", Data: map[string]any{
+			"status": string(meta.Status),
+		}})
+	}
+	return buf.Bytes()
+}
+
+// TurnLogNode represents a turn and its delegated children for zip packaging.
+type TurnLogNode struct {
+	TurnID   string         `json:"turnId"`
+	AgentID  string         `json:"agentId,omitempty"`
+	Goal     string         `json:"goal,omitempty"`
+	File     string         `json:"file,omitempty"`
+	Missing  bool           `json:"missing,omitempty"` // no log rows; events may still be present
+	Children []*TurnLogNode `json:"children,omitempty"`
+}
+
+func (s *TurnLogStore) LoadTurnLogZip(turnID string, events []domain.StreamEvent) ([]byte, error) {
+	ctx := context.Background()
+
+	// Build parent->children map and per-turn meta from stream events.
+	childrenOf := make(map[string][]string)
+	metaByTurn := make(map[string]struct{ agentID, goal string })
+	turnsWithEvents := make(map[string]bool)
+	seenChild := make(map[string]bool)
+
+	for _, ev := range events {
+		if ev.TurnID != "" {
+			turnsWithEvents[ev.TurnID] = true
+		}
+		if ev.Type == domain.EventTurnStarted {
+			var p domain.TurnStartedPayload
+			if err := json.Unmarshal(ev.Payload, &p); err == nil {
+				m := metaByTurn[ev.TurnID]
+				if p.AgentID != "" {
+					m.agentID = p.AgentID
+				}
+				if p.Goal != "" {
+					m.goal = p.Goal
+				}
+				metaByTurn[ev.TurnID] = m
+			}
+		}
+		if ev.Type == domain.EventDelegateStarted {
+			var p domain.DelegateStartedPayload
+			if err := json.Unmarshal(ev.Payload, &p); err == nil && p.ChildTurnID != "" {
+				if !seenChild[p.ChildTurnID] {
+					childrenOf[ev.TurnID] = append(childrenOf[ev.TurnID], p.ChildTurnID)
+					seenChild[p.ChildTurnID] = true
+				}
+				m := metaByTurn[p.ChildTurnID]
+				if p.AgentID != "" {
+					m.agentID = p.AgentID
+				}
+				if p.Goal != "" {
+					m.goal = p.Goal
+				}
+				metaByTurn[p.ChildTurnID] = m
+			}
+		}
+	}
+
+	loadTurn := func(id string) (domain.TurnLog, []port.TurnLogEntryRecord, bool) {
+		meta, hasMeta, err := s.repo.GetTurnMeta(ctx, id)
+		if err != nil {
+			log.Printf("[turnlog] zip meta %s: %v", id, err)
+			return domain.TurnLog{}, nil, false
+		}
+		entries, err := s.repo.ListEntries(ctx, id)
+		if err != nil {
+			log.Printf("[turnlog] zip entries %s: %v", id, err)
+			return domain.TurnLog{}, nil, false
+		}
+		return meta, entries, hasMeta || len(entries) > 0
+	}
+
+	rootMeta, rootEntries, rootHasLog := loadTurn(turnID)
+	if !rootHasLog && !turnsWithEvents[turnID] {
+		return nil, fmt.Errorf("turn log not found: %s", turnID)
+	}
+
+	// Collect related turns: prefer log rows; fall back to stream-event presence.
+	files := make(map[string][]byte)
+	turnIDs := make(map[string]bool)
+	var collect func(id string) *TurnLogNode
+	collect = func(id string) *TurnLogNode {
+		meta, entries, hasLog := loadTurn(id)
+		if id == turnID {
+			meta, entries, hasLog = rootMeta, rootEntries, rootHasLog
+		}
+		evMeta := metaByTurn[id]
+		hasEvents := turnsWithEvents[id]
+		if !hasLog && !hasEvents && id != turnID {
+			return nil
+		}
+		turnIDs[id] = true
+		node := &TurnLogNode{TurnID: id}
+		if hasLog {
+			files[id] = renderTurnJSONL(meta, entries)
+			node.File = id + ".jsonl"
+			node.AgentID = meta.AgentID
+			node.Goal = meta.Goal
+		} else {
+			node.Missing = true
+		}
+		if node.AgentID == "" {
+			node.AgentID = evMeta.agentID
+		}
+		if node.Goal == "" {
+			node.Goal = evMeta.goal
+		}
+		for _, childID := range childrenOf[id] {
+			if child := collect(childID); child != nil {
+				node.Children = append(node.Children, child)
+			}
+		}
+		return node
+	}
+
+	rootNode := collect(turnID)
+
+	relatedEvents := make([]domain.StreamEvent, 0)
+	for _, ev := range events {
+		if turnIDs[ev.TurnID] {
+			relatedEvents = append(relatedEvents, ev)
+		}
+	}
+
+	var nodes []*TurnLogNode
+	if rootNode != nil {
+		nodes = append(nodes, rootNode)
+	}
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+
+	manifest, _ := json.MarshalIndent(nodes, "", "  ")
+	w, _ := zw.Create("manifest.json")
+	_, _ = w.Write(manifest)
+
+	if len(relatedEvents) > 0 {
+		var evBuf bytes.Buffer
+		enc := json.NewEncoder(&evBuf)
+		for _, ev := range relatedEvents {
+			_ = enc.Encode(ev)
+		}
+		w, _ = zw.Create("events.jsonl")
+		_, _ = w.Write(evBuf.Bytes())
+	}
+
+	for id, data := range files {
+		w, _ = zw.Create(id + ".jsonl")
+		_, _ = w.Write(data)
+	}
+
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // trimIncompleteTurnEntries keeps reconstructable whitelist entries and drops
@@ -720,351 +822,4 @@ func partsFromData(data map[string]any) []port.ChatContentPart {
 		})
 	}
 	return out
-}
-
-func (s *TurnLogStore) LoadRawLog(turnID string) ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	tf, ok := s.loadTurnFileLocked(turnID)
-	if !ok {
-		return nil, fmt.Errorf("turn log not found: %s", turnID)
-	}
-
-	return os.ReadFile(tf.filePath)
-}
-
-// TurnLogNode represents a turn and its delegated children for zip packaging.
-type TurnLogNode struct {
-	TurnID   string         `json:"turnId"`
-	AgentID  string         `json:"agentId,omitempty"`
-	Goal     string         `json:"goal,omitempty"`
-	File     string         `json:"file,omitempty"`
-	Missing  bool           `json:"missing,omitempty"` // JSONL absent; events may still be present
-	Children []*TurnLogNode `json:"children,omitempty"`
-}
-
-func (s *TurnLogStore) LoadTurnLogZip(turnID string, events []domain.StreamEvent) ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Build parent->children map and per-turn meta from stream events.
-	childrenOf := make(map[string][]string)
-	metaByTurn := make(map[string]struct{ agentID, goal string })
-	turnsWithEvents := make(map[string]bool)
-	seenChild := make(map[string]bool)
-
-	for _, ev := range events {
-		if ev.TurnID != "" {
-			turnsWithEvents[ev.TurnID] = true
-		}
-		if ev.Type == domain.EventTurnStarted {
-			var p domain.TurnStartedPayload
-			if err := json.Unmarshal(ev.Payload, &p); err == nil {
-				m := metaByTurn[ev.TurnID]
-				if p.AgentID != "" {
-					m.agentID = p.AgentID
-				}
-				if p.Goal != "" {
-					m.goal = p.Goal
-				}
-				metaByTurn[ev.TurnID] = m
-			}
-		}
-		if ev.Type == domain.EventDelegateStarted {
-			var p domain.DelegateStartedPayload
-			if err := json.Unmarshal(ev.Payload, &p); err == nil && p.ChildTurnID != "" {
-				if !seenChild[p.ChildTurnID] {
-					childrenOf[ev.TurnID] = append(childrenOf[ev.TurnID], p.ChildTurnID)
-					seenChild[p.ChildTurnID] = true
-				}
-				m := metaByTurn[p.ChildTurnID]
-				if p.AgentID != "" {
-					m.agentID = p.AgentID
-				}
-				if p.Goal != "" {
-					m.goal = p.Goal
-				}
-				metaByTurn[p.ChildTurnID] = m
-			}
-		}
-	}
-
-	rootTF, rootHasFile := s.loadTurnFileLocked(turnID)
-	if !rootHasFile && !turnsWithEvents[turnID] {
-		return nil, fmt.Errorf("turn log not found: %s", turnID)
-	}
-
-	// Collect related turns: prefer JSONL; fall back to stream-event presence.
-	files := make(map[string]string)
-	turnIDs := make(map[string]bool)
-	var collect func(id string) *TurnLogNode
-	collect = func(id string) *TurnLogNode {
-		tf, hasFile := s.loadTurnFileLocked(id)
-		meta := metaByTurn[id]
-		hasEvents := turnsWithEvents[id]
-		if !hasFile && !hasEvents && id != turnID {
-			return nil
-		}
-		turnIDs[id] = true
-		node := &TurnLogNode{TurnID: id}
-		if hasFile {
-			files[id] = tf.filePath
-			node.File = id + ".jsonl"
-			node.AgentID = tf.log.AgentID
-			node.Goal = tf.log.Goal
-		} else {
-			node.Missing = true
-		}
-		if node.AgentID == "" {
-			node.AgentID = meta.agentID
-		}
-		if node.Goal == "" {
-			node.Goal = meta.goal
-		}
-		for _, childID := range childrenOf[id] {
-			if child := collect(childID); child != nil {
-				node.Children = append(node.Children, child)
-			}
-		}
-		return node
-	}
-
-	rootNode := collect(turnID)
-	if rootTF != nil && rootNode != nil {
-		if rootNode.AgentID == "" {
-			rootNode.AgentID = rootTF.log.AgentID
-		}
-		if rootNode.Goal == "" {
-			rootNode.Goal = rootTF.log.Goal
-		}
-	}
-
-	relatedEvents := make([]domain.StreamEvent, 0)
-	for _, ev := range events {
-		if turnIDs[ev.TurnID] {
-			relatedEvents = append(relatedEvents, ev)
-		}
-	}
-
-	var nodes []*TurnLogNode
-	if rootNode != nil {
-		nodes = append(nodes, rootNode)
-	}
-
-	var buf bytes.Buffer
-	zw := zip.NewWriter(&buf)
-
-	manifest, _ := json.MarshalIndent(nodes, "", "  ")
-	w, _ := zw.Create("manifest.json")
-	_, _ = w.Write(manifest)
-
-	if len(relatedEvents) > 0 {
-		var evBuf bytes.Buffer
-		enc := json.NewEncoder(&evBuf)
-		for _, ev := range relatedEvents {
-			_ = enc.Encode(ev)
-		}
-		w, _ = zw.Create("events.jsonl")
-		_, _ = w.Write(evBuf.Bytes())
-	}
-
-	for id, fp := range files {
-		data, err := os.ReadFile(fp)
-		if err != nil {
-			continue
-		}
-		w, _ = zw.Create(id + ".jsonl")
-		_, _ = w.Write(data)
-	}
-
-	if err := zw.Close(); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-func (s *TurnLogStore) ListEntries(turnID string) []EntryJSON {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	tf, ok := s.loadTurnFileLocked(turnID)
-	if !ok {
-		return nil
-	}
-
-	f, err := os.Open(tf.filePath)
-	if err != nil {
-		return nil
-	}
-	defer f.Close()
-
-	dec := json.NewDecoder(f)
-	entries := make([]EntryJSON, 0)
-	for dec.More() {
-		var e EntryJSON
-		if err := dec.Decode(&e); err != nil {
-			break // stop at first corrupt record; see readEntriesLocked
-		}
-		entries = append(entries, e)
-	}
-	return entries
-}
-
-func LoadTurnLog(projector func(projectID string) string, projectID, sessionID string) ([]EntryJSON, error) {
-	dir := filepath.Join(projector(projectID), "sessions", sessionID)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-	var all []EntryJSON
-	for _, entry := range entries {
-		name := entry.Name()
-		if len(name) > 6 && name[len(name)-6:] == ".jsonl" {
-			f, err := os.Open(filepath.Join(dir, name))
-			if err != nil {
-				continue
-			}
-			dec := json.NewDecoder(f)
-			for dec.More() {
-				var e EntryJSON
-				if err := dec.Decode(&e); err != nil {
-					break // stop at first corrupt record; see readEntriesLocked
-				}
-				all = append(all, e)
-			}
-			f.Close()
-		}
-	}
-	return all, nil
-}
-
-func (tf *turnFile) writeEntry(e TurnLogEntry) {
-	b, err := json.Marshal(e)
-	if err != nil {
-		log.Printf("[turnlog] marshal entry seq=%d type=%s: %v", e.Seq, e.Type, err)
-		return
-	}
-	// Disk-full / closed-fd failures here mean history silently diverges from
-	// what the LLM saw; at minimum make the divergence visible in the log.
-	if _, err := tf.f.Write(append(b, '\n')); err != nil {
-		log.Printf("[turnlog] write entry seq=%d type=%s: %v", e.Seq, e.Type, err)
-	}
-}
-
-// loadTurnFileLocked returns an in-memory turnFile, rehydrating from disk when
-// needed (e.g. after process restart). Caller must hold s.mu.
-func (s *TurnLogStore) loadTurnFileLocked(turnID string) (*turnFile, bool) {
-	if tf, ok := s.logs[turnID]; ok {
-		return tf, true
-	}
-	filePath, sessionID, projectID := s.locateTurnFile(turnID)
-	if filePath == "" {
-		return nil, false
-	}
-	goal, agentID, status, lastSeq := readTurnMeta(filePath)
-	tf := &turnFile{
-		log: &domain.TurnLog{
-			ID:        turnID,
-			SessionID: sessionID,
-			Status:    status,
-			AgentID:   agentID,
-			Goal:      goal,
-		},
-		f:        nil,
-		seq:      lastSeq,
-		filePath: filePath,
-	}
-	s.logs[turnID] = tf
-	if sessionID != "" {
-		s.sessionProjects[sessionID] = projectID
-	}
-	return tf, true
-}
-
-func (s *TurnLogStore) reopenAppendLocked(tf *turnFile) error {
-	if tf.f != nil {
-		return nil
-	}
-	f, err := os.OpenFile(tf.filePath, os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		return err
-	}
-	tf.f = f
-	return nil
-}
-
-// locateTurnFile scans project data dirs for sessions/*/{turnID}.jsonl
-// or sessions/*/tool_runs/{turnID}.jsonl.
-func (s *TurnLogStore) locateTurnFile(turnID string) (filePath, sessionID, projectID string) {
-	root := s.projector("")
-	projectEntries, err := os.ReadDir(root)
-	if err != nil {
-		return "", "", ""
-	}
-	want := turnID + ".jsonl"
-	for _, pe := range projectEntries {
-		if !pe.IsDir() {
-			continue
-		}
-		pid := pe.Name()
-		sessionsRoot := filepath.Join(s.projector(pid), "sessions")
-		sessionEntries, err := os.ReadDir(sessionsRoot)
-		if err != nil {
-			continue
-		}
-		for _, se := range sessionEntries {
-			if !se.IsDir() {
-				continue
-			}
-			sid := se.Name()
-			for _, rel := range []string{
-				filepath.Join(sessionsRoot, sid, want),
-				filepath.Join(sessionsRoot, sid, "tool_runs", want),
-			} {
-				if st, err := os.Stat(rel); err == nil && !st.IsDir() {
-					return rel, sid, pid
-				}
-			}
-		}
-	}
-	return "", "", ""
-}
-
-func readTurnMeta(filePath string) (goal, agentID string, status domain.TurnStatus, lastSeq int) {
-	status = domain.TurnRunning
-	f, err := os.Open(filePath)
-	if err != nil {
-		return "", "", status, 0
-	}
-	defer f.Close()
-
-	dec := json.NewDecoder(f)
-	for dec.More() {
-		var e EntryJSON
-		if err := dec.Decode(&e); err != nil {
-			break
-		}
-		if e.Seq > lastSeq {
-			lastSeq = e.Seq
-		}
-		switch e.Type {
-		case "start":
-			if e.Data != nil {
-				if g, ok := e.Data["goal"].(string); ok && g != "" {
-					goal = g
-				}
-				if a, ok := e.Data["agent_id"].(string); ok && a != "" {
-					agentID = a
-				}
-			}
-		case "end":
-			if e.Data != nil {
-				if st, ok := e.Data["status"].(string); ok && st != "" {
-					status = domain.TurnStatus(st)
-				}
-			}
-		}
-	}
-	return goal, agentID, status, lastSeq
 }

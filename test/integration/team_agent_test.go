@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"danmo-work/core/domain"
-	"danmo-work/core/store/turnlog"
 )
 const agentTeam = "team"
 
@@ -37,10 +36,7 @@ func TestTeamCreateSession(t *testing.T) {
 	}
 	t.Logf("team report summary: %s", rep.Summary)
 
-	entries, err := turnlog.LoadTurnLog(core.Projects.ProjectDir, "_default", s.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	entries := core.TurnLogs.ListSessionEntries(s.ID)
 	if len(entries) < 2 {
 		t.Errorf("expected at least 2 log entries, got %d", len(entries))
 	}

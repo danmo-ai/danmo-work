@@ -154,24 +154,78 @@ func streamEventToDomain(m streamEventModel) domain.StreamEvent {
 type turnModel struct {
 	ID        string `gorm:"primaryKey"`
 	SessionID string `gorm:"column:session_id;index"`
+	ProjectID string `gorm:"column:project_id"`
 	AgentID   string `gorm:"column:agent_id"`
 	Status    string
 	Goal      string
+	Nested    bool `gorm:"column:nested"`
 }
 
 func (turnModel) TableName() string { return "turns" }
 
 func turnToDomain(m turnModel) domain.TurnLog {
 	return domain.TurnLog{
-		ID: m.ID, SessionID: m.SessionID, AgentID: m.AgentID,
-		Status: domain.TurnStatus(m.Status), Goal: m.Goal,
+		ID: m.ID, SessionID: m.SessionID, ProjectID: m.ProjectID, AgentID: m.AgentID,
+		Status: domain.TurnStatus(m.Status), Goal: m.Goal, Nested: m.Nested,
 	}
 }
 
 func turnFromDomain(t domain.TurnLog) turnModel {
 	return turnModel{
-		ID: t.ID, SessionID: t.SessionID, AgentID: t.AgentID,
-		Status: string(t.Status), Goal: t.Goal,
+		ID: t.ID, SessionID: t.SessionID, ProjectID: t.ProjectID, AgentID: t.AgentID,
+		Status: string(t.Status), Goal: t.Goal, Nested: t.Nested,
+	}
+}
+
+// ---- Turn log entries (LLM history source of truth) ----
+
+type turnLogEntryModel struct {
+	ID        int64  `gorm:"primaryKey;autoIncrement"`
+	TurnID    string `gorm:"column:turn_id;uniqueIndex:idx_turn_log_entries_turn_seq,priority:1"`
+	Seq       int    `gorm:"column:seq;uniqueIndex:idx_turn_log_entries_turn_seq,priority:2"`
+	Type      string `gorm:"column:type"`
+	Data      string `gorm:"column:data"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+}
+
+func (turnLogEntryModel) TableName() string { return "turn_log_entries" }
+
+// ---- Compaction checkpoints (control plane, one row per session) ----
+
+type checkpointModel struct {
+	SessionID string `gorm:"primaryKey;column:session_id"`
+	// Data is the JSON-encoded domain.CompactionCheckpoint. Stored as one
+	// blob: the checkpoint is read/written whole and its shape evolves with
+	// compaction logic.
+	Data      string
+	UpdatedAt time.Time `gorm:"column:updated_at"`
+}
+
+func (checkpointModel) TableName() string { return "compaction_checkpoints" }
+
+// ---- File change journal (history plane, append-only) ----
+
+type fileChangeModel struct {
+	ID        int64  `gorm:"primaryKey;autoIncrement"`
+	SessionID string `gorm:"column:session_id;uniqueIndex:idx_file_changes_session_seq,priority:1"`
+	Seq       int64  `gorm:"column:seq;uniqueIndex:idx_file_changes_session_seq,priority:2"`
+	TurnID    string `gorm:"column:turn_id"`
+	CallID    string `gorm:"column:call_id"`
+	Tool      string
+	Path      string
+	Op        string
+	At        string
+	Diff      string
+	Bytes     int
+	CreatedAt time.Time `gorm:"column:created_at"`
+}
+
+func (fileChangeModel) TableName() string { return "file_changes" }
+
+func fileChangeToDomain(m fileChangeModel) domain.FileChangeRecord {
+	return domain.FileChangeRecord{
+		Seq: m.Seq, TurnID: m.TurnID, CallID: m.CallID, Tool: m.Tool,
+		Path: m.Path, Op: domain.FileChangeOp(m.Op), At: m.At, Diff: m.Diff, Bytes: m.Bytes,
 	}
 }
 
