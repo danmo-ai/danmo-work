@@ -2199,21 +2199,24 @@ function onTitleKeydown(e: KeyboardEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
-  border: 1px solid var(--dq-border);
+  border: 1px solid var(--dq-glass-border, var(--dq-border));
   border-radius: 50%;
-  background: var(--dq-surface-elevated);
+  background: var(--dq-glass-popover-bg, var(--dq-surface-elevated));
+  -webkit-backdrop-filter: var(--dq-glass-blur-light);
+  backdrop-filter: var(--dq-glass-blur-light);
   color: var(--dq-label-secondary);
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  transition: color 0.12s ease, border-color 0.12s ease;
+  box-shadow: var(--dq-shadow-md);
+  transition: color 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
 }
 
 .session-workspace__to-bottom:hover {
   color: var(--dq-label-primary);
   border-color: var(--dq-border-strong);
+  transform: translateY(-1px);
 }
 
 /* Right-side anchors for pending approval / ask_user events */
@@ -2687,25 +2690,27 @@ function onTitleKeydown(e: KeyboardEvent) {
 .turn__process-fold {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   align-self: flex-start;
   max-width: 100%;
-  margin: 0;
-  padding: 2px 4px 2px 0;
+  margin: 0 0 4px;
+  padding: 3px 9px 3px 6px;
   border: none;
-  border-radius: 4px;
+  border-radius: 999px;
   background: transparent;
   color: var(--dq-label-tertiary);
   font: inherit;
-  font-size: var(--dq-font-size-body);
+  font-size: var(--dq-font-size-caption);
+  font-weight: 500;
   line-height: 1.35;
   cursor: pointer;
   text-align: left;
+  transition: color 0.12s ease, background 0.12s ease;
 }
 
 .turn__process-fold:hover {
   color: var(--dq-label-secondary);
-  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
+  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
 }
 
 .turn__process-fold svg {
@@ -2754,6 +2759,16 @@ function onTitleKeydown(e: KeyboardEvent) {
   pointer-events: none;
   /* Skill / @ picker renders above the composer; do not clip it. */
   overflow: visible;
+}
+
+/* Soft fade under the floating composer so stream text doesn't collide */
+.session-workspace__composer::before {
+  content: '';
+  position: absolute;
+  inset: -28px -24px 0;
+  z-index: -1;
+  background: var(--dq-composer-fade, none);
+  pointer-events: none;
 }
 
 .session-workspace__composer > * {

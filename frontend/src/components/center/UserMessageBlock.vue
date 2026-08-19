@@ -88,7 +88,7 @@ function rowAsk(part: UserMessagePart): string {
 }
 
 .user-msg__bubble {
-  max-width: min(85%, 420px);
+  max-width: min(85%, 480px);
   padding: 10px 14px;
   border-radius: var(--dq-msg-user-radius);
   font-size: var(--dq-font-size-body);
@@ -96,7 +96,7 @@ function rowAsk(part: UserMessagePart): string {
   color: var(--dq-msg-user-fg);
   background: var(--dq-msg-user-bg);
   border: 1px solid var(--dq-msg-user-border);
-  box-shadow: none;
+  box-shadow: var(--dq-msg-user-shadow, none);
   word-break: break-word;
 }
 

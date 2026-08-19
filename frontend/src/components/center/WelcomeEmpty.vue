@@ -103,18 +103,27 @@ function goSettings() {
   line-height: 1.55;
 }
 
+/* Neutral elevated setup card — orange washes read muddy on dark glass */
 .welcome-empty__alert {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  max-width: 360px;
-  padding: 16px 20px;
-  border-radius: var(--dq-shell-radius);
-  background: color-mix(in srgb, var(--dq-system-orange) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--dq-system-orange) 22%, transparent);
-  color: var(--dq-label-primary);
+  max-width: 380px;
+  padding: 20px 24px;
+  border-radius: 14px;
+  background: var(--dq-glass-grouped-bg, var(--dq-bg-elevated));
+  border: 1px solid var(--dq-glass-border, var(--dq-border));
+  -webkit-backdrop-filter: var(--dq-glass-blur-light);
+  backdrop-filter: var(--dq-glass-blur-light);
+  box-shadow: var(--dq-shadow-md);
+  color: var(--dq-label-secondary);
   font-size: var(--dq-font-size-body);
+  line-height: 1.5;
+}
+
+.welcome-empty__alert p {
+  margin: 0;
 }
 
 .welcome-empty__ready {
@@ -136,7 +145,7 @@ function goSettings() {
 .welcome-empty__chip {
   max-width: 300px;
   padding: 10px 14px;
-  border-radius: var(--dq-shell-radius);
+  border-radius: 12px;
   border: 1px solid var(--dq-welcome-chip-border);
   background: var(--dq-welcome-chip-bg);
   color: var(--dq-label-primary);
@@ -144,12 +153,14 @@ function goSettings() {
   line-height: 1.45;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
 }
 
 .welcome-empty__chip:hover {
   border-color: color-mix(in srgb, var(--dq-accent) 40%, transparent);
   background: var(--dq-welcome-chip-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--dq-shadow-sm);
 }
 
 .welcome-empty__chip:active {
