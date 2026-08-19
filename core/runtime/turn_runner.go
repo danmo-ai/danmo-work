@@ -1236,13 +1236,6 @@ func (p *TurnRunner) enforceToolPairing(messages []Message) []Message {
 	return keepCompleteToolPairs(messages)
 }
 
-// salvagePairedTurnDelta keeps this-turn messages that form complete tool pairs.
-// Used when a turn is cancelled/failed so the next turn still sees finished work
-// (e.g. read_file/glob results) without unpaired assistant tool_calls.
-func salvagePairedTurnDelta(delta []Message) []Message {
-	return keepCompleteToolPairs(delta)
-}
-
 // keepCompleteToolPairs returns an API-safe message sequence. Each assistant
 // tool_call is kept only when its result exists, and results are re-emitted
 // immediately after their assistant (repairing interleaved/corrupt history).

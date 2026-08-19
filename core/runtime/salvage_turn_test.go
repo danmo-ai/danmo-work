@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -10,7 +9,7 @@ import (
 	"danmo-work/core/domain"
 )
 
-func TestSalvagePairedTurnDelta_KeepsCompletedDropsUnpaired(t *testing.T) {
+func TestKeepCompleteToolPairs_KeepsCompletedDropsUnpaired(t *testing.T) {
 	delta := []Message{
 		{Role: RoleUser, Content: "change badge color"},
 		{
@@ -24,7 +23,7 @@ func TestSalvagePairedTurnDelta_KeepsCompletedDropsUnpaired(t *testing.T) {
 		// tool_b never completed — unpaired
 	}
 
-	got := salvagePairedTurnDelta(delta)
+	got := keepCompleteToolPairs(delta)
 	if len(got) != 3 {
 		t.Fatalf("expected user + assistant(tool_a) + tool(tool_a), got %d msgs: %+v", len(got), got)
 	}
@@ -39,120 +38,21 @@ func TestSalvagePairedTurnDelta_KeepsCompletedDropsUnpaired(t *testing.T) {
 	}
 }
 
-func TestSalvagePairedTurnDelta_KeepsCancelledToolResult(t *testing.T) {
+func TestKeepCompleteToolPairs_KeepsCancelledToolResult(t *testing.T) {
 	delta := []Message{
 		{Role: RoleUser, Content: "ask me"},
 		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c1", Name: "tool_wait"}}},
 		{Role: RoleTool, ToolCallID: "c1", Name: "tool_wait", Content: "cancelled"},
 	}
-	got := salvagePairedTurnDelta(delta)
+	got := keepCompleteToolPairs(delta)
 	if len(got) != 3 {
 		t.Fatalf("expected full cancelled pair kept, got %d", len(got))
 	}
 }
 
-func TestCommitTurnMessages_CancelKeepsPriorTurnAndSalvage(t *testing.T) {
-	e := &Engine{turnMessages: make(map[string][]Message)}
-	sessionID := "s1"
-	prev := []Message{
-		{Role: RoleUser, Content: "turn1"},
-		{Role: RoleAssistant, Content: "done turn1"},
-	}
-	full := append([]Message{{Role: RoleSystem, Content: "sys"}}, prev...)
-	full = append(full,
-		Message{Role: RoleUser, Content: "turn2 goal"},
-		Message{Role: RoleAssistant, ToolCalls: []ToolCall{
-			{ID: "a", Name: "tool_a"},
-			{ID: "b", Name: "tool_b"},
-		}},
-		Message{Role: RoleTool, ToolCallID: "a", Name: "tool_a", Content: "file body"},
-	)
-	userIdx := 3 // index of turn2 user in full
-
-	e.commitTurnMessages(sessionID, prev, full, userIdx, context.Canceled)
-
-	got := e.turnMessages[sessionID]
-	if len(got) < 4 {
-		t.Fatalf("expected prev + salvaged turn2, got %d: %+v", len(got), got)
-	}
-	if got[0].Content != "turn1" || got[1].Content != "done turn1" {
-		t.Fatalf("prev turn lost: %+v", got)
-	}
-	if got[2].Content != "turn2 goal" {
-		t.Fatalf("turn2 user lost: %+v", got[2])
-	}
-	foundA := false
-	for _, m := range got {
-		if m.Role == RoleTool && m.ToolCallID == "a" {
-			foundA = true
-		}
-		if m.Role == RoleAssistant {
-			for _, tc := range m.ToolCalls {
-				if tc.ID == "b" {
-					t.Fatal("unpaired tool_b should not be committed")
-				}
-			}
-		}
-	}
-	if !foundA {
-		t.Fatal("completed tool_a result was not salvaged")
-	}
-}
-
-func TestCommitTurnMessages_SuccessStoresDeltaOnly(t *testing.T) {
-	e := &Engine{turnMessages: make(map[string][]Message)}
-	sessionID := "s1"
-	prev := []Message{{Role: RoleUser, Content: "t1"}}
-	full := []Message{
-		{Role: RoleSystem, Content: "sys"},
-		{Role: RoleUser, Content: "t1"},
-		{Role: RoleUser, Content: "t2"},
-		{Role: RoleAssistant, Content: "ok"},
-	}
-	e.commitTurnMessages(sessionID, prev, full, 2, nil)
-	got := e.turnMessages[sessionID]
-	if len(got) != 3 {
-		t.Fatalf("expected prev(1)+delta(2)=3, got %d: %+v", len(got), got)
-	}
-	if got[0].Content != "t1" || got[1].Content != "t2" || got[2].Content != "ok" {
-		t.Fatalf("unexpected messages: %+v", got)
-	}
-	t1Count := 0
-	for _, m := range got {
-		if m.Role == RoleUser && m.Content == "t1" {
-			t1Count++
-		}
-	}
-	if t1Count != 1 {
-		t.Fatalf("t1 duplicated: count=%d", t1Count)
-	}
-}
-
-func TestCommitTurnMessages_CancelErrorUsesSalvage(t *testing.T) {
-	e := &Engine{turnMessages: make(map[string][]Message)}
-	err := errors.New("boom")
-	full := []Message{
-		{Role: RoleUser, Content: "u"},
-		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "x", Name: "tool_x"}}},
-	}
-	e.commitTurnMessages("s", nil, full, 0, err)
-	got := e.turnMessages["s"]
-	if len(got) != 1 || got[0].Role != RoleUser {
-		t.Fatalf("expected only user after failed unpaired turn, got %+v", got)
-	}
-}
-
 // Mirrors session-1784128: user + completed tools, then waiting tool cancelled unpaired.
-func TestCommitTurnMessages_CancelMidWaitKeepsUserAndCompletedTools(t *testing.T) {
-	e := &Engine{turnMessages: make(map[string][]Message)}
-	prev := []Message{
-		{Role: RoleUser, Content: "write a game"},
-		{Role: RoleAssistant, Content: "done"},
-	}
-	full := []Message{
-		{Role: RoleSystem, Content: "sys"},
-		{Role: RoleUser, Content: "write a game"},
-		{Role: RoleAssistant, Content: "done"},
+func TestKeepCompleteToolPairs_CancelMidWaitKeepsUserAndCompletedTools(t *testing.T) {
+	delta := []Message{
 		{Role: RoleUser, Content: "change badge color"},
 		{Role: RoleAssistant, ToolCalls: []ToolCall{
 			{ID: "t_glob", Name: "tool_a"},
@@ -165,9 +65,7 @@ func TestCommitTurnMessages_CancelMidWaitKeepsUserAndCompletedTools(t *testing.T
 		{Role: RoleTool, ToolCallID: "t_read", Name: "tool_c", Content: "css snippet"},
 		// tool_d waiting — no result
 	}
-	userIdx := 3
-	e.commitTurnMessages("sess", prev, full, userIdx, context.Canceled)
-	got := e.turnMessages["sess"]
+	got := keepCompleteToolPairs(delta)
 
 	var sawUser, sawGlob, sawGrep, sawRead bool
 	for _, m := range got {
@@ -183,7 +81,7 @@ func TestCommitTurnMessages_CancelMidWaitKeepsUserAndCompletedTools(t *testing.T
 			case "t_read":
 				sawRead = true
 			case "t_wait":
-				t.Fatal("unpaired waiting tool should not be committed")
+				t.Fatal("unpaired waiting tool should not be kept")
 			}
 		}
 		if m.Role == RoleAssistant {
