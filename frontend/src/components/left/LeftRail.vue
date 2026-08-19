@@ -825,7 +825,7 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .module-sidebar__collapse:hover {
-  color: var(--dq-label-primary);
+  color: var(--dq-sidebar-item-emphasis-fg, var(--dq-label-secondary));
   background: color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
 }
 
@@ -896,10 +896,10 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .module-sidebar__brand-title {
-  font-size: var(--dq-font-size-secondary);
-  font-weight: 650;
+  font-size: var(--dq-font-size-nav);
+  font-weight: 500;
   letter-spacing: -0.02em;
-  color: var(--dq-label-primary);
+  color: var(--dq-sidebar-item-emphasis-fg, var(--dq-label-secondary));
   white-space: nowrap;
 }
 
@@ -928,10 +928,10 @@ watch(() => projects.projects.length, (len) => {
   border-radius: 8px;
   box-sizing: border-box;
   background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
-  color: var(--dq-label-primary);
+  color: var(--dq-sidebar-item-emphasis-fg, var(--dq-label-secondary));
   font: inherit;
-  font-size: var(--dq-font-size-body);
-  font-weight: 550;
+  font-size: var(--dq-font-size-nav);
+  font-weight: 500;
   letter-spacing: -0.01em;
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
@@ -968,10 +968,10 @@ watch(() => projects.projects.length, (len) => {
   flex: 1;
   min-width: 0;
   font-size: var(--dq-font-size-caption);
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--dq-label-secondary);
+  color: var(--dq-sidebar-section-fg, var(--dq-label-tertiary));
 }
 
 .module-sidebar__view-toggle {
@@ -985,16 +985,16 @@ watch(() => projects.projects.length, (len) => {
 .module-sidebar__view-btn {
   border: none;
   background: transparent;
-  color: var(--dq-label-secondary);
+  color: var(--dq-sidebar-meta-fg, var(--dq-label-quaternary));
   font-size: var(--dq-font-size-caption);
-  font-weight: 600;
+  font-weight: 500;
   padding: 2px 7px;
   cursor: pointer;
 }
 
 .module-sidebar__view-btn.is-active {
   background: var(--dq-accent-tint-strong, var(--dq-accent-surface));
-  color: var(--dq-label-primary);
+  color: var(--dq-sidebar-item-active-fg, var(--dq-label-secondary));
 }
 
 .module-sidebar__section-add {
@@ -1133,7 +1133,7 @@ watch(() => projects.projects.length, (len) => {
   padding: 0 8px 0 2px;
   transition: background 0.12s ease, color 0.12s ease;
   cursor: pointer;
-  color: var(--dq-label-primary);
+  color: var(--dq-sidebar-item-emphasis-fg, var(--dq-label-secondary));
 }
 
 .project-tree__row:hover {
@@ -1165,7 +1165,7 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .project-tree__row:hover .project-tree__toggle {
-  color: var(--dq-label-primary);
+  color: var(--dq-sidebar-item-emphasis-fg, var(--dq-label-secondary));
 }
 
 .project-tree__folder-icon {
@@ -1180,8 +1180,8 @@ watch(() => projects.projects.length, (len) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--dq-font-size-secondary);
-  font-weight: 550;
+  font-size: var(--dq-font-size-nav);
+  font-weight: 500;
   color: inherit;
 }
 
@@ -1221,7 +1221,7 @@ watch(() => projects.projects.length, (len) => {
 
 .project-tree__add:hover {
   background: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
-  color: var(--dq-label-primary);
+  color: var(--dq-sidebar-item-emphasis-fg, var(--dq-label-secondary));
 }
 
 .project-tree__menu {
@@ -1259,9 +1259,9 @@ watch(() => projects.projects.length, (len) => {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--dq-label-primary);
-  font-size: var(--dq-font-size-body);
-  font-weight: 500;
+  color: var(--dq-sidebar-item-fg, var(--dq-label-secondary));
+  font-size: var(--dq-font-size-nav);
+  font-weight: 400;
   cursor: pointer;
   text-align: left;
   flex: 1;
@@ -1271,8 +1271,8 @@ watch(() => projects.projects.length, (len) => {
 
 .project-tree__session.is-active {
   background: var(--dq-surface-list-selected-strong, var(--dq-accent-tint-strong));
-  color: var(--dq-label-primary);
-  font-weight: 600;
+  color: var(--dq-sidebar-item-active-fg, var(--dq-label-secondary));
+  font-weight: 500;
 }
 
 .project-tree__session-action {
@@ -1295,7 +1295,7 @@ watch(() => projects.projects.length, (len) => {
 
 .project-tree__session-action:hover {
   background: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
-  color: var(--dq-label-primary);
+  color: var(--dq-sidebar-item-emphasis-fg, var(--dq-label-secondary));
 }
 
 .project-tree__session--empty {
@@ -1349,8 +1349,8 @@ watch(() => projects.projects.length, (len) => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--dq-font-size-caption);
-  font-weight: 600;
-  color: var(--dq-label-secondary);
+  font-weight: 500;
+  color: var(--dq-sidebar-meta-fg, var(--dq-label-quaternary));
 }
 
 .project-tree__session.is-running .project-tree__session-badge {
@@ -1380,10 +1380,10 @@ watch(() => projects.projects.length, (len) => {
   justify-content: space-between;
   padding: 4px 8px;
   font-size: var(--dq-font-size-caption);
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--dq-label-secondary);
+  color: var(--dq-sidebar-section-fg, var(--dq-label-tertiary));
 }
 
 .session-board__count {
@@ -1417,14 +1417,14 @@ watch(() => projects.projects.length, (len) => {
 .project-tree__session-time {
   flex-shrink: 0;
   font-size: var(--dq-font-size-caption);
-  color: var(--dq-label-tertiary);
+  color: var(--dq-sidebar-meta-fg, var(--dq-label-quaternary));
   padding-left: 8px;
   transition: color 0.15s ease;
 }
 
 .project-tree__session:hover .project-tree__session-time,
 .project-tree__session.is-active .project-tree__session-time {
-  color: var(--dq-label-secondary);
+  color: var(--dq-sidebar-item-fg, var(--dq-label-secondary));
 }
 
 .project-tree__session.is-active .project-tree__session-time {
@@ -1455,9 +1455,9 @@ watch(() => projects.projects.length, (len) => {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--dq-label-tertiary);
+  color: var(--dq-sidebar-section-fg, var(--dq-label-tertiary));
   font-size: var(--dq-font-size-caption);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   cursor: pointer;
@@ -1477,7 +1477,7 @@ watch(() => projects.projects.length, (len) => {
   box-sizing: border-box;
   padding: 0 10px;
   margin: 0;
-  font-size: var(--dq-font-size-body);
+  font-size: var(--dq-font-size-nav);
   line-height: 30px;
   border-radius: 8px;
   border: 1px solid transparent;
@@ -1520,9 +1520,9 @@ watch(() => projects.projects.length, (len) => {
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: var(--dq-label-primary);
-  font-size: var(--dq-font-size-body);
-  font-weight: 500;
+  color: var(--dq-sidebar-item-fg, var(--dq-label-secondary));
+  font-size: var(--dq-font-size-nav);
+  font-weight: 400;
   cursor: pointer;
   text-align: left;
   transition: background 0.12s ease, color 0.12s ease;
@@ -1565,7 +1565,7 @@ watch(() => projects.projects.length, (len) => {
   align-items: center;
   justify-content: center;
   font-size: var(--dq-font-size-footnote);
-  font-weight: 600;
+  font-weight: 500;
   background: color-mix(in srgb, var(--dq-accent) 20%, transparent);
   color: var(--dq-accent);
   flex-shrink: 0;
@@ -1582,7 +1582,7 @@ watch(() => projects.projects.length, (len) => {
   background: transparent;
   font: inherit;
   font-size: var(--dq-font-size-caption);
-  color: var(--dq-label-tertiary);
+  color: var(--dq-sidebar-meta-fg, var(--dq-label-quaternary));
   white-space: nowrap;
   padding: 2px 4px;
   border-radius: 4px;
@@ -1590,7 +1590,7 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .module-sidebar__version:hover {
-  color: var(--dq-label-primary);
+  color: var(--dq-sidebar-item-fg, var(--dq-label-secondary));
   background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
 }
 
@@ -1614,9 +1614,9 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .module-sidebar__name {
-  font-size: var(--dq-font-size-body);
-  font-weight: 600;
-  color: var(--dq-label-primary);
+  font-size: var(--dq-font-size-nav);
+  font-weight: 500;
+  color: var(--dq-sidebar-item-fg, var(--dq-label-secondary));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1624,7 +1624,7 @@ watch(() => projects.projects.length, (len) => {
 
 .module-sidebar__plan {
   font-size: var(--dq-font-size-caption);
-  color: var(--dq-label-tertiary);
+  color: var(--dq-sidebar-meta-fg, var(--dq-label-quaternary));
 }
 
 .module-sidebar__settings {
@@ -1633,7 +1633,7 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .module-sidebar__settings:hover {
-  color: var(--dq-label-primary);
+  color: var(--dq-sidebar-item-emphasis-fg, var(--dq-label-secondary));
 }
 
 .module-sidebar__resize {

@@ -2,10 +2,12 @@
 
    Type scale (macOS-dense, theme-invariant):
      caption 12  badges / timestamps / kbd / hints
-     body    14  UI + chat (sidebar, tools, forms, plan, stream)
+     nav     13  sidebar / rail navigation rows only
+     body    14  UI + chat (sidebar forms, tools, plan, stream)
      prose   14  alias of body
      title   16  one page/session title per view
    Hierarchy inside a page: prefer weight/color over extra sizes.
+   Sidebar chrome uses --dq-sidebar-* fg tokens from recipe CSS.
    Never hardcode 10/11px.
 */
 
@@ -1409,8 +1411,8 @@ body.teams-is-resizing {
   border-radius: 8px;
   background: var(--dq-fill-tertiary);
   color: var(--dq-label-secondary);
-  font-size: var(--dq-font-size-body);
-  font-weight: 700;
+  font-size: var(--dq-font-size-nav);
+  font-weight: 500;
 }
 
 .resource-rail__avatar--new {
@@ -1427,12 +1429,16 @@ body.teams-is-resizing {
 
 .resource-rail__name {
   display: block;
-  font-size: var(--dq-font-size-body);
-  font-weight: 600;
-  color: var(--dq-label-primary);
+  font-size: var(--dq-font-size-nav);
+  font-weight: 500;
+  color: var(--dq-sidebar-item-emphasis-fg, var(--dq-label-secondary));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.resource-rail__row.is-active .resource-rail__name {
+  color: var(--dq-sidebar-item-active-fg, var(--dq-label-secondary));
 }
 
 .resource-rail__desc {
