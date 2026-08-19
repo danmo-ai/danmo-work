@@ -39,6 +39,11 @@ type ChatToolCall struct {
 	ID        string
 	Name      string
 	Arguments map[string]any
+	// RepairedFrom holds the original argument bytes when the adapter had to
+	// repair damaged JSON (unescaped quotes, raw newlines, trailing commas)
+	// to produce Arguments. Empty when the model output parsed cleanly.
+	// The runtime records it as a tool.args_repaired stream event for audit.
+	RepairedFrom string
 }
 
 type LLMChatRequest struct {

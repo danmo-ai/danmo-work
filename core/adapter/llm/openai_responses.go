@@ -281,14 +281,15 @@ func parseResponsesBody(respBody []byte) (port.LLMChatResponse, error) {
 				}
 			}
 		case "function_call":
-			args, err := parseArgs(json.RawMessage(item.Arguments))
+			args, repairedFrom, err := parseArgs(json.RawMessage(item.Arguments))
 			if err != nil {
 				return port.LLMChatResponse{}, fmt.Errorf("tool '%s' arguments: %w (raw: %s)", item.Name, err, item.Arguments)
 			}
 			tcs = append(tcs, port.ChatToolCall{
-				ID:        item.CallID,
-				Name:      item.Name,
-				Arguments: args,
+				ID:           item.CallID,
+				Name:         item.Name,
+				Arguments:    args,
+				RepairedFrom: repairedFrom,
 			})
 		case "reasoning":
 			for _, s := range item.Summary {

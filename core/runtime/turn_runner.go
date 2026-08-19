@@ -446,6 +446,19 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentMessage, domain.AgentMessagePayload{Text: resp.Content})
 		}
 
+		// Audit: when the adapter repaired damaged tool-argument JSON, record
+		// the pre-repair bytes as a stream event. The repaired form is what
+		// enters the flow (and turn JSONL); JSONL itself stays audit-free.
+		for _, tc := range resp.ToolCalls {
+			if tc.RepairedFrom == "" {
+				continue
+			}
+			log.Printf("[llm] repaired tool arguments for %s (call %s, %d raw bytes)", tc.Name, tc.ID, len(tc.RepairedFrom))
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolArgsRepaired, domain.ToolArgsRepairedPayload{
+				CallID: tc.ID, Name: tc.Name, RawArguments: tc.RepairedFrom,
+			})
+		}
+
 		// IMPORTANT: Append the assistant message with tool_calls BEFORE any
 		// tool result messages. OpenAI-compatible APIs require the message
 		// order: assistant(tool_calls) → tool(result) → tool(result) → ...
