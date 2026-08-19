@@ -6,9 +6,36 @@ import (
 	"testing"
 )
 
+func TestHomeHonorsWorkHome(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "custom-root")
+	t.Setenv("WORK_HOME", root)
+
+	if Home() != root {
+		t.Fatalf("Home() = %q, want %q", Home(), root)
+	}
+	if _, err := os.Stat(filepath.Join(root, "data")); err != nil {
+		t.Fatalf("data dir not created under WORK_HOME: %v", err)
+	}
+	// Every derived path stays inside the root.
+	if got := DatabaseFile(); got != filepath.Join(root, "work.db") {
+		t.Fatalf("DatabaseFile() = %q", got)
+	}
+	if got := StoreDatabaseFile(); got != filepath.Join(root, "store.db") {
+		t.Fatalf("StoreDatabaseFile() = %q", got)
+	}
+	if got := HistoryDatabaseFileFor(DatabaseFile()); got != filepath.Join(root, "history.db") {
+		t.Fatalf("HistoryDatabaseFileFor() = %q", got)
+	}
+	if got := ResolveAgainstHome("data"); got != filepath.Join(root, "data") {
+		t.Fatalf("ResolveAgainstHome() = %q", got)
+	}
+}
+
 func TestHomeLayoutAndMigrate(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("WORK_HOME", "")
 
 	// Migrate from pre-Danmo layout (~/.dq-teams/teams.db).
 	legacyDir := filepath.Join(tmp, ".dq-teams")
@@ -47,6 +74,7 @@ func TestHomeLayoutAndMigrate(t *testing.T) {
 func TestResolveAgainstHome(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("WORK_HOME", "")
 	rel := ResolveAgainstHome("data")
 	if rel != filepath.Join(tmp, ".danmo-work", "data") {
 		t.Fatalf("rel = %q", rel)

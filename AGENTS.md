@@ -63,12 +63,18 @@ out/run/             # dev PIDs, logs, wrappers (DQ_DEV markers)
 
 ## Environment
 
+One root, everything derived: `WORK_HOME` relocates the whole data home;
+config, all databases, and `data/` follow. The per-path variables below are
+fine-grained overrides and normally unnecessary. `history.db` has no env var —
+it always sits next to the control DB (or set `data.history_database` in YAML).
+
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `WORK_CONFIG` | `~/.danmo-work/config.yaml` | YAML config path |
-| `WORK_DB_PATH` | `~/.danmo-work/work.db` | SQLite control-plane database |
-| `WORK_STORE_DB_PATH` | `~/.danmo-work/store.db` | SQLite agent table-store (data plane) |
-| `WORK_DATA_DIR` | `~/.danmo-work/data` | Projects (turn history lives in `work.db`; JSONL is export-only) |
+| `WORK_HOME` | `~/.danmo-work` | Root data home; all paths below derive from it |
+| `WORK_CONFIG` | `$WORK_HOME/config.yaml` | YAML config path |
+| `WORK_DB_PATH` | `$WORK_HOME/work.db` | SQLite control-plane database |
+| `WORK_STORE_DB_PATH` | `$WORK_HOME/store.db` | SQLite agent table-store (data plane) |
+| `WORK_DATA_DIR` | `$WORK_HOME/data` | Projects (turn history lives in `history.db`; JSONL is export-only) |
 | `DQ_BACKEND_PORT` | `7801` | Injected by dev scripts |
 | `DQ_FRONTEND_PORT` | `5801` | Injected by dev scripts |
 | `DQ_APP_NAME` | `danmo-work` | App name for build scripts |
@@ -80,7 +86,8 @@ Server, CLI, TUI, and desktop all use the same home by default:
 ```
 ~/.danmo-work/
   config.yaml
-  work.db        # control plane + turn history (sessions, memories, turn_log_entries, …)
+  work.db        # control plane (sessions, turns metadata, memories, …)
+  history.db     # history plane (turn_log_entries + stream_events; retention-pruned, incremental auto-vacuum)
   store.db       # agent table-store data plane
   knowledge/     # knowledge-base Markdown source of truth
   data/          # projects (legacy turn JSONL kept as inert backup after DB import)
@@ -93,6 +100,10 @@ Server, CLI, TUI, and desktop all use the same home by default:
 Custom skills (Agentskills layout) are also read from `~/.agents/skills/`,
 `<project>/.danmo-work/skills/`, and `<project>/.agents/skills/` on each new turn
 (memory only, not SQLite).
+
+History retention: orphaned history (deleted sessions) is pruned at startup
+and daily; optional age-based pruning of stale sessions via
+`runtime.retention.history_max_age_days` (0 = off, default).
 
 Agent durable memories live in SQLite (`memories` table) via
 `memory_update` / `memory_read` (scopes: user / project / agent). UI: right

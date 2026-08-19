@@ -1,11 +1,13 @@
 // Package paths provides the unified user-home data layout for Danmo Work.
+// WORK_HOME is the single root; every other location derives from it.
 //
-//	~/.danmo-work/
+//	$WORK_HOME (default ~/.danmo-work/)
 //	  config.yaml   — runtime config
 //	  work.db       — SQLite control-plane database
+//	  history.db    — SQLite history plane (turn_log_entries + stream_events)
 //	  store.db      — SQLite agent table-store (data plane)
 //	  knowledge/    — knowledge-base Markdown source of truth
-//	  data/         — projects, turn logs, checkpoints
+//	  data/         — projects, checkpoints (legacy turn JSONL kept as backup)
 //	  bin/          — desktop sidecar binary (optional)
 //	  bin/coreutils/— Windows Microsoft Coreutils multi-call + applet hardlinks (optional)
 //	  first_launch/ — platform post-install script + stamp (optional)
@@ -20,13 +22,20 @@ import (
 
 const DirName = ".danmo-work"
 
-// Home returns ~/.danmo-work (absolute). Creates the directory if needed.
+// Home returns the root data directory (absolute) and creates it if needed.
+// WORK_HOME overrides the default ~/.danmo-work — it is the single relocation
+// knob; config.yaml, all databases, and data/ derive from it.
 func Home() string {
-	h, err := os.UserHomeDir()
-	if err != nil || h == "" {
-		h = "."
+	dir := os.Getenv("WORK_HOME")
+	if dir == "" {
+		h, err := os.UserHomeDir()
+		if err != nil || h == "" {
+			h = "."
+		}
+		dir = filepath.Join(h, DirName)
+	} else if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
 	}
-	dir := filepath.Join(h, DirName)
 	_ = os.MkdirAll(dir, 0o755)
 	_ = os.MkdirAll(filepath.Join(dir, "data"), 0o755)
 	return dir
@@ -43,6 +52,14 @@ func DatabaseFile() string { return filepath.Join(Home(), "work.db") }
 
 // StoreDatabaseFile is ~/.danmo-work/store.db (agent table-store data plane).
 func StoreDatabaseFile() string { return filepath.Join(Home(), "store.db") }
+
+// HistoryDatabaseFileFor derives the history-plane database path from the
+// control-plane database path (same directory, history.db). Deriving from the
+// work.db location — not from Home() — keeps the pair co-located when the
+// control DB is relocated (tests, WORK_DB_PATH overrides).
+func HistoryDatabaseFileFor(workDBPath string) string {
+	return filepath.Join(filepath.Dir(workDBPath), "history.db")
+}
 
 // KnowledgeDir is ~/.danmo-work/knowledge (Markdown KB source of truth).
 func KnowledgeDir() string {

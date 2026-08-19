@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"danmo-work/core/adapter/config"
 	"danmo-work/core/adapter/feishu"
@@ -117,6 +118,14 @@ func New(cfg Config) *Core {
 	if !filepath.IsAbs(appCfg.Data.StoreDatabase) {
 		appCfg.Data.StoreDatabase = paths.ResolveAgainstHome(appCfg.Data.StoreDatabase)
 	}
+	// History plane derives from the control DB location (same directory)
+	// unless explicitly configured — one root, everything else derived.
+	if appCfg.Data.HistoryDatabase == "" {
+		appCfg.Data.HistoryDatabase = paths.HistoryDatabaseFileFor(appCfg.Data.Database)
+	}
+	if !filepath.IsAbs(appCfg.Data.HistoryDatabase) {
+		appCfg.Data.HistoryDatabase = paths.ResolveAgainstHome(appCfg.Data.HistoryDatabase)
+	}
 	if appCfg.Instance.ID == "" {
 		appCfg.Instance.ID = os.Getenv("WORK_INSTANCE_ID")
 		if appCfg.Instance.ID == "" {
@@ -124,10 +133,21 @@ func New(cfg Config) *Core {
 		}
 	}
 
-	log.Printf("[bootstrap] work.db=%s store.db=%s data=%s", appCfg.Data.Database, appCfg.Data.StoreDatabase, appCfg.Data.Dir)
+	log.Printf("[bootstrap] work.db=%s history.db=%s store.db=%s data=%s",
+		appCfg.Data.Database, appCfg.Data.HistoryDatabase, appCfg.Data.StoreDatabase, appCfg.Data.Dir)
 	st, err := sqlitestore.New(appCfg.Data.Database)
 	if err != nil {
 		panic("failed to open database: " + err.Error())
+	}
+	hist, err := sqlitestore.NewHistory(appCfg.Data.HistoryDatabase)
+	if err != nil {
+		panic("failed to open history database: " + err.Error())
+	}
+	st.SetHistory(hist)
+	// One-time move of bulk tables out of work.db. Must run before anything
+	// reads stream events (MaxSeq seeding) or turn entries.
+	if err := sqlitestore.MigrateHistoryTables(context.Background(), st, hist); err != nil {
+		log.Printf("[bootstrap] history split migration (will retry next start): %v", err)
 	}
 	tableStore, err := tablestore.New(appCfg.Data.StoreDatabase)
 	if err != nil {
@@ -339,6 +359,23 @@ func New(cfg Config) *Core {
 	automations.StartScheduler()
 
 	eng.RecoverRunning(context.Background())
+
+	// History retention: orphan cleanup always; age-based pruning opt-in via
+	// runtime.retention.history_max_age_days. Runs at boot and daily.
+	retentionAge := time.Duration(appCfg.Runtime.Retention.HistoryMaxAgeDays) * 24 * time.Hour
+	go func() {
+		for {
+			stats, err := st.PruneHistory(context.Background(), retentionAge)
+			switch {
+			case err != nil:
+				log.Printf("[bootstrap] history retention: %v", err)
+			case stats.OrphanSessions > 0 || stats.AgedSessions > 0:
+				log.Printf("[bootstrap] history retention: orphans=%d aged=%d events=%d entries=%d",
+					stats.OrphanSessions, stats.AgedSessions, stats.DeletedEvents, stats.DeletedEntries)
+			}
+			time.Sleep(24 * time.Hour)
+		}
+	}()
 
 	weixinPeer := service.NewWeixinPeerStore(st)
 	feishuPeer := service.NewFeishuPeerStore(st, configManager)

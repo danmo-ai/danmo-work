@@ -69,6 +69,19 @@ func (r *memStreamRepo) ListBySession(_ context.Context, sessionID string, since
 	return out, nil
 }
 
+func (r *memStreamRepo) DeleteBySession(_ context.Context, sessionID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	kept := r.events[:0]
+	for _, ev := range r.events {
+		if ev.SessionID != sessionID {
+			kept = append(kept, ev)
+		}
+	}
+	r.events = kept
+	return nil
+}
+
 func (r *memStreamRepo) MaxSeq() int64 {
 	r.mu.Lock()
 	defer r.mu.Unlock()

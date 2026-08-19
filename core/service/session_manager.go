@@ -183,7 +183,19 @@ func (m *SessionManager) Delete(ctx context.Context, id string) error {
 		m.engine.RevokeSessionNetworkGrants(id)
 	}
 	_ = m.store.PendingMessages().DeleteBySession(ctx, id)
-	return m.store.Sessions().Delete(ctx, id)
+	// Cascade the session's history (turn rows, message entries, event
+	// timeline). Best-effort: the session row is deleted first, so any
+	// remainder becomes an orphan that startup retention finishes off.
+	if err := m.store.Sessions().Delete(ctx, id); err != nil {
+		return err
+	}
+	if err := m.store.TurnLogs().DeleteSessionHistory(ctx, id); err != nil {
+		log.Printf("[sessions] delete %s: turn history cascade: %v", id, err)
+	}
+	if err := m.store.StreamEvents().DeleteBySession(ctx, id); err != nil {
+		log.Printf("[sessions] delete %s: stream events cascade: %v", id, err)
+	}
+	return nil
 }
 
 func (m *SessionManager) StreamEvents(sessionID string, since int64) []domain.StreamEvent {

@@ -15,6 +15,7 @@ type Repository interface {
 	PendingMessages() PendingMessageRepo
 	StreamEvents()    StreamEventRepo
 	Turns()           TurnRepo
+	TurnLogs()        TurnLogRepo
 	Secrets()         SecretStore
 	Automations()     AutomationRepo
 	Memories()        MemoryRepo
@@ -218,6 +219,8 @@ type StreamEventRepo interface {
 	Save(ctx context.Context, event domain.StreamEvent) error
 	ListBySession(ctx context.Context, sessionID string, since int64) ([]domain.StreamEvent, error)
 	MaxSeq() int64
+	// DeleteBySession removes the session's event timeline (cascade cleanup).
+	DeleteBySession(ctx context.Context, sessionID string) error
 }
 
 type TurnRepo interface {
@@ -258,6 +261,9 @@ type TurnLogRepo interface {
 	ListEntries(ctx context.Context, turnID string) ([]TurnLogEntryRecord, error)
 	// MaxSeq returns the highest entry seq for a turn (0 when none).
 	MaxSeq(ctx context.Context, turnID string) (int, error)
+	// DeleteSessionHistory removes the session's turn rows and their message
+	// entries (cascade cleanup when a session is deleted).
+	DeleteSessionHistory(ctx context.Context, sessionID string) error
 }
 
 // TurnLogStore reconstructs LLM chat history (session replay + turn recovery)
