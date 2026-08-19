@@ -913,6 +913,7 @@ watch(() => projects.projects.length, (len) => {
   gap: 8px;
 }
 
+/* Primary CTA — the one accent-forward control in the sidebar */
 .module-sidebar__new-session {
   grid-column: 1;
   grid-row: 1;
@@ -924,25 +925,26 @@ watch(() => projects.projects.length, (len) => {
   min-width: 0;
   height: 32px;
   padding: 0 10px;
-  border: 1px solid transparent;
+  border: 1px solid var(--dq-accent-surface-border, transparent);
   border-radius: 8px;
   box-sizing: border-box;
-  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
-  color: var(--dq-label-primary);
+  background: var(--dq-accent-tint, color-mix(in srgb, var(--dq-accent) 10%, transparent));
+  color: var(--dq-accent);
   font: inherit;
   font-size: var(--dq-font-size-body);
-  font-weight: 550;
+  font-weight: 600;
   letter-spacing: -0.01em;
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
 .module-sidebar__new-session:hover {
-  background: color-mix(in srgb, var(--dq-label-primary) 10%, transparent);
+  background: var(--dq-accent-tint-strong, color-mix(in srgb, var(--dq-accent) 16%, transparent));
+  border-color: var(--dq-accent-border-hover, transparent);
 }
 
 .module-sidebar__new-session:active {
-  background: color-mix(in srgb, var(--dq-label-primary) 14%, transparent);
+  background: color-mix(in srgb, var(--dq-accent) 22%, transparent);
 }
 
 .module-sidebar__new-session:focus-visible {

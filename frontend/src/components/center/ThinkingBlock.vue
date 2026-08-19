@@ -130,14 +130,22 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--dq-font-size-body);
-  color: var(--dq-label-primary);
+  /* Quiet reasoning footnote — must not compete with the answer prose */
+  color: var(--dq-label-tertiary);
+  transition: color 0.12s ease;
+}
+
+.thinking-block__header:hover .thinking-block__preview,
+.thinking-block.is-running .thinking-block__preview {
+  color: var(--dq-label-secondary);
 }
 
 .thinking-block__hint {
   flex: 0 1 auto;
   min-width: 0;
   font-size: var(--dq-font-size-body);
-  color: var(--dq-label-primary);
+  font-weight: 500;
+  color: var(--dq-label-secondary);
 }
 
 .thinking-block__trail {
@@ -185,13 +193,14 @@ onBeforeUnmount(() => {
 .thinking-block__body {
   max-height: 280px;
   overflow-y: auto;
-  margin: 2px 0 4px;
-  padding: 6px 8px;
-  border-radius: 6px;
+  margin: 4px 0 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
   background: color-mix(in srgb, var(--dq-label-primary) 3%, transparent);
   font-size: var(--dq-font-size-body);
-  line-height: 1.45;
-  color: var(--dq-label-primary);
+  line-height: 1.5;
+  color: var(--dq-label-secondary);
   white-space: pre-wrap;
   word-break: break-word;
 }

@@ -696,8 +696,12 @@ body.teams-is-resizing {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+/* Focused composer — accent halo, the one place accent chrome is loudest */
 .composer-float:focus-within .composer-float__card {
-  border-color: color-mix(in srgb, var(--dq-label-primary) 22%, transparent);
+  border-color: color-mix(in srgb, var(--dq-accent) 45%, var(--dq-composer-border));
+  box-shadow:
+    var(--dq-composer-shadow, var(--dq-shadow-glass)),
+    0 0 0 3px var(--dq-accent-ring-subtle, color-mix(in srgb, var(--dq-accent) 14%, transparent));
 }
 
 .composer-float.is-compose .composer-float__card {
