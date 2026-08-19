@@ -25,6 +25,13 @@ type Store struct {
 	mu     sync.Mutex
 	db     *gorm.DB
 	dbPath string
+	// history is the dedicated history-plane store (turn_log_entries +
+	// stream_events). nil = single-database mode: history tables live in this
+	// store's own file (tests, embedded use).
+	history *Store
+	// historyOnly marks a store opened by NewHistory (bulk append-only tables
+	// with incremental auto-vacuum; no control-plane tables).
+	historyOnly bool
 }
 
 func New(dbPath string) (*Store, error) {
@@ -43,6 +50,39 @@ func New(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("migrate database %s: %w", dbPath, err)
 	}
 	return s, nil
+}
+
+// NewHistory opens the dedicated history-plane database holding the two bulk
+// append-only tables (turn_log_entries, stream_events). auto_vacuum is set to
+// INCREMENTAL before the first table is created so retention pruning can
+// return pages to the OS without a full VACUUM.
+func NewHistory(dbPath string) (*Store, error) {
+	if abs, err := filepath.Abs(dbPath); err == nil {
+		dbPath = abs
+	}
+	s := &Store{dbPath: dbPath, historyOnly: true}
+	if err := s.open(); err != nil {
+		return nil, err
+	}
+	if err := s.migrate(); err != nil {
+		_ = s.closeUnlocked()
+		return nil, fmt.Errorf("migrate history database %s: %w", dbPath, err)
+	}
+	return s, nil
+}
+
+// SetHistory routes the history-plane repositories (StreamEvents, the entry
+// side of TurnLogs) to a dedicated store. Turn metadata stays in this store's
+// turns table; only the bulk rows move.
+func (s *Store) SetHistory(h *Store) { s.history = h }
+
+// historyOrSelf returns the history-plane store (single-database mode when no
+// dedicated history store is attached).
+func (s *Store) historyOrSelf() *Store {
+	if s.history != nil {
+		return s.history
+	}
+	return s
 }
 
 func (s *Store) open() error {
@@ -77,6 +117,14 @@ func (s *Store) open() error {
 	if _, err := sqlDB.Exec(`PRAGMA busy_timeout=5000`); err != nil {
 		_ = sqlDB.Close()
 		return fmt.Errorf("database busy_timeout %s: %w", s.dbPath, err)
+	}
+	if s.historyOnly {
+		// Must be set before the first table exists to take effect on a fresh
+		// file; on an already-populated file it is a harmless no-op.
+		if _, err := sqlDB.Exec(`PRAGMA auto_vacuum=INCREMENTAL`); err != nil {
+			_ = sqlDB.Close()
+			return fmt.Errorf("history database auto_vacuum %s: %w", s.dbPath, err)
+		}
 	}
 	// Fail fast if the connection cannot write (e.g. file replaced / inode moved).
 	if _, err := sqlDB.Exec(`BEGIN IMMEDIATE; ROLLBACK;`); err != nil {
@@ -130,6 +178,13 @@ func (s *Store) withWrite(fn func(*gorm.DB) error) error {
 }
 
 func (s *Store) migrate() error {
+	if s.historyOnly {
+		return s.db.AutoMigrate(
+			&streamEventModel{},
+			&turnLogEntryModel{},
+			&fileChangeModel{},
+		)
+	}
 	if err := s.db.AutoMigrate(
 		&sessionModel{},
 		&projectModel{},
@@ -139,12 +194,16 @@ func (s *Store) migrate() error {
 		&memoryModel{},
 		&streamEventModel{},
 		&turnModel{},
+		&turnLogEntryModel{},
+		&checkpointModel{},
+		&fileChangeModel{},
 		&secretModel{},
 		&automationModel{},
 		&weixinAccountModel{},
 		&weixinBindingModel{},
 		&channelBindingModel{},
 		&usageRollupModel{},
+		&appMetaModel{},
 	); err != nil {
 		return err
 	}
@@ -176,8 +235,11 @@ func (s *Store) Projects() port.ProjectRepo               { return &projectRepo{
 func (s *Store) LLMConfig() port.LLMConfigRepo            { return &llmConfigRepo{s} }
 func (s *Store) Approvals() port.ApprovalRepo             { return &approvalRepo{s} }
 func (s *Store) PendingMessages() port.PendingMessageRepo { return &pendingMessageRepo{s} }
-func (s *Store) StreamEvents() port.StreamEventRepo       { return &streamEventRepo{s} }
+func (s *Store) StreamEvents() port.StreamEventRepo       { return &streamEventRepo{s.historyOrSelf()} }
 func (s *Store) Turns() port.TurnRepo                     { return &turnRepo{s} }
+func (s *Store) TurnLogs() port.TurnLogRepo               { return &turnLogRepo{meta: s, hist: s.historyOrSelf()} }
+func (s *Store) Checkpoints() port.CheckpointRepo         { return &checkpointRepo{s} }
+func (s *Store) FileChanges() port.FileChangeRepo         { return &fileChangeRepo{s.historyOrSelf()} }
 func (s *Store) Secrets() port.SecretStore                { return newSecretStore(s.db) }
 func (s *Store) Automations() port.AutomationRepo         { return &automationRepo{s} }
 func (s *Store) Memories() port.MemoryRepo                { return &memoryRepo{s} }
@@ -551,6 +613,12 @@ func (r *streamEventRepo) MaxSeq() int64 {
 	var max int64
 	r.s.db.Model(&streamEventModel{}).Select("COALESCE(MAX(seq), 0)").Scan(&max)
 	return max
+}
+
+func (r *streamEventRepo) DeleteBySession(ctx context.Context, sessionID string) error {
+	return r.s.withWrite(func(db *gorm.DB) error {
+		return db.WithContext(ctx).Where("session_id = ?", sessionID).Delete(&streamEventModel{}).Error
+	})
 }
 
 // ---- TurnRepo ----

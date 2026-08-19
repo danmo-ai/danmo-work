@@ -32,7 +32,10 @@ type ConfigDataSection struct {
 	Dir           string `json:"dir" mapstructure:"dir"`
 	Database      string `json:"database" mapstructure:"database"`
 	StoreDatabase string `json:"storeDatabase" mapstructure:"store_database"`
-	Store         string `json:"store" mapstructure:"store"`
+	// HistoryDatabase holds the history plane (turn_log_entries +
+	// stream_events). Empty = derived: <dir of database>/history.db.
+	HistoryDatabase string `json:"historyDatabase" mapstructure:"history_database"`
+	Store           string `json:"store" mapstructure:"store"`
 }
 
 type ConfigServerSection struct {
@@ -57,6 +60,18 @@ type ConfigRuntimeSection struct {
 	Table           ConfigTableSection        `json:"table" mapstructure:"table"`
 	Knowledge       ConfigKnowledgeSection    `json:"knowledge" mapstructure:"knowledge"`
 	Compaction      ConfigCompactionSection   `json:"compaction" mapstructure:"compaction"`
+	Retention       ConfigRetentionSection    `json:"retention" mapstructure:"retention"`
+}
+
+// ConfigRetentionSection bounds history.db growth. Orphaned history (sessions
+// that no longer exist) is always cleaned at startup; age-based pruning is
+// opt-in.
+type ConfigRetentionSection struct {
+	// HistoryMaxAgeDays prunes turn entries + stream events of sessions whose
+	// last activity is older than this many days. Session/turn metadata and
+	// memories are kept; the pruned sessions lose timeline and LLM replay
+	// context. 0 disables age-based pruning (default).
+	HistoryMaxAgeDays int `json:"historyMaxAgeDays" mapstructure:"history_max_age_days"`
 }
 
 type ConfigCompactionSection struct {

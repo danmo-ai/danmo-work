@@ -59,7 +59,6 @@ type Engine struct {
 	// githubMCPReady reports whether the builtin github connector has usable auth.
 	githubMCPReady func(ctx context.Context) bool
 	dataDir        string
-	turnMessages   map[string][]Message
 	mu             sync.Mutex
 	approvalWait   map[string]chan ApprovalOutcome
 	approvalMeta   map[string]approvalMeta
@@ -145,7 +144,6 @@ func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, pro
 		modelLimits:   modelLimits,
 		configStore:   configStore,
 		dataDir:       dataDir,
-		turnMessages:  make(map[string][]Message),
 		approvalWait:  make(map[string]chan ApprovalOutcome),
 		approvalMeta:  make(map[string]approvalMeta),
 		sessionPerm:   make(map[string]sessionPermState),
@@ -660,7 +658,6 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 			ClaimSteers:      func() []Message { return e.claimSteerMessages(sessionID) },
 		})
 
-		e.clearSessionTurnMessages(sessionID)
 		e.turnLog.EndTurn(turnID, turnStatus(err, rep))
 		e.afterTurn(sessionID, turnID, agentPtr.ID, rep, err, nil, s.ModelID)
 	}()
@@ -797,10 +794,12 @@ func (e *Engine) RecoverRunning(ctx context.Context) {
 		// LLM and UI see the same failed pairs a live Execute error would produce.
 		e.closeIncompleteToolPairs(t.SessionID, t.ID)
 
-		// Recoverable only when JSONL exists (start goal and/or complete tool pairs).
-		// DB Goal alone is not enough — injected zombies without work must stay failed.
-		goal, entries := e.turnLog.LoadForRecovery(t.ID)
-		if goal == "" && len(entries) == 0 {
+		// Recoverable only when the turn persisted at least one message entry.
+		// The goal alone (turns row) is not enough — a turn that crashed before
+		// logging its user message has no context worth replaying, and injected
+		// zombie rows without work must stay failed.
+		_, entries := e.turnLog.LoadForRecovery(t.ID)
+		if len(entries) == 0 {
 			log.Printf("[RecoverRunning] turn %s not recoverable, marking as failed", t.ID)
 			if err := e.turns.UpdateStatus(ctx, t.ID, domain.TurnFailed); err != nil {
 				log.Printf("[RecoverRunning] update turn %s status: %v", t.ID, err)
@@ -1285,11 +1284,10 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 	userMsg := userMessageFromAttachments(goal, attachments)
 	e.turnLog.Append(turnID, "user", userMessageLogData(userMsg))
 	messages = append(messages, userMsg)
-	userIdx := len(messages) - 1
 
 	workDir := e.resolveWorkDir(ctx, projectID)
 
-	rep, turnMsgs, err := runner.Run(ctx, TurnContext{
+	rep, _, err := runner.Run(ctx, TurnContext{
 		SessionID:        sessionID,
 		TurnID:           turnID,
 		Agent:            agent,
@@ -1304,21 +1302,8 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		ClaimSteers:      func() []Message { return e.claimSteerMessages(sessionID) },
 	})
 
-	// History lives on disk; drop any in-memory session buffer after the turn.
-	e.clearSessionTurnMessages(sessionID)
-	_ = turnMsgs
-	_ = userIdx
-
 	e.afterTurn(sessionID, turnID, agent.ID, rep, err, nil, modelID)
 	return rep, err
-}
-
-// clearSessionTurnMessages drops in-memory cross-turn history for a session.
-// LLM history is reconstructed from turn logs on the next turn.
-func (e *Engine) clearSessionTurnMessages(sessionID string) {
-	e.mu.Lock()
-	delete(e.turnMessages, sessionID)
-	e.mu.Unlock()
 }
 
 func chatMessagesToRuntime(in []port.ChatMessage) []Message {
@@ -1353,22 +1338,6 @@ func userMessageLogData(msg Message) map[string]any {
 	data := map[string]any{"content": msg.Content}
 	// v1: do not persist base64 image blobs in turn log.
 	return data
-}
-
-// commitTurnMessages is retained for tests that simulate in-memory deltas.
-// Production turns clear memory via clearSessionTurnMessages; history is on disk.
-func (e *Engine) commitTurnMessages(sessionID string, prev []Message, turnMsgs []Message, userIdx int, runErr error) {
-	if userIdx < 0 {
-		userIdx = 0
-	}
-	if userIdx > len(turnMsgs) {
-		userIdx = len(turnMsgs)
-	}
-	delta := turnMsgs[userIdx:]
-	if runErr != nil {
-		delta = salvagePairedTurnDelta(delta)
-	}
-	e.turnMessages[sessionID] = append(append([]Message(nil), prev...), delta...)
 }
 
 func (e *Engine) resolveWorkDir(ctx context.Context, projectID string) string {
@@ -1499,10 +1468,7 @@ func (e *Engine) maybeCompact(ctx context.Context, sessionID, turnID string, tur
 	if newRetain == retainFrom && newSkip == retainSkip {
 		return
 	}
-	if !e.compactionMgr.CompactToRetain(ctx, sessionID, turnID, oldMessages, history, turnCount, model, newRetain, newSkip, tokenEstimate) {
-		return
-	}
-	e.clearSessionTurnMessages(sessionID)
+	e.compactionMgr.CompactToRetain(ctx, sessionID, turnID, oldMessages, history, turnCount, model, newRetain, newSkip, tokenEstimate)
 }
 
 // loadRetainedHistory loads compaction-bounded session messages.
@@ -1848,18 +1814,26 @@ func (e *Engine) settleAbandonedApproval(id, status string, approved bool) {
 	}
 	e.PublishPermissionDecided(a.SessionID, a.TurnID, id, approved, "once")
 }
-func (e *Engine) CreateApproval(sessionID, turnID, toolName, description, reason, hostDomain string) string {
+func (e *Engine) CreateApproval(sessionID, turnID, toolName, description, reason, hostDomain string) (string, error) {
 	id := newRuntimeID("appr")
 	ch := make(chan ApprovalOutcome, 1)
 	e.mu.Lock()
 	e.approvalWait[id] = ch
 	e.approvalMeta[id] = approvalMeta{SessionID: sessionID, Reason: reason, Domain: hostDomain}
 	e.mu.Unlock()
-	_ = e.approvals.Create(context.Background(), domain.Approval{
+	if err := e.approvals.Create(context.Background(), domain.Approval{
 		ID: id, SessionID: sessionID, TurnID: turnID, ToolName: toolName,
 		Summary: description, Description: description, Status: "pending", CreatedAt: time.Now().UTC(),
-	})
-	return id
+	}); err != nil {
+		// DecideApproval loads the DB row before resolving; without it the user
+		// could never answer and the turn would block in WaitApproval forever.
+		e.mu.Lock()
+		delete(e.approvalWait, id)
+		delete(e.approvalMeta, id)
+		e.mu.Unlock()
+		return "", fmt.Errorf("persist approval: %w", err)
+	}
+	return id, nil
 }
 
 func (e *Engine) ResolveAskUser(askID, answer string) error {
@@ -1887,25 +1861,6 @@ func (e *Engine) knowledgeHitsText(agent domain.Agent, goal string, topK int) st
 		return ""
 	}
 	return strings.Join(hits, "\n")
-}
-
-func (e *Engine) buildTurnMessages(sessionID string, agent domain.Agent, goal string, checkpointText string, planMode bool) []Message {
-	var skills []domain.Skill
-	if e.skills != nil {
-		skills = e.resolveAgentSkills(agent, e.dataDir)
-	}
-	sys := buildSystemPrompt(agent.SystemPrompt, skills, e.delegatableAgents(agent), agent.CanDelegate, checkpointText, "", "", e.sandboxStatus(), e.environmentStatus())
-	messages := []Message{
-		{Role: RoleSystem, Content: sys},
-	}
-
-	e.mu.Lock()
-	prevMsgs := e.turnMessages[sessionID]
-	e.mu.Unlock()
-	messages = append(messages, prevMsgs...)
-
-	messages = append(messages, Message{Role: RoleUser, Content: goal})
-	return messages
 }
 
 func turnStatus(err error, rep domain.Report) domain.TurnStatus {

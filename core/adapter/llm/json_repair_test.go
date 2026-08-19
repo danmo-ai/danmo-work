@@ -94,17 +94,33 @@ func TestParseArgsRepairsBrokenStringArguments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	args, err := parseArgs(wrapped)
+	args, repairedFrom, err := parseArgs(wrapped)
 	if err != nil {
 		t.Fatalf("parseArgs: %v", err)
 	}
 	if args["question"] != `say "hi" please` {
 		t.Errorf("question: got %#v", args["question"])
 	}
+	if repairedFrom != inner {
+		t.Errorf("repairedFrom should carry pre-repair bytes for audit: got %q want %q", repairedFrom, inner)
+	}
+}
+
+func TestParseArgsCleanInputHasNoRepairRecord(t *testing.T) {
+	args, repairedFrom, err := parseArgs(json.RawMessage(`{"path":"a.txt"}`))
+	if err != nil {
+		t.Fatalf("parseArgs: %v", err)
+	}
+	if args["path"] != "a.txt" {
+		t.Errorf("path: got %#v", args["path"])
+	}
+	if repairedFrom != "" {
+		t.Errorf("clean parse must not report a repair, got %q", repairedFrom)
+	}
 }
 
 func TestParseArgsStillFailsOnGarbage(t *testing.T) {
-	_, err := parseArgs(json.RawMessage(`"not-an-object"`))
+	_, _, err := parseArgs(json.RawMessage(`"not-an-object"`))
 	if err == nil {
 		t.Fatal("expected error for non-object arguments")
 	}

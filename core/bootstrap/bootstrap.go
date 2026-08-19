@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"danmo-work/core/adapter/config"
 	"danmo-work/core/adapter/feishu"
@@ -117,6 +118,14 @@ func New(cfg Config) *Core {
 	if !filepath.IsAbs(appCfg.Data.StoreDatabase) {
 		appCfg.Data.StoreDatabase = paths.ResolveAgainstHome(appCfg.Data.StoreDatabase)
 	}
+	// History plane derives from the control DB location (same directory)
+	// unless explicitly configured — one root, everything else derived.
+	if appCfg.Data.HistoryDatabase == "" {
+		appCfg.Data.HistoryDatabase = paths.HistoryDatabaseFileFor(appCfg.Data.Database)
+	}
+	if !filepath.IsAbs(appCfg.Data.HistoryDatabase) {
+		appCfg.Data.HistoryDatabase = paths.ResolveAgainstHome(appCfg.Data.HistoryDatabase)
+	}
 	if appCfg.Instance.ID == "" {
 		appCfg.Instance.ID = os.Getenv("WORK_INSTANCE_ID")
 		if appCfg.Instance.ID == "" {
@@ -124,10 +133,21 @@ func New(cfg Config) *Core {
 		}
 	}
 
-	log.Printf("[bootstrap] work.db=%s store.db=%s data=%s", appCfg.Data.Database, appCfg.Data.StoreDatabase, appCfg.Data.Dir)
+	log.Printf("[bootstrap] work.db=%s history.db=%s store.db=%s data=%s",
+		appCfg.Data.Database, appCfg.Data.HistoryDatabase, appCfg.Data.StoreDatabase, appCfg.Data.Dir)
 	st, err := sqlitestore.New(appCfg.Data.Database)
 	if err != nil {
 		panic("failed to open database: " + err.Error())
+	}
+	hist, err := sqlitestore.NewHistory(appCfg.Data.HistoryDatabase)
+	if err != nil {
+		panic("failed to open history database: " + err.Error())
+	}
+	st.SetHistory(hist)
+	// One-time move of bulk tables out of work.db. Must run before anything
+	// reads stream events (MaxSeq seeding) or turn entries.
+	if err := sqlitestore.MigrateHistoryTables(context.Background(), st, hist); err != nil {
+		log.Printf("[bootstrap] history split migration (will retry next start): %v", err)
 	}
 	tableStore, err := tablestore.New(appCfg.Data.StoreDatabase)
 	if err != nil {
@@ -140,7 +160,9 @@ func New(cfg Config) *Core {
 	gitMgr := service.NewGitManager(pm)
 	gitMgr.SetSecretStore(st.Secrets())
 
-	turnLog := turnlog.NewTurnLogStore(pm.ProjectDir)
+	turnLog := turnlog.NewTurnLogStore(st.TurnLogs())
+	migrateLegacyTurnLogs(st, pm)
+	migrateLegacySessionArtifacts(st, pm)
 	agents := service.NewAgentManager(appCfg.Data.Dir)
 	skills := service.NewSkillManager(appCfg.Data.Dir)
 	knowledgeMgr := service.NewKnowledgeManager(
@@ -220,8 +242,8 @@ func New(cfg Config) *Core {
 	usageSink := dqruntime.NewUsageSink(st.Usage(), st.Sessions())
 	stream.SetUsageSink(usageSink)
 	go dqruntime.BackfillUsageFromStreamEvents(context.Background(), st.Usage(), st.Sessions(), st.StreamEvents())
-	checkpointStore := turnlog.NewCheckpointStore(pm.ProjectDir)
-	fileChangeStore := turnlog.NewFileChangeStore(pm.ProjectDir)
+	checkpointStore := turnlog.NewCheckpointStore(st.Checkpoints())
+	fileChangeStore := turnlog.NewFileChangeStore(st.FileChanges())
 	snapshotStore := turnlog.NewSnapshotStore(pm.ProjectDir)
 	aiReview := service.NewAIReviewManager(pm, snapshotStore, fileChangeStore)
 
@@ -339,6 +361,23 @@ func New(cfg Config) *Core {
 
 	eng.RecoverRunning(context.Background())
 
+	// History retention: orphan cleanup always; age-based pruning opt-in via
+	// runtime.retention.history_max_age_days. Runs at boot and daily.
+	retentionAge := time.Duration(appCfg.Runtime.Retention.HistoryMaxAgeDays) * 24 * time.Hour
+	go func() {
+		for {
+			stats, err := st.PruneHistory(context.Background(), retentionAge)
+			switch {
+			case err != nil:
+				log.Printf("[bootstrap] history retention: %v", err)
+			case stats.OrphanSessions > 0 || stats.AgedSessions > 0:
+				log.Printf("[bootstrap] history retention: orphans=%d aged=%d events=%d entries=%d",
+					stats.OrphanSessions, stats.AgedSessions, stats.DeletedEvents, stats.DeletedEntries)
+			}
+			time.Sleep(24 * time.Hour)
+		}
+	}()
+
 	weixinPeer := service.NewWeixinPeerStore(st)
 	feishuPeer := service.NewFeishuPeerStore(st, configManager)
 	wecomPeer := service.NewWecomPeerStore(st, configManager)
@@ -434,6 +473,58 @@ func (c *Core) Close() error {
 		}
 	}
 	return first
+}
+
+// migrateLegacyTurnLogs runs the one-time import of on-disk turn JSONL files
+// into the DB-backed turn log (single source of truth). Guarded by an
+// app_meta marker; on partial failure the marker is not set so the
+// idempotent import retries at next startup. Legacy files stay on disk as
+// inert backups. Must run before Engine.RecoverRunning.
+func migrateLegacyTurnLogs(st *sqlitestore.Store, pm *service.ProjectManager) {
+	const marker = "turnlog_jsonl_imported_v1"
+	ctx := context.Background()
+	if _, ok, err := st.AppMeta().Get(ctx, marker); err != nil || ok {
+		if err != nil {
+			log.Printf("[bootstrap] turnlog import marker: %v", err)
+		}
+		return
+	}
+	n, err := turnlog.ImportLegacyJSONL(ctx, st.TurnLogs(), pm.ProjectDir)
+	if err != nil {
+		log.Printf("[bootstrap] turnlog jsonl import (will retry next start): imported=%d err=%v", n, err)
+		return
+	}
+	if n > 0 {
+		log.Printf("[bootstrap] turnlog jsonl import: %d turns migrated to DB", n)
+	}
+	if err := st.AppMeta().Set(ctx, marker, "done"); err != nil {
+		log.Printf("[bootstrap] turnlog import marker set: %v", err)
+	}
+}
+
+// migrateLegacySessionArtifacts runs the one-time import of on-disk session
+// artifacts (checkpoint_*.json, file_changes.jsonl) into the DB. Files stay
+// on disk as inert backups.
+func migrateLegacySessionArtifacts(st *sqlitestore.Store, pm *service.ProjectManager) {
+	const marker = "session_artifacts_imported_v1"
+	ctx := context.Background()
+	if _, ok, err := st.AppMeta().Get(ctx, marker); err != nil || ok {
+		if err != nil {
+			log.Printf("[bootstrap] session artifacts import marker: %v", err)
+		}
+		return
+	}
+	n, err := turnlog.ImportLegacyArtifacts(ctx, st.Checkpoints(), st.FileChanges(), pm.ProjectDir)
+	if err != nil {
+		log.Printf("[bootstrap] session artifacts import (will retry next start): imported=%d err=%v", n, err)
+		return
+	}
+	if n > 0 {
+		log.Printf("[bootstrap] session artifacts import: %d artifacts migrated to DB", n)
+	}
+	if err := st.AppMeta().Set(ctx, marker, "done"); err != nil {
+		log.Printf("[bootstrap] session artifacts import marker set: %v", err)
+	}
 }
 
 func ensureDefaultProject(pm *service.ProjectManager) {

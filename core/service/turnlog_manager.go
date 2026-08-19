@@ -32,14 +32,6 @@ func (m *TurnLogManager) EndTurn(turnID string, status domain.TurnStatus) {
 	m.store.EndTurn(turnID, status)
 }
 
-func (m *TurnLogManager) LastStatus(sessionID string) domain.TurnStatus {
-	return m.store.LastStatus(sessionID)
-}
-
-func (m *TurnLogManager) ListTurns(sessionID string) []domain.TurnLog {
-	return m.store.ListTurns(sessionID)
-}
-
 func (m *TurnLogManager) ListTurnIDs(sessionID string) []string {
 	return m.store.ListTurnIDs(sessionID)
 }
@@ -62,6 +54,10 @@ func (m *TurnLogManager) LoadTurnMessages(turnID string) []port.ChatMessage {
 
 func (m *TurnLogManager) IsNestedToolRun(turnID string) bool {
 	return m.store.IsNestedToolRun(turnID)
+}
+
+func (m *TurnLogManager) ListSessionEntries(sessionID string) []port.TurnLogEntryRecord {
+	return m.store.ListSessionEntries(sessionID)
 }
 
 func (m *TurnLogManager) LoadRawLog(turnID string) ([]byte, error) {

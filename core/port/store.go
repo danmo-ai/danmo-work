@@ -15,6 +15,9 @@ type Repository interface {
 	PendingMessages() PendingMessageRepo
 	StreamEvents()    StreamEventRepo
 	Turns()           TurnRepo
+	TurnLogs()        TurnLogRepo
+	Checkpoints()     CheckpointRepo
+	FileChanges()     FileChangeRepo
 	Secrets()         SecretStore
 	Automations()     AutomationRepo
 	Memories()        MemoryRepo
@@ -218,6 +221,8 @@ type StreamEventRepo interface {
 	Save(ctx context.Context, event domain.StreamEvent) error
 	ListBySession(ctx context.Context, sessionID string, since int64) ([]domain.StreamEvent, error)
 	MaxSeq() int64
+	// DeleteBySession removes the session's event timeline (cascade cleanup).
+	DeleteBySession(ctx context.Context, sessionID string) error
 }
 
 type TurnRepo interface {
@@ -228,38 +233,94 @@ type TurnRepo interface {
 	ListByStatus(ctx context.Context, status domain.TurnStatus) ([]domain.TurnLog, error)
 }
 
-// TurnLogStore persists turn-level JSONL entries used exclusively for LLM
-// message reconstruction (session history + turn recovery) and offline
-// debugging (zip download).
+// TurnLogEntryRecord is one persisted LLM-history entry row. The SQLite
+// turn_log_entries table is the single source of truth for LLM message
+// reconstruction; JSONL files are rendered from these rows on demand
+// (export/zip/debug) and are no longer authoritative.
+type TurnLogEntryRecord struct {
+	TurnID string
+	Seq    int
+	Type   string
+	Data   map[string]any
+}
+
+// TurnLogRepo persists turn-log entries and turn metadata in the database.
+// Turn metadata (goal, agent, status, nested) lives in the turns table —
+// the same rows served by TurnRepo — so there is exactly one fact per turn.
+type TurnLogRepo interface {
+	// UpsertTurnMeta inserts the turn row (status as given) or fills blank
+	// fields (session/project/agent/goal) on an existing row. Nested is only
+	// ever raised to true, never cleared. The status of an existing row is
+	// left untouched (CancelTurn/recovery own explicit status transitions).
+	UpsertTurnMeta(ctx context.Context, t domain.TurnLog) error
+	GetTurnMeta(ctx context.Context, turnID string) (domain.TurnLog, bool, error)
+	// EndTurn records a terminal status but never overwrites an existing
+	// terminal status — a concurrent user cancel must not be resurrected by
+	// the finishing turn goroutine.
+	EndTurn(ctx context.Context, turnID string, status domain.TurnStatus) error
+	ListSessionTurnIDs(ctx context.Context, sessionID string, includeNested bool) ([]string, error)
+	AppendEntry(ctx context.Context, e TurnLogEntryRecord) error
+	ListEntries(ctx context.Context, turnID string) ([]TurnLogEntryRecord, error)
+	// MaxSeq returns the highest entry seq for a turn (0 when none).
+	MaxSeq(ctx context.Context, turnID string) (int, error)
+	// DeleteSessionHistory removes the session's turn rows and their message
+	// entries (cascade cleanup when a session is deleted).
+	DeleteSessionHistory(ctx context.Context, sessionID string) error
+}
+
+// CheckpointRepo persists the latest compaction checkpoint per session
+// (control plane). The checkpoint owns replay semantics: RetainFromTurnID
+// decides which turn_log_entries participate in LLM context reconstruction,
+// and it carries the surviving todo/plan list and file-change aggregate.
+type CheckpointRepo interface {
+	// Save upserts the session's checkpoint (only the latest is kept).
+	Save(ctx context.Context, cp domain.CompactionCheckpoint) error
+	// Get returns nil without error when the session has no checkpoint.
+	Get(ctx context.Context, sessionID string) (*domain.CompactionCheckpoint, error)
+	DeleteBySession(ctx context.Context, sessionID string) error
+}
+
+// FileChangeRepo persists the append-only session file-change journal
+// (history plane).
+type FileChangeRepo interface {
+	// Append stores one record. Seq 0 means assign the next per-session seq;
+	// a non-zero Seq is preserved (legacy import).
+	Append(ctx context.Context, sessionID string, rec domain.FileChangeRecord) (int64, error)
+	// ListAfter returns records with Seq > afterSeq in ascending order.
+	ListAfter(ctx context.Context, sessionID string, afterSeq int64) ([]domain.FileChangeRecord, error)
+	DeleteBySession(ctx context.Context, sessionID string) error
+}
+
+// TurnLogStore reconstructs LLM chat history (session replay + turn recovery)
+// from the DB-backed turn log and renders JSONL exports for debugging.
 //
 // WHITELIST of allowed entry types:
-//   - "start"        — written by Create (skipped on reopen/resume of existing file)
 //   - "user"         — user / synthetic user messages for LLM replay
 //   - "assistant"    — assistant text and/or batched tool_calls
 //   - "tool_call"    — legacy single tool call (still accepted on read)
 //   - "tool_result"  — tool role result after Execute (success, error, or cancel)
-//   - "end"          — written by EndTurn
+//
+// Turn start/end are table columns (turns.goal / turns.status), not entries;
+// exports render synthetic "start"/"end" lines for backward-compatible JSONL.
 //
 // DO NOT write diagnostic, audit, or telemetry entries here (e.g. llm_error,
 // step events, permission decisions). Those belong in Stream Events
 // (port.EventStream) which serve the UI/SSE timeline.
 //
-// LoadSessionMessages rebuilds full ChatMessages from the whitelist above
-// (user / assistant / tool_call / tool_result). Incomplete turns drop an
-// unpaired trailing assistant(tool_calls)/tool_call unless recovery has already
-// closed them via ListIncompleteToolCalls + tool_result. Compaction uses
-// retainFromTurnID + retainSkipMessages to bound the replay window.
+// LoadSessionMessages rebuilds full ChatMessages from the whitelist above.
+// Incomplete turns drop an unpaired trailing assistant(tool_calls)/tool_call
+// unless recovery has already closed them via ListIncompleteToolCalls +
+// tool_result. Compaction uses retainFromTurnID + retainSkipMessages to bound
+// the replay window.
 type TurnLogStore interface {
 	Create(turnID, sessionID, projectID, agentID, goal string) error
-	// CreateNested writes a nested tool-run log under tool_runs/ (zip/debug only).
+	// CreateNested records a nested tool-run log (zip/debug only).
 	CreateNested(turnID, sessionID, projectID, agentID, goal string) error
 	Append(turnID, typ string, data map[string]any)
 	EndTurn(turnID string, status domain.TurnStatus)
-	LastStatus(sessionID string) domain.TurnStatus
-	ListTurns(sessionID string) []domain.TurnLog
 	ListTurnIDs(sessionID string) []string
 	LoadForRecovery(turnID string) (goal string, entries []map[string]any)
-	// ListIncompleteToolCalls returns tool invocations in the raw JSONL that
+	// ListIncompleteToolCalls returns tool invocations in the turn log that
 	// lack a matching tool_result (authoritative open set for recovery close).
 	ListIncompleteToolCalls(turnID string) []IncompleteToolCall
 	// LoadSessionMessages rebuilds full LLM chat history for a session.
@@ -268,6 +329,9 @@ type TurnLogStore interface {
 	LoadSessionMessages(sessionID, retainFromTurnID string, retainSkipMessages int) []ChatMessage
 	LoadTurnMessages(turnID string) []ChatMessage
 	IsNestedToolRun(turnID string) bool
+	// ListSessionEntries returns every entry of every non-nested turn in the
+	// session, ordered by turn then seq (debug/inspection).
+	ListSessionEntries(sessionID string) []TurnLogEntryRecord
 	LoadRawLog(turnID string) ([]byte, error)
 	LoadTurnLogZip(turnID string, events []domain.StreamEvent) ([]byte, error)
 }

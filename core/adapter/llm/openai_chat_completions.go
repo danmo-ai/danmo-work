@@ -207,14 +207,15 @@ func parseChatCompletionsResponse(respBody []byte) (port.LLMChatResponse, error)
 	if len(choice.ToolCalls) > 0 {
 		var tcs []port.ChatToolCall
 		for _, tc := range choice.ToolCalls {
-			args, err := parseArgs(tc.Function.Arguments)
+			args, repairedFrom, err := parseArgs(tc.Function.Arguments)
 			if err != nil {
 				return port.LLMChatResponse{}, fmt.Errorf("tool '%s' arguments: %w (raw: %s)", tc.Function.Name, err, string(tc.Function.Arguments))
 			}
 			tcs = append(tcs, port.ChatToolCall{
-				ID:        tc.ID,
-				Name:      tc.Function.Name,
-				Arguments: args,
+				ID:           tc.ID,
+				Name:         tc.Function.Name,
+				Arguments:    args,
+				RepairedFrom: repairedFrom,
 			})
 		}
 		return port.LLMChatResponse{
@@ -267,10 +268,12 @@ func marshalArgs(args map[string]any) string {
 // parseArgs parses tool call arguments from an OpenAI-compatible API response.
 // arguments may be a JSON string or a JSON object; both are handled.
 // When the model damages JSON structure (unescaped quotes / raw newlines inside
-// string values), a best-effort repair is attempted before failing.
-func parseArgs(raw json.RawMessage) (map[string]any, error) {
+// string values), a best-effort repair is attempted before failing. On a
+// successful repair the second return value carries the pre-repair bytes so
+// callers can surface an audit record; it is empty when parsing was clean.
+func parseArgs(raw json.RawMessage) (map[string]any, string, error) {
 	if len(raw) == 0 || string(raw) == "null" {
-		return nil, fmt.Errorf("arguments is null")
+		return nil, "", fmt.Errorf("arguments is null")
 	}
 	// OpenAI-compatible APIs return arguments as a JSON string, not an object.
 	var str string
@@ -278,19 +281,21 @@ func parseArgs(raw json.RawMessage) (map[string]any, error) {
 		raw = json.RawMessage(str)
 	}
 	var args map[string]any
+	repairedFrom := ""
 	if err := json.Unmarshal(raw, &args); err != nil {
 		repaired, rerr := repairJSONObject(raw)
 		if rerr != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if err := json.Unmarshal(repaired, &args); err != nil {
-			return nil, err
+			return nil, "", err
 		}
+		repairedFrom = string(raw)
 	}
 	if args == nil {
-		return nil, fmt.Errorf("arguments parsed to nil")
+		return nil, "", fmt.Errorf("arguments parsed to nil")
 	}
-	return args, nil
+	return args, repairedFrom, nil
 }
 
 // classifyHTTPError returns a user-friendly error message for common HTTP

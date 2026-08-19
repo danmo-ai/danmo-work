@@ -433,8 +433,8 @@ func (g *mockApprovalGate) WaitApproval(_ context.Context, _ string) (ApprovalOu
 	return <-g.result, nil
 }
 
-func (g *mockApprovalGate) CreateApproval(_, _, _, _, _, _ string) string {
-	return "approval-1"
+func (g *mockApprovalGate) CreateApproval(_, _, _, _, _, _ string) (string, error) {
+	return "approval-1", nil
 }
 
 func validateToolMessagePairs(t *testing.T, msgs []Message, label string) {
@@ -1142,5 +1142,67 @@ func TestTurnRunnerStopsAfterMaxLLMFailures(t *testing.T) {
 	}
 	if !strings.Contains(report.Summary, "3 times") {
 		t.Fatalf("expected failure summary mentioning 3 times, got %q", report.Summary)
+	}
+}
+
+// repairedArgsLLM emits one tool call whose arguments were repaired by the
+// adapter (RepairedFrom set), then finishes.
+type repairedArgsLLM struct {
+	calls int
+	raw   string
+}
+
+func (l *repairedArgsLLM) Chat(_ context.Context, _ port.LLMChatRequest) (port.LLMChatResponse, error) {
+	l.calls++
+	if l.calls == 1 {
+		return port.LLMChatResponse{
+			ToolCalls: []port.ChatToolCall{{
+				ID:           "call-repair-1",
+				Name:         "noop_tool",
+				Arguments:    map[string]any{"path": "a.txt"},
+				RepairedFrom: l.raw,
+			}},
+		}, nil
+	}
+	return port.LLMChatResponse{Content: "done", Done: true}, nil
+}
+
+func TestRunPublishesToolArgsRepairedAuditEvent(t *testing.T) {
+	rawDamaged := `{"path":"a.txt",}`
+	reg := tool.NewRegistry()
+	reg.Register(&mockToolHandler{name: "noop_tool", risk: domain.RiskLow})
+	stream := NewStreamEventManager(&memStreamRepo{})
+	runner := NewTurnRunner(&repairedArgsLLM{raw: rawDamaged}, stream, permission.NewGate(nil), reg, nil)
+
+	_, _, err := runner.Run(context.Background(), TurnContext{
+		SessionID: "s1",
+		TurnID:    "t1",
+		Agent:     domain.Agent{ID: "a", Steps: 5},
+		Model:     "m",
+		MaxSteps:  5,
+		Messages:  []Message{{Role: RoleUser, Content: "go"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got *domain.ToolArgsRepairedPayload
+	for _, ev := range stream.ListSince("s1", 0) {
+		if ev.Type != domain.EventToolArgsRepaired {
+			continue
+		}
+		var p domain.ToolArgsRepairedPayload
+		if json.Unmarshal(ev.Payload, &p) == nil {
+			got = &p
+		}
+	}
+	if got == nil {
+		t.Fatal("expected tool.args_repaired audit event in stream")
+	}
+	if got.CallID != "call-repair-1" || got.Name != "noop_tool" {
+		t.Fatalf("audit event identity mismatch: %+v", got)
+	}
+	if got.RawArguments != rawDamaged {
+		t.Fatalf("audit event must carry pre-repair bytes: got %q want %q", got.RawArguments, rawDamaged)
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -149,7 +148,7 @@ func TestRecoverRunningExpiresStaleApprovals(t *testing.T) {
 	t.Logf("approval status after recovery: %s", recovered.Status)
 }
 
-// ---------- Test: Checkpoint file fallback after restart ----------
+// ---------- Test: DB-backed checkpoint survives restart ----------
 
 func TestCheckpointRecoveryFromDisk(t *testing.T) {
 	_, dataDir := setupRecoveryEnv(t)
@@ -174,34 +173,30 @@ func TestCheckpointRecoveryFromDisk(t *testing.T) {
 	waitForReport(t, r1, s.ID, &since)
 	time.Sleep(300 * time.Millisecond)
 
-	// Phase 2: manually write a checkpoint file to the session's data directory.
-	// After restart, the CheckpointStore scans project dirs to find the session.
-	projDir := core1.Projects.ProjectDir("") // dataDir/_default or proj-xxx
-	sessionDir := filepath.Join(projDir, "sessions", s.ID)
-	if err := os.MkdirAll(sessionDir, 0755); err != nil {
-		t.Fatalf("mkdir session dir: %v", err)
+	// Phase 2: persist a checkpoint via the DB repo (checkpoints live in
+	// work.db; legacy checkpoint files are import-only).
+	cp := domain.CompactionCheckpoint{
+		SessionID: s.ID, TurnID: "turn-cp-001",
+		Summary: "recovered-checkpoint-marker", TurnCount: 5, TokenEstimate: 1000,
+	}
+	if err := core1.Store.Checkpoints().Save(context.Background(), cp); err != nil {
+		t.Fatalf("save checkpoint: %v", err)
 	}
 
-	checkpointContent := `{"sessionId":"` + s.ID + `","turnId":"turn-cp-001","summary":"recovered-checkpoint-marker","turnCount":5,"tokenEstimate":1000}`
-	cpPath := filepath.Join(sessionDir, "checkpoint_turn-cp-001.json")
-	if err := os.WriteFile(cpPath, []byte(checkpointContent), 0644); err != nil {
-		t.Fatalf("write checkpoint: %v", err)
-	}
-	t.Logf("wrote checkpoint to %s", cpPath)
-
-	// Phase 3: simulate restart — new bootstrap.
+	// Phase 3: simulate restart — new bootstrap over the same DB.
 	core2 := newCore(t, dataDir)
 
-	// Verify: the checkpoint is loadable from disk via the checkpoint store.
-	// We check by querying the store through a compaction manager recovery call.
-	// Since we can't access CompactionManager directly, we verify via the
-	// CheckpointStore by checking the file is in the expected location and
-	// the new bootstrap's Recover() path would load it.
-	//
-	// Practical check: start a new turn on the same session. The runTurn
-	// function calls Recover which now uses getCheckpoint (with file fallback).
-	// If the checkpoint loads, the system prompt will include the marker.
-	// We can verify indirectly by confirming the turn starts without error.
+	// The checkpoint must be readable after restart.
+	got, err := core2.Store.Checkpoints().Get(context.Background(), s.ID)
+	if err != nil || got == nil {
+		t.Fatalf("checkpoint after restart: %+v, %v", got, err)
+	}
+	if got.Summary != "recovered-checkpoint-marker" {
+		t.Errorf("checkpoint summary: want 'recovered-checkpoint-marker', got %q", got.Summary)
+	}
+
+	// Practical check: a new turn on the same session loads the checkpoint
+	// into the system prompt and completes without error.
 	r2 := newRouter(t, core2)
 	w2 := postJSON(t, r2, "/api/v1/sessions/"+s.ID+"/turns", domain.SendMessageRequest{
 		UserInput: "checkpoint验证轮, 回复'验证完成'",
@@ -218,22 +213,8 @@ func TestCheckpointRecoveryFromDisk(t *testing.T) {
 
 	rep := waitForReport(t, r2, s.ID, &since)
 	// Report may be empty (LLM flakiness), but the turn completing without
-	// error proves the checkpoint was loaded from disk and injected into the
-	// system prompt successfully.
+	// error proves the checkpoint was loaded and injected successfully.
 	t.Logf("report after checkpoint recovery: %q", rep.Summary)
-
-	// Verify checkpoint file still exists and is readable.
-	data, err := os.ReadFile(cpPath)
-	if err != nil {
-		t.Fatalf("checkpoint file disappeared: %v", err)
-	}
-	var cp domain.CompactionCheckpoint
-	if err := json.Unmarshal(data, &cp); err != nil {
-		t.Fatalf("checkpoint file corrupted: %v", err)
-	}
-	if cp.Summary != "recovered-checkpoint-marker" {
-		t.Errorf("checkpoint summary: want 'recovered-checkpoint-marker', got %q", cp.Summary)
-	}
 }
 
 // ---------- Test: Cancel sets correct DB status ----------
@@ -934,7 +915,7 @@ func TestSessionHistorySurvivesRestartFromTurnLog(t *testing.T) {
 		t.Fatalf("before restart: weather assistant missing from history: %+v", msgs1)
 	}
 
-	// Process restart — in-memory turnMessages is gone; history must come from JSONL.
+	// Process restart — all in-memory engine state is gone; history must come from JSONL.
 	core2 := newCore(t, dataDir)
 	msgs2 := core2.TurnLogs.LoadSessionMessages(s.ID, "", 0)
 	found = false

@@ -62,6 +62,17 @@ type ErrorPayload struct {
 	Kind    string `json:"kind,omitempty"`
 }
 
+// ToolArgsRepairedPayload is the audit record emitted when an LLM adapter
+// repaired damaged tool-call argument JSON before execution. RawArguments
+// carries the pre-repair bytes; the repaired form is what entered the flow
+// (assistant message, tool input, turn JSONL). Audit lives in stream events
+// only — turn JSONL stays restricted to LLM-reconstructable types.
+type ToolArgsRepairedPayload struct {
+	CallID       string `json:"callId"`
+	Name         string `json:"name"`
+	RawArguments string `json:"rawArguments"`
+}
+
 type LLMUsagePayload struct {
 	PromptTokens        int    `json:"promptTokens,omitempty"`
 	CompletionTokens    int    `json:"completionTokens,omitempty"`

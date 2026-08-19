@@ -6,16 +6,6 @@ import (
 	"danmo-work/core/port"
 )
 
-func TestClearSessionTurnMessages(t *testing.T) {
-	e := &Engine{turnMessages: map[string][]Message{
-		"sess-1": {{Role: RoleUser, Content: "hi"}},
-	}}
-	e.clearSessionTurnMessages("sess-1")
-	if _, ok := e.turnMessages["sess-1"]; ok {
-		t.Fatal("expected session history cleared from memory")
-	}
-}
-
 func TestChatMessagesToRuntime(t *testing.T) {
 	in := []port.ChatMessage{
 		{Role: "user", Content: "u"},

@@ -89,6 +89,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("runtime.knowledge.chapter_max_tokens", 512)
 	v.SetDefault("runtime.knowledge.vector_hybrid", false)
 	v.SetDefault("data.store_database", paths.StoreDatabaseFile())
+	v.SetDefault("data.history_database", "")
+	v.SetDefault("runtime.retention.history_max_age_days", 0)
 	v.SetDefault("runtime.compaction.enabled", true)
 	v.SetDefault("runtime.compaction.model", "")
 	v.SetDefault("runtime.compaction.max_tokens", 128000)
@@ -167,6 +169,14 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 	}
 	if !filepath.IsAbs(cfg.Data.StoreDatabase) {
 		cfg.Data.StoreDatabase = paths.ResolveAgainstHome(cfg.Data.StoreDatabase)
+	}
+	// History plane derives from the control DB location so the pair stays
+	// co-located under WORK_DB_PATH overrides (tests, custom layouts).
+	if cfg.Data.HistoryDatabase == "" {
+		cfg.Data.HistoryDatabase = paths.HistoryDatabaseFileFor(cfg.Data.Database)
+	}
+	if !filepath.IsAbs(cfg.Data.HistoryDatabase) {
+		cfg.Data.HistoryDatabase = paths.ResolveAgainstHome(cfg.Data.HistoryDatabase)
 	}
 	if cfg.Runtime.Table == (domain.ConfigTableSection{}) {
 		cfg.Runtime.Table = domain.DefaultTableSection()

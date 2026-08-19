@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -134,10 +133,9 @@ func TestCompactionMergesFileChangesIncrementally(t *testing.T) {
 		AddText("summary-1").
 		AddText("summary-2")
 	stream := NewStreamEventManager(nil)
-	tmpDir := t.TempDir()
-	projector := func(pid string) string { return filepath.Join(tmpDir, pid) }
-	cpStore := turnlog.NewCheckpointStore(projector)
-	fcStore := turnlog.NewFileChangeStore(projector)
+	artifacts := newArtifactTestStore(t)
+	cpStore := turnlog.NewCheckpointStore(artifacts.Checkpoints())
+	fcStore := turnlog.NewFileChangeStore(artifacts.FileChanges())
 	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 128000, 50), cpStore, nil)
 	mgr.SetFileChangeJournal(fcStore)
 
@@ -206,10 +204,9 @@ func TestCompactionInheritsFileChangesWhenNoDelta(t *testing.T) {
 		AddText("first").
 		AddText("second")
 	stream := NewStreamEventManager(nil)
-	tmpDir := t.TempDir()
-	projector := func(pid string) string { return filepath.Join(tmpDir, pid) }
-	cpStore := turnlog.NewCheckpointStore(projector)
-	fcStore := turnlog.NewFileChangeStore(projector)
+	artifacts := newArtifactTestStore(t)
+	cpStore := turnlog.NewCheckpointStore(artifacts.Checkpoints())
+	fcStore := turnlog.NewFileChangeStore(artifacts.FileChanges())
 	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 128000, 50), cpStore, nil)
 	mgr.SetFileChangeJournal(fcStore)
 

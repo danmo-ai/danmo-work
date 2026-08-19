@@ -14,6 +14,7 @@ import (
 	"danmo-work/core/runtime/tool"
 	"danmo-work/core/runtime/tool/builtin"
 	"danmo-work/core/service"
+	sqlitestore "danmo-work/core/store/sqlite"
 	"danmo-work/core/store/turnlog"
 )
 
@@ -66,6 +67,19 @@ func (r *memStreamRepo) ListBySession(_ context.Context, sessionID string, since
 		}
 	}
 	return out, nil
+}
+
+func (r *memStreamRepo) DeleteBySession(_ context.Context, sessionID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	kept := r.events[:0]
+	for _, ev := range r.events {
+		if ev.SessionID != sessionID {
+			kept = append(kept, ev)
+		}
+	}
+	r.events = kept
+	return nil
 }
 
 func (r *memStreamRepo) MaxSeq() int64 {
@@ -134,7 +148,10 @@ func TestWaitApprovalCancelSettlesAbandonedApproval(t *testing.T) {
 		approvalMeta: make(map[string]approvalMeta),
 	}
 
-	id := e.CreateApproval("sess-appr", "turn-appr", "exec_shell", "rm -rf x", "high_risk", "")
+	id, err := e.CreateApproval("sess-appr", "turn-appr", "exec_shell", "rm -rf x", "high_risk", "")
+	if err != nil {
+		t.Fatalf("create approval: %v", err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -177,6 +194,43 @@ func TestWaitApprovalCancelSettlesAbandonedApproval(t *testing.T) {
 	a, _ = repo.Get(context.Background(), id)
 	if a.Status != "expired" {
 		t.Fatalf("late resolve must not resurrect approval, got %q", a.Status)
+	}
+}
+
+type failCreateApprovalRepo struct {
+	*memApprovalRepo
+}
+
+func (r *failCreateApprovalRepo) Create(context.Context, domain.Approval) error {
+	return errors.New("db locked")
+}
+
+// Regression: a failed approval INSERT must surface as an error and clean up
+// the waiter maps. Previously the error was swallowed — the UI showed the ask
+// buttons but DecideApproval could never find the row, so the turn hung in
+// WaitApproval until cancelled.
+func TestCreateApprovalPersistFailureCleansWaiters(t *testing.T) {
+	repo := &failCreateApprovalRepo{memApprovalRepo: newMemApprovalRepo()}
+	e := &Engine{
+		approvals:    service.NewApprovalManager(repo),
+		stream:       NewStreamEventManager(&memStreamRepo{}),
+		approvalWait: make(map[string]chan ApprovalOutcome),
+		approvalMeta: make(map[string]approvalMeta),
+	}
+
+	id, err := e.CreateApproval("sess-x", "turn-x", "exec_shell", "rm -rf x", "high_risk", "")
+	if err == nil {
+		t.Fatal("expected error when approval row cannot be persisted")
+	}
+	if id != "" {
+		t.Fatalf("expected empty id on persist failure, got %q", id)
+	}
+
+	e.mu.Lock()
+	nWait, nMeta := len(e.approvalWait), len(e.approvalMeta)
+	e.mu.Unlock()
+	if nWait != 0 || nMeta != 0 {
+		t.Fatalf("waiter maps must be cleaned up on persist failure: wait=%d meta=%d", nWait, nMeta)
 	}
 }
 
@@ -229,168 +283,9 @@ func TestReserveSessionTurnPreventsConcurrentStartAndResume(t *testing.T) {
 	}
 }
 
-func TestBuildTurnMessages_IncludesPreviousTurnMessages(t *testing.T) {
-	engine := &Engine{
-		turnRunner:   &TurnRunner{},
-		knowledge:    builtin.NewKnowledge(),
-		turnMessages: make(map[string][]Message),
-	}
-	agent := domain.Agent{
-		ID:           "test-agent",
-		SystemPrompt: "You are a test assistant.",
-		KnowledgeIDs: []string{},
-	}
-
-	sessionID := "session-1"
-
-	msgs1 := engine.buildTurnMessages(sessionID, agent, "hello turn 1", "", false)
-	if len(msgs1) < 2 {
-		t.Fatalf("turn 1: expected at least 2 messages (system + user), got %d", len(msgs1))
-	}
-	if msgs1[0].Role != RoleSystem {
-		t.Errorf("turn 1: first message should be system, got %s", msgs1[0].Role)
-	}
-	if msgs1[len(msgs1)-1].Role != RoleUser || msgs1[len(msgs1)-1].Content != "hello turn 1" {
-		t.Errorf("turn 1: last message should be user with goal, got role=%s content=%q",
-			msgs1[len(msgs1)-1].Role, msgs1[len(msgs1)-1].Content)
-	}
-
-	engine.mu.Lock()
-	engine.turnMessages[sessionID] = append(engine.turnMessages[sessionID], msgs1...)
-	engine.mu.Unlock()
-
-	msgs2 := engine.buildTurnMessages(sessionID, agent, "hello turn 2", "", false)
-
-	turn1UserFound := false
-	turn1SystemFound := false
-	for _, msg := range msgs2 {
-		if msg.Role == RoleUser && msg.Content == "hello turn 1" {
-			turn1UserFound = true
-		}
-		if msg.Role == RoleSystem && msg.Content == msgs1[0].Content {
-			turn1SystemFound = true
-		}
-	}
-	if !turn1UserFound {
-		t.Error("turn 2 messages do NOT contain turn 1's user message (cross-turn context lost)")
-	}
-	if !turn1SystemFound {
-		t.Error("turn 2 messages do NOT contain turn 1's system prompt (cross-turn context lost)")
-	}
-	if msgs2[len(msgs2)-1].Role != RoleUser || msgs2[len(msgs2)-1].Content != "hello turn 2" {
-		t.Errorf("turn 2: last message should be user with goal, got role=%s content=%q",
-			msgs2[len(msgs2)-1].Role, msgs2[len(msgs2)-1].Content)
-	}
-	if len(msgs2) < len(msgs1)+1 {
-		t.Errorf("turn 2: expected at least %d messages, got %d", len(msgs1)+1, len(msgs2))
-	}
-}
-
-func TestBuildTurnMessages_EmptyPreviousMessages(t *testing.T) {
-	engine := &Engine{
-		turnRunner:   &TurnRunner{},
-		knowledge:    builtin.NewKnowledge(),
-		turnMessages: make(map[string][]Message),
-	}
-
-	agent := domain.Agent{
-		ID:           "test-agent",
-		SystemPrompt: "You are a test assistant.",
-		KnowledgeIDs: []string{},
-	}
-
-	msgs := engine.buildTurnMessages("session-1", agent, "hello", "", false)
-
-	if len(msgs) < 2 {
-		t.Fatalf("expected at least 2 messages, got %d", len(msgs))
-	}
-	if msgs[0].Role != RoleSystem {
-		t.Errorf("first message should be system, got %s", msgs[0].Role)
-	}
-	if msgs[len(msgs)-1].Role != RoleUser {
-		t.Errorf("last message should be user, got %s", msgs[len(msgs)-1].Role)
-	}
-}
-
-func TestBuildTurnMessages_CheckpointTextInSystemPrompt(t *testing.T) {
-	engine := &Engine{
-		turnRunner:   &TurnRunner{},
-		knowledge:    builtin.NewKnowledge(),
-		turnMessages: make(map[string][]Message),
-	}
-
-	agent := domain.Agent{
-		ID:           "test-agent",
-		SystemPrompt: "You are a test assistant.",
-		KnowledgeIDs: []string{},
-	}
-
-	checkpoint := "Previous summary: completed task A"
-	msgs := engine.buildTurnMessages("session-1", agent, "continue", checkpoint, false)
-
-	if len(msgs) == 0 {
-		t.Fatal("expected at least 1 message")
-	}
-	if msgs[0].Role != RoleSystem {
-		t.Fatal("first message should be system prompt")
-	}
-	if !contains(msgs[0].Content, checkpoint) {
-		t.Errorf("system prompt should contain checkpoint text %q, got %q", checkpoint, msgs[0].Content)
-	}
-}
-
+// contains is a shared test helper (compaction_test.go, file_changes_test.go).
 func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
-func TestBuildTurnMessages_MessageOrder(t *testing.T) {
-	engine := &Engine{
-		turnRunner:   &TurnRunner{},
-		knowledge:    builtin.NewKnowledge(),
-		turnMessages: make(map[string][]Message),
-	}
-
-	sessionID := "session-1"
-	agent := domain.Agent{
-		ID:           "test-agent",
-		SystemPrompt: "You are a test assistant.",
-		KnowledgeIDs: []string{},
-	}
-
-	turn1Msgs := engine.buildTurnMessages(sessionID, agent, "TURN-1-GOAL", "", false)
-	engine.mu.Lock()
-	engine.turnMessages[sessionID] = append(engine.turnMessages[sessionID], turn1Msgs...)
-	engine.mu.Unlock()
-
-	turn2Msgs := engine.buildTurnMessages(sessionID, agent, "TURN-2-GOAL", "", false)
-
-	lastUserIdx := -1
-	for i, msg := range turn2Msgs {
-		if msg.Role == RoleUser {
-			lastUserIdx = i
-		}
-	}
-	if lastUserIdx < 0 {
-		t.Fatal("no user message found in turn 2")
-	}
-	if turn2Msgs[lastUserIdx].Content != "TURN-2-GOAL" {
-		t.Errorf("last user message should be turn 2 goal, got %q", turn2Msgs[lastUserIdx].Content)
-	}
-
-	turn1UserIdx := -1
-	for i, msg := range turn2Msgs {
-		if msg.Role == RoleUser && msg.Content == "TURN-1-GOAL" {
-			turn1UserIdx = i
-		}
-	}
-	if turn1UserIdx >= 0 && turn1UserIdx > lastUserIdx {
-		t.Error("turn 1's user message should appear BEFORE turn 2's user message")
-	}
+	return strings.Contains(s, substr)
 }
 
 func TestCheckDelegation_AllowsParallelSameAgent(t *testing.T) {
@@ -548,13 +443,11 @@ func (s *memStream) ListSince(sessionID string, since int64) []domain.StreamEven
 }
 
 func TestCloseIncompleteToolPairsSettlesDelegateAndAskUser(t *testing.T) {
-	root := t.TempDir()
-	tls := turnlog.NewTurnLogStore(func(projectID string) string {
-		if projectID == "" {
-			return root
-		}
-		return filepath.Join(root, projectID)
-	})
+	st, err := sqlitestore.New(filepath.Join(t.TempDir(), "work.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tls := turnlog.NewTurnLogStore(st.TurnLogs())
 	turnLogs := service.NewTurnLogManager(tls)
 	stream := &memStream{}
 	repo := &memTurnRepo{turns: map[string]domain.TurnLog{

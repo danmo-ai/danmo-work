@@ -4,9 +4,12 @@
 # Override with WORK_CONFIG / WORK_DATA_DIR / WORK_DB_PATH if needed.
 
 # Data and persistence paths (defaults resolve under ~/.danmo-work/).
+# All paths derive from one root: $WORK_HOME (default ~/.danmo-work).
+# Relative paths below resolve against that root.
 data:
   dir: "data"                 # -> ~/.danmo-work/data
-  database: "work.db"        # -> ~/.danmo-work/work.db
+  database: "work.db"        # -> ~/.danmo-work/work.db (control plane)
+  # history_database: ""      # default: history.db next to the control DB (turn entries + stream events)
   store: "sqlite"             # sqlite only today; memory backend reserved for future use.
 
 # HTTP API server settings.
