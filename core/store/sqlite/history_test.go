@@ -200,6 +200,12 @@ func TestPruneHistory(t *testing.T) {
 		if err := work.StreamEvents().Save(ctx, domain.StreamEvent{SessionID: session, Seq: seq, Type: "x"}); err != nil {
 			t.Fatal(err)
 		}
+		if err := work.Checkpoints().Save(ctx, domain.CompactionCheckpoint{SessionID: session, TurnID: turn, Summary: "s"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := work.FileChanges().Append(ctx, session, domain.FileChangeRecord{TurnID: turn, Tool: "write", Path: "a.go", Op: domain.FileChangeCreate}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	seed("stale", "t-stale", 1)
 	seed("live", "t-live", 2)
@@ -234,6 +240,20 @@ func TestPruneHistory(t *testing.T) {
 	}
 	if n := countRows(t, hist, &streamEventModel{}); n != 1 {
 		t.Fatalf("events = %d, want 1 (live only)", n)
+	}
+	if n := countRows(t, hist, &fileChangeModel{}); n != 1 {
+		t.Fatalf("file changes = %d, want 1 (live only)", n)
+	}
+	// Checkpoints: ghost's row dropped (orphan), stale's kept (metadata
+	// survives age pruning), live untouched.
+	if cp, _ := work.Checkpoints().Get(ctx, "ghost"); cp != nil {
+		t.Fatalf("ghost checkpoint not dropped: %+v", cp)
+	}
+	if cp, _ := work.Checkpoints().Get(ctx, "stale"); cp == nil {
+		t.Fatal("stale checkpoint should survive age pruning")
+	}
+	if cp, _ := work.Checkpoints().Get(ctx, "live"); cp == nil {
+		t.Fatal("live checkpoint should be untouched")
 	}
 
 	// maxAge=0 disables age pruning: live session stays even after re-run.

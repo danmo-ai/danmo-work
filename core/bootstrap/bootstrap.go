@@ -162,6 +162,7 @@ func New(cfg Config) *Core {
 
 	turnLog := turnlog.NewTurnLogStore(st.TurnLogs())
 	migrateLegacyTurnLogs(st, pm)
+	migrateLegacySessionArtifacts(st, pm)
 	agents := service.NewAgentManager(appCfg.Data.Dir)
 	skills := service.NewSkillManager(appCfg.Data.Dir)
 	knowledgeMgr := service.NewKnowledgeManager(
@@ -241,8 +242,8 @@ func New(cfg Config) *Core {
 	usageSink := dqruntime.NewUsageSink(st.Usage(), st.Sessions())
 	stream.SetUsageSink(usageSink)
 	go dqruntime.BackfillUsageFromStreamEvents(context.Background(), st.Usage(), st.Sessions(), st.StreamEvents())
-	checkpointStore := turnlog.NewCheckpointStore(pm.ProjectDir)
-	fileChangeStore := turnlog.NewFileChangeStore(pm.ProjectDir)
+	checkpointStore := turnlog.NewCheckpointStore(st.Checkpoints())
+	fileChangeStore := turnlog.NewFileChangeStore(st.FileChanges())
 	snapshotStore := turnlog.NewSnapshotStore(pm.ProjectDir)
 	aiReview := service.NewAIReviewManager(pm, snapshotStore, fileChangeStore)
 
@@ -498,6 +499,31 @@ func migrateLegacyTurnLogs(st *sqlitestore.Store, pm *service.ProjectManager) {
 	}
 	if err := st.AppMeta().Set(ctx, marker, "done"); err != nil {
 		log.Printf("[bootstrap] turnlog import marker set: %v", err)
+	}
+}
+
+// migrateLegacySessionArtifacts runs the one-time import of on-disk session
+// artifacts (checkpoint_*.json, file_changes.jsonl) into the DB. Files stay
+// on disk as inert backups.
+func migrateLegacySessionArtifacts(st *sqlitestore.Store, pm *service.ProjectManager) {
+	const marker = "session_artifacts_imported_v1"
+	ctx := context.Background()
+	if _, ok, err := st.AppMeta().Get(ctx, marker); err != nil || ok {
+		if err != nil {
+			log.Printf("[bootstrap] session artifacts import marker: %v", err)
+		}
+		return
+	}
+	n, err := turnlog.ImportLegacyArtifacts(ctx, st.Checkpoints(), st.FileChanges(), pm.ProjectDir)
+	if err != nil {
+		log.Printf("[bootstrap] session artifacts import (will retry next start): imported=%d err=%v", n, err)
+		return
+	}
+	if n > 0 {
+		log.Printf("[bootstrap] session artifacts import: %d artifacts migrated to DB", n)
+	}
+	if err := st.AppMeta().Set(ctx, marker, "done"); err != nil {
+		log.Printf("[bootstrap] session artifacts import marker set: %v", err)
 	}
 }
 

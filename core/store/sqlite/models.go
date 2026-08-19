@@ -190,6 +190,45 @@ type turnLogEntryModel struct {
 
 func (turnLogEntryModel) TableName() string { return "turn_log_entries" }
 
+// ---- Compaction checkpoints (control plane, one row per session) ----
+
+type checkpointModel struct {
+	SessionID string `gorm:"primaryKey;column:session_id"`
+	// Data is the JSON-encoded domain.CompactionCheckpoint. Stored as one
+	// blob: the checkpoint is read/written whole and its shape evolves with
+	// compaction logic.
+	Data      string
+	UpdatedAt time.Time `gorm:"column:updated_at"`
+}
+
+func (checkpointModel) TableName() string { return "compaction_checkpoints" }
+
+// ---- File change journal (history plane, append-only) ----
+
+type fileChangeModel struct {
+	ID        int64  `gorm:"primaryKey;autoIncrement"`
+	SessionID string `gorm:"column:session_id;uniqueIndex:idx_file_changes_session_seq,priority:1"`
+	Seq       int64  `gorm:"column:seq;uniqueIndex:idx_file_changes_session_seq,priority:2"`
+	TurnID    string `gorm:"column:turn_id"`
+	CallID    string `gorm:"column:call_id"`
+	Tool      string
+	Path      string
+	Op        string
+	At        string
+	Diff      string
+	Bytes     int
+	CreatedAt time.Time `gorm:"column:created_at"`
+}
+
+func (fileChangeModel) TableName() string { return "file_changes" }
+
+func fileChangeToDomain(m fileChangeModel) domain.FileChangeRecord {
+	return domain.FileChangeRecord{
+		Seq: m.Seq, TurnID: m.TurnID, CallID: m.CallID, Tool: m.Tool,
+		Path: m.Path, Op: domain.FileChangeOp(m.Op), At: m.At, Diff: m.Diff, Bytes: m.Bytes,
+	}
+}
+
 // ---- Helpers ----
 
 func unmarshalSlice[T any](raw string) []T {

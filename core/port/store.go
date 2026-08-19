@@ -16,6 +16,8 @@ type Repository interface {
 	StreamEvents()    StreamEventRepo
 	Turns()           TurnRepo
 	TurnLogs()        TurnLogRepo
+	Checkpoints()     CheckpointRepo
+	FileChanges()     FileChangeRepo
 	Secrets()         SecretStore
 	Automations()     AutomationRepo
 	Memories()        MemoryRepo
@@ -264,6 +266,29 @@ type TurnLogRepo interface {
 	// DeleteSessionHistory removes the session's turn rows and their message
 	// entries (cascade cleanup when a session is deleted).
 	DeleteSessionHistory(ctx context.Context, sessionID string) error
+}
+
+// CheckpointRepo persists the latest compaction checkpoint per session
+// (control plane). The checkpoint owns replay semantics: RetainFromTurnID
+// decides which turn_log_entries participate in LLM context reconstruction,
+// and it carries the surviving todo/plan list and file-change aggregate.
+type CheckpointRepo interface {
+	// Save upserts the session's checkpoint (only the latest is kept).
+	Save(ctx context.Context, cp domain.CompactionCheckpoint) error
+	// Get returns nil without error when the session has no checkpoint.
+	Get(ctx context.Context, sessionID string) (*domain.CompactionCheckpoint, error)
+	DeleteBySession(ctx context.Context, sessionID string) error
+}
+
+// FileChangeRepo persists the append-only session file-change journal
+// (history plane).
+type FileChangeRepo interface {
+	// Append stores one record. Seq 0 means assign the next per-session seq;
+	// a non-zero Seq is preserved (legacy import).
+	Append(ctx context.Context, sessionID string, rec domain.FileChangeRecord) (int64, error)
+	// ListAfter returns records with Seq > afterSeq in ascending order.
+	ListAfter(ctx context.Context, sessionID string, afterSeq int64) ([]domain.FileChangeRecord, error)
+	DeleteBySession(ctx context.Context, sessionID string) error
 }
 
 // TurnLogStore reconstructs LLM chat history (session replay + turn recovery)

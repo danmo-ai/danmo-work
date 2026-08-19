@@ -182,6 +182,7 @@ func (s *Store) migrate() error {
 		return s.db.AutoMigrate(
 			&streamEventModel{},
 			&turnLogEntryModel{},
+			&fileChangeModel{},
 		)
 	}
 	if err := s.db.AutoMigrate(
@@ -194,6 +195,8 @@ func (s *Store) migrate() error {
 		&streamEventModel{},
 		&turnModel{},
 		&turnLogEntryModel{},
+		&checkpointModel{},
+		&fileChangeModel{},
 		&secretModel{},
 		&automationModel{},
 		&weixinAccountModel{},
@@ -235,6 +238,8 @@ func (s *Store) PendingMessages() port.PendingMessageRepo { return &pendingMessa
 func (s *Store) StreamEvents() port.StreamEventRepo       { return &streamEventRepo{s.historyOrSelf()} }
 func (s *Store) Turns() port.TurnRepo                     { return &turnRepo{s} }
 func (s *Store) TurnLogs() port.TurnLogRepo               { return &turnLogRepo{meta: s, hist: s.historyOrSelf()} }
+func (s *Store) Checkpoints() port.CheckpointRepo         { return &checkpointRepo{s} }
+func (s *Store) FileChanges() port.FileChangeRepo         { return &fileChangeRepo{s.historyOrSelf()} }
 func (s *Store) Secrets() port.SecretStore                { return newSecretStore(s.db) }
 func (s *Store) Automations() port.AutomationRepo         { return &automationRepo{s} }
 func (s *Store) Memories() port.MemoryRepo                { return &memoryRepo{s} }

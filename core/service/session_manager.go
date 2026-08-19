@@ -195,6 +195,12 @@ func (m *SessionManager) Delete(ctx context.Context, id string) error {
 	if err := m.store.StreamEvents().DeleteBySession(ctx, id); err != nil {
 		log.Printf("[sessions] delete %s: stream events cascade: %v", id, err)
 	}
+	if err := m.store.Checkpoints().DeleteBySession(ctx, id); err != nil {
+		log.Printf("[sessions] delete %s: checkpoint cascade: %v", id, err)
+	}
+	if err := m.store.FileChanges().DeleteBySession(ctx, id); err != nil {
+		log.Printf("[sessions] delete %s: file changes cascade: %v", id, err)
+	}
 	return nil
 }
 

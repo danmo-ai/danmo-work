@@ -14,13 +14,18 @@ import (
 	sqlitestore "danmo-work/core/store/sqlite"
 )
 
-func newTestRepo(t *testing.T) port.TurnLogRepo {
+func newTestSQLStore(t *testing.T) *sqlitestore.Store {
 	t.Helper()
 	st, err := sqlitestore.New(filepath.Join(t.TempDir(), "work.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return st.TurnLogs()
+	return st
+}
+
+func newTestRepo(t *testing.T) port.TurnLogRepo {
+	t.Helper()
+	return newTestSQLStore(t).TurnLogs()
 }
 
 func newTestStore(t *testing.T) *TurnLogStore {

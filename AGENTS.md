@@ -86,11 +86,11 @@ Server, CLI, TUI, and desktop all use the same home by default:
 ```
 ~/.danmo-work/
   config.yaml
-  work.db        # control plane (sessions, turns metadata, memories, …)
-  history.db     # history plane (turn_log_entries + stream_events; retention-pruned, incremental auto-vacuum)
+  work.db        # control plane (sessions, turns metadata, compaction checkpoints, memories, …)
+  history.db     # history plane (turn_log_entries + stream_events + file_changes; retention-pruned, incremental auto-vacuum)
   store.db       # agent table-store data plane
   knowledge/     # knowledge-base Markdown source of truth
-  data/          # projects (legacy turn JSONL kept as inert backup after DB import)
+  data/          # projects (legacy turn JSONL / checkpoint JSON / file_changes.jsonl kept as inert backups after DB import)
   skills/        # optional user custom skills (scanned each turn)
   bin/           # desktop sidecar binary
   bin/coreutils/ # Windows: Microsoft Coreutils (default-installed by NSIS) + applet hardlinks
