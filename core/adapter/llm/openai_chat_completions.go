@@ -188,14 +188,7 @@ func parseChatCompletionsResponse(respBody []byte) (port.LLMChatResponse, error)
 				} `json:"tool_calls"`
 			} `json:"message"`
 		} `json:"choices"`
-		Usage struct {
-			PromptTokens        int `json:"prompt_tokens"`
-			CompletionTokens    int `json:"completion_tokens"`
-			TotalTokens         int `json:"total_tokens"`
-			PromptTokensDetails struct {
-				CachedTokens int `json:"cached_tokens"`
-			} `json:"prompt_tokens_details"`
-		} `json:"usage"`
+		Usage openaiCompatibleUsage `json:"usage"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return port.LLMChatResponse{}, err
@@ -204,15 +197,7 @@ func parseChatCompletionsResponse(respBody []byte) (port.LLMChatResponse, error)
 		return port.LLMChatResponse{}, fmt.Errorf("no choices in llm response")
 	}
 
-	usage := &port.LLMUsage{
-		PromptTokens:     result.Usage.PromptTokens,
-		CompletionTokens: result.Usage.CompletionTokens,
-		TotalTokens:      result.Usage.TotalTokens,
-		CacheReadTokens:  result.Usage.PromptTokensDetails.CachedTokens,
-	}
-	if usage.Empty() {
-		usage = nil
-	}
+	usage := result.Usage.toLLMUsage()
 
 	choice := result.Choices[0].Message
 	reasoning := choice.ReasoningContent

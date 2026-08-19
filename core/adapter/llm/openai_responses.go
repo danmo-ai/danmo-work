@@ -242,14 +242,7 @@ func parseResponsesBody(respBody []byte) (port.LLMChatResponse, error) {
 				Text string `json:"text"`
 			} `json:"summary"`
 		} `json:"output"`
-		Usage struct {
-			InputTokens        int `json:"input_tokens"`
-			OutputTokens       int `json:"output_tokens"`
-			TotalTokens        int `json:"total_tokens"`
-			InputTokensDetails struct {
-				CachedTokens int `json:"cached_tokens"`
-			} `json:"input_tokens_details"`
-		} `json:"usage"`
+		Usage openaiCompatibleUsage `json:"usage"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return port.LLMChatResponse{}, err
@@ -258,15 +251,7 @@ func parseResponsesBody(respBody []byte) (port.LLMChatResponse, error) {
 		return port.LLMChatResponse{}, fmt.Errorf("no output in responses api result")
 	}
 
-	usage := &port.LLMUsage{
-		PromptTokens:     result.Usage.InputTokens,
-		CompletionTokens: result.Usage.OutputTokens,
-		TotalTokens:      result.Usage.TotalTokens,
-		CacheReadTokens:  result.Usage.InputTokensDetails.CachedTokens,
-	}
-	if usage.Empty() {
-		usage = nil
-	}
+	usage := result.Usage.toLLMUsage()
 
 	var content strings.Builder
 	var reasoning strings.Builder

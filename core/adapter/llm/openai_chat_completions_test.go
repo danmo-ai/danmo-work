@@ -58,6 +58,36 @@ func TestOpenAIChatCompletionsClientParsesUsage(t *testing.T) {
 	}
 }
 
+func TestOpenAIChatCompletionsClientParsesDeepSeekCacheHit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]any{"content": "ok"}},
+			},
+			"usage": map[string]any{
+				"prompt_tokens":            100,
+				"completion_tokens":        20,
+				"total_tokens":             120,
+				"prompt_cache_hit_tokens":  80,
+				"prompt_cache_miss_tokens": 20,
+			},
+		})
+	}))
+	defer server.Close()
+
+	p := NewOpenAIChatCompletionsClient(server.URL, "")
+	resp, err := p.Chat(context.Background(), port.LLMChatRequest{Model: "deepseek-chat"}, "")
+	if err != nil {
+		t.Fatalf("chat: %v", err)
+	}
+	if resp.Usage == nil {
+		t.Fatal("usage not parsed")
+	}
+	if resp.Usage.CacheReadTokens != 80 {
+		t.Errorf("cache read tokens: got %d", resp.Usage.CacheReadTokens)
+	}
+}
+
 func TestOpenAIChatCompletionsClientOmitsEmptyUsage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
