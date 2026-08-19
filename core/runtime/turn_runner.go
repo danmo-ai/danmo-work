@@ -180,7 +180,7 @@ type TurnContext struct {
 
 type approvalGate interface {
 	WaitApproval(ctx context.Context, approvalID string) (ApprovalOutcome, error)
-	CreateApproval(sessionID, turnID, toolName, description, reason, domain string) string
+	CreateApproval(sessionID, turnID, toolName, description, reason, domain string) (string, error)
 }
 
 type TurnRunner struct {
@@ -444,6 +444,19 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		}
 		if resp.Content != "" {
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventAgentMessage, domain.AgentMessagePayload{Text: resp.Content})
+		}
+
+		// Audit: when the adapter repaired damaged tool-argument JSON, record
+		// the pre-repair bytes as a stream event. The repaired form is what
+		// enters the flow (and turn JSONL); JSONL itself stays audit-free.
+		for _, tc := range resp.ToolCalls {
+			if tc.RepairedFrom == "" {
+				continue
+			}
+			log.Printf("[llm] repaired tool arguments for %s (call %s, %d raw bytes)", tc.Name, tc.ID, len(tc.RepairedFrom))
+			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventToolArgsRepaired, domain.ToolArgsRepairedPayload{
+				CallID: tc.ID, Name: tc.Name, RawArguments: tc.RepairedFrom,
+			})
 		}
 
 		// IMPORTANT: Append the assistant message with tool_calls BEFORE any
@@ -834,7 +847,12 @@ func (p *TurnRunner) gateToolCall(
 	if decision == permission.DecisionAsk {
 		canAuto := cfg.autoApprove && permission.AutoApprovable(permResult.Reason)
 		if !canAuto && p.Approval != nil {
-			approvalID := p.Approval.CreateApproval(tctx.SessionID, tctx.TurnID, call.Name, describe, permResult.Reason, permResult.Domain)
+			approvalID, createErr := p.Approval.CreateApproval(tctx.SessionID, tctx.TurnID, call.Name, describe, permResult.Reason, permResult.Domain)
+			if createErr != nil {
+				// Without a persisted row the user can never decide (the API
+				// resolves against the DB), so fail the call instead of asking.
+				return nil, "approval could not be persisted: " + createErr.Error() + toolErrorHint, "approval persist failed", false, nil
+			}
 			scopeOpts := []string{"once"}
 			// Full-network session grant only in deny mode (ReasonNetwork).
 			// Domain grants use ReasonNetworkDomain with session scope.
@@ -1229,13 +1247,6 @@ func truncateUTF8Boundary(s string, max int) int {
 
 func (p *TurnRunner) enforceToolPairing(messages []Message) []Message {
 	return keepCompleteToolPairs(messages)
-}
-
-// salvagePairedTurnDelta keeps this-turn messages that form complete tool pairs.
-// Used when a turn is cancelled/failed so the next turn still sees finished work
-// (e.g. read_file/glob results) without unpaired assistant tool_calls.
-func salvagePairedTurnDelta(delta []Message) []Message {
-	return keepCompleteToolPairs(delta)
 }
 
 // keepCompleteToolPairs returns an API-safe message sequence. Each assistant

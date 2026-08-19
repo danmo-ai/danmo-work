@@ -450,7 +450,7 @@ func (s *TurnLogStore) readEntriesLocked(filePath string) []map[string]any {
 // trimIncompleteTurnEntries keeps reconstructable whitelist entries and drops
 // unpaired tool calls. Trailing assistants/tool_calls without any results are
 // removed; within a batch, tool_calls that lack a matching tool_result are
-// stripped (aligned with salvagePairedTurnDelta) so resume stays API-valid.
+// stripped (aligned with runtime keepCompleteToolPairs) so resume stays API-valid.
 func trimIncompleteTurnEntries(all []map[string]any) []map[string]any {
 	// Collect whitelist indices first.
 	var kept []map[string]any

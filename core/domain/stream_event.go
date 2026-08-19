@@ -15,6 +15,7 @@ const (
 	EventToolRunning       = "tool.running"
 	EventToolCompleted     = "tool.completed"
 	EventToolError         = "tool.error"
+	EventToolArgsRepaired  = "tool.args_repaired"
 	EventCapabilityActive  = "capability.activated"
 	EventPermissionAsk     = "permission.ask"
 	EventPermissionDecided = "permission.decided"

@@ -934,7 +934,7 @@ func TestSessionHistorySurvivesRestartFromTurnLog(t *testing.T) {
 		t.Fatalf("before restart: weather assistant missing from history: %+v", msgs1)
 	}
 
-	// Process restart — in-memory turnMessages is gone; history must come from JSONL.
+	// Process restart — all in-memory engine state is gone; history must come from JSONL.
 	core2 := newCore(t, dataDir)
 	msgs2 := core2.TurnLogs.LoadSessionMessages(s.ID, "", 0)
 	found = false

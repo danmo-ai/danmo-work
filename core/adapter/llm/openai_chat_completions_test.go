@@ -194,6 +194,9 @@ func TestOpenAIChatCompletionsClientToolCallRepairsUnescapedQuotes(t *testing.T)
 	if tc.Arguments["content"] != `quote "x" here` {
 		t.Errorf("content: got %#v", tc.Arguments["content"])
 	}
+	if tc.RepairedFrom != brokenInner {
+		t.Errorf("RepairedFrom should carry pre-repair bytes for audit: got %q want %q", tc.RepairedFrom, brokenInner)
+	}
 }
 
 func TestOpenAIChatCompletionsClientToolCallEmptyStringArguments(t *testing.T) {
