@@ -4,10 +4,11 @@
 
 | Asset | Use |
 |-------|-----|
-| [`product-tour.html`](./product-tour.html) | **Primary** — ZH/EN toggle · Architecture · Highlights · Capacity |
+| [`../screenshots/carousel.html`](../screenshots/carousel.html) | **README hero** — real UI screenshots + one-line captions · ZH/EN |
+| [`product-tour.html`](./product-tour.html) | Architecture · Highlights · Capacity (animated diagrams) |
 | [`office-coedit-tour.html`](./office-coedit-tour.html) | **Office co-edit** — Intent → Propose → Review → Commit · Doc / Slides / Sheet · AI Diff |
 | `product-tour-{zh,en}.mp4` | Social / talks |
-| `product-tour-{zh,en}.gif` | README embed |
+| `product-tour-{zh,en}.gif` | Legacy README embed (superseded by `../screenshots/carousel.gif`) |
 | `product-tour-{zh,en}-still.png` | Social preview / link cards |
 | [`work-capacity-demo.html`](./work-capacity-demo.html) | Capacity-only (legacy single-scene page) |
 
