@@ -16,8 +16,9 @@ DQ_UI_REPO="https://github.com/danmo-ai/dq-ui.git"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # The frontend resolves dq-ui at ../../dq-ui relative to frontend/, i.e. a
-# sibling of the repo root. Derive the same path here regardless of checkout dir.
-DQ_UI_DIR="$(dirname "$REPO_DIR")/dq-ui"
+# sibling of the repo root. Derive the same path here regardless of checkout dir
+# (${REPO_DIR%/*} avoids a doubled leading slash when the repo sits at /workspace).
+DQ_UI_DIR="${REPO_DIR%/*}/dq-ui"
 
 SUDO=""
 if [ "$(id -u)" -ne 0 ]; then
