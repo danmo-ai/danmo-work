@@ -12,6 +12,7 @@ agents:
   - danmo-make
   - github
   - browser
+  - operator
 skills:
   - debugging
   - novel-writing
@@ -29,3 +30,4 @@ skills:
   - deep-research
   - skill-creator
   - browser
+  - computer-use

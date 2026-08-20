@@ -89,6 +89,14 @@ runtime:
     enabled: true
     executable_path: ""   # optional absolute path to chrome/chromium/edge
     cdp_url: ""           # optional attach URL, e.g. http://127.0.0.1:9222
+  # Desktop control for the `computer` tool (find/focus windows, mouse, keyboard,
+  # screenshots). Off by default: it drives the host GUI with no sandbox and each
+  # call requires approval. Linux needs xdotool + a screenshot tool (imagemagick/
+  # scrot/ffmpeg); macOS needs Accessibility+Screen Recording TCC (mouse via
+  # cliclick); Windows uses PowerShell.
+  computer:
+    enabled: false
+    display: ""           # optional X11 DISPLAY override on Linux (e.g. ":1")
   turn:
     doom_loop_threshold: 10  # fail after N consecutive identical tool calls (resets when tool/args change)
     max_steps_default: 200   # used when agent.steps is 0 / unset

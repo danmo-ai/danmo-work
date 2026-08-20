@@ -20,6 +20,7 @@ import (
 	"danmo-work/core/resource/home"
 	dqruntime "danmo-work/core/runtime"
 	dqbrowser "danmo-work/core/runtime/browser"
+	dqcomputer "danmo-work/core/runtime/computer"
 	"danmo-work/core/runtime/sandbox"
 	"danmo-work/core/runtime/tool/builtin"
 	"danmo-work/core/service"
@@ -286,6 +287,7 @@ func New(cfg Config) *Core {
 	eng.SetExecution(sb)
 	br := dqbrowser.New(appCfg.Runtime.Browser)
 	eng.SetBrowser(br)
+	computerCtl := dqcomputer.New(appCfg.Runtime.Computer)
 	eng.RegisterTool(&builtin.ExecShell{Sandbox: sb})
 	eng.RegisterTool(&builtin.ReadFile{})
 	eng.RegisterTool(&builtin.ReadImage{
@@ -314,6 +316,7 @@ func New(cfg Config) *Core {
 	eng.RegisterTool(&builtin.BrowserAct{Browser: br})
 	eng.RegisterTool(&builtin.BrowserScreenshot{Browser: br, SupportsImage: supportsImage})
 	eng.RegisterTool(&builtin.BrowserClose{Browser: br})
+	eng.RegisterTool(&builtin.Computer{Ctl: computerCtl, SupportsImage: supportsImage})
 	eng.RegisterTool(&builtin.AskUser{})
 	eng.RegisterTool(&builtin.Sleep{})
 	eng.RegisterTool(&builtin.ReadSkill{})

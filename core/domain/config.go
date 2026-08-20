@@ -53,6 +53,7 @@ type ConfigRuntimeSection struct {
 	Sandbox         ConfigSandboxSection      `json:"sandbox" mapstructure:"sandbox"`
 	Environment     *ConfigEnvironmentSection `json:"environment,omitempty" mapstructure:"environment" yaml:"environment,omitempty"`
 	Browser         ConfigBrowserSection      `json:"browser" mapstructure:"browser"`
+	Computer        ConfigComputerSection     `json:"computer" mapstructure:"computer"`
 	Turn            ConfigTurnSection         `json:"turn" mapstructure:"turn"`
 	Team            ConfigTeamSection         `json:"team" mapstructure:"team"`
 	Tools           ConfigToolsSection        `json:"tools" mapstructure:"tools"`

@@ -64,6 +64,7 @@ When acting directly (not delegating):
 - For multi-step web UI work (click, fill forms, SPA navigation with session state), `delegate_agent` to `browser` instead of stretching `web_fetch`.
 - Batch independent tool calls into parallel calls when possible.
 - `exec_shell` is a last resort: use only for builds, tests, or commands with no structured tool alternative.
+- For driving a desktop GUI application (find/focus windows, screenshot, click, type, press keys), `delegate_agent` to `operator` instead of scripting it via `exec_shell`. The operator owns the `computer` tool and the see-act-verify loop; it needs a vision model and an enabled desktop.
 - Use `todowrite` for tasks with 3+ steps.
 - Use `memory_read` when prior preferences/conventions may matter; use `memory_update` for lasting preferences or project conventions (scopes: user / project / agent). Do not store secrets or one-off task details.
 - Use `sleep`, not `exec_shell sleep`.

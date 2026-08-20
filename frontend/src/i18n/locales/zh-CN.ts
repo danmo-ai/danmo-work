@@ -1239,6 +1239,7 @@ export default {
       allowNewDomain: '允许新域名',
       dangerousCommand: '危险命令',
       unsandboxed: '未隔离环境',
+      desktopControl: '桌面控制（鼠标/键盘/截屏）',
       needConfirm: '需要确认',
       unknownTool: '未知工具',
       allowDomainSession: '本会话允许此域名',
