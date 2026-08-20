@@ -196,14 +196,15 @@ const showStatus = () => {
 }
 
 .turn-section__number {
-  font-size: var(--dq-font-size-body);
+  font-size: var(--dq-font-size-caption);
   font-weight: 600;
-  color: var(--dq-label-secondary);
-  letter-spacing: 0.01em;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--dq-label-tertiary);
 }
 
 .turn-section__status {
-  font-size: var(--dq-font-size-body);
+  font-size: var(--dq-font-size-caption);
   font-weight: 500;
   color: var(--dq-label-secondary);
 }
@@ -220,10 +221,10 @@ const showStatus = () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: var(--dq-font-size-body);
+  font-size: var(--dq-font-size-caption);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: var(--dq-label-secondary);
+  color: var(--dq-label-tertiary);
 }
 
 .turn-section__summary-item {
@@ -274,13 +275,17 @@ const showStatus = () => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  /* Footnotes (thinking / tools) — room between quiet tools and thinking */
-  gap: 10px;
+  gap: 0;
 }
 
 .turn-section__timeline :deep(.turn__event) {
   display: flex;
   align-items: stretch;
+  margin-top: 10px;
+}
+
+.turn-section__timeline :deep(.turn__event:first-child) {
+  margin-top: 0;
 }
 
 .turn-section__timeline :deep(.turn__event > *) {
@@ -288,15 +293,30 @@ const showStatus = () => {
   min-width: 0;
 }
 
-/* Extra breath between tool aggregates and thinking blocks */
-.turn-section__timeline :deep(.turn__event:has(.tool-group) + .turn__event:has(.thinking-block)),
-.turn-section__timeline :deep(.turn__event:has(.thinking-block) + .turn__event:has(.tool-group)),
-.turn-section__timeline :deep(.turn__event:has(.dq-tool-card) + .turn__event:has(.thinking-block)),
-.turn-section__timeline :deep(.turn__event:has(.thinking-block) + .turn__event:has(.dq-tool-card)) {
-  margin-top: 6px;
+/*
+ * Process rail — thinking / tool / skill footnotes share one continuous
+ * guide line, so the agent's working steps read as a quiet sub-column and
+ * the final answer stands free (Claude/Cursor-style step hierarchy).
+ */
+.turn-section__timeline :deep(.turn__event:has(> .thinking-block)),
+.turn-section__timeline :deep(.turn__event:has(> .tool-group)),
+.turn-section__timeline :deep(.turn__event:has(> .dq-tool-card)),
+.turn-section__timeline :deep(.turn__event:has(> .turn__skill)) {
+  margin-top: 0;
+  padding: 3px 0 3px 12px;
+  border-left: 2px solid color-mix(in srgb, var(--dq-label-primary) 9%, transparent);
+}
+
+/* Rail segments that follow prose keep breathing room before the line resumes */
+.turn-section__timeline
+  :deep(
+    .turn__event:not(:has(> .thinking-block, > .tool-group, > .dq-tool-card, > .turn__skill))
+      + .turn__event:has(> .thinking-block, > .tool-group, > .dq-tool-card, > .turn__skill)
+  ) {
+  margin-top: 10px;
 }
 
 .turn-section__timeline :deep(.agent-msg) {
-  margin-block: 2px;
+  margin-block: 4px 2px;
 }
 </style>

@@ -218,19 +218,19 @@ const statusHint = computed(() => {
   white-space: nowrap;
   font-size: var(--dq-font-size-body);
   font-weight: 500;
-  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
-  font-family: var(--dq-font-mono, ui-monospace, monospace);
+  color: var(--dq-label-tertiary);
+  transition: color 0.12s ease;
 }
 
 .tool-group__header:hover .tool-group__names,
 .tool-group.is-expanded .tool-group__names {
-  color: var(--dq-label-tertiary);
+  color: var(--dq-label-secondary);
 }
 
 .tool-group.is-running .tool-group__names,
 .tool-group.is-error .tool-group__names {
   font-weight: 600;
-  color: var(--dq-label-tertiary);
+  color: var(--dq-label-secondary);
 }
 
 .tool-group__hint {
@@ -268,8 +268,8 @@ const statusHint = computed(() => {
   flex-direction: column;
   gap: 1px;
   margin: 2px 0 4px;
-  padding: 2px 0 2px 12px;
-  border-left: 1px solid color-mix(in srgb, var(--dq-label-primary) 8%, transparent);
+  padding: 2px 0 2px 11px;
+  border-left: 1px solid color-mix(in srgb, var(--dq-label-primary) 7%, transparent);
 }
 
 .tool-group__body :deep(.dq-tool-card),

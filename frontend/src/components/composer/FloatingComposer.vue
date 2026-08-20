@@ -1870,13 +1870,14 @@ defineExpose({
   margin-left: 4px;
   padding: 0 12px 0 14px;
   border: none;
-  border-radius: 10px;
+  border-radius: 999px;
   background: var(--dq-accent);
   color: var(--dq-on-accent);
   font-size: var(--dq-font-size-footnote);
   font-weight: 650;
   cursor: pointer;
-  transition: opacity 0.15s ease, transform 0.12s ease;
+  box-shadow: 0 1px 6px var(--dq-accent-shadow-cta, transparent);
+  transition: opacity 0.15s ease, transform 0.12s ease, filter 0.12s ease;
 }
 
 .composer-send:hover:not(:disabled) {
