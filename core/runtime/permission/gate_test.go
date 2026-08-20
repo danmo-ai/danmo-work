@@ -215,6 +215,31 @@ func TestGateDiscussDenyWrite(t *testing.T) {
 	}
 }
 
+func TestGateComputerAlwaysAsks(t *testing.T) {
+	g := NewGate(nil)
+	// Interactive mode: ask with desktop_control reason.
+	r := g.CheckRequest(Request{ToolName: "computer", Risk: domain.RiskHigh})
+	if r.Decision != DecisionAsk || r.Reason != ReasonDesktopControl {
+		t.Fatalf("interactive got %+v", r)
+	}
+	// Auto mode must NOT auto-allow desktop control.
+	r2 := g.CheckRequest(Request{ToolName: "computer", Risk: domain.RiskHigh, Mode: domain.PermModeAuto})
+	if r2.Decision != DecisionAsk || r2.Reason != ReasonDesktopControl {
+		t.Fatalf("auto got %+v", r2)
+	}
+	if AutoApprovable(r2.Reason) {
+		t.Fatal("desktop_control must never be auto-approvable")
+	}
+}
+
+func TestGateComputerDeniedInPlan(t *testing.T) {
+	g := NewGate(nil)
+	r := g.CheckRequest(Request{ToolName: "computer", Risk: domain.RiskHigh, Mode: domain.PermModePlan})
+	if r.Decision != DecisionDeny {
+		t.Fatalf("plan got %+v", r)
+	}
+}
+
 func TestGateContainerIsolationStrong(t *testing.T) {
 	g := NewGate(nil)
 	weak := domain.SandboxStatus{

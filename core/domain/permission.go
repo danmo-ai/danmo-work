@@ -16,12 +16,13 @@ type PermissionRule struct {
 const (
 	ReasonDangerousCommand = "dangerous_command"
 	ReasonUnsandboxed      = "unsandboxed"
+	ReasonDesktopControl   = "desktop_control"
 )
 
 // AutoApprovableReason reports whether auto_approve may skip waiting for reason.
 func AutoApprovableReason(reason string) bool {
 	switch reason {
-	case ReasonDangerousCommand, ReasonUnsandboxed:
+	case ReasonDangerousCommand, ReasonUnsandboxed, ReasonDesktopControl:
 		return false
 	default:
 		return true

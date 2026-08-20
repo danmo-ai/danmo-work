@@ -341,8 +341,10 @@ OpenAI-compat 路径上，模型常把 `write`/`edit` 等内容里的未转义�
 |------|------|
 | `exec_shell` | Shell 执行 |
 | `read_file` / `write` / `edit` / `apply_patch` | 文件读写与补丁 |
+| `read_image` | 读取本地图片交给视觉模型（多模态 `ToolResult.Parts`） |
 | `grep` / `glob` | 代码搜索 |
 | `todowrite` | 任务清单 |
+| `computer` | 桌面 GUI 控制（找/聚焦窗口、鼠标、键盘、截屏）；高风险、仅本机、每次审批 |
 | `memory_update` / `memory_read` | 跨会话持久记忆（user / project / agent 三级作用域） |
 | `table_upsert` / `table_get` / `table_query` / `table_delete` / `table_list` | 业务流水表（schema-free JSON；独立 `store.db`） |
 | `web_fetch` / `web_search` | 读网页 / 搜索 |
@@ -350,6 +352,23 @@ OpenAI-compat 路径上，模型常把 `write`/`edit` 等内容里的未转义�
 | `ask_user` | 向用户提问（全局，无需 Agent 绑定） |
 | `sleep` | 等待 |
 | `read_skill` | 读取技能说明（**全局默认**，无需 Agent 绑定） |
+
+#### 7.1.1 桌面控制（`computer`）
+
+单一工具、`action` 枚举（Anthropic Computer Use 对齐）：`list_windows` / `focus_window` /
+`screenshot` / `mouse_move` / `left_click` / `right_click` / `middle_click` /
+`double_click` / `left_click_drag` / `scroll` / `type` / `key` / `cursor_position` /
+`wait`。截屏经 `ToolResult.Parts`（`image/png`）走多模态链路，与 `read_image` 相同。
+
+- **坐标系**：整屏截图为屏幕绝对坐标；窗口截图为图像相对坐标，后续动作带同一 `window_id` 时由
+  后端按窗口 bounds 自动换算为绝对坐标。
+- **仅本机、无沙箱**：与容器隔离不兼容，权限门以 `desktop_control` 原因**始终 ask、永不
+  auto-approve**（等同 `unsandboxed` 类别）；`discuss/plan` 模式直接拒绝。
+- **平台后端**（`core/runtime/computer/`，无新增 CGO 依赖）：Linux X11 用 `xdotool` + 截图
+  CLI（imagemagick/scrot/ffmpeg/xwd）；macOS 用 osascript/`screencapture`（鼠标需 `cliclick`，
+  且需授予 Accessibility 与 Screen Recording TCC）；Windows 用 PowerShell + user32/System.Drawing。
+  无可用后端时 `ComputerStatus` 报 degraded，动作返回结构化错误。
+- 默认 `runtime.computer.enabled=false`，需显式开启。
 
 ### 7.1.0 能力三层（Core / Bound / Ambient）
 

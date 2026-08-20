@@ -1240,6 +1240,7 @@ export default {
       allowNewDomain: 'Allow new domain',
       dangerousCommand: 'Dangerous command',
       unsandboxed: 'Unsandboxed environment',
+      desktopControl: 'Desktop control (mouse/keyboard/screen)',
       needConfirm: 'Needs confirmation',
       unknownTool: 'Unknown tool',
       allowDomainSession: 'Allow this domain for session',

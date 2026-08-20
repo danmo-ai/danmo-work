@@ -25,6 +25,8 @@ tools:
     risk_level: medium
   - tool_id: file_op
     risk_level: medium
+  - tool_id: computer
+    risk_level: high
   - tool_id: todowrite
     risk_level: low
 knowledge: []

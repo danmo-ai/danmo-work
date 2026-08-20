@@ -29,6 +29,7 @@ const (
 	ReasonHighRisk         = "high_risk"
 	ReasonExternal         = "external"
 	ReasonModeDeny         = "mode_deny"
+	ReasonDesktopControl   = domain.ReasonDesktopControl // computer tool: host GUI control
 )
 
 // Request is the structured input for permission checks.
@@ -150,6 +151,12 @@ func (g *Gate) CheckRequest(req Request) Result {
 
 	if req.ToolName == "exec_shell" {
 		return Result{Decision: DecisionAsk, Reason: ReasonUnsandboxed}
+	}
+
+	// Desktop control drives the host GUI with no sandbox boundary. Always ask,
+	// and never let auto_approve skip it (mirrors unsandboxed shell).
+	if req.ToolName == "computer" {
+		return Result{Decision: DecisionAsk, Reason: ReasonDesktopControl}
 	}
 
 	if mode == domain.PermModeAuto && req.Risk != domain.RiskExternal {

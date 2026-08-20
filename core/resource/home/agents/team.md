@@ -38,6 +38,8 @@ tools:
     risk_level: medium
   - tool_id: exec_shell
     risk_level: high
+  - tool_id: computer
+    risk_level: high
   - tool_id: todowrite
     risk_level: low
   - tool_id: sleep
@@ -63,6 +65,7 @@ When acting directly (not delegating):
 - Prefer `web_search`/`web_fetch` for search and reading pages; prefer `http_request` for REST/API calls over `exec_shell` curl.
 - Batch independent tool calls into parallel calls when possible.
 - `exec_shell` is a last resort: use only for builds, tests, or commands with no structured tool alternative.
+- `computer` controls the desktop GUI (find/focus windows, screenshot, click, type). Use it only when a task needs a real application; `screenshot` first to see the screen, prefer `key` shortcuts over fragile clicks, and never use `exec_shell` to script the GUI when `computer` is available. Each call asks for approval.
 - Use `todowrite` for tasks with 3+ steps.
 - Use `memory_read` when prior preferences/conventions may matter; use `memory_update` for lasting preferences or project conventions (scopes: user / project / agent). Do not store secrets or one-off task details.
 - Use `sleep`, not `exec_shell sleep`.
