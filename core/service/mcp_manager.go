@@ -63,17 +63,16 @@ func NewMCPManager(dataDir string) *MCPManager {
 }
 
 // SetPluginMCPFiles replaces the plugin mcp.json file list (batch set, called by PluginManager.Init).
-// Loads all plugin entries into servers and triggers auto-connect.
+// Loads all plugin entries into servers; discovery runs later via AutoDiscoverAll after bootstrap wires the syncer.
 func (m *MCPManager) SetPluginMCPFiles(files []string) error {
 	m.mu.Lock()
 	m.pluginMCPFiles = append([]string{}, files...)
 	m.mu.Unlock()
 	m.loadFromDisk()
-	go m.autoConnectPlugins()
 	return nil
 }
 
-// RegisterPluginMCP appends a single plugin mcp.json path, loads its entries, and auto-connects.
+// RegisterPluginMCP appends a single plugin mcp.json path and loads its entries.
 func (m *MCPManager) RegisterPluginMCP(mcpPath string) error {
 	m.mu.Lock()
 	for _, existing := range m.pluginMCPFiles {
@@ -85,7 +84,6 @@ func (m *MCPManager) RegisterPluginMCP(mcpPath string) error {
 	m.pluginMCPFiles = append(m.pluginMCPFiles, mcpPath)
 	m.mu.Unlock()
 	m.loadFromDisk()
-	go m.autoConnectPlugins()
 	return nil
 }
 
@@ -132,23 +130,26 @@ func pluginNameFromMCPPath(mcpPath string) string {
 	return ""
 }
 
-func (m *MCPManager) autoConnectPlugins() error {
-	m.mu.Lock()
-	ids := make([]string, 0, len(m.servers))
-	for id, srv := range m.servers {
-		if strings.HasPrefix(srv.MarketSource, "plugin:") && srv.Enabled {
-			ids = append(ids, id)
-		}
+// AutoDiscoverAll dials every enabled MCP server and runs ListTools (best-effort).
+// Must run after SetToolSync so discovered tools sync into the runtime catalog.
+func (m *MCPManager) AutoDiscoverAll(ctx context.Context) {
+	servers, err := m.List(ctx)
+	if err != nil {
+		log.Printf("[mcp] auto-discover list: %v", err)
+		return
 	}
-	m.mu.Unlock()
+	for _, srv := range servers {
+		if !srv.Enabled {
+			continue
+		}
+		m.refreshToolsBestEffort(ctx, srv.ID, "startup")
+	}
+}
 
-	for _, id := range ids {
-		_, err := m.RefreshTools(context.Background(), id)
-		if err != nil {
-			log.Printf("[mcp] plugin auto-connect %q: %v", id, err)
-		}
+func (m *MCPManager) refreshToolsBestEffort(ctx context.Context, id, phase string) {
+	if _, err := m.RefreshTools(ctx, id); err != nil {
+		log.Printf("[mcp] refresh tools %q (%s): %v", id, phase, err)
 	}
-	return nil
 }
 
 func (m *MCPManager) SetDialer(d port.MCPDialer) { m.dialer = d }
@@ -389,6 +390,10 @@ func (m *MCPManager) Create(ctx context.Context, req domain.UpsertMCPServerReque
 		return domain.MCPServer{}, err
 	}
 	_ = m.syncServer(ctx, s)
+	if s.Enabled {
+		m.refreshToolsBestEffort(ctx, s.ID, "create")
+		s, _ = m.Get(ctx, s.ID)
+	}
 	return s, nil
 }
 
@@ -463,6 +468,10 @@ func (m *MCPManager) Update(ctx context.Context, id string, req domain.UpsertMCP
 		return domain.MCPServer{}, err
 	}
 	_ = m.syncServer(ctx, existing)
+	if existing.Enabled {
+		m.refreshToolsBestEffort(ctx, existing.ID, "update")
+		existing, _ = m.Get(ctx, existing.ID)
+	}
 	return existing, nil
 }
 
@@ -810,6 +819,10 @@ func (m *MCPManager) CompleteOAuth(ctx context.Context, id, code, state, accessT
 	m.servers[id] = srv
 	m.mu.Unlock()
 	_ = m.syncServer(ctx, srv)
+	if srv.Enabled {
+		m.refreshToolsBestEffort(ctx, srv.ID, "oauth")
+		srv, _ = m.Get(ctx, srv.ID)
+	}
 	return srv, nil
 }
 
