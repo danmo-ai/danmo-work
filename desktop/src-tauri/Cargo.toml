@@ -1,6 +1,6 @@
 [package]
 name = "danmo-work-desktop"
-version = "0.9.47"
+version = "0.9.48"
 edition = "2021"
 
 [build-dependencies]
