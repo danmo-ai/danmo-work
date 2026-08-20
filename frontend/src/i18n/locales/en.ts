@@ -712,7 +712,7 @@ export default {
     browserExecutablePath: 'Browser executable',
     browserExecutablePathPlaceholder: 'Leave empty to auto-detect Chrome/Edge/Chromium',
     browserCdpUrl: 'CDP URL',
-    browserCdpUrlPlaceholder: 'e.g. http://127.0.0.1:9222 (optional; preferred over local launch)',
+    browserCdpUrlPlaceholder: 'Optional; e.g. http://127.0.0.1:9222 attaches to that browser — leave empty to auto-launch headless Chrome/Edge/Chromium',
     browserStatus: 'Browser engine',
     browserUnavailable: 'Unavailable',
     runtimeCompaction: 'Context Compaction',

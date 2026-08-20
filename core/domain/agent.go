@@ -85,8 +85,11 @@ var PlanModeAllowedToolIDs = map[string]struct{}{
 	"grep":       {},
 	"glob":       {},
 	// External research
-	"web_search": {},
-	"web_fetch":  {},
+	"web_search":         {},
+	"web_fetch":          {},
+	"browser_navigate":   {},
+	"browser_snapshot":   {},
+	"browser_screenshot": {},
 	// Clarification / delegation (delegated sub-agents also inherit plan mode)
 	"ask_user":       {},
 	"delegate_agent": {},

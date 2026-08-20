@@ -3,6 +3,7 @@ package builtin
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -107,6 +108,13 @@ func (s *stubBrowser) Status() domain.BrowserStatus {
 }
 func (s *stubBrowser) Configure(domain.ConfigBrowserSection) {}
 func (s *stubBrowser) Close(context.Context) error           { return nil }
+func (s *stubBrowser) CloseAll(context.Context) error        { return nil }
+func (s *stubBrowser) ClosePage(context.Context, string) error {
+	return nil
+}
+func (s *stubBrowser) AcquirePage(context.Context, string) (port.BrowserPage, error) {
+	return nil, fmt.Errorf("stub browser does not support interactive pages")
+}
 func (s *stubBrowser) RenderHTML(ctx context.Context, opts port.BrowserRenderOptions) (string, string, error) {
 	s.calls++
 	if s.err != nil {
