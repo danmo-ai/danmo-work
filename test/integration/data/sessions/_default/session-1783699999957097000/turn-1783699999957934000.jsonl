@@ -1,6 +1,0 @@
-{"seq":1,"type":"start","data":{"agent_id":"default","goal":"turn id test"}}
-{"seq":1,"type":"step","data":{"step":1}}
-{"seq":2,"type":"tool_call","data":{"input":{"query":"test"},"name":"search_kb"}}
-{"seq":3,"type":"tool_result","data":{"name":"search_kb","output":""}}
-{"seq":4,"type":"step","data":{"step":2}}
-{"seq":5,"type":"end","data":{"status":"completed"}}
