@@ -26,6 +26,7 @@ export interface PluginInstalled {
   keywords?: string[]
   rootPath: string
   marketSource?: string
+  builtin?: boolean
   installedAt: string
   components: PluginComponents
 }

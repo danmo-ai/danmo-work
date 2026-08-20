@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "reviewer",
+  "version": "1.0.0",
+  "description": "Code and artifact review expert.",
+  "author": { "name": "Danmo" },
+  "license": "MIT",
+  "keywords": ["reviewer", "coding", "expert", "builtin"]
+}

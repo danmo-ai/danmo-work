@@ -100,14 +100,18 @@ func (pm *PluginManager) Init(ctx context.Context) error {
 
 	pm.skillManager.SetPluginSkillDirs(skillDirs)
 	pm.agentManager.SetPluginExpertDirs(expertDirs)
-	pm.knowledgeManager.SetPluginKBRoots(kbRoots)
+	if pm.knowledgeManager != nil {
+		pm.knowledgeManager.SetPluginKBRoots(kbRoots)
+	}
 
 	if err := pm.mcpManager.SetPluginMCPFiles(mcpFiles); err != nil {
 		log.Printf("[plugins] mcp register: %v", err)
 	}
 
-	if err := pm.knowledgeManager.ScanPluginBases(ctx); err != nil {
-		log.Printf("[plugins] knowledge register: %v", err)
+	if pm.knowledgeManager != nil {
+		if err := pm.knowledgeManager.ScanPluginBases(ctx); err != nil {
+			log.Printf("[plugins] knowledge register: %v", err)
+		}
 	}
 
 	log.Printf("[plugins] init: %d installed, %d skill dirs, %d expert dirs, %d mcp files, %d kb roots",
@@ -161,7 +165,9 @@ func (pm *PluginManager) InstallPlugin(ctx context.Context, packageDir, depsScri
 		}
 		kd := filepath.Join(extDir, "knowledge")
 		if st, err := os.Stat(kd); err == nil && st.IsDir() {
-			pm.knowledgeManager.RegisterPluginKB(kd)
+			if pm.knowledgeManager != nil {
+				pm.knowledgeManager.RegisterPluginKB(kd)
+			}
 		}
 	}
 
@@ -192,6 +198,9 @@ func (pm *PluginManager) UninstallPlugin(ctx context.Context, name, depsScript s
 	if !ok {
 		return fmt.Errorf("plugin %q not installed", name)
 	}
+	if p.Builtin || p.MarketSource == domain.PluginMarketSourceBuiltin {
+		return fmt.Errorf("cannot uninstall builtin plugin %q", name)
+	}
 
 	if depsScript != "" {
 		scriptPath := filepath.Join(p.RootPath, filepath.FromSlash(depsScript))
@@ -213,7 +222,7 @@ func (pm *PluginManager) UninstallPlugin(ctx context.Context, name, depsScript s
 	if st, err := os.Stat(extDir); err == nil && st.IsDir() {
 		pm.agentManager.UnregisterPluginExpertDir(filepath.Join(extDir, "experts"))
 		kd := filepath.Join(extDir, "knowledge")
-		if st, err := os.Stat(kd); err == nil && st.IsDir() {
+		if st, err := os.Stat(kd); err == nil && st.IsDir() && pm.knowledgeManager != nil {
 			_ = pm.knowledgeManager.UnregisterPluginKB(ctx, kd)
 		}
 	}
@@ -302,7 +311,11 @@ func (pm *PluginManager) scanComponents(p *domain.PluginInstalled) {
 
 		kd := filepath.Join(extDir, "knowledge")
 		if st, err := os.Stat(kd); err == nil && st.IsDir() {
-			p.Components.Knowledge = []string{p.Name}
+			kbID := p.Name
+			if meta := readKBmeta(filepath.Join(kd, "_meta.json")); meta["id"] != "" {
+				kbID = meta["id"]
+			}
+			p.Components.Knowledge = []string{kbID}
 		}
 	}
 }

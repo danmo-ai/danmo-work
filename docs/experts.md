@@ -51,28 +51,35 @@ delegate_agent(agent_id="<id>", goal="...")
 
 ## 3. 内置专家清单
 
-### 主专家
+### 主专家（home embed）
 
 | id | 名称 | 说明 |
 |----|------|------|
 | `team` | Team | 默认可协作；适合跨文件、多步骤任务 |
 
-### 子专家（可召唤）
+`team` 仍在 `core/resource/home` 随 `SyncBuiltinToFS` 同步。共享技能（debugging、document-writing、TDD…）也留在 home，供多个专家按 id 绑定。
 
-| id | 名称 | 职责 | 典型技能 / MCP |
-|----|------|------|----------------|
-| `document` | Document | 报告、幻灯、表格等职场文档 | `document-writing`, `playable-slides`, `sheet-writing` |
-| `comms` | Comms | 邮件、消息、通知润色 | — |
-| `implementer` | Implementer | 按规格改代码 | TDD / debugging |
-| `explorer` | Explorer | 只读摸代码库 | debugging |
-| `researcher` | Researcher | 检索与调研 | `deep-research` |
-| `reviewer` | Reviewer | 代码/产物审查 | `requesting-code-review` |
-| `data` | Data | CSV/JSON 分析与报表 | shell 等 |
-| `github` | GitHub | Issue / PR / Actions 等 | skill `github` + MCP `github` |
-| `danmo-make` | Danmo Make | 本机图片/视频/音频生成 | skill + MCP `danmo-make`（需单独安装 Make） |
-| `novel` | Novel Writing | 长篇/网文：章合同→草稿→审稿→Commit（内置子专家，Team 召唤） | `novel-writing`, craft KB `kb-novel-craft` |
+### 子专家（全部为内置插件）
 
-市场安装的专家（如 **CodeGraph**）同样会出现在可召唤列表中（`mode=subagent` 且带 `marketSource`）。
+同步到 `~/.danmo-work/plugins/<name>/`，不可卸载。
+
+| 分组 | id | 名称 | 同包资源 |
+|------|-----|------|----------|
+| 编码 | `implementer` | Implementer | 专家（技能用 home：TDD / debugging） |
+| 编码 | `explorer` | Explorer | 专家 |
+| 编码 | `reviewer` | Reviewer | 专家 |
+| 编码 | `github` | GitHub | 专家 + skill + bound MCP |
+| 调研/自动化 | `researcher` | Researcher | 专家（技能用 home：deep-research） |
+| 调研/自动化 | `browser` | Browser | 专家 + skill + `browser_*` |
+| 调研/自动化 | `operator` | Operator | 专家 + `computer-use` + `computer` |
+| 职场写作 | `document` | Document | 专家（含原 Comms：邮件/消息/通知；技能用 home） |
+| 职场写作 | `data` | Data | 专家 |
+| 创作 | `novel` | Novel Writing | 专家 + `novel-writing` + KB `kb-novel-craft` |
+| 创作 | `danmo-make` | Danmo Make | 专家 + skill + bound MCP |
+
+**Comms 已并入 Document**：职场沟通写作不再单独召唤 `comms`。
+
+市场安装的专家（如 **CodeGraph**）同样会出现在可召唤列表中。
 
 ---
 
@@ -89,9 +96,11 @@ delegate_agent(agent_id="<id>", goal="...")
 
 ---
 
-## 5. 市场与自定义专家
+## 5. 市场、内置插件与自定义专家
 
-- **市场（Market）**：安装 `kind: expert` 包会写入专家定义，并可拉取 `skillDeps` / 连接器。
+- **内置插件（Builtin plugins）**：所有内置**子专家**均以 Agent Plugins 布局落在 `~/.danmo-work/plugins/<name>/`。能力包可同带 `skills/`、`mcp.json`、knowledge；薄专家只带 `ai.danmo.work/experts/`，共享技能仍从 home 解析。
+- **孤儿技能 / 连接器**：跨专家复用的 SOP（TDD、debugging、document-writing…）与产品连接器目录仍走原 home / catalog 模式，不强制塞进某个专家插件。
+- **市场（Market）**：安装 `kind: plugin`（推荐）或 `skill` / `connector`。历史上的 `kind: expert` / `bundle` 已由插件取代。
 - **自定义**：在 Teams 新建子专家，绑定技能、工具、知识库与 MCP；主专家开启协作后即可被 `@` / 图标召唤。
 - **Ambient**：子专家默认不继承全量 Ambient MCP；需要的连接器应写在专家的 `mcpServers` 绑定里（如 GitHub、Danmo Make）。
 

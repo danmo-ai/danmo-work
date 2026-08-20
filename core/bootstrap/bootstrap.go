@@ -203,10 +203,6 @@ func New(cfg Config) *Core {
 	mcpManager.SetDialer(mcpDialer)
 
 	pluginManager := service.NewPluginManager(appCfg.Data.Dir, skills, agents, mcpManager, knowledgeMgr)
-	if err := pluginManager.Init(context.Background()); err != nil {
-		log.Printf("[bootstrap] plugin init: %v", err)
-	}
-	knowledgeMgr.StartAsyncIndex(context.Background())
 
 	llmConfigRepo := st.LLMConfig()
 	searchConfig := service.NewSearchConfigManager(loader)
@@ -231,7 +227,14 @@ func New(cfg Config) *Core {
 	if err := service.SyncBuiltinToFS(appCfg.Data.Dir); err != nil {
 		log.Printf("[bootstrap] builtin sync failed (experts/skills/knowledge not refreshed): %v", err)
 	}
+	if err := service.SyncBuiltinPlugins(appCfg.Data.Dir); err != nil {
+		log.Printf("[bootstrap] builtin plugins sync failed: %v", err)
+	}
+	if err := pluginManager.Init(context.Background()); err != nil {
+		log.Printf("[bootstrap] plugin init: %v", err)
+	}
 	ensureBuiltinKnowledge(knowledgeMgr)
+	knowledgeMgr.StartAsyncIndex(context.Background())
 	if err := mcpManager.SyncBuiltinMCP(); err != nil {
 		log.Printf("[bootstrap] builtin mcp sync failed (connectors not upserted): %v", err)
 	}

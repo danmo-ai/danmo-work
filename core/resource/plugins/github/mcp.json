@@ -1,0 +1,15 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "github": {
+      "type": "streamable-http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "name": "GitHub",
+      "description": "Official GitHub remote MCP (bound-only; use with github expert + local gh CLI).",
+      "auth": "headers",
+      "catalogId": "github",
+      "ambientMount": false,
+      "toolTimeout": 120
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "github",
+  "version": "1.0.0",
+  "description": "GitHub platform expert: bound MCP + skill + gh/git degrade path.",
+  "author": { "name": "Danmo" },
+  "license": "MIT",
+  "keywords": ["github", "mcp", "expert", "builtin"]
+}

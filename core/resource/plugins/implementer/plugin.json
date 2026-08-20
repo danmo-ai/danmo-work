@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "implementer",
+  "version": "1.0.0",
+  "description": "Code implementation expert (binds shared home skills: TDD, debugging).",
+  "author": { "name": "Danmo" },
+  "license": "MIT",
+  "keywords": ["implementer", "coding", "expert", "builtin"]
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "document",
+  "version": "1.0.0",
+  "description": "Workplace writing expert: docs, slides, sheets, and communications (binds shared home writing skills).",
+  "author": { "name": "Danmo" },
+  "license": "MIT",
+  "keywords": ["document", "comms", "writing", "expert", "builtin"]
+}

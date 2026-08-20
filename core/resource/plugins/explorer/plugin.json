@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "explorer",
+  "version": "1.0.0",
+  "description": "Read-only codebase exploration expert.",
+  "author": { "name": "Danmo" },
+  "license": "MIT",
+  "keywords": ["explorer", "coding", "expert", "builtin"]
+}

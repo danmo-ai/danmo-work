@@ -273,6 +273,13 @@ export default {
     builtinAgents: '内置专家',
     customAgents: '自定义专家',
     marketAgents: '市场安装专家',
+    category: {
+      coding: '编码协作',
+      research: '调研与自动化',
+      office: '职场文档',
+      creative: '创作',
+      other: '其他',
+    },
     agentId: '专家 ID',
     idHint: '字母开头，创建后不可修改',
     displayName: '显示名称',
@@ -1651,5 +1658,7 @@ export default {
     keywords: '关键词',
     components: '组件',
     installedAt: '安装时间',
+    builtin: '内置',
+    source: '来源',
   },
 }

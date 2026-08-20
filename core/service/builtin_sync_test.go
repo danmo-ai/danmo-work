@@ -10,7 +10,7 @@ import (
 	"danmo-work/core/resource/home"
 )
 
-func TestSyncBuiltinToFSCopiesAgentsSkillsKnowledge(t *testing.T) {
+func TestSyncBuiltinToFSCopiesAgentsSkills(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("WORK_HOME", root)
 	dataDir := filepath.Join(root, "data")
@@ -38,21 +38,26 @@ func TestSyncBuiltinToFSCopiesAgentsSkillsKnowledge(t *testing.T) {
 		t.Fatal("builtin skill was not overwritten")
 	}
 
-	agentPath := filepath.Join(dataDir, "agents", "explorer.md")
+	agentPath := filepath.Join(dataDir, "agents", "team.md")
 	if _, err := os.Stat(agentPath); err != nil {
-		t.Fatalf("missing builtin agent: %v", err)
+		t.Fatalf("missing builtin primary agent: %v", err)
 	}
 
-	kbMeta := filepath.Join(paths.KnowledgeDir(), "kb-novel-craft", "_meta.json")
-	if _, err := os.Stat(kbMeta); err != nil {
-		t.Fatalf("knowledge not written to KnowledgeDir: %v", err)
+	// Migrated packs must not remain under home sync targets.
+	for _, name := range []string{
+		"github.md", "novel.md", "browser.md", "danmo-make.md", "operator.md",
+		"implementer.md", "explorer.md", "reviewer.md", "researcher.md",
+		"document.md", "data.md", "comms.md",
+	} {
+		if _, err := os.Stat(filepath.Join(dataDir, "agents", name)); err == nil {
+			t.Fatalf("migrated agent %s should not be synced from home", name)
+		}
 	}
-	kbDoc := filepath.Join(paths.KnowledgeDir(), "kb-novel-craft", "01-pacing-structure.md")
-	if _, err := os.Stat(kbDoc); err != nil {
-		t.Fatalf("knowledge markdown not written to KnowledgeDir: %v", err)
+	if _, err := os.Stat(filepath.Join(dataDir, "agents", "team.md")); err != nil {
+		t.Fatalf("primary team agent missing from home sync: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dataDir, "knowledge", "kb-novel-craft")); err == nil {
-		t.Fatal("knowledge should not be copied under dataDir")
+	if _, err := os.Stat(filepath.Join(paths.KnowledgeDir(), "kb-novel-craft")); err == nil {
+		t.Fatal("kb-novel-craft should not sync to KnowledgeDir from home")
 	}
 
 	ver, err := os.ReadFile(filepath.Join(dataDir, ".builtin_version"))
@@ -93,18 +98,13 @@ func TestSyncBuiltinToFSSkipsWhenHashMatches(t *testing.T) {
 	}
 }
 
-func TestBuiltinFileTargetRoutesKnowledge(t *testing.T) {
+func TestBuiltinFileTargetRoutesSkills(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("WORK_HOME", root)
 	dataDir := filepath.Join(root, "data")
 
-	got := builtinFileTarget(dataDir, "knowledge/kb-novel-craft/_meta.json")
-	want := filepath.Join(paths.KnowledgeDir(), "kb-novel-craft", "_meta.json")
-	if got != want {
-		t.Fatalf("knowledge target=%q want %q", got, want)
-	}
-	got = builtinFileTarget(dataDir, "skills/debugging/SKILL.md")
-	want = filepath.Join(dataDir, "skills", "debugging", "SKILL.md")
+	got := builtinFileTarget(dataDir, "skills/debugging/SKILL.md")
+	want := filepath.Join(dataDir, "skills", "debugging", "SKILL.md")
 	if got != want {
 		t.Fatalf("skill target=%q want %q", got, want)
 	}

@@ -46,9 +46,13 @@ type PluginInstalled struct {
 	Keywords     []string         `json:"keywords,omitempty"`
 	RootPath     string           `json:"rootPath"`
 	MarketSource string           `json:"marketSource,omitempty"`
+	Builtin      bool             `json:"builtin,omitempty"`
 	InstalledAt  string           `json:"installedAt"`
 	Components   PluginComponents `json:"components"`
 }
+
+// PluginMarketSourceBuiltin marks first-party plugins synced from the binary embed.
+const PluginMarketSourceBuiltin = "builtin"
 
 // PluginInstalledManifest is the persisted installed.json (minimal on-disk format).
 type PluginInstalledManifest struct {

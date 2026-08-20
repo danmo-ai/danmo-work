@@ -115,7 +115,10 @@ const marketSelected = computed(() => {
               <div class="resource-rail__avatar">{{ initial(p.name) }}</div>
               <div class="resource-rail__meta">
                 <div class="resource-rail__title">{{ p.name }}</div>
-                <div class="resource-rail__subtitle">v{{ p.version || '0.0.0' }}</div>
+                <div class="resource-rail__subtitle">
+                  v{{ p.version || '0.0.0' }}
+                  <span v-if="p.builtin" class="plugins-rail__builtin"> · {{ t('plugins.builtin') }}</span>
+                </div>
               </div>
             </div>
             <div v-if="sortedPlugins.length === 0" class="resource-rail__empty">
@@ -137,6 +140,7 @@ const marketSelected = computed(() => {
         <div class="detail-header">{{ store.selected.name }}</div>
         <div class="detail-section">
           <div class="detail-row"><span class="detail-label">{{ t('plugins.version') }}</span><span>{{ store.selected.version || '-' }}</span></div>
+          <div v-if="store.selected.builtin" class="detail-row"><span class="detail-label">{{ t('plugins.source') }}</span><span>{{ t('plugins.builtin') }}</span></div>
           <div class="detail-row"><span class="detail-label">{{ t('plugins.author') }}</span><span>{{ store.selected.author?.name || '-' }}</span></div>
           <div class="detail-row"><span class="detail-label">{{ t('plugins.license') }}</span><span>{{ store.selected.license || '-' }}</span></div>
           <div v-if="store.selected.homepage" class="detail-row"><span class="detail-label">{{ t('plugins.homepage') }}</span><span>{{ store.selected.homepage }}</span></div>
@@ -176,7 +180,7 @@ const marketSelected = computed(() => {
       />
     </template>
 
-    <template v-if="pageView === 'library' && store.selected" #footer>
+    <template v-if="pageView === 'library' && store.selected && !store.selected.builtin" #footer>
       <div style="display: flex; gap: 8px; justify-content: flex-end; width: 100%;">
         <DqButton
           theme="danger"

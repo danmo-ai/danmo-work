@@ -4,6 +4,8 @@ export interface Agent {
   description?: string
   persona?: string
   mode?: 'primary' | 'subagent'
+  /** UI group: coding | research | office | creative */
+  category?: string
   systemPrompt?: string
   steps?: number
   skillIds?: string[]

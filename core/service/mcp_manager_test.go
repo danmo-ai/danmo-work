@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 
@@ -13,40 +12,19 @@ import (
 	"danmo-work/core/port"
 )
 
-func TestSyncBuiltinMCPSeedsMissing(t *testing.T) {
+func TestSyncBuiltinMCPNoopWithoutSeeds(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	m := NewMCPManager(dir)
 	if err := m.SyncBuiltinMCP(); err != nil {
 		t.Fatal(err)
 	}
-
-	gh, err := m.Get(ctx, GitHubExpertID)
-	if err != nil {
-		t.Fatalf("github missing: %v", err)
+	// GitHub / Danmo Make ship via builtin plugins, not mcp.json seeds.
+	if _, err := m.Get(ctx, GitHubExpertID); err == nil {
+		t.Fatal("github should not be seeded by SyncBuiltinMCP")
 	}
-	if gh.Auth != domain.MCPAuthHeaders {
-		t.Fatalf("github auth=%q want headers", gh.Auth)
-	}
-	if gh.AmbientMount {
-		t.Fatal("github must be bound-only (AmbientMount=false)")
-	}
-	if gh.CatalogID != GitHubExpertID {
-		t.Fatalf("github catalogId=%q", gh.CatalogID)
-	}
-	if gh.URL != "https://api.githubcopilot.com/mcp/" {
-		t.Fatalf("github url=%q", gh.URL)
-	}
-
-	dm, err := m.Get(ctx, "danmo-make")
-	if err != nil {
-		t.Fatalf("danmo-make missing: %v", err)
-	}
-	if dm.AmbientMount {
-		t.Fatal("danmo-make must be bound-only")
-	}
-	if !strings.Contains(dm.URL, "/mcp/") {
-		t.Fatalf("danmo-make url=%q", dm.URL)
+	if _, err := m.Get(ctx, "danmo-make"); err == nil {
+		t.Fatal("danmo-make should not be seeded by SyncBuiltinMCP")
 	}
 }
 
@@ -86,18 +64,22 @@ func TestSyncBuiltinMCPDoesNotOverwriteExisting(t *testing.T) {
 	if gh.Headers["Authorization"] != "Bearer ghp_keep" {
 		t.Fatalf("headers not preserved: %+v", gh.Headers)
 	}
-
-	// Missing sibling builtin should still be inserted.
-	if _, err := m.Get(ctx, "danmo-make"); err != nil {
-		t.Fatalf("danmo-make should still be seeded: %v", err)
-	}
 }
 
-func TestSyncBuiltinMCPPersistsAmbientMountAndAuth(t *testing.T) {
+func TestMCPSpecRoundTripPreservesAmbientMountAndAuth(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	m := NewMCPManager(dir)
-	if err := m.SyncBuiltinMCP(); err != nil {
+	if _, err := m.Create(ctx, domain.UpsertMCPServerRequest{
+		ID:           GitHubExpertID,
+		Name:         "GitHub",
+		Transport:    "streamable-http",
+		URL:          "https://api.githubcopilot.com/mcp/",
+		Auth:         domain.MCPAuthHeaders,
+		CatalogID:    GitHubExpertID,
+		Enabled:      true,
+		AmbientMount: boolPtr(false),
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -140,7 +122,6 @@ func TestSyncBuiltinMCPPersistsAmbientMountAndAuth(t *testing.T) {
 }
 
 func TestSyncBuiltinMCPIdempotent(t *testing.T) {
-	ctx := context.Background()
 	dir := t.TempDir()
 	m := NewMCPManager(dir)
 	if err := m.SyncBuiltinMCP(); err != nil {
@@ -148,13 +129,6 @@ func TestSyncBuiltinMCPIdempotent(t *testing.T) {
 	}
 	if err := m.SyncBuiltinMCP(); err != nil {
 		t.Fatal(err)
-	}
-	gh, err := m.Get(ctx, GitHubExpertID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gh.AmbientMount || gh.Auth != domain.MCPAuthHeaders {
-		t.Fatalf("second sync corrupted builtin: ambient=%v auth=%q", gh.AmbientMount, gh.Auth)
 	}
 }
 
