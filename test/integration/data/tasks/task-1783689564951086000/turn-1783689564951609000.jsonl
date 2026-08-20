@@ -1,5 +1,0 @@
-{"seq":1,"type":"start","data":{"agent_id":"planner","goal":"test planner log"}}
-{"seq":1,"type":"step","data":{"step":1}}
-{"seq":2,"type":"tool_call","data":{"input":{"path":"main.go"},"name":"read_file"}}
-{"seq":3,"type":"step","data":{"step":2}}
-{"seq":4,"type":"end","data":{"status":"completed"}}
