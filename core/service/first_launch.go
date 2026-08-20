@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+
+	"danmo-work/core/paths"
 )
 
 const (
@@ -25,13 +27,9 @@ const (
 
 var (
 	firstLaunchOnce sync.Once
-	// firstLaunchHomeDir is overridable in tests (defaults to ~/.danmo-work).
+	// firstLaunchHomeDir is overridable in tests (defaults to WORK_HOME / ~/.danmo-work).
 	firstLaunchHomeDir = func() string {
-		h, err := os.UserHomeDir()
-		if err != nil || h == "" {
-			return filepath.Join(".", ".danmo-work")
-		}
-		return filepath.Join(h, ".danmo-work")
+		return paths.Home()
 	}
 )
 

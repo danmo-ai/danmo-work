@@ -290,6 +290,7 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
 
     let mut cmd = Command::new(&binary);
     cmd.current_dir(&home)
+        .env("WORK_HOME", home.to_string_lossy().as_ref())
         .env("WORK_ADDR", BACKEND_ADDR)
         .env(
             "WORK_DB_PATH",

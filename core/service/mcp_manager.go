@@ -18,13 +18,19 @@ import (
 const mcpSchemaURL = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
 
 type mcpSpecServer struct {
-	Type    string            `json:"type"`
-	Command string            `json:"command,omitempty"`
-	Args    string            `json:"args,omitempty"`
-	URL     string            `json:"url,omitempty"`
-	Env     map[string]string `json:"env,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Cwd     string            `json:"cwd,omitempty"`
+	Type         string            `json:"type"`
+	Command      string            `json:"command,omitempty"`
+	Args         string            `json:"args,omitempty"`
+	URL          string            `json:"url,omitempty"`
+	Env          map[string]string `json:"env,omitempty"`
+	Headers      map[string]string `json:"headers,omitempty"`
+	Cwd          string            `json:"cwd,omitempty"`
+	Name         string            `json:"name,omitempty"`
+	Description  string            `json:"description,omitempty"`
+	Auth         string            `json:"auth,omitempty"`
+	CatalogID    string            `json:"catalogId,omitempty"`
+	AmbientMount *bool             `json:"ambientMount,omitempty"`
+	ToolTimeout  int               `json:"toolTimeout,omitempty"`
 }
 
 type mcpSpecDoc struct {
@@ -228,27 +234,46 @@ func mcpSpecToDomain(id string, spec mcpSpecServer) domain.MCPServer {
 		}
 		env = strings.Join(parts, "\n")
 	}
+	name := spec.Name
+	if name == "" {
+		name = id
+	}
+	ambient := true
+	if spec.AmbientMount != nil {
+		ambient = *spec.AmbientMount
+	}
 	return domain.MCPServer{
-		ID:          id,
-		Name:        id,
-		Transport:   spec.Type,
-		Command:     spec.Command,
-		Args:        args,
-		URL:         spec.URL,
-		Env:         env,
-		Headers:     spec.Headers,
-		Enabled:     true,
-		AmbientMount: true,
+		ID:           id,
+		Name:         name,
+		Description:  spec.Description,
+		Transport:    spec.Type,
+		Command:      spec.Command,
+		Args:         args,
+		URL:          spec.URL,
+		Env:          env,
+		Headers:      spec.Headers,
+		Auth:         domain.MCPAuthMode(spec.Auth),
+		CatalogID:    spec.CatalogID,
+		ToolTimeout:  spec.ToolTimeout,
+		Enabled:      true,
+		AmbientMount: ambient,
 	}
 }
 
 func domainToMCPSpec(srv domain.MCPServer) mcpSpecServer {
+	ambient := srv.AmbientMount
 	spec := mcpSpecServer{
-		Type:    srv.Transport,
-		Command: srv.Command,
-		Args:    srv.Args,
-		URL:     srv.URL,
-		Headers: srv.Headers,
+		Type:         srv.Transport,
+		Command:      srv.Command,
+		Args:         srv.Args,
+		URL:          srv.URL,
+		Headers:      srv.Headers,
+		Name:         srv.Name,
+		Description:  srv.Description,
+		Auth:         string(srv.Auth),
+		CatalogID:    srv.CatalogID,
+		AmbientMount: &ambient,
+		ToolTimeout:  srv.ToolTimeout,
 	}
 	if srv.Env != "" {
 		envMap := make(map[string]string)
@@ -269,40 +294,32 @@ func domainToMCPSpec(srv domain.MCPServer) mcpSpecServer {
 	return spec
 }
 
-// SyncBuiltinMCP adds built-in MCP server entries that are missing from the user's mcp.json.
-// Never overwrites existing entries with the same ID.
+// SyncBuiltinMCP adds product builtin MCP servers that are missing from mcp.json.
+// Never overwrites an existing entry with the same ID (users may have set API
+// keys, headers, AmbientMount, or other local config).
 func (m *MCPManager) SyncBuiltinMCP() error {
-	builtins := map[string]mcpSpecServer{}
-
-	danmoMakeURL := ResolveDanmoMakeMCPURL()
-	if danmoMakeURL != "" {
-		builtins["danmo-make"] = mcpSpecServer{
-			Type: "streamable-http",
-			URL:  danmoMakeURL,
+	ctx := context.Background()
+	added := 0
+	for _, id := range BuiltinConnectorIDs {
+		entry := CatalogEntryByID(id)
+		if entry == nil {
+			continue
 		}
-	}
-
-	builtins["github"] = mcpSpecServer{
-		Type: "streamable-http",
-		URL:  "https://api.githubcopilot.com/mcp/",
-	}
-
-	m.mu.Lock()
-	changed := false
-	for id, spec := range builtins {
-		if _, exists := m.servers[id]; !exists {
-			m.servers[id] = mcpSpecToDomain(id, spec)
-			changed = true
-			log.Printf("[mcp] added builtin server %q", id)
+		if _, err := m.Get(ctx, id); err == nil {
+			continue
 		}
+		req := InstallCatalogEntry(*entry, "")
+		req.ID = id
+		if _, err := m.Create(ctx, req); err != nil {
+			return fmt.Errorf("seed builtin mcp %q: %w", id, err)
+		}
+		added++
+		log.Printf("[mcp] added builtin server %q", id)
 	}
-	saveErr := m.saveToDisk()
-	m.mu.Unlock()
-
-	if changed {
-		log.Printf("[mcp] builtin sync: %d new server(s)", 1)
+	if added > 0 {
+		log.Printf("[mcp] builtin sync: %d new server(s)", added)
 	}
-	return saveErr
+	return nil
 }
 
 func (m *MCPManager) List(ctx context.Context) ([]domain.MCPServer, error) {

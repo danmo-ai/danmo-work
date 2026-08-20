@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"danmo-work/core/paths"
 	"danmo-work/core/resource/home"
 )
 
@@ -17,9 +18,9 @@ import (
 // knowledge bases) into the data home so they go through the same filesystem
 // scan/ingest paths as user-created resources.
 func SyncBuiltinToFS(dataDir string) error {
-	hash, err := home.BuiltinManifestHash()
+	hash, err := home.BuiltinContentHash()
 	if err != nil {
-		return fmt.Errorf("builtin manifest: %w", err)
+		return fmt.Errorf("builtin content hash: %w", err)
 	}
 
 	versionFile := filepath.Join(dataDir, ".builtin_version")
@@ -32,6 +33,7 @@ func SyncBuiltinToFS(dataDir string) error {
 
 	agentsDir := filepath.Join(dataDir, "agents")
 	skillsDir := filepath.Join(dataDir, "skills")
+	knowledgeDir := paths.KnowledgeDir()
 
 	ts := time.Now().Format("2006-01-02T150405")
 	backupDir := filepath.Join(dataDir, ".backups", ts)
@@ -41,10 +43,15 @@ func SyncBuiltinToFS(dataDir string) error {
 	if _, err := os.Stat(skillsDir); err == nil {
 		copyDirectory(skillsDir, filepath.Join(backupDir, "skills"))
 	}
+	if knowledgeHasEntries(knowledgeDir) {
+		copyDirectory(knowledgeDir, filepath.Join(backupDir, "knowledge"))
+	}
 	log.Printf("[builtin] backup: %s", backupDir)
 
 	cleanBuiltinAgents(agentsDir)
 	cleanBuiltinSkills(skillsDir)
+	cleanBuiltinKnowledge(knowledgeDir)
+	cleanStaleDataKnowledge(dataDir)
 
 	if err := copyBuiltinFiles(dataDir); err != nil {
 		return fmt.Errorf("copy builtin files: %w", err)
@@ -53,7 +60,7 @@ func SyncBuiltinToFS(dataDir string) error {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(versionFile, []byte(hash), 0o644); err != nil {
+	if err := os.WriteFile(versionFile, []byte(hash+"\n"), 0o644); err != nil {
 		return err
 	}
 
@@ -119,13 +126,50 @@ func builtinSkillDirs() map[string]struct{} {
 	return out
 }
 
+func cleanBuiltinKnowledge(dir string) {
+	for _, id := range home.KnowledgeDirs() {
+		target := filepath.Join(dir, id)
+		if _, err := os.Stat(target); err != nil {
+			continue
+		}
+		log.Printf("[builtin] removing old builtin knowledge: %s", id)
+		_ = os.RemoveAll(target)
+	}
+}
+
+func cleanStaleDataKnowledge(dataDir string) {
+	stale := filepath.Join(dataDir, "knowledge")
+	for _, id := range home.KnowledgeDirs() {
+		target := filepath.Join(stale, id)
+		if _, err := os.Stat(target); err != nil {
+			continue
+		}
+		log.Printf("[builtin] removing stale data-dir knowledge: %s", id)
+		_ = os.RemoveAll(target)
+	}
+}
+
+func knowledgeHasEntries(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	return err == nil && len(entries) > 0
+}
+
+func builtinFileTarget(dataDir, embedPath string) string {
+	embedPath = filepath.ToSlash(embedPath)
+	if strings.HasPrefix(embedPath, "knowledge/") {
+		rel := strings.TrimPrefix(embedPath, "knowledge/")
+		return filepath.Join(paths.KnowledgeDir(), filepath.FromSlash(rel))
+	}
+	return filepath.Join(dataDir, filepath.FromSlash(embedPath))
+}
+
 func copyBuiltinFiles(dataDir string) error {
 	files, err := home.LoadBuiltinFiles()
 	if err != nil {
 		return err
 	}
 	for _, f := range files {
-		target := filepath.Join(dataDir, f.Path)
+		target := builtinFileTarget(dataDir, f.Path)
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
@@ -166,6 +210,6 @@ func copyDirectory(src, dst string) error {
 }
 
 func BuiltinVersionHash() string {
-	h, _ := home.BuiltinManifestHash()
+	h, _ := home.BuiltinContentHash()
 	return h
 }

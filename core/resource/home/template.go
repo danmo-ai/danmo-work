@@ -2,8 +2,10 @@ package home
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
+	"sort"
 	"strings"
 
 	"danmo-work/core/domain"
@@ -213,6 +215,30 @@ func BuiltinManifestHash() (string, error) {
 	}
 	h := sha256.Sum256(data)
 	return fmt.Sprintf("%x", h), nil
+}
+
+// BuiltinContentHash returns a stable SHA256 of every embedded builtin file
+// (agents, skills, knowledge, manifest). Used as the FS sync version gate so
+// content updates still trigger overwrite when manifest.yaml is unchanged.
+func BuiltinContentHash() (string, error) {
+	files, err := LoadBuiltinFiles()
+	if err != nil {
+		return "", err
+	}
+	return hashBuiltinFiles(files), nil
+}
+
+func hashBuiltinFiles(files []BuiltinFile) string {
+	sorted := append([]BuiltinFile(nil), files...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Path < sorted[j].Path })
+	h := sha256.New()
+	for _, f := range sorted {
+		_, _ = h.Write([]byte(f.Path))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(f.Content)
+		_, _ = h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // loadBuiltinSkillFiles reads resource files for a skill from embedded FS.
