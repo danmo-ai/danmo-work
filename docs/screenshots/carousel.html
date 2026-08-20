@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Danmo Work — Screenshot Tour</title>
-  <meta name="description" content="Bilingual screenshot carousel: multi-agent, Document Stage, browser preview, skills, sandbox, IM." />
+  <meta name="description" content="Bilingual screenshot carousel: multi-agent Plan, Trajectory, Document Stage, preview annotate, experts, skills, runtime, IM." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -310,75 +310,75 @@
   <script>
     const SLIDES = [
       {
-        img: "ui-team-delegate.png",
-        title: { zh: "多 Agent 协作", en: "Multi-agent delegation" },
+        img: "ui-team-plan.png",
+        title: { zh: "多 Agent + Plan", en: "Multi-agent + Plan" },
         caption: {
-          zh: "主专家委派研究员与文档子代理，计划面板实时追踪进度。",
-          en: "Lead agent delegates Researchers & Document experts; Plan panel tracks every step.",
+          zh: "主链边跑边规划，Plan 面板实时追踪进行中 / 待办步骤。",
+          en: "Lead agent plans while running — Plan panel tracks in-progress and pending steps.",
         },
       },
       {
-        img: "ui-market-report.png",
-        title: { zh: "调研 → 报告", en: "Research → live report" },
+        img: "ui-trajectory.png",
+        title: { zh: "Trajectory 可观测", en: "Trajectory observability" },
         caption: {
-          zh: "检索、写文件、生成 HTML 报告，内置浏览器即时预览。",
-          en: "Search, write files, ship an HTML report — preview in the built-in browser.",
+          zh: "工具调用、思考与子专家委派时间线一目了然，可回放整条 Turn。",
+          en: "Tool calls, thinking, and specialist delegation on one timeline — replay any turn.",
         },
       },
       {
-        img: "ui-office-coedit.png",
+        img: "ui-document-stage.png",
         title: { zh: "Document Stage", en: "Document Stage" },
         caption: {
-          zh: "文档 / 幻灯片 / 表格同台编辑，Markdown 为真相源，可导出 PDF。",
-          en: "Docs, slides, and sheets on one canvas — Markdown source of truth, PDF export.",
+          zh: "调研报告落盘为 Markdown，同台 View / Edit / 导出 PDF。",
+          en: "Research lands as Markdown — View / Edit / Export PDF on one canvas.",
         },
       },
       {
-        img: "ui-ai-doc-modify.png",
-        title: { zh: "AI 行内编辑", en: "AI inline editing" },
+        img: "ui-preview-game.png",
+        title: { zh: "代码即预览", en: "Code → preview" },
         caption: {
-          zh: "选中段落 → 润色 / 扩写 / 修改，不离开 Document Stage。",
-          en: "Select text → Polish / Expand / Modify without leaving the canvas.",
+          zh: "Agent 写完网页小游戏，Document Stage 预览里立刻能玩。",
+          en: "Agent ships a web game — play it instantly in Document Stage preview.",
         },
       },
       {
         img: "ui-browser-annotate.png",
-        title: { zh: "浏览器 + 标注", en: "Browser + annotate" },
+        title: { zh: "预览 + 标注", en: "Preview + annotate" },
         caption: {
-          zh: "本地预览网页，点选 DOM 元素标注，精确上下文发回 Composer。",
-          en: "Preview locally, click a DOM element, send exact HTML/CSS context to Composer.",
+          zh: "点选 DOM 元素标注，精确 HTML/CSS 上下文发回 Composer。",
+          en: "Click a DOM element, send exact HTML/CSS context back to Composer.",
         },
       },
       {
-        img: "ui-snake-game.png",
-        title: { zh: "代码即预览", en: "Code → preview" },
+        img: "ui-expert-prompts.png",
+        title: { zh: "专家提示词", en: "Expert prompts" },
         caption: {
-          zh: "Agent 写完网页小游戏，Browser 标签页里立刻能玩。",
-          en: "Agent ships a web game — play it instantly in the Browser tab.",
+          zh: "内置与自定义专家，应用内编辑 Prompt / Skills / Tools / Knowledge。",
+          en: "Built-in and custom experts — edit Prompt, Skills, Tools, and Knowledge in-app.",
         },
       },
       {
         img: "ui-skill-editor.png",
         title: { zh: "技能库", en: "Skills library" },
         caption: {
-          zh: "内置、自定义与市场技能，应用内编辑 SKILL.md 指令。",
-          en: "Built-in, custom, and market skills — edit SKILL.md instructions in-app.",
+          zh: "内置、自定义与市场技能，预览并编辑 SKILL.md 指令。",
+          en: "Built-in, custom, and market skills — preview and edit SKILL.md instructions.",
         },
       },
       {
         img: "ui-runtime-settings.png",
         title: { zh: "沙箱与运行时", en: "Sandbox & runtime" },
         caption: {
-          zh: "OS 级沙箱、网络 deny、权限模式、Turn 上限与记忆检索。",
-          en: "OS sandbox, network deny, permission modes, turn limits, memory TopK.",
+          zh: "Turn 上限、委派深度、记忆 TopK、工具输出硬限与 OS 沙箱。",
+          en: "Turn limits, delegation depth, memory TopK, tool output caps, and OS sandbox.",
         },
       },
       {
-        img: "wx1.png",
+        img: "ui-wechat-channel.png",
         title: { zh: "IM 通道", en: "IM channels" },
         caption: {
-          zh: "微信 / 飞书 / QQ / 企微同一条 Loop — 进度与审批在聊天里。",
-          en: "WeChat · Feishu · QQ · WeCom — same loop, progress cards in chat.",
+          zh: "微信 / 飞书 / QQ / 企微同一条 Loop — 默认 Agent、自动审批可配。",
+          en: "WeChat · Feishu · QQ · WeCom — same loop; default agent and auto-approve configurable.",
         },
       },
     ];
