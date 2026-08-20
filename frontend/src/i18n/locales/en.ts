@@ -213,7 +213,7 @@ export default {
     builtinSkills: 'Built-in Skills',
     projectSkills: 'Project Skills',
     path: 'Path',
-    pathPlaceholder: '~/.danmo-work/skills/my-skill',
+    pathPlaceholder: '{danmo_work_home}/skills/my-skill',
     customSkills: 'Custom Skills',
     marketSkills: 'Market Skills',
     resetConfirm: 'Reset skill "{name}" to template defaults? All changes will be lost.',

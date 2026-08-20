@@ -84,7 +84,7 @@ func ScanSkillDirs(dirs []string) ([]domain.Skill, map[string][]domain.SkillFile
 			if _, exists := byID[sk.ID]; !exists {
 				order = append(order, sk.ID)
 			}
-			sk.Dir = filepath.Join(dir, sk.SourcePath)
+			sk.Dir = filepath.Join(dir, sk.ID)
 			byID[sk.ID] = sk
 			dirByID[sk.ID] = dir
 			if sf, ok := filesForDir[sk.ID]; ok {

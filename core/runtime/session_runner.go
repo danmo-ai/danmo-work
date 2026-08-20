@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"danmo-work/core/domain"
+	"danmo-work/core/paths"
 	"danmo-work/core/port"
 	"danmo-work/core/runtime/permission"
 	"danmo-work/core/runtime/tool"
@@ -1226,8 +1227,16 @@ func homeDir() string {
 
 func (e *Engine) resolveAgentSkills(agent domain.Agent, workDir string) []domain.Skill {
 	allSkills := service.ScanAllSkills(e.dataDir, workDir)
+	var pluginDirs []string
+	if e.skills != nil {
+		if listed, err := e.skills.List(context.Background()); err == nil {
+			allSkills = service.MergeSkillsByID(listed, allSkills)
+		}
+		pluginDirs = e.skills.PluginSkillDirs()
+	}
+	pluginDirs = append(pluginDirs, paths.PluginSkillDirs(e.dataDir)...)
 	for i := range allSkills {
-		allSkills[i].PromptPath = builtin.SkillPathForPrompt(allSkills[i].Dir, e.dataDir, homeDir()+"/.agents", workDir)
+		allSkills[i].PromptPath = builtin.SkillPathForPromptWithPlugins(allSkills[i].Dir, e.dataDir, homeDir()+"/.agents", workDir, pluginDirs)
 	}
 
 	if agent.Mode == domain.AgentModeSubagent {

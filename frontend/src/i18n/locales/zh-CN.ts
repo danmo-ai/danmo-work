@@ -213,7 +213,7 @@ export default {
     builtinSkills: '内置技能',
     projectSkills: '项目技能',
     path: '路径',
-    pathPlaceholder: '~/.danmo-work/skills/my-skill',
+    pathPlaceholder: '{danmo_work_home}/skills/my-skill',
     customSkills: '自定义技能',
     marketSkills: '市场安装技能',
     resetConfirm: '确定重置技能「{name}」为模板默认值？所有修改将丢失。',
