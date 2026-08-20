@@ -228,12 +228,13 @@ func New(cfg Config) *Core {
 	}
 
 	if err := service.SyncBuiltinToFS(appCfg.Data.Dir); err != nil {
-		log.Printf("[bootstrap] builtin sync: %v", err)
+		log.Printf("[bootstrap] builtin sync failed (experts/skills/knowledge not refreshed): %v", err)
 	}
 	ensureBuiltinKnowledge(knowledgeMgr)
 	if err := mcpManager.SyncBuiltinMCP(); err != nil {
-		log.Printf("[bootstrap] builtin mcp sync: %v", err)
+		log.Printf("[bootstrap] builtin mcp sync failed (connectors not upserted): %v", err)
 	}
+	service.StartFirstLaunchAsync(nil)
 
 	marketReg := marketadapter.NewRegistry(appCfg.Market.Sources)
 	marketMgr := service.NewMarketManager(configManager, marketReg, skills, agents, mcpManager, pluginManager)
