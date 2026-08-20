@@ -56,6 +56,19 @@ func TestScanSkillDirsOverridesByOrder(t *testing.T) {
 	}
 }
 
+func TestScanSkillDirsSetsDirFromID(t *testing.T) {
+	root := t.TempDir()
+	writeSkill(t, root, "demo", "body")
+	skills, _ := ScanSkillDirs([]string{root})
+	if len(skills) != 1 {
+		t.Fatalf("skills=%d", len(skills))
+	}
+	want := filepath.Join(root, "demo")
+	if skills[0].Dir != want {
+		t.Fatalf("Dir=%q want %q", skills[0].Dir, want)
+	}
+}
+
 func TestScanSkillDirsMissingOK(t *testing.T) {
 	skills, files := ScanSkillDirs([]string{filepath.Join(t.TempDir(), "nope")})
 	if len(skills) != 0 || len(files) != 0 {

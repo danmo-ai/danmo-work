@@ -93,6 +93,13 @@ func (m *SkillManager) UnregisterPluginSkillDir(dir string) {
 
 func (m *SkillManager) DataDir() string { return m.dataDir }
 
+// PluginSkillDirs returns a copy of registered plugin skill directories.
+func (m *SkillManager) PluginSkillDirs() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return append([]string{}, m.pluginSkillDirs...)
+}
+
 // globalDirs returns all global skill roots (read), low → high priority.
 func (m *SkillManager) globalDirs() []string {
 	return []string{
@@ -239,7 +246,7 @@ func (m *SkillManager) ResetFromTemplate(ctx context.Context, id string) (*domai
 }
 
 // SetTemplateLoader and SetFileTemplateLoader are no-ops retained for interface compatibility.
-func (m *SkillManager) SetTemplateLoader(fn func(id string) (*domain.Skill, error)) {}
+func (m *SkillManager) SetTemplateLoader(fn func(id string) (*domain.Skill, error))          {}
 func (m *SkillManager) SetFileTemplateLoader(fn func(id string) ([]domain.SkillFile, error)) {}
 
 // LoadSkillsFromFS reads all skill directories from the given path.

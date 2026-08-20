@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	phDanmoWorkHome = "{danmo_work_home}"
-	phAgentsHome    = "{agents_home}"
-	phProject       = "{project}"
+	phDanmoWorkHome = paths.PhDanmoWorkHome
+	phAgentsHome    = paths.PhAgentsHome
+	phProject       = paths.PhProject
+	phWorkHome      = paths.PhWorkHome
 )
 
 type ReadSkill struct {
@@ -113,6 +114,7 @@ func (h *ReadSkill) Execute(ctx context.Context, input map[string]any) (domain.T
 func (h *ReadSkill) resolvePath(p string) string {
 	p = strings.ReplaceAll(p, phDanmoWorkHome, filepath.Join(h.dataDir))
 	p = strings.ReplaceAll(p, phAgentsHome, filepath.Join(home(), ".agents"))
+	p = strings.ReplaceAll(p, phWorkHome, paths.WorkHomeFromDataDir(h.dataDir))
 	if h.projectDir != "" {
 		p = strings.ReplaceAll(p, phProject, h.projectDir)
 	}
@@ -120,14 +122,13 @@ func (h *ReadSkill) resolvePath(p string) string {
 }
 
 func (h *ReadSkill) isValid(absPath string) bool {
-	roots := paths.GlobalSkillRoots(h.dataDir)
-	roots = append(roots, paths.ProjectSkillDirs(h.projectDir)...)
-	for _, root := range roots {
-		absRoot, err := filepath.Abs(root)
+	mappings := paths.SkillRootMappings(h.dataDir, filepath.Join(home(), ".agents"), h.projectDir, paths.PluginSkillDirs(h.dataDir))
+	for _, m := range mappings {
+		absRoot, err := filepath.Abs(m.AbsRoot)
 		if err != nil {
 			continue
 		}
-		if strings.HasPrefix(absPath, absRoot+string(filepath.Separator)) || absPath == absRoot {
+		if paths.PathUnderRoot(absPath, absRoot) {
 			return true
 		}
 	}
@@ -149,26 +150,14 @@ func (h *ReadSkill) findSkillRoot(absPath string) string {
 }
 
 // SkillPathForPrompt returns the placeholder form of a skill directory path for the system prompt.
+// Plugin skill dirs under {dataDir}/../plugins/*/skills are discovered from disk.
 func SkillPathForPrompt(skillDir, dataDir, agentsHome, projectDir string) string {
-	dwHome := filepath.Join(dataDir, "skills")
-	if strings.HasPrefix(skillDir, dwHome) {
-		return phDanmoWorkHome + "/skills/" + filepath.Base(skillDir)
-	}
-	agentsSkillDir := filepath.Join(agentsHome, "skills")
-	if strings.HasPrefix(skillDir, agentsSkillDir) {
-		return phAgentsHome + "/skills/" + filepath.Base(skillDir)
-	}
-	if projectDir != "" {
-		projSkillDir := filepath.Join(projectDir, ".danmo-work", "skills")
-		if strings.HasPrefix(skillDir, projSkillDir) {
-			return phProject + "/.danmo-work/skills/" + filepath.Base(skillDir)
-		}
-		projAgentsDir := filepath.Join(projectDir, ".agents", "skills")
-		if strings.HasPrefix(skillDir, projAgentsDir) {
-			return phProject + "/.agents/skills/" + filepath.Base(skillDir)
-		}
-	}
-	return skillDir
+	return SkillPathForPromptWithPlugins(skillDir, dataDir, agentsHome, projectDir, paths.PluginSkillDirs(dataDir))
+}
+
+// SkillPathForPromptWithPlugins is SkillPathForPrompt with an explicit plugin skills/ list.
+func SkillPathForPromptWithPlugins(skillDir, dataDir, agentsHome, projectDir string, pluginSkillDirs []string) string {
+	return paths.FormatSkillPath(skillDir, paths.SkillRootMappings(dataDir, agentsHome, projectDir, pluginSkillDirs))
 }
 
 func home() string {

@@ -102,6 +102,7 @@ func TestSkillPathForPrompt(t *testing.T) {
 		skillDir, dataDir, agentsHome, projectDir, want string
 	}{
 		{"/home/u/.danmo-work/skills/debugging", "/home/u/.danmo-work", "/home/u/.agents", "", "{danmo_work_home}/skills/debugging"},
+		{"/home/u/.danmo-work/data/skills/debugging", "/home/u/.danmo-work/data", "/home/u/.agents", "", "{danmo_work_home}/skills/debugging"},
 		{"/home/u/.agents/skills/foo", "/home/u/.danmo-work", "/home/u/.agents", "", "{agents_home}/skills/foo"},
 		{"/work/proj/.danmo-work/skills/bar", "/home/u/.danmo-work", "/home/u/.agents", "/work/proj", "{project}/.danmo-work/skills/bar"},
 		{"/work/proj/.agents/skills/baz", "/home/u/.danmo-work", "/home/u/.agents", "/work/proj", "{project}/.agents/skills/baz"},
@@ -112,5 +113,43 @@ func TestSkillPathForPrompt(t *testing.T) {
 			t.Errorf("SkillPathForPrompt(%q, %q, %q, %q) = %q, want %q",
 				tt.skillDir, tt.dataDir, tt.agentsHome, tt.projectDir, got, tt.want)
 		}
+	}
+}
+
+func TestSkillPathForPromptPlugin(t *testing.T) {
+	pluginDir := "/home/u/.danmo-work/plugins/ext/skills"
+	got := SkillPathForPromptWithPlugins(
+		filepath.Join(pluginDir, "plug"),
+		"/home/u/.danmo-work/data",
+		"/home/u/.agents",
+		"",
+		[]string{pluginDir},
+	)
+	want := "{work_home}/plugins/ext/skills/plug"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestReadSkillWorkHomePlaceholderPath(t *testing.T) {
+	root := t.TempDir()
+	dataDir := filepath.Join(root, "data")
+	skillDir := filepath.Join(root, "plugins", "ext", "skills", "plug")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	md := "---\nname: plug\n---\n\nplugin-body"
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &ReadSkill{dataDir: dataDir}
+	p := "{work_home}/plugins/ext/skills/plug"
+	got, err := h.Execute(context.Background(), map[string]any{"path": p})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Content != "plugin-body" {
+		t.Fatalf("body=%q", got.Content)
 	}
 }

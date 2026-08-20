@@ -4,9 +4,11 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"danmo-work/core/domain"
+	"danmo-work/core/paths"
 	"danmo-work/core/runtime/tool/builtin"
 	"danmo-work/core/service"
 
@@ -23,7 +25,8 @@ type SkillHandler struct {
 func listSkills(h *SkillHandler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var projectDir string
-		if projectID := c.Query("project_id"); projectID != "" && h.Projects != nil {
+		projectID := c.Query("project_id")
+		if projectID != "" && h.Projects != nil {
 			if proj, err := h.Projects.Get(c, projectID); err == nil {
 				projectDir = proj.Directory
 			}
@@ -37,21 +40,40 @@ func listSkills(h *SkillHandler) gin.HandlerFunc {
 
 		if projectDir != "" {
 			projectSkills := service.ScanAllSkills(h.DataDir, projectDir)
+			projRoots := paths.ProjectSkillDirs(projectDir)
+			for i := range projectSkills {
+				for _, root := range projRoots {
+					if paths.PathUnderRoot(projectSkills[i].Dir, root) {
+						projectSkills[i].ProjectID = projectID
+						break
+					}
+				}
+			}
 			skills = service.MergeSkillsByID(skills, projectSkills)
 		}
 
 		for i := range skills {
-			skills[i].Dir = h.skillDisplayPath(skills[i].Dir)
+			h.normalizeSkill(&skills[i], projectDir)
 		}
 		c.JSON(http.StatusOK, skills)
 	}
 }
 
-func (h *SkillHandler) skillDisplayPath(skillDir string) string {
+func (h *SkillHandler) skillDisplayPath(skillDir, projectDir string) string {
 	agentsHome, _ := os.UserHomeDir()
-	agentsHome = agentsHome + "/.agents"
-	projectDir := ""
-	return builtin.SkillPathForPrompt(skillDir, h.DataDir, agentsHome, projectDir)
+	agentsHome = filepath.Join(agentsHome, ".agents")
+	pluginDirs := paths.PluginSkillDirs(h.DataDir)
+	if h.Skills != nil {
+		pluginDirs = append(pluginDirs, h.Skills.PluginSkillDirs()...)
+	}
+	return builtin.SkillPathForPromptWithPlugins(skillDir, h.DataDir, agentsHome, projectDir, pluginDirs)
+}
+
+func (h *SkillHandler) normalizeSkill(sk *domain.Skill, projectDir string) {
+	if sk == nil {
+		return
+	}
+	sk.Dir = h.skillDisplayPath(sk.Dir, projectDir)
 }
 
 func getSkill(h *SkillHandler) gin.HandlerFunc {
@@ -65,6 +87,7 @@ func getSkill(h *SkillHandler) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "skill not found"})
 			return
 		}
+		h.normalizeSkill(skill, "")
 		c.JSON(http.StatusOK, skill)
 	}
 }
@@ -87,6 +110,12 @@ func createSkill(h *SkillHandler) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		if out, err := h.Skills.Get(c, sk.ID); err == nil && out != nil {
+			h.normalizeSkill(out, "")
+			c.JSON(http.StatusCreated, out)
+			return
+		}
+		h.normalizeSkill(&sk, "")
 		c.JSON(http.StatusCreated, sk)
 	}
 }
@@ -106,9 +135,11 @@ func updateSkill(h *SkillHandler) gin.HandlerFunc {
 		}
 		out, err := h.Skills.Get(c, id)
 		if err != nil || out == nil {
+			h.normalizeSkill(&sk, "")
 			c.JSON(http.StatusOK, sk)
 			return
 		}
+		h.normalizeSkill(out, "")
 		c.JSON(http.StatusOK, out)
 	}
 }
@@ -161,6 +192,14 @@ func importSkillDir(h *SkillHandler) gin.HandlerFunc {
 				return
 			}
 		}
+		sourcePath := skill.SourcePath
+		if out, err := h.Skills.Get(c, skill.ID); err == nil && out != nil {
+			out.SourcePath = sourcePath
+			h.normalizeSkill(out, "")
+			skill = out
+		} else {
+			h.normalizeSkill(skill, "")
+		}
 		c.JSON(http.StatusCreated, gin.H{"skill": skill, "fileCount": len(files)})
 	}
 }
@@ -186,6 +225,7 @@ func resetSkill(h *SkillHandler) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		h.normalizeSkill(skill, "")
 		c.JSON(http.StatusOK, skill)
 	}
 }
