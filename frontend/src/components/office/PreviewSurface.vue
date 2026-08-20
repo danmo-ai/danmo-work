@@ -7,8 +7,10 @@ import { renderMarkdown } from '@/utils/markdown-render'
 import { toast } from '@/utils/feedback'
 import {
   fromInspectPayload,
+  serializePreviewConsoleReport,
   type ElementAttachment,
   type InspectElementPayload,
+  type PreviewConsoleEntry,
 } from '@/types/element-attachment'
 
 const props = defineProps<{
@@ -21,6 +23,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   attachElement: [att: ElementAttachment]
+  attachConsole: [text: string]
   urlChange: [displayUrl: string, loadUrl: string]
 }>()
 
@@ -31,11 +34,16 @@ const loadUrl = ref('')
 const refreshKey = ref(0)
 const mdHtml = ref('')
 const selectingElement = ref(false)
+const drawingRegion = ref(false)
 const annotateOpen = ref(false)
 const annotatePayload = ref<InspectElementPayload | null>(null)
+const annotatePayloads = ref<InspectElementPayload[]>([])
 const frameRef = ref<HTMLIFrameElement | null>(null)
+const consoleCount = ref(0)
+const lastHighlightSelector = ref('')
 
 const isImagePath = computed(() => /\.(png|jpe?g|gif|webp|svg|ico|bmp)$/i.test(props.path || urlInput.value))
+const isHtmlPreview = computed(() => !mdHtml.value && !isImagePath.value)
 
 function isMdUrl(url: string): boolean {
   const path = url.split('?')[0].split('#')[0]
@@ -46,8 +54,9 @@ function toProxyUrl(rawUrl: string): string {
   if (rawUrl.includes('/api/v1/projects/') || rawUrl.startsWith('/')) return rawUrl
   try {
     const u = new URL(rawUrl)
+    const scheme = u.protocol === 'https:' ? 'https' : 'http'
     const host = u.host.replace(/:/g, '-')
-    return `${apiBaseUrl()}/api/v1/proxy/${host}${u.pathname}${u.search}${u.hash}`
+    return `${apiBaseUrl()}/api/v1/proxy/${scheme}/${host}${u.pathname}${u.search}${u.hash}`
   } catch {
     return rawUrl
   }
@@ -132,14 +141,46 @@ function clearPreview() {
   emit('urlChange', '', '')
 }
 
+function postToFrame(data: Record<string, unknown>) {
+  frameRef.value?.contentWindow?.postMessage(data, '*')
+}
+
 function startElementSelect() {
+  if (!isHtmlPreview.value) {
+    toast.warning(t('sessions.designModeHtmlOnly'))
+    return
+  }
+  drawingRegion.value = false
   selectingElement.value = true
-  frameRef.value?.contentWindow?.postMessage({ type: 'dq-inspect-start' }, '*')
+  postToFrame({ type: 'dq-inspect-start' })
+}
+
+function startDrawRegion() {
+  if (!isHtmlPreview.value) {
+    toast.warning(t('sessions.designModeHtmlOnly'))
+    return
+  }
+  selectingElement.value = true
+  drawingRegion.value = true
+  postToFrame({ type: 'dq-inspect-draw' })
 }
 
 function stopElementSelect() {
   selectingElement.value = false
-  frameRef.value?.contentWindow?.postMessage({ type: 'dq-inspect-stop' }, '*')
+  drawingRegion.value = false
+  postToFrame({ type: 'dq-inspect-stop' })
+}
+
+function requestConsoleDump() {
+  if (!isHtmlPreview.value) {
+    toast.warning(t('sessions.designModeHtmlOnly'))
+    return
+  }
+  if (!consoleCount.value) {
+    toast.info(t('sessions.designModeConsoleEmpty'))
+    return
+  }
+  postToFrame({ type: 'dq-inspect-console-dump' })
 }
 
 function resolveProjectSourceFile(): string | undefined {
@@ -159,44 +200,94 @@ function resolveProjectSourceFile(): string | undefined {
 function handleInspectMessage(ev: MessageEvent) {
   const data = ev.data
   if (!data || typeof data !== 'object') return
+  if (data.type === 'dq-inspect-console') {
+    consoleCount.value = Number(data.count) || 0
+    return
+  }
+  if (data.type === 'dq-inspect-console-data') {
+    const entries = (Array.isArray(data.entries) ? data.entries : []) as PreviewConsoleEntry[]
+    emit('attachConsole', serializePreviewConsoleReport(entries))
+    toast.success(t('sessions.designModeConsoleSent'))
+    return
+  }
   if (data.type === 'dq-inspect-cancel') {
     selectingElement.value = false
+    drawingRegion.value = false
     return
   }
   if (data.type !== 'dq-inspect-selected') return
-  selectingElement.value = false
   const payload = data as InspectElementPayload
   if (!payload.tag && !payload.text && !payload.outerHTML && !payload.html) return
+  if (payload.additive) {
+    selectingElement.value = true
+    annotatePayloads.value = [...annotatePayloads.value, payload]
+    annotatePayload.value = payload
+    annotateOpen.value = true
+    return
+  }
+  selectingElement.value = false
+  drawingRegion.value = false
+  annotatePayloads.value = annotatePayloads.value.length
+    ? [...annotatePayloads.value, payload]
+    : [payload]
   annotatePayload.value = payload
   annotateOpen.value = true
 }
 
 function onAnnotateConfirm(annotation: string) {
-  const raw = annotatePayload.value
+  const list = annotatePayloads.value.length
+    ? annotatePayloads.value
+    : annotatePayload.value
+      ? [annotatePayload.value]
+      : []
   annotateOpen.value = false
   annotatePayload.value = null
-  if (!raw) return
-  const pageUrl = urlInput.value || raw.page?.url || ''
-  const att = fromInspectPayload(raw, {
-    annotation,
-    sourceFile: resolveProjectSourceFile(),
-    pageUrl,
-  })
-  emit('attachElement', att)
+  annotatePayloads.value = []
+  if (!list.length) return
+  const pageUrl = urlInput.value || list[0]?.page?.url || ''
+  const sourceFile = resolveProjectSourceFile()
+  for (const raw of list) {
+    const att = fromInspectPayload(raw, {
+      annotation: raw.suggestedAnnotation && !annotation ? raw.suggestedAnnotation : annotation,
+      sourceFile,
+      pageUrl,
+    })
+    if (att.selectors?.css) lastHighlightSelector.value = att.selectors.css
+    emit('attachElement', att)
+  }
   toast.success(t('office.previewAttached'))
 }
 
 function onAnnotateCancel() {
   annotateOpen.value = false
   annotatePayload.value = null
+  annotatePayloads.value = []
+}
+
+function onFrameLoad() {
+  consoleCount.value = 0
+  if (lastHighlightSelector.value) {
+    postToFrame({ type: 'dq-inspect-highlight', selector: lastHighlightSelector.value })
+  }
+}
+
+function onPreviewKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return
+  if (annotateOpen.value) return
+  if (selectingElement.value || drawingRegion.value) {
+    e.preventDefault()
+    stopElementSelect()
+  }
 }
 
 onMounted(() => {
   window.addEventListener('message', handleInspectMessage)
+  window.addEventListener('keydown', onPreviewKeydown, true)
 })
 
 onUnmounted(() => {
   window.removeEventListener('message', handleInspectMessage)
+  window.removeEventListener('keydown', onPreviewKeydown, true)
   stopElementSelect()
 })
 
@@ -213,7 +304,7 @@ defineExpose({
 
 <template>
   <div class="preview-surface">
-    <p v-if="selectingElement" class="preview-surface__hint">{{ t('sessions.designModeHint') }}</p>
+    <p v-if="selectingElement" class="preview-surface__hint">{{ drawingRegion ? t('sessions.designModeHintDraw') : t('sessions.designModeHint') }}</p>
     <div class="preview-surface__bar">
       <input
         v-model="urlInput"
@@ -231,11 +322,27 @@ defineExpose({
       </button>
       <button
         class="preview-surface__btn"
-        :class="{ 'is-active': selectingElement }"
-        :title="selectingElement ? t('sessions.designModeOn') : t('sessions.designModeOff')"
-        @click="selectingElement ? stopElementSelect() : startElementSelect()"
+        :class="{ 'is-active': selectingElement && !drawingRegion }"
+        :title="selectingElement && !drawingRegion ? t('sessions.designModeOn') : t('sessions.designModeOff')"
+        @click="selectingElement && !drawingRegion ? stopElementSelect() : startElementSelect()"
       >
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
+      </button>
+      <button
+        class="preview-surface__btn"
+        :class="{ 'is-active': drawingRegion }"
+        :title="t('sessions.designModeDraw')"
+        @click="drawingRegion ? stopElementSelect() : startDrawRegion()"
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
+      </button>
+      <button
+        class="preview-surface__btn preview-surface__btn--console"
+        :title="t('sessions.designModeConsole')"
+        @click="requestConsoleDump"
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        <span v-if="consoleCount" class="preview-surface__badge">{{ consoleCount > 9 ? '9+' : consoleCount }}</span>
       </button>
       <button class="preview-surface__btn" :title="t('office.previewClear')" @click="clearPreview">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -260,10 +367,12 @@ defineExpose({
         :key="`${loadUrl || 'empty'}:${refreshKey}`"
         class="preview-surface__frame"
         :src="loadUrl || 'about:blank'"
+        @load="onFrameLoad"
       />
       <ElementAnnotatePopover
         :open="annotateOpen"
         :payload="annotatePayload"
+        :payloads="annotatePayloads"
         @confirm="onAnnotateConfirm"
         @cancel="onAnnotateCancel"
       />
@@ -337,6 +446,23 @@ defineExpose({
 .preview-surface__btn.is-active {
   background: var(--dq-accent);
   color: var(--dq-on-accent);
+}
+.preview-surface__btn--console {
+  position: relative;
+}
+.preview-surface__badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--dq-system-orange, #f59e0b);
+  color: #fff;
+  font-size: 9px;
+  line-height: 14px;
+  text-align: center;
 }
 .preview-surface__stage {
   position: relative;

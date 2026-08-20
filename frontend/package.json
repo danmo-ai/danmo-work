@@ -9,6 +9,7 @@
     "typecheck": "vue-tsc --noEmit",
     "test:slides": "node --import ./scripts/register-ts-resolve.mjs --experimental-strip-types scripts/test-slides-render.mjs",
     "test:code-route": "node --experimental-strip-types scripts/test-code-route.mjs",
+    "test:element-attachment": "node --experimental-strip-types scripts/test-element-attachment.mjs",
     "test:composer-slash": "node --experimental-strip-types scripts/test-composer-slash.mjs",
     "test:composer-experts": "node --experimental-strip-types scripts/test-composer-experts.mjs",
     "test:novel-workbench": "node --experimental-strip-types scripts/test-novel-workbench.mjs",

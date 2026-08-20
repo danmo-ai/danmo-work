@@ -1,7 +1,6 @@
 package v1
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1537,7 +1536,7 @@ func serveProjectFile(h *Handler) gin.HandlerFunc {
 		}
 		// Inject inspect listener into HTML responses
 		if ct == "text/html" {
-			data = append(data, []byte(dqInspectScript)...)
+			data = injectInspectHTML(data)
 		}
 		c.Header("Content-Type", ct)
 		c.Data(http.StatusOK, ct, data)
@@ -1548,31 +1547,20 @@ func serveProjectFile(h *Handler) gin.HandlerFunc {
 func proxyDevServer(h *Handler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw := strings.TrimPrefix(c.Param("target"), "/")
-		if raw == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "target is required"})
+		target, err := parseProxyTarget(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		// Convert localhost-3000/path to http://localhost:3000/path
-		// Replace first dash after the host portion with colon
-		parts := strings.SplitN(raw, "/", 2)
-		host := strings.Replace(parts[0], "-", ":", 1) // localhost-3000 → localhost:3000
-		path := ""
-		if len(parts) > 1 {
-			path = "/" + parts[1]
-		}
-		targetURL := "http://" + host + path
-		if q := c.Request.URL.RawQuery; q != "" {
-			targetURL += "?" + q
-		}
+		targetURL := target.URL(c.Request.URL.RawQuery)
 
-		resp, err := http.Get(targetURL)
+		resp, err := doProxyGet(c.Request, targetURL)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
 		}
-		defer resp.Body.Close()
 
-		body, err := io.ReadAll(resp.Body)
+		body, err := readProxyBody(resp)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 			return
@@ -1583,18 +1571,12 @@ func proxyDevServer(h *Handler) gin.HandlerFunc {
 			ct = ct[:i]
 		}
 
-		// Inject <base> tag and inspect script into HTML
 		if ct == "text/html" {
-			baseTag := fmt.Sprintf(`<base href="http://%s/">`, host)
-			body = bytes.Replace(body, []byte("<head>"), []byte("<head>"+baseTag), 1)
-			body = append(body, []byte(dqInspectScript)...)
+			baseTag := fmt.Sprintf(`<base href="%s://%s/">`, target.Scheme, target.Host)
+			body = injectBaseAndInspect(body, baseTag)
 		}
 
-		for k, vs := range resp.Header {
-			for _, v := range vs {
-				c.Header(k, v)
-			}
-		}
+		copyProxyResponseHeaders(c.Writer.Header(), resp.Header)
 		c.Header("Content-Type", ct)
 		c.Data(resp.StatusCode, ct, body)
 	}

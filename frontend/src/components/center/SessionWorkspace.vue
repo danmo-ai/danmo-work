@@ -149,6 +149,10 @@ function onStageAttachElement(att: ElementAttachment) {
   composerRef.value?.addElementAttachment(att)
 }
 
+function onStageAttachConsole(text: string) {
+  composerRef.value?.appendContent(text)
+}
+
 function onStageAttachCodeSelection(att: CodeSelectionAttachment) {
   composerRef.value?.addCodeSelectionAttachment(att)
 }
@@ -1918,6 +1922,7 @@ function onTitleKeydown(e: KeyboardEvent) {
         class="session-workspace__stage"
         :project-id="sessions.selectedProjectId"
         @attach-element="onStageAttachElement"
+        @attach-console="onStageAttachConsole"
         @attach-code-selection="onStageAttachCodeSelection"
         @attach-office-edit="onStageAttachOfficeEdit"
       />

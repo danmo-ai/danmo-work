@@ -25,13 +25,20 @@ export type UserMessagePart =
       request?: string
       preview: string
     }
+  | {
+      type: 'preview-console'
+      request?: string
+      preview: string
+    }
 
 const OFFICE_RE =
   /\[office-edit\]\n([\s\S]*?)(?=\n\[office-edit\]\n|\n## Selected (?:Code|UI Element)\n|$)/g
 const CODE_RE =
   /## Selected Code\n([\s\S]*?)(?=\n\[office-edit\]\n|\n## Selected (?:Code|UI Element)\n|$)/g
 const ELEMENT_RE =
-  /## Selected UI Element\n([\s\S]*?)(?=\n\[office-edit\]\n|\n## Selected (?:Code|UI Element)\n|$)/g
+  /## Selected UI Element\n([\s\S]*?)(?=\n\[office-edit\]\n|\n## Selected (?:Code|UI Element)\n|\n## Preview Console \/ Network\n|$)/g
+const CONSOLE_RE =
+  /## Preview Console \/ Network\n([\s\S]*?)(?=\n\[office-edit\]\n|\n## Selected (?:Code|UI Element)\n|\n## Preview Console \/ Network\n|$)/g
 
 function field(block: string, key: string): string | undefined {
   const m = block.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'))
@@ -84,6 +91,12 @@ function parseElementBlock(raw: string): UserMessagePart {
   return { type: 'selected-element', summary: target, request, preview }
 }
 
+function parseConsoleBlock(raw: string): UserMessagePart {
+  const request = field(raw, 'Request')
+  const preview = raw.replace(/^Request:.*$/m, '').trim().slice(0, 120)
+  return { type: 'preview-console', request, preview }
+}
+
 type MatchHit = { index: number; length: number; part: UserMessagePart }
 
 /** Split userInput into display parts; structured blocks become chips. */
@@ -91,7 +104,7 @@ export function parseUserMessageParts(text: string): UserMessagePart[] {
   if (!text) return []
   const hits: MatchHit[] = []
 
-  for (const re of [OFFICE_RE, CODE_RE, ELEMENT_RE]) {
+  for (const re of [OFFICE_RE, CODE_RE, ELEMENT_RE, CONSOLE_RE]) {
     re.lastIndex = 0
     let m: RegExpExecArray | null
     while ((m = re.exec(text)) !== null) {
@@ -100,6 +113,7 @@ export function parseUserMessageParts(text: string): UserMessagePart[] {
       let part: UserMessagePart
       if (full.startsWith('[office-edit]')) part = parseOfficeBlock(body)
       else if (full.startsWith('## Selected Code')) part = parseCodeBlock(body)
+      else if (full.startsWith('## Preview Console')) part = parseConsoleBlock(body)
       else part = parseElementBlock(body)
       hits.push({ index: m.index, length: full.length, part })
     }

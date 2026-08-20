@@ -40,6 +40,7 @@ function rowTitle(part: UserMessagePart): string {
     return part.lines ? `${fileBase(part.path)}:${part.lines}` : fileBase(part.path)
   }
   if (part.type === 'selected-element') return part.summary
+  if (part.type === 'preview-console') return 'Console / network'
   return ''
 }
 
@@ -47,6 +48,7 @@ function rowAsk(part: UserMessagePart): string {
   if (part.type === 'office-edit') return part.ask
   if (part.type === 'selected-code') return part.request || ''
   if (part.type === 'selected-element') return part.request || ''
+  if (part.type === 'preview-console') return part.request || part.preview || ''
   return ''
 }
 </script>

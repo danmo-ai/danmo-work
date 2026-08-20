@@ -20,6 +20,7 @@ export interface ElementSelectors {
 export interface ElementComponentHint {
   name: string
   file?: string | null
+  line?: number | null
   framework?: string | null
 }
 
@@ -33,6 +34,10 @@ export interface ElementPageContext {
 /** Payload from iframe inspect script (before user annotation). */
 export interface InspectElementPayload {
   type?: 'dq-inspect-selected'
+  /** Cmd/Ctrl-click: keep pick mode and stack this element. */
+  additive?: boolean
+  /** Prefill the annotate note (inline text edit, draw region). */
+  suggestedAnnotation?: string
   tag: string
   text?: string
   outerHTML?: string
@@ -122,7 +127,9 @@ export function chipTooltip(att: ElementAttachment): string {
     lines.push(`Box: ${b.x},${b.y} ${b.w}×${b.h}`)
   }
   if (att.component?.name) {
-    const loc = att.component.file ? ` @ ${att.component.file}` : ''
+    const loc = att.component.file
+      ? ` @ ${att.component.file}${att.component.line ? ':' + att.component.line : ''}`
+      : ''
     lines.push(`Component: ${att.component.name}${loc}`)
   }
   const styleKeys = Object.keys(att.computedStyles || {})
@@ -197,7 +204,93 @@ function clip(s: string, max: number): string {
   return t.slice(0, max) + '…'
 }
 
-/** Compact prompt block for the agent — identity + HTML only. */
+/** Design-relevant CSS keys, in prompt order (token-capped). */
+export const ELEMENT_STYLE_PROMPT_KEYS = [
+  'display',
+  'position',
+  'box-sizing',
+  'width',
+  'height',
+  'min-width',
+  'min-height',
+  'max-width',
+  'max-height',
+  'margin',
+  'padding',
+  'color',
+  'background-color',
+  'background-image',
+  'background-size',
+  'font-family',
+  'font-size',
+  'font-weight',
+  'font-style',
+  'line-height',
+  'letter-spacing',
+  'text-align',
+  'text-decoration',
+  'border',
+  'border-radius',
+  'opacity',
+  'overflow',
+  'z-index',
+  'flex',
+  'flex-direction',
+  'flex-wrap',
+  'justify-content',
+  'align-items',
+  'align-self',
+  'gap',
+  'grid-template-columns',
+  'grid-template-rows',
+  'grid-gap',
+  'box-shadow',
+  'transform',
+] as const
+
+const MAX_STYLE_PROMPT_PROPS = 28
+
+export function serializeComputedStyles(styles: Record<string, string> | undefined): string {
+  if (!styles) return ''
+  const parts: string[] = []
+  const used = new Set<string>()
+  for (const k of ELEMENT_STYLE_PROMPT_KEYS) {
+    const v = styles[k]
+    if (!v) continue
+    parts.push(`${k}: ${clip(v, 80)}`)
+    used.add(k)
+    if (parts.length >= MAX_STYLE_PROMPT_PROPS) break
+  }
+  if (parts.length < MAX_STYLE_PROMPT_PROPS) {
+    for (const [k, v] of Object.entries(styles)) {
+      if (used.has(k) || !v) continue
+      parts.push(`${k}: ${clip(v, 80)}`)
+      used.add(k)
+      if (parts.length >= MAX_STYLE_PROMPT_PROPS) break
+    }
+  }
+  return parts.join('; ')
+}
+
+function serializeKeyAttrs(att: ElementAttachment): string {
+  const bits: string[] = []
+  if (att.role) bits.push(`role=${att.role}`)
+  if (att.ariaLabel) bits.push(`aria-label="${clip(att.ariaLabel, 60)}"`)
+  if (att.testId) bits.push(`data-testid=${att.testId}`)
+  if (att.name) bits.push(`name=${att.name}`)
+  if (att.placeholder) bits.push(`placeholder="${clip(att.placeholder, 40)}"`)
+  if (att.elementId) bits.push(`id=${att.elementId}`)
+  return bits.join(' ')
+}
+
+function componentLoc(att: ElementAttachment): string {
+  const c = att.component
+  if (!c?.name) return ''
+  const file = c.file ? (c.line ? `${c.file}:${c.line}` : c.file) : ''
+  return file ? `${c.name} (${file})` : c.name
+}
+
+/** Compact prompt block: identity + CSS + HTML + spatial box. */
 export function serializeElementAttachment(att: ElementAttachment): string {
   const lines: string[] = ['## Selected UI Element']
   if (att.annotation) lines.push(`Request: ${att.annotation}`)
@@ -211,12 +304,36 @@ export function serializeElementAttachment(att: ElementAttachment): string {
   lines.push(`Target: ${target.join(' ')}`)
 
   if (att.page.sourceFile) lines.push(`File: ${att.page.sourceFile}`)
-  else if (att.page.url) lines.push(`Page: ${att.page.url}`)
+  else if (att.component?.file) {
+    const loc = att.component.line ? `${att.component.file}:${att.component.line}` : att.component.file
+    lines.push(`File: ${loc}`)
+  } else if (att.page.url) lines.push(`Page: ${att.page.url}`)
 
-  if (att.component?.name) {
-    const loc = att.component.file ? ` (${att.component.file})` : ''
-    lines.push(`Component: ${att.component.name}${loc}`)
+  const comp = componentLoc(att)
+  if (comp) lines.push(`Component: ${comp}`)
+
+  const cssSel = att.selectors?.css || ''
+  const fallbacks = (att.selectors?.fallbacks || []).filter((s) => s && s !== cssSel).slice(0, 2)
+  if (cssSel && fallbacks.length) {
+    lines.push(`Selectors: ${cssSel} | ${fallbacks.join(' | ')}`)
   }
+  if (att.xpath) lines.push(`XPath: ${att.xpath}`)
+
+  const attrs = serializeKeyAttrs(att)
+  if (attrs) lines.push(`Attrs: ${attrs}`)
+
+  if (att.boundingBox && (att.boundingBox.w || att.boundingBox.h)) {
+    const b = att.boundingBox
+    const vp = att.viewport
+    let extra = ''
+    if (vp?.w && vp?.h) {
+      extra = ` (${Math.round((b.x / vp.w) * 100)}%,${Math.round((b.y / vp.h) * 100)}% of ${vp.w}×${vp.h})`
+    }
+    lines.push(`Box: ${b.x},${b.y} ${b.w}×${b.h}${extra}`)
+  }
+
+  const css = serializeComputedStyles(att.computedStyles)
+  if (css) lines.push(`Computed CSS: ${css}`)
 
   const html = clip(att.neighborhoodHTML || att.outerHTML || '', 1200)
   if (html) {
@@ -231,7 +348,12 @@ export function serializeElementAttachment(att: ElementAttachment): string {
 
 export function serializeElementAttachments(atts: ElementAttachment[]): string {
   if (!atts.length) return ''
-  return atts.map(serializeElementAttachment).join('\n\n')
+  const blocks = atts.map(serializeElementAttachment).join('\n\n')
+  if (atts.length < 2) return blocks
+  return (
+    'These UI elements are related; apply the request across them (match, align, or edit as a group).\n\n' +
+    blocks
+  )
 }
 
 export function buildUserInputWithAttachments(
@@ -242,4 +364,28 @@ export function buildUserInputWithAttachments(
   const blocks = serializeElementAttachments(atts)
   if (body && blocks) return `${body}\n\n${blocks}`
   return body || blocks
+}
+
+export interface PreviewConsoleEntry {
+  kind: 'error' | 'warn' | 'page' | 'network'
+  message: string
+  source?: string
+}
+
+export function serializePreviewConsoleReport(
+  entries: PreviewConsoleEntry[],
+  annotation?: string,
+): string {
+  const lines: string[] = ['## Preview Console / Network']
+  if (annotation?.trim()) lines.push(`Request: ${annotation.trim()}`)
+  else lines.push('Request: Investigate and fix these preview console/network errors')
+  if (!entries.length) {
+    lines.push('(no entries)')
+    return lines.join('\n')
+  }
+  for (const e of entries.slice(-30)) {
+    const src = e.source ? ` @ ${clip(e.source, 80)}` : ''
+    lines.push(`- [${e.kind}] ${clip(e.message, 400)}${src}`)
+  }
+  return lines.join('\n')
 }

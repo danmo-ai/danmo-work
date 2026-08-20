@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { InspectElementPayload } from '@/types/element-attachment'
 
 const props = defineProps<{
   open: boolean
   payload: InspectElementPayload | null
+  payloads?: InspectElementPayload[]
   summary?: string
 }>()
 
@@ -18,15 +19,33 @@ const { t } = useI18n()
 const annotation = ref('')
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 
+const allPayloads = computed(() => {
+  if (props.payloads?.length) return props.payloads
+  return props.payload ? [props.payload] : []
+})
+
 watch(
-  () => props.open,
+  () => [props.open, props.payload, props.payloads] as const,
   (v) => {
-    if (v) {
-      annotation.value = ''
-      void nextTick(() => inputRef.value?.focus())
-    }
+    if (!props.open) return
+    const suggested = allPayloads.value.map((p) => p.suggestedAnnotation).filter(Boolean) as string[]
+    annotation.value = suggested[0] || ''
+    void nextTick(() => inputRef.value?.focus())
   },
 )
+
+function applyIntent(kind: 'text' | 'space' | 'color' | 'align') {
+  const phrase =
+    kind === 'text'
+      ? 'Change the visible copy'
+      : kind === 'space'
+        ? 'Increase spacing / padding'
+        : kind === 'color'
+          ? 'Restyle color to match the surrounding UI'
+          : 'Match alignment and size of these elements'
+  annotation.value = annotation.value ? `${annotation.value}; ${phrase}` : phrase
+  void nextTick(() => inputRef.value?.focus())
+}
 
 function confirm() {
   emit('confirm', annotation.value.trim())
@@ -50,7 +69,9 @@ function onKeydown(e: KeyboardEvent) {
 
 function shortSummary(): string {
   if (props.summary) return props.summary
-  const p = props.payload
+  const list = allPayloads.value
+  if (list.length > 1) return t('sessions.annotate.multiHint', { n: list.length })
+  const p = list[0]
   if (!p) return ''
   const tag = p.tag || 'el'
   const text = (p.text || p.ariaLabel || '').trim()
@@ -79,8 +100,14 @@ function shortSummary(): string {
           <div class="el-annotate__summary">{{ shortSummary() }}</div>
         </div>
       </div>
-      <div v-if="payload?.screenshot" class="el-annotate__preview">
-        <img :src="payload.screenshot" :alt="t('sessions.annotate.previewAlt')" class="el-annotate__preview-img" />
+      <div v-if="allPayloads[0]?.screenshot" class="el-annotate__preview">
+        <img :src="allPayloads[0].screenshot" :alt="t('sessions.annotate.previewAlt')" class="el-annotate__preview-img" />
+      </div>
+      <div class="el-annotate__intents">
+        <button type="button" class="el-annotate__chip" @click="applyIntent('text')">{{ t('sessions.annotate.intentText') }}</button>
+        <button type="button" class="el-annotate__chip" @click="applyIntent('space')">{{ t('sessions.annotate.intentSpace') }}</button>
+        <button type="button" class="el-annotate__chip" @click="applyIntent('color')">{{ t('sessions.annotate.intentColor') }}</button>
+        <button type="button" class="el-annotate__chip" @click="applyIntent('align')">{{ t('sessions.annotate.intentAlign') }}</button>
       </div>
       <label class="el-annotate__label" for="el-annotate-input">{{ t('sessions.annotate.label') }}</label>
       <textarea
@@ -186,7 +213,27 @@ function shortSummary(): string {
   object-fit: contain;
 }
 
-.el-annotate__label {
+.el-annotate__intents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.el-annotate__chip {
+  appearance: none;
+  border: 1px solid var(--dq-glass-border-strong);
+  background: color-mix(in srgb, var(--dq-bg-base) 40%, transparent);
+  color: var(--dq-label-secondary);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: var(--dq-font-size-caption);
+  cursor: pointer;
+  font-family: inherit;
+}
+.el-annotate__chip:hover {
+  color: var(--dq-label-primary);
+  border-color: var(--dq-accent);
+}
   display: block;
   font-size: var(--dq-font-size-body);
   color: var(--dq-label-secondary);

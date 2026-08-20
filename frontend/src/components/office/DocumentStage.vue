@@ -32,6 +32,7 @@ const emit = defineEmits<{
   attachElement: [att: ElementAttachment]
   attachCodeSelection: [att: CodeSelectionAttachment]
   attachOfficeEdit: [att: OfficeEditAttachment]
+  attachConsole: [text: string]
 }>()
 
 const { t } = useI18n()
@@ -495,6 +496,7 @@ defineExpose({ save })
       :reload-token="stageReloadToken"
       @url-change="onPreviewUrlChange"
       @attach-element="emit('attachElement', $event)"
+      @attach-console="emit('attachConsole', $event)"
     />
   </section>
 </template>
