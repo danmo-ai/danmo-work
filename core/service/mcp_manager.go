@@ -176,7 +176,7 @@ func (m *MCPManager) loadFromDisk() {
 			server := mcpSpecToDomain(id, srv)
 			normalizeMCPServer(&server)
 			server.Enabled = true
-			server.AmbientMount = true
+			// Respect ambientMount from plugin mcp.json (bound-only experts set false).
 			if server.MarketSource == "" {
 				server.MarketSource = "plugin:" + pluginName
 			}

@@ -6,16 +6,11 @@ agents:
   - researcher
   - document
   - data
-  - novel
   - team
   - comms
-  - danmo-make
-  - github
-  - browser
   - operator
 skills:
   - debugging
-  - novel-writing
   - playable-slides
   - requesting-code-review
   - git-workflow
@@ -25,9 +20,6 @@ skills:
   - mcp-connectors
   - brainstorming
   - sheet-writing
-  - github
-  - danmo-make
   - deep-research
   - skill-creator
-  - browser
   - computer-use

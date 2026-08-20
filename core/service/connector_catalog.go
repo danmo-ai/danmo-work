@@ -12,8 +12,8 @@ import (
 // DefaultConnectorCatalog returns built-in MCP connector presets.
 // Deprecated: prefer market.sources → dq-market kind=connector packages.
 // Kept for the legacy GET /mcp/catalog API.
-// Product builtins that must exist without market install are also listed in
-// BuiltinConnectorIDs and seeded by bootstrap.
+// First-party GitHub / Danmo Make connectors also ship via builtin plugins;
+// BuiltinConnectorIDs may additionally seed mcp.json when non-empty.
 func DefaultConnectorCatalog() []domain.ConnectorCatalogEntry {
 	return []domain.ConnectorCatalogEntry{
 		{
@@ -95,9 +95,12 @@ func DefaultConnectorCatalog() []domain.ConnectorCatalogEntry {
 	}
 }
 
-// BuiltinConnectorIDs are product connectors auto-seeded on bootstrap (fixed server id).
+// BuiltinConnectorIDs are product connectors auto-seeded into mcp.json on bootstrap
+// when missing. GitHub / Danmo Make now ship via builtin plugins (mcp.json in the
+// plugin pack); keep this empty so SyncBuiltinMCP is a no-op unless new product
+// seeds are added. Catalog entries remain for the Connectors UI.
 // CodeGraph is market-installed (connector deps script + CLI), not product-seeded.
-var BuiltinConnectorIDs = []string{"danmo-make", GitHubExpertID}
+var BuiltinConnectorIDs = []string{}
 
 // DanmoMakeCatalogEntry is the built-in local creative MCP preset.
 func DanmoMakeCatalogEntry() domain.ConnectorCatalogEntry {

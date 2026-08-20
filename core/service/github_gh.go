@@ -106,13 +106,14 @@ func hasAuthHeader(headers map[string]string) bool {
 	return false
 }
 
-// IsProductBuiltinConnector hides/blocks market packages that are product-seeded.
+// IsProductBuiltinConnector hides/blocks market packages that ship as product
+// builtins (catalog seeds and/or first-party builtin plugins).
 func IsProductBuiltinConnector(id string) bool {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return false
 	}
-	if id == GitHubLegacyMarketConnectorID {
+	if id == GitHubLegacyMarketConnectorID || id == GitHubExpertID || id == "danmo-make" {
 		return true
 	}
 	for _, bid := range BuiltinConnectorIDs {

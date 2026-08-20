@@ -13,7 +13,6 @@ func TestLoadSkillTemplatesIncludesAdaptedPack(t *testing.T) {
 	want := map[string]string{
 		"debugging":               "coding",
 		"git-workflow":            "coding",
-		"github":                  "coding",
 		"test-driven-development": "coding",
 		"writing-plans":           "coding",
 		"requesting-code-review":  "coding",
@@ -23,6 +22,7 @@ func TestLoadSkillTemplatesIncludesAdaptedPack(t *testing.T) {
 		"playable-slides":         "work",
 		"sheet-writing":           "work",
 		"skill-creator":           "general",
+		"computer-use":            "automation",
 	}
 
 	got := make(map[string]string, len(templates))
@@ -45,6 +45,12 @@ func TestLoadSkillTemplatesIncludesAdaptedPack(t *testing.T) {
 		}
 		if gotCat != cat {
 			t.Errorf("skill %q category = %q, want %q", id, gotCat, cat)
+		}
+	}
+
+	for _, migrated := range []string{"github", "danmo-make", "novel-writing", "browser"} {
+		if _, ok := got[migrated]; ok {
+			t.Errorf("skill %q should live in builtin plugins, not home embed", migrated)
 		}
 	}
 }

@@ -1651,5 +1651,7 @@ export default {
     keywords: '关键词',
     components: '组件',
     installedAt: '安装时间',
+    builtin: '内置',
+    source: '来源',
   },
 }

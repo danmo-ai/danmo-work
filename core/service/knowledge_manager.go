@@ -137,16 +137,16 @@ func (m *KnowledgeManager) UnregisterPluginKB(ctx context.Context, pluginRoot st
 	m.pluginKBRoots = filtered
 	m.mu.Unlock()
 
-	pluginName := pluginNameFromKBPath(pluginRoot)
-	if pluginName == "" {
+	id := pluginKnowledgeID(pluginRoot)
+	if id == "" {
 		return nil
 	}
-	_ = m.DeleteBase(ctx, pluginName)
+	_ = m.DeleteBase(ctx, id)
 	return nil
 }
 
 // ScanPluginBases discovers plugin knowledge directories and registers them as KBs in SQLite.
-// One plugin = one knowledge base; kb-id is the plugin name.
+// One plugin = one knowledge base; kb-id is _meta.json "id" when set, else the plugin name.
 // Call this before StartAsyncIndex so plugin KBs/docs are included in the reindex.
 func (m *KnowledgeManager) ScanPluginBases(ctx context.Context) error {
 	m.mu.RLock()
@@ -163,13 +163,22 @@ func (m *KnowledgeManager) ScanPluginBases(ctx context.Context) error {
 
 // ScanPluginBase registers one plugin knowledge directory as a KB in SQLite.
 func (m *KnowledgeManager) ScanPluginBase(ctx context.Context, root string) error {
-	id := pluginNameFromKBPath(root)
+	id := pluginKnowledgeID(root)
 	if id == "" {
 		return nil
 	}
 	return m.scanKnowledgeDir(ctx, id, root, func(fname string) string {
 		return strings.TrimSuffix(fname, ".md")
 	})
+}
+
+// pluginKnowledgeID resolves the KB id for a plugin knowledge root.
+// Prefers _meta.json "id" so packs can keep stable ids (e.g. kb-novel-craft).
+func pluginKnowledgeID(root string) string {
+	if meta := readKBmeta(filepath.Join(root, "_meta.json")); meta["id"] != "" {
+		return meta["id"]
+	}
+	return pluginNameFromKBPath(root)
 }
 
 // ScanBuiltinKnowledgeDir registers a builtin knowledge directory (synced from

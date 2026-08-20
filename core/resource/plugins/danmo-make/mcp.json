@@ -1,0 +1,15 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "danmo-make": {
+      "type": "streamable-http",
+      "url": "http://127.0.0.1:7800/mcp/",
+      "name": "Danmo Make",
+      "description": "Local image/video/audio generation via Danmo Make MCP (bound-only; use with danmo-make expert).",
+      "auth": "none",
+      "catalogId": "danmo-make",
+      "ambientMount": false,
+      "toolTimeout": 900
+    }
+  }
+}

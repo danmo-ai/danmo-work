@@ -1654,5 +1654,7 @@ export default {
     keywords: 'Keywords',
     components: 'Components',
     installedAt: 'Installed at',
+    builtin: 'Built-in',
+    source: 'Source',
   },
 }

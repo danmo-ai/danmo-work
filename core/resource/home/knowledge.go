@@ -1,25 +1,12 @@
 package home
 
-import (
-	"io/fs"
-	"sort"
-)
-
-// NovelCraftKnowledgeBaseID is the stable id for the builtin novel craft KB.
+// NovelCraftKnowledgeBaseID is the stable id for the novel craft KB
+// (shipped by the builtin "novel" plugin under ai.danmo.work/knowledge/).
 const NovelCraftKnowledgeBaseID = "kb-novel-craft"
 
 // KnowledgeDirs lists builtin knowledge base directory names under knowledge/.
+// Empty after novel craft moved to the builtin novel plugin; retained for API
+// compatibility with bootstrap ensureBuiltinKnowledge.
 func KnowledgeDirs() []string {
-	entries, err := fs.ReadDir(FS, "knowledge")
-	if err != nil {
-		return nil
-	}
-	var dirs []string
-	for _, e := range entries {
-		if e.IsDir() {
-			dirs = append(dirs, e.Name())
-		}
-	}
-	sort.Strings(dirs)
-	return dirs
+	return nil
 }
