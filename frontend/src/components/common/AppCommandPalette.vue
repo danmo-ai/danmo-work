@@ -33,7 +33,7 @@ const open = computed({
 })
 
 function goTab(tab: RightWorkspaceTab) {
-  workspaceUi.setRightTab(tab)
+  workspaceUi.openRightDrawer(tab)
   if (router.currentRoute.value.name !== 'sessions') {
     router.push({ name: 'sessions', params: sessions.currentSessionId ? { id: sessions.currentSessionId } : {} })
   }

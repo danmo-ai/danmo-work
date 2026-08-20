@@ -1,24 +1,5 @@
 import type { AvailableSkill } from '@/types'
 
-/** Detect `@query` immediately before the caret (start of line or after whitespace). */
-export function detectAtSkillQuery(
-  text: string,
-  caret: number,
-): { start: number; query: string } | null {
-  if (caret < 0 || caret > text.length) return null
-  const before = text.slice(0, caret)
-  const m = before.match(/(^|[\s\n])@([^\s@]*)$/)
-  if (!m) return null
-  const query = m[2] ?? ''
-  const start = before.length - query.length - 1
-  if (start < 0 || text[start] !== '@') return null
-  return { start, query }
-}
-
-export function removeAtSkillQuery(text: string, start: number, caret: number): string {
-  return text.slice(0, start) + text.slice(caret)
-}
-
 export function filterAvailableSkills(
   skills: AvailableSkill[],
   query: string,

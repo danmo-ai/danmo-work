@@ -1410,8 +1410,8 @@ export default {
     diffFileMissing: '文件不存在或已删除',
   },
   composer: {
-    placeholderNew: "输入会话目标，或键入 {'@'} 召唤技能/专家、{'/'} 打开命令…",
-    placeholderContinue: "继续输入，或键入 {'@'} 召唤技能/专家、{'/'} 打开命令…",
+    placeholderNew: "输入会话目标，或键入 {'/'} 打开命令…",
+    placeholderContinue: "继续输入，或键入 {'/'} 打开命令…",
     selectProject: '项目',
     selectAgent: '选择主专家',
     selectModel: '模型',

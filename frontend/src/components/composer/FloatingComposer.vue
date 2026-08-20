@@ -34,16 +34,8 @@ import {
   officeEditSnapshotPaths,
   type OfficeEditAttachment,
 } from '@/types/office-edit-attachment'
-import {
-  detectAtSkillQuery,
-  prependSkillSummon,
-  removeAtSkillQuery,
-} from '@/types/composer-skills'
-import {
-  filterSummonableExperts,
-  listSummonableExperts,
-  prependExpertSummon,
-} from '@/types/composer-experts'
+import { prependSkillSummon } from '@/types/composer-skills'
+import { listSummonableExperts, prependExpertSummon } from '@/types/composer-experts'
 import {
   COMPOSER_SLASH_COMMANDS,
   detectSlashQuery,
@@ -67,9 +59,6 @@ const selectedSkillIds = ref<string[]>([])
 const selectedExpertIds = ref<string[]>([])
 const buttonPickerOpen = ref(false)
 const expertButtonPickerOpen = ref(false)
-const atMenuOpen = ref(false)
-const atQuery = ref('')
-const atStart = ref(-1)
 const slashMenuOpen = ref(false)
 const slashQuery = ref('')
 const slashStart = ref(-1)
@@ -169,16 +158,8 @@ const selectedExperts = computed(() => {
     .filter((a): a is Agent => Boolean(a))
 })
 
-const atExpertMatches = computed(() =>
-  canDelegateExperts.value
-    ? filterSummonableExperts(sessions.agents, atQuery.value, sessions.selectedAgentId)
-    : [],
-)
-
-const skillPickerOpen = computed(() => buttonPickerOpen.value || atMenuOpen.value)
-const expertPickerOpen = computed(
-  () => expertButtonPickerOpen.value || (atMenuOpen.value && canDelegateExperts.value),
-)
+const skillPickerOpen = computed(() => buttonPickerOpen.value)
+const expertPickerOpen = computed(() => expertButtonPickerOpen.value)
 const anyPickerOpen = computed(
   () => skillPickerOpen.value || expertPickerOpen.value || slashMenuOpen.value,
 )
@@ -486,9 +467,6 @@ watch(content, () => {
 
 function closeSkillPickers() {
   buttonPickerOpen.value = false
-  atMenuOpen.value = false
-  atQuery.value = ''
-  atStart.value = -1
 }
 
 function closeExpertButtonPicker() {
@@ -510,7 +488,7 @@ function closeAllPickers() {
 function onDocPointerDown(e: MouseEvent) {
   if (!anyPickerOpen.value) return
   const root = (e.target as HTMLElement | null)?.closest?.(
-    '.composer-skill-pop, .composer-expert-pop, .composer-at-pop, .composer-tool-btn--skill, .composer-tool-btn--expert, .composer-slash-pop',
+    '.composer-skill-pop, .composer-expert-pop, .composer-tool-btn--skill, .composer-tool-btn--expert, .composer-slash-pop',
   )
   if (!root) closeAllPickers()
 }
@@ -577,33 +555,17 @@ async function loadAvailableSkills() {
   }
 }
 
-function syncAtMenuFromCaret() {
+function syncSlashMenuFromCaret() {
   if (hasPendingApproval.value || isTurnRunning.value) {
-    atMenuOpen.value = false
     slashMenuOpen.value = false
     return
   }
   const ta = getTextarea()
   if (!ta) {
-    atMenuOpen.value = false
     slashMenuOpen.value = false
     return
   }
   const caret = ta.selectionStart ?? 0
-  const at = detectAtSkillQuery(content.value, caret)
-  if (at) {
-    buttonPickerOpen.value = false
-    closeExpertButtonPicker()
-    closeSlashPicker()
-    atMenuOpen.value = true
-    atQuery.value = at.query
-    atStart.value = at.start
-    return
-  }
-  atMenuOpen.value = false
-  atQuery.value = ''
-  atStart.value = -1
-
   const slash = detectSlashQuery(content.value, caret)
   if (slash) {
     buttonPickerOpen.value = false
@@ -617,14 +579,13 @@ function syncAtMenuFromCaret() {
 }
 
 watch(content, () => {
-  void nextTick(() => syncAtMenuFromCaret())
+  void nextTick(() => syncSlashMenuFromCaret())
 })
 
 function toggleButtonSkillPicker() {
   if (hasPendingApproval.value || isTurnRunning.value) return
   closeSlashPicker()
   closeExpertButtonPicker()
-  atMenuOpen.value = false
   buttonPickerOpen.value = !buttonPickerOpen.value
 }
 
@@ -636,24 +597,10 @@ function toggleButtonExpertPicker() {
   }
   closeSlashPicker()
   buttonPickerOpen.value = false
-  atMenuOpen.value = false
   expertButtonPickerOpen.value = !expertButtonPickerOpen.value
 }
 
 function onPickSkill(sk: AvailableSkill) {
-  if (atMenuOpen.value && atStart.value >= 0) {
-    const ta = getTextarea()
-    const caret = ta?.selectionStart ?? content.value.length
-    content.value = removeAtSkillQuery(content.value, atStart.value, caret)
-    atMenuOpen.value = false
-    atQuery.value = ''
-    atStart.value = -1
-    if (!selectedSkillIds.value.includes(sk.id)) {
-      selectedSkillIds.value = [...selectedSkillIds.value, sk.id]
-    }
-    void nextTick(() => focusInput())
-    return
-  }
   if (selectedSkillIds.value.includes(sk.id)) {
     selectedSkillIds.value = selectedSkillIds.value.filter((id) => id !== sk.id)
   } else {
@@ -664,19 +611,6 @@ function onPickSkill(sk: AvailableSkill) {
 function onPickExpert(agent: Agent) {
   if (!canDelegateExperts.value) {
     toast.warning(t('composer.expertNeedDelegate'))
-    return
-  }
-  if (atMenuOpen.value && atStart.value >= 0) {
-    const ta = getTextarea()
-    const caret = ta?.selectionStart ?? content.value.length
-    content.value = removeAtSkillQuery(content.value, atStart.value, caret)
-    atMenuOpen.value = false
-    atQuery.value = ''
-    atStart.value = -1
-    if (!selectedExpertIds.value.includes(agent.id)) {
-      selectedExpertIds.value = [...selectedExpertIds.value, agent.id]
-    }
-    void nextTick(() => focusInput())
     return
   }
   if (selectedExpertIds.value.includes(agent.id)) {
@@ -695,22 +629,22 @@ async function onPickSlash(cmd: ComposerSlashCommand) {
   closeSlashPicker()
   switch (cmd.id) {
     case 'changes':
-      workspaceUi.setRightTab('changes')
+      workspaceUi.openRightDrawer('changes')
       break
     case 'plan':
-      workspaceUi.setRightTab('plan')
+      workspaceUi.openRightDrawer('plan')
       break
     case 'files':
-      workspaceUi.setRightTab('files')
+      workspaceUi.openRightDrawer('files')
       break
     case 'memory':
-      workspaceUi.setRightTab('memory')
+      workspaceUi.openRightDrawer('memory')
       break
     case 'tables':
-      workspaceUi.setRightTab('tables')
+      workspaceUi.openRightDrawer('tables')
       break
     case 'terminal':
-      workspaceUi.setRightTab('terminal')
+      workspaceUi.openRightDrawer('terminal')
       break
     case 'approve':
       emit('jump-pending')
@@ -930,27 +864,6 @@ function onKeydown(e: KeyboardEvent) {
     slashPickerRef.value?.onKeydown(e)
     return
   }
-  // @ menu: prefer skills when they match; otherwise route keys to experts.
-  if (atMenuOpen.value) {
-    const preferExperts =
-      canDelegateExperts.value &&
-      atExpertMatches.value.length > 0 &&
-      availableSkills.value.filter((s) => {
-        const q = atQuery.value.trim().toLowerCase()
-        if (!q) return true
-        const hay = [s.id, s.name, s.description ?? ''].join('\n').toLowerCase()
-        return hay.includes(q)
-      }).length === 0
-    const target = preferExperts ? expertPickerRef.value : skillPickerRef.value
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape') {
-      target?.onKeydown(e)
-      return
-    }
-    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
-      target?.onKeydown(e)
-      return
-    }
-  }
   if (expertButtonPickerOpen.value && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape')) {
     expertPickerRef.value?.onKeydown(e)
     return
@@ -1058,34 +971,7 @@ defineExpose({
   >
     <!-- Outside the glass card: card has overflow:hidden and would clip this popover. -->
     <div
-      v-if="atMenuOpen"
-      class="composer-at-pop"
-    >
-      <ComposerSkillPicker
-        ref="skillPickerRef"
-        :skills="availableSkills"
-        :selected-ids="selectedSkillIds"
-        :query="atQuery"
-        :show-search="false"
-        :loading="availableSkillsLoading"
-        @select="onPickSkill"
-        @close="closeAllPickers"
-      />
-      <ComposerExpertPicker
-        v-if="canDelegateExperts"
-        ref="expertPickerRef"
-        :agents="sessions.agents"
-        :selected-ids="selectedExpertIds"
-        :exclude-agent-id="sessions.selectedAgentId"
-        :query="atQuery"
-        :show-search="false"
-        hide-close
-        @select="onPickExpert"
-        @close="closeAllPickers"
-      />
-    </div>
-    <div
-      v-else-if="buttonPickerOpen"
+      v-if="buttonPickerOpen"
       class="composer-skill-pop composer-skill-pop--button"
     >
       <ComposerSkillPicker
@@ -1178,8 +1064,8 @@ defineExpose({
             :placeholder="hasPendingApproval || isTurnRunning ? t('composer.placeholderQueue') : placeholder"
             @keydown="onKeydown"
             @paste="onPaste"
-            @click="syncAtMenuFromCaret"
-            @keyup="syncAtMenuFromCaret"
+            @click="syncSlashMenuFromCaret"
+            @keyup="syncSlashMenuFromCaret"
           />
         </div>
       </div>
@@ -1812,8 +1698,7 @@ defineExpose({
 }
 
 .composer-skill-pop,
-.composer-expert-pop,
-.composer-at-pop {
+.composer-expert-pop {
   position: absolute;
   left: 10px;
   right: 10px;
@@ -1823,14 +1708,6 @@ defineExpose({
   display: flex;
   justify-content: flex-start;
   pointer-events: none;
-}
-
-.composer-at-pop {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-  max-height: min(520px, 70vh);
-  overflow: auto;
 }
 
 .composer-slash-pop {
@@ -1846,8 +1723,7 @@ defineExpose({
 
 .composer-slash-pop > *,
 .composer-skill-pop > *,
-.composer-expert-pop > *,
-.composer-at-pop > * {
+.composer-expert-pop > * {
   pointer-events: auto;
 }
 

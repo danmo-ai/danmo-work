@@ -1411,8 +1411,8 @@ export default {
     diffFileMissing: 'File missing or deleted',
   },
   composer: {
-    placeholderNew: "Describe the goal, or type {'@'} for skills/experts / {'/'} for commands…",
-    placeholderContinue: "Continue, or type {'@'} for skills/experts / {'/'} for commands…",
+    placeholderNew: "Describe the goal, or type {'/'} for commands…",
+    placeholderContinue: "Continue, or type {'/'} for commands…",
     selectProject: 'Project',
     selectAgent: 'Select lead expert',
     selectModel: 'Model',

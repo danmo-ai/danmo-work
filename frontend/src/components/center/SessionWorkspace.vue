@@ -2766,16 +2766,6 @@ function onTitleKeydown(e: KeyboardEvent) {
   overflow: visible;
 }
 
-/* Soft fade under the floating composer so stream text doesn't collide */
-.session-workspace__composer::before {
-  content: '';
-  position: absolute;
-  inset: -28px -24px 0;
-  z-index: -1;
-  background: var(--dq-composer-fade, none);
-  pointer-events: none;
-}
-
 .session-workspace__composer > * {
   pointer-events: auto;
 }

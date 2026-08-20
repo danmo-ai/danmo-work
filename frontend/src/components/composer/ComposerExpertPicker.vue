@@ -193,10 +193,10 @@ defineExpose({ onKeydown, confirmActive, move, filtered, grouped })
   max-height: 280px;
   overflow: hidden;
   border: 1px solid var(--dq-border-subtle, rgba(0, 0, 0, 0.08));
-  border-radius: 10px;
+  border-radius: var(--dq-composer-radius, var(--dq-radius-menu, 16px));
   /* Opaque sheet — glass popover-bg is ~24% in dark and lets stream bleed through. */
   background: var(--dq-bg-elevated, #fff);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: none;
   color: var(--dq-label-primary, inherit);
   isolation: isolate;
 }
