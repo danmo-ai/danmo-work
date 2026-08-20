@@ -42,22 +42,48 @@ Body here.
 	}
 }
 
-func TestParseSkillMDFlatMetadata(t *testing.T) {
+func TestParseSkillMDBuiltinFlag(t *testing.T) {
 	content := `---
-name: plain
-description: d
-metadata:
-  version: "1.0"
+name: sheet-writing
+source: builtin
+description: tables
 ---
 
-x
+Body
 `
 	sk, err := NewSkillImporter().ParseSkillMD(content)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sk.Metadata["version"] != "1.0" {
-		t.Fatalf("metadata = %#v", sk.Metadata)
+	if !sk.Builtin || sk.Source != "builtin" {
+		t.Fatalf("builtin=%v source=%q", sk.Builtin, sk.Source)
+	}
+}
+
+func TestParseSkillMDDescriptionContainsFence(t *testing.T) {
+	content := `---
+name: playable-slides
+source: builtin
+description: "Marp Markdown (` + "`---`"+ ` page breaks) for slides"
+---
+
+# Playable Slides
+`
+	sk, err := NewSkillImporter().ParseSkillMD(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sk.ID != "playable-slides" {
+		t.Fatalf("id = %q", sk.ID)
+	}
+	if !sk.Builtin {
+		t.Fatal("expected builtin")
+	}
+	if !strings.Contains(sk.Description, "page breaks") {
+		t.Fatalf("description = %q", sk.Description)
+	}
+	if sk.Body != "# Playable Slides" {
+		t.Fatalf("body = %q", sk.Body)
 	}
 }
 

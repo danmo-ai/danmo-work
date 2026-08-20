@@ -234,6 +234,8 @@ function shortSummary(): string {
   color: var(--dq-label-primary);
   border-color: var(--dq-accent);
 }
+
+.el-annotate__label {
   display: block;
   font-size: var(--dq-font-size-body);
   color: var(--dq-label-secondary);

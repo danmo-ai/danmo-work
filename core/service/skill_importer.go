@@ -110,6 +110,8 @@ func (i *SkillImporter) ImportAll(skillsDir string) ([]domain.Skill, []domain.Sk
 		if err != nil {
 			continue
 		}
+		// Directory name is the stable skill id (Agentskills layout).
+		skill.ID = entry.Name()
 		skills = append(skills, *skill)
 		allFiles = append(allFiles, files...)
 	}
@@ -118,17 +120,18 @@ func (i *SkillImporter) ImportAll(skillsDir string) ([]domain.Skill, []domain.Sk
 }
 
 func (i *SkillImporter) ParseSkillMD(content string) (*domain.Skill, error) {
-	var fm skillFrontmatter
-	parts := strings.SplitN(content, "---", 3)
-	if len(parts) < 3 {
-		return nil, fmt.Errorf("invalid SKILL.md: missing YAML frontmatter")
+	fmText, body, err := splitYAMLFrontmatter(content)
+	if err != nil {
+		return nil, err
 	}
-	if err := yaml.Unmarshal([]byte(strings.TrimSpace(parts[1])), &fm); err != nil {
+	var fm skillFrontmatter
+	if err := yaml.Unmarshal([]byte(fmText), &fm); err != nil {
 		return nil, err
 	}
 	if fm.Name == "" {
 		return nil, fmt.Errorf("invalid SKILL.md: name is required in frontmatter")
 	}
+	source := strings.TrimSpace(fm.Source)
 	return &domain.Skill{
 		ID:            fm.Name,
 		Name:          fm.Name,
@@ -137,9 +140,28 @@ func (i *SkillImporter) ParseSkillMD(content string) (*domain.Skill, error) {
 		Compatibility: fm.Compatibility,
 		Metadata:      coerceMetadata(fm.Metadata),
 		AllowedTools:  fm.AllowedTools,
-		Source:        fm.Source,
-		Body:          strings.TrimSpace(parts[2]),
+		Source:        source,
+		Builtin:       source == "builtin",
+		Body:          body,
 	}, nil
+}
+
+// splitYAMLFrontmatter finds the opening/closing --- lines so values that
+// contain "---" (e.g. quoted descriptions) do not break parsing.
+func splitYAMLFrontmatter(content string) (fmText, body string, err error) {
+	content = strings.TrimPrefix(content, "\ufeff")
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return "", "", fmt.Errorf("invalid SKILL.md: missing YAML frontmatter")
+	}
+	var fmLines []string
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			return strings.Join(fmLines, "\n"), strings.TrimSpace(strings.Join(lines[i+1:], "\n")), nil
+		}
+		fmLines = append(fmLines, lines[i])
+	}
+	return "", "", fmt.Errorf("invalid SKILL.md: unclosed YAML frontmatter")
 }
 
 // coerceMetadata flattens Agentskills / ClawHub frontmatter metadata into string map.
