@@ -122,6 +122,24 @@ const readingEntry = computed((): NovelChapterEntry | null => {
 const readingIsContract = computed(() => readPane.value === 'contract')
 const readingIsProse = computed(() => readPane.value === 'prose')
 
+const readingChapterIndex = computed(() => {
+  const ch = readingChapter.value
+  if (ch == null) return -1
+  return chapterEntries.value.findIndex((e) => e.chapter === ch)
+})
+
+const prevChapterEntry = computed((): NovelChapterEntry | null => {
+  const i = readingChapterIndex.value
+  if (i <= 0) return null
+  return chapterEntries.value[i - 1] ?? null
+})
+
+const nextChapterEntry = computed((): NovelChapterEntry | null => {
+  const i = readingChapterIndex.value
+  if (i < 0 || i >= chapterEntries.value.length - 1) return null
+  return chapterEntries.value[i + 1] ?? null
+})
+
 watch(projectId, () => {
   view.value = 'shelf'
   selectedBookId.value = null
@@ -290,6 +308,13 @@ function openChapterFromList(chapter: number, kind: 'contract' | 'prose') {
   readChapterNum.value = chapter
   readPane.value = kind
   openChapterDoc(kind)
+}
+
+function goAdjacentChapter(dir: -1 | 1) {
+  const entry = dir < 0 ? prevChapterEntry.value : nextChapterEntry.value
+  if (!entry) return
+  const kind = readPane.value === 'contract' || readPane.value === 'prose' ? readPane.value : 'prose'
+  openChapterFromList(entry.chapter, kind)
 }
 
 function backToShelf() {
@@ -719,6 +744,36 @@ function escapeHtml(s: string) {
         {{ t('novelWorkbench.noContractYet') }}
       </div>
       <div v-else class="novel-wb__reader" v-html="readHtml" />
+      <nav
+        v-if="readingChapter != null"
+        class="novel-wb__chapter-nav"
+        :aria-label="t('novelWorkbench.chapterNav')"
+      >
+        <button
+          type="button"
+          class="novel-wb__link"
+          :disabled="!prevChapterEntry"
+          @click="goAdjacentChapter(-1)"
+        >
+          ← {{
+            prevChapterEntry
+              ? t('novelWorkbench.prevChapter', { n: prevChapterEntry.chapter })
+              : t('novelWorkbench.prevChapterNone')
+          }}
+        </button>
+        <button
+          type="button"
+          class="novel-wb__link"
+          :disabled="!nextChapterEntry"
+          @click="goAdjacentChapter(1)"
+        >
+          {{
+            nextChapterEntry
+              ? t('novelWorkbench.nextChapter', { n: nextChapterEntry.chapter })
+              : t('novelWorkbench.nextChapterNone')
+          }} →
+        </button>
+      </nav>
     </template>
   </div>
 </template>
@@ -981,6 +1036,16 @@ function escapeHtml(s: string) {
   font: inherit;
   font-size: var(--dq-font-size-caption);
   cursor: pointer;
+}
+
+.novel-wb__chapter-nav {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px 12px;
+  border-top: 1px solid color-mix(in srgb, var(--dq-border-subtle, #000) 50%, transparent);
 }
 
 .novel-wb__reader {
