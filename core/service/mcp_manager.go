@@ -293,90 +293,32 @@ func domainToMCPSpec(srv domain.MCPServer) mcpSpecServer {
 	return spec
 }
 
-// SyncBuiltinMCP upserts product builtin MCP servers into mcp.json.
-// Missing ids are created from the connector catalog. Existing product
-// builtins with no marketSource are updated (URL, auth, AmbientMount, …)
-// while user secrets / OAuth tokens / enabled-tool picks are preserved.
+// SyncBuiltinMCP adds product builtin MCP servers that are missing from mcp.json.
+// Never overwrites an existing entry with the same ID (users may have set API
+// keys, headers, AmbientMount, or other local config).
 func (m *MCPManager) SyncBuiltinMCP() error {
 	ctx := context.Background()
-	added, updated := 0, 0
+	added := 0
 	for _, id := range BuiltinConnectorIDs {
 		entry := CatalogEntryByID(id)
 		if entry == nil {
 			continue
 		}
+		if _, err := m.Get(ctx, id); err == nil {
+			continue
+		}
 		req := InstallCatalogEntry(*entry, "")
 		req.ID = id
-
-		existing, err := m.Get(ctx, id)
-		if err != nil {
-			if _, err := m.Create(ctx, req); err != nil {
-				return fmt.Errorf("seed builtin mcp %q: %w", id, err)
-			}
-			added++
-			log.Printf("[mcp] added builtin server %q", id)
-			continue
+		if _, err := m.Create(ctx, req); err != nil {
+			return fmt.Errorf("seed builtin mcp %q: %w", id, err)
 		}
-		if existing.MarketSource != "" {
-			continue
-		}
-		req.Enabled = existing.Enabled
-		req.Headers = existing.Headers
-		req.SecretHeadersRef = existing.SecretHeadersRef
-		req.EnabledTools = existing.EnabledTools
-		req.OAuthClientID = existing.OAuthClientID
-		req.OAuthAuthorizeURL = existing.OAuthAuthorizeURL
-		req.OAuthTokenURL = existing.OAuthTokenURL
-		req.OAuthScopes = existing.OAuthScopes
-		req.Status = existing.Status
-		req.Network = existing.Network
-		if !builtinMCPNeedsUpdate(existing, req) {
-			continue
-		}
-		if _, err := m.Update(ctx, id, req); err != nil {
-			return fmt.Errorf("update builtin mcp %q: %w", id, err)
-		}
-		updated++
-		log.Printf("[mcp] updated builtin server %q", id)
+		added++
+		log.Printf("[mcp] added builtin server %q", id)
 	}
-	if added > 0 || updated > 0 {
-		log.Printf("[mcp] builtin sync: %d added, %d updated", added, updated)
+	if added > 0 {
+		log.Printf("[mcp] builtin sync: %d new server(s)", added)
 	}
 	return nil
-}
-
-func builtinMCPNeedsUpdate(existing domain.MCPServer, req domain.UpsertMCPServerRequest) bool {
-	if req.Name != "" && existing.Name != req.Name {
-		return true
-	}
-	if existing.Description != req.Description {
-		return true
-	}
-	if existing.Transport != req.Transport {
-		return true
-	}
-	if existing.URL != req.URL {
-		return true
-	}
-	if existing.Command != req.Command {
-		return true
-	}
-	if existing.Args != req.Args {
-		return true
-	}
-	if req.Auth != "" && existing.Auth != req.Auth {
-		return true
-	}
-	if req.CatalogID != "" && existing.CatalogID != req.CatalogID {
-		return true
-	}
-	if req.AmbientMount != nil && existing.AmbientMount != *req.AmbientMount {
-		return true
-	}
-	if req.ToolTimeout > 0 && existing.ToolTimeout != req.ToolTimeout {
-		return true
-	}
-	return false
 }
 
 func (m *MCPManager) List(ctx context.Context) ([]domain.MCPServer, error) {
