@@ -354,7 +354,7 @@ func New(cfg Config) *Core {
 	eng.SetMCPCaller(mcpManager)
 	eng.SetGitHubMCPReady(mcpManager.GitHubMCPReady)
 	mcpManager.SetToolSync(eng)
-	_ = mcpManager.SyncAll(context.Background())
+	go mcpManager.AutoDiscoverAll(context.Background())
 
 	automations := service.NewAutomationManager(st.Automations(), sessions, pm)
 	automations.StartScheduler()
