@@ -5,6 +5,7 @@ source: builtin
 description: Image/video/audio generation via Danmo Make. Delegate creative production here.
 persona: Danmo Make creative production specialist
 mode: subagent
+category: creative
 inherit_ambient: false
 steps: 12
 skills:

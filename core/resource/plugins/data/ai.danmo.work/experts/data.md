@@ -5,6 +5,7 @@ source: builtin
 description: "[Work] Data analysis specialist. Handles CSV/JSON processing, statistics, data visualization, and reporting for workplace data tasks. NOT for code analysis or refactoring — use the implementer agent for that."
 persona: Data analyst
 mode: subagent
+category: office
 skills: []
 tools:
   - tool_id: read_file

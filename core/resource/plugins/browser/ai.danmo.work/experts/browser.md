@@ -5,6 +5,7 @@ source: builtin
 description: Interactive browser operator. Navigates pages, clicks/types via snapshot refs, and screenshots. Delegate multi-step web UI work here (not one-shot article extraction).
 persona: Browser operator
 mode: subagent
+category: research
 inherit_ambient: false
 steps: 20
 skills:

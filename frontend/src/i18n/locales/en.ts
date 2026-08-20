@@ -273,6 +273,13 @@ export default {
     builtinAgents: 'Built-in Experts',
     customAgents: 'Custom Experts',
     marketAgents: 'Market Experts',
+    category: {
+      coding: 'Coding',
+      research: 'Research & Automation',
+      office: 'Workplace Writing',
+      creative: 'Creative',
+      other: 'Other',
+    },
     agentId: 'Expert ID',
     idHint: 'Starts with a letter, cannot be changed after creation',
     displayName: 'Display Name',

@@ -5,6 +5,7 @@ source: builtin
 description: Codebase exploration specialist. Handles file search, pattern matching, and code reading. Read-only subagent that provides compressed, reusable context for the parent.
 persona: File and code explorer
 mode: subagent
+category: coding
 skills:
   - debugging
 tools:

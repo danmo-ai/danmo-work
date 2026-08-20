@@ -35,6 +35,9 @@ type Agent struct {
 	Persona      string    `json:"persona"`
 	Mode         AgentMode `json:"mode"`
 	SystemPrompt string    `json:"systemPrompt"`
+	// Category groups experts in UI (coding / research / office / creative).
+	// Empty means uncategorized (shown under "other").
+	Category string `json:"category,omitempty"`
 	// Steps is the max tool/LLM steps per turn. 0 means follow
 	// runtime.turn.max_steps_default.
 	Steps        int           `json:"steps"`
@@ -45,8 +48,8 @@ type Agent struct {
 	MCPServers   []string `json:"mcpServers,omitempty"`
 	KnowledgeIDs []string `json:"knowledgeIds"`
 	CanDelegate  bool     `json:"canDelegate"`
-// InheritAmbient is unused (replaced by AgentMode) but kept for backward compat.
-// Primary agents get all skills/MCP; subagents get only bound.
+	// InheritAmbient is unused (replaced by AgentMode) but kept for backward compat.
+	// Primary agents get all skills/MCP; subagents get only bound.
 	InheritAmbient *bool `json:"inheritAmbient,omitempty"`
 	// Source tracks the origin: builtin, market, or user.
 	Source string `json:"source,omitempty"`
@@ -54,6 +57,14 @@ type Agent struct {
 	// MarketSource is the market source id when installed from the marketplace.
 	MarketSource string `json:"marketSource,omitempty"`
 }
+
+// Builtin expert category ids (stable; used by UI i18n keys teams.category.*).
+const (
+	AgentCategoryCoding   = "coding"
+	AgentCategoryResearch = "research"
+	AgentCategoryOffice   = "office"
+	AgentCategoryCreative = "creative"
+)
 
 // ToolBinding attaches a builtin tool to an agent (set ToolID, e.g. "read_file").
 // MCP is bound via Agent.MCPServers, not ToolBinding.

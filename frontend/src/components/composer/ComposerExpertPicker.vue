@@ -2,7 +2,11 @@
 import { computed, ref, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Agent } from '@/types'
-import { filterSummonableExperts } from '@/types/composer-experts'
+import {
+  filterSummonableExperts,
+  groupSummonableExperts,
+  type ExpertCategoryGroup,
+} from '@/types/composer-experts'
 
 const props = defineProps<{
   agents: Agent[]
@@ -34,8 +38,15 @@ const filtered = computed(() =>
   filterSummonableExperts(props.agents, effectiveQuery.value, props.excludeAgentId),
 )
 
+const grouped = computed((): ExpertCategoryGroup[] =>
+  groupSummonableExperts(props.agents, effectiveQuery.value, props.excludeAgentId),
+)
+
+/** Flat index → agent for keyboard nav (matches visual order in grouped list). */
+const flatAgents = computed(() => grouped.value.flatMap((g) => g.agents))
+
 watch(
-  filtered,
+  flatAgents,
   (list) => {
     if (activeIndex.value >= list.length) activeIndex.value = Math.max(0, list.length - 1)
   },
@@ -59,8 +70,18 @@ function sourceLabel(a: Agent) {
   return t('composer.expertCustom')
 }
 
+function categoryLabel(id: string) {
+  const key = `teams.category.${id}`
+  const label = t(key)
+  return label === key ? t('teams.category.other') : label
+}
+
+function flatIndexOf(agentId: string) {
+  return flatAgents.value.findIndex((a) => a.id === agentId)
+}
+
 function move(delta: number) {
-  const n = filtered.value.length
+  const n = flatAgents.value.length
   if (!n) return
   activeIndex.value = (activeIndex.value + delta + n) % n
   void nextTick(() => {
@@ -70,7 +91,7 @@ function move(delta: number) {
 }
 
 function confirmActive() {
-  const a = filtered.value[activeIndex.value]
+  const a = flatAgents.value[activeIndex.value]
   if (a) emit('select', a)
 }
 
@@ -96,7 +117,7 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-defineExpose({ onKeydown, confirmActive, move, filtered })
+defineExpose({ onKeydown, confirmActive, move, filtered, grouped })
 </script>
 
 <template>
@@ -131,30 +152,35 @@ defineExpose({ onKeydown, confirmActive, move, filtered })
     </div>
 
     <div v-if="!agents.length" class="expert-picker__empty">{{ t('composer.expertEmpty') }}</div>
-    <div v-else-if="!filtered.length" class="expert-picker__empty">{{ t('composer.expertNoMatch') }}</div>
-    <ul v-else ref="listRef" class="expert-picker__list">
-      <li
-        v-for="(a, idx) in filtered"
-        :key="a.id"
-        :data-idx="idx"
-        class="expert-picker__item"
-        :class="{
-          'is-active': idx === activeIndex,
-          'is-selected': isSelected(a.id),
-        }"
-        role="option"
-        :aria-selected="isSelected(a.id)"
-        @mouseenter="activeIndex = idx"
-        @click="emit('select', a)"
-      >
-        <div class="expert-picker__item-main">
-          <span class="expert-picker__name">{{ a.name || a.id }}</span>
-          <span class="expert-picker__source">{{ sourceLabel(a) }}</span>
-        </div>
-        <p v-if="a.description" class="expert-picker__desc">{{ a.description }}</p>
-        <span v-if="isSelected(a.id)" class="expert-picker__check" aria-hidden="true">✓</span>
-      </li>
-    </ul>
+    <div v-else-if="!flatAgents.length" class="expert-picker__empty">{{ t('composer.expertNoMatch') }}</div>
+    <div v-else ref="listRef" class="expert-picker__list">
+      <div v-for="group in grouped" :key="group.id" class="expert-picker__group">
+        <div class="expert-picker__group-title">{{ categoryLabel(group.id) }}</div>
+        <ul class="expert-picker__group-list">
+          <li
+            v-for="a in group.agents"
+            :key="a.id"
+            :data-idx="flatIndexOf(a.id)"
+            class="expert-picker__item"
+            :class="{
+              'is-active': flatIndexOf(a.id) === activeIndex,
+              'is-selected': isSelected(a.id),
+            }"
+            role="option"
+            :aria-selected="isSelected(a.id)"
+            @mouseenter="activeIndex = flatIndexOf(a.id)"
+            @click="emit('select', a)"
+          >
+            <div class="expert-picker__item-main">
+              <span class="expert-picker__name">{{ a.name || a.id }}</span>
+              <span class="expert-picker__source">{{ sourceLabel(a) }}</span>
+            </div>
+            <p v-if="a.description" class="expert-picker__desc">{{ a.description }}</p>
+            <span v-if="isSelected(a.id)" class="expert-picker__check" aria-hidden="true">✓</span>
+          </li>
+        </ul>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -232,6 +258,24 @@ defineExpose({ onKeydown, confirmActive, move, filtered })
   overflow: auto;
   flex: 1;
   min-height: 0;
+}
+
+.expert-picker__group + .expert-picker__group {
+  margin-top: 4px;
+}
+
+.expert-picker__group-title {
+  padding: 6px 10px 2px;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 600;
+  opacity: 0.5;
+  letter-spacing: 0.02em;
+}
+
+.expert-picker__group-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
 .expert-picker__item {

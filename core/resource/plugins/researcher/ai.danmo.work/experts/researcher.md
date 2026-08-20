@@ -5,6 +5,7 @@ source: builtin
 description: Information retrieval specialist. Handles web search, knowledge base queries, and best practice collection. Read-only subagent delivering sourced research conclusions to the parent.
 persona: Information researcher
 mode: subagent
+category: research
 skills:
   - deep-research
 tools:

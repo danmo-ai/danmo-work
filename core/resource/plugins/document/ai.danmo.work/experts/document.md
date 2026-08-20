@@ -5,6 +5,7 @@ source: builtin
 description: "[Work] Workplace writing specialist. Reports, slides, sheets, markdown docs, plus email/message/notification drafting and text polishing. NOT for code or implementation files — use the implementer agent for that."
 persona: Document and communication writer
 mode: subagent
+category: office
 skills:
   - document-writing
   - playable-slides

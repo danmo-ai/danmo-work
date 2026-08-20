@@ -5,6 +5,7 @@ source: builtin
 description: GitHub platform ops via bound MCP (when configured), else gh, else git. Delegate GitHub hosting / API tasks here.
 persona: GitHub specialist (MCP → gh → git degrade)
 mode: subagent
+category: coding
 inherit_ambient: false
 steps: 16
 skills:

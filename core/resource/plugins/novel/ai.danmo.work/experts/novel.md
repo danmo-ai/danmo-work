@@ -5,6 +5,7 @@ source: builtin
 description: "[Creative] Long-form / webnovel creation specialist. Outlines, chapter contracts, drafting, continuity ledgers, review gates, and deslop. Aggregates novel-writing skill + craft knowledge base + file/table/memory tools. NOT for code, workplace docs, or video/短剧 production."
 persona: Fiction editor-in-chief and production lead
 mode: subagent
+category: creative
 skills:
   - novel-writing
   - brainstorming

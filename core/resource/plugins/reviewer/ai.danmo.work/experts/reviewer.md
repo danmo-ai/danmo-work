@@ -5,6 +5,7 @@ source: builtin
 description: Code and artifact review specialist. Checks quality, security, correctness, and maintainability against structured checklists. Read-only subagent providing detailed review reports to the parent.
 persona: Senior code reviewer with structured checklists
 mode: subagent
+category: coding
 skills:
   - requesting-code-review
   - debugging

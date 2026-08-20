@@ -115,17 +115,34 @@ func TestThinCodingPluginsRelyOnHomeSkills(t *testing.T) {
 	}
 }
 
-func TestGitHubAndDanmoMakePluginsShipBoundMCP(t *testing.T) {
-	for _, name := range []string{"github", "danmo-make"} {
-		data, err := fs.ReadFile(FS, name+"/mcp.json")
+func TestBuiltinPluginCategories(t *testing.T) {
+	want := map[string]string{
+		"implementer": "coding", "explorer": "coding", "reviewer": "coding", "github": "coding",
+		"researcher": "research", "browser": "research", "operator": "research",
+		"document": "office", "data": "office",
+		"novel": "creative", "danmo-make": "creative",
+	}
+	for name, cat := range want {
+		ed, err := fs.ReadFile(FS, name+"/ai.danmo.work/experts/"+name+".md")
 		if err != nil {
-			t.Fatalf("%s mcp.json: %v", name, err)
+			t.Fatalf("%s: %v", name, err)
 		}
-		if !strings.Contains(string(data), `"ambientMount": false`) {
-			t.Errorf("%s mcp.json must set ambientMount=false", name)
+		var fm struct {
+			Category string `yaml:"category"`
+		}
+		parts := strings.SplitN(string(ed), "---", 3)
+		if len(parts) < 3 {
+			t.Fatalf("%s: missing frontmatter", name)
+		}
+		if err := yaml.Unmarshal([]byte(parts[1]), &fm); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if fm.Category != cat {
+			t.Errorf("%s category=%q want %q", name, fm.Category, cat)
 		}
 	}
 }
+
 
 func TestBuiltinContentHashStable(t *testing.T) {
 	a, err := BuiltinContentHash()

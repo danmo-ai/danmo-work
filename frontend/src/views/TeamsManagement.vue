@@ -70,6 +70,26 @@ const builtinAgents = computed(() =>
   sortedAgents.value.filter((a) => a.mode === 'subagent' && a.builtin && !a.marketSource),
 )
 
+const builtinAgentGroups = computed(() => {
+  const order = ['coding', 'research', 'office', 'creative', 'other'] as const
+  const buckets = new Map<string, typeof builtinAgents.value>()
+  for (const id of order) buckets.set(id, [])
+  for (const a of builtinAgents.value) {
+    const c = (a.category ?? '').trim().toLowerCase()
+    const key = order.includes(c as (typeof order)[number]) ? c : 'other'
+    buckets.get(key)!.push(a)
+  }
+  return order
+    .map((id) => ({ id, agents: buckets.get(id)! }))
+    .filter((g) => g.agents.length > 0)
+})
+
+function categoryLabel(id: string) {
+  const key = `teams.category.${id}`
+  const label = t(key)
+  return label === key ? t('teams.category.other') : label
+}
+
 const customAgents = computed(() =>
   sortedAgents.value.filter((a) => a.mode === 'subagent' && !a.builtin && !a.marketSource),
 )
@@ -332,25 +352,31 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
               </button>
             </nav>
           </div>
-          <div v-if="builtinAgents.length" class="resource-rail__group">
-            <div class="resource-rail__group-title">{{ $t('teams.builtinAgents') }}</div>
-            <nav class="resource-rail__list" :aria-label="$t('teams.builtinAgents')">
-              <button
-                v-for="agent in builtinAgents"
-                :key="agent.id"
-                type="button"
-                class="resource-rail__row"
-                :class="{ 'is-active': selectedId === agent.id && !isCreating }"
-                @click="selectAgent(agent.id)"
-              >
-                <span class="resource-rail__avatar">{{ agentInitial(agent.name) }}</span>
-                <span class="resource-rail__meta">
-                  <span class="resource-rail__name">{{ agent.name }}</span>
-                  <span class="resource-rail__desc" :title="agent.persona || agent.description || agent.id">{{ agentRailSubtitle(agent) }}</span>
-                </span>
-              </button>
-            </nav>
-          </div>
+          <template v-if="builtinAgentGroups.length">
+            <div
+              v-for="group in builtinAgentGroups"
+              :key="group.id"
+              class="resource-rail__group"
+            >
+              <div class="resource-rail__group-title">{{ categoryLabel(group.id) }}</div>
+              <nav class="resource-rail__list" :aria-label="categoryLabel(group.id)">
+                <button
+                  v-for="agent in group.agents"
+                  :key="agent.id"
+                  type="button"
+                  class="resource-rail__row"
+                  :class="{ 'is-active': selectedId === agent.id && !isCreating }"
+                  @click="selectAgent(agent.id)"
+                >
+                  <span class="resource-rail__avatar">{{ agentInitial(agent.name) }}</span>
+                  <span class="resource-rail__meta">
+                    <span class="resource-rail__name">{{ agent.name }}</span>
+                    <span class="resource-rail__desc" :title="agent.persona || agent.description || agent.id">{{ agentRailSubtitle(agent) }}</span>
+                  </span>
+                </button>
+              </nav>
+            </div>
+          </template>
           <div v-if="customAgents.length" class="resource-rail__group">
             <div class="resource-rail__group-title">{{ $t('teams.customAgents') }}</div>
             <nav class="resource-rail__list" :aria-label="$t('teams.customAgents')">

@@ -164,6 +164,7 @@ func parseAgentMarkdown(content string) (*domain.Agent, error) {
 		Source         string `yaml:"source"`
 		Persona        string `yaml:"persona"`
 		Mode           string `yaml:"mode"`
+		Category       string `yaml:"category"`
 		Steps          int    `yaml:"steps"`
 		Skills         []string          `yaml:"skills"`
 		Tools          []toolFrontmatter `yaml:"tools"`
@@ -200,7 +201,8 @@ func parseAgentMarkdown(content string) (*domain.Agent, error) {
 	}
 	a := domain.Agent{
 		ID: fm.ID, Name: fm.Name, Description: fm.Description, Source: source, Builtin: source == "builtin",
-		Persona: fm.Persona, Mode: mode, SystemPrompt: strings.TrimSpace(parts[2]),
+		Persona: fm.Persona, Mode: mode, Category: strings.TrimSpace(fm.Category),
+		SystemPrompt: strings.TrimSpace(parts[2]),
 		Steps: fm.Steps, SkillIDs: fm.Skills, Tools: tools, MCPServers: fm.MCPServers,
 		KnowledgeIDs: fm.Knowledge, CanDelegate: fm.CanDelegate,
 		InheritAmbient: fm.InheritAmbient,
@@ -217,6 +219,7 @@ func writeAgentFile(dir string, a domain.Agent) error {
 		Source         string            `yaml:"source,omitempty"`
 		Persona        string            `yaml:"persona,omitempty"`
 		Mode           string            `yaml:"mode,omitempty"`
+		Category       string            `yaml:"category,omitempty"`
 		Steps          int               `yaml:"steps,omitempty"`
 		Skills         []string          `yaml:"skills,omitempty"`
 		Tools          []toolFrontmatter `yaml:"tools,omitempty"`
@@ -231,7 +234,7 @@ func writeAgentFile(dir string, a domain.Agent) error {
 	}
 	fm, _ := yaml.Marshal(agentFM{
 		ID: a.ID, Name: a.Name, Description: a.Description, Source: a.Source,
-		Persona: a.Persona, Mode: string(a.Mode), Steps: a.Steps,
+		Persona: a.Persona, Mode: string(a.Mode), Category: a.Category, Steps: a.Steps,
 		Skills: a.SkillIDs, Tools: tools, MCPServers: a.MCPServers,
 		Knowledge: a.KnowledgeIDs, CanDelegate: a.CanDelegate,
 		InheritAmbient: a.InheritAmbient,
