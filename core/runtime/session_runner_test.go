@@ -634,3 +634,43 @@ func TestCancelTurnEagerlyClearsRunningStatus(t *testing.T) {
 		t.Fatalf("turn-child stream status: want cancelled, got %q (events=%v)", saw["turn-child"], saw)
 	}
 }
+
+func TestMountMCPForAgentExposesSyncedTools(t *testing.T) {
+	engine := &Engine{toolCatalog: tool.NewRegistry()}
+	engine.ReplaceMCPServer("github", []domain.MCPToolBinding{
+		{
+			ServerID:    "github",
+			ServerName:  "github",
+			ToolName:    "search",
+			ExposedName: domain.ExposedMCPToolName("github", "search"),
+			Description: "search repos",
+		},
+	}, false)
+
+	primaryReg := tool.NewRegistry()
+	engine.mountMCPForAgent(primaryReg, domain.Agent{Mode: domain.AgentModePrimary})
+	if _, ok := primaryReg.Get(domain.ExposedMCPToolName("github", "search")); ok {
+		t.Fatal("bound-only github MCP should not mount on primary agent")
+	}
+
+	subReg := tool.NewRegistry()
+	engine.mountMCPForAgent(subReg, domain.Agent{
+		Mode:       domain.AgentModeSubagent,
+		MCPServers: []string{"github"},
+	})
+	exposed := domain.ExposedMCPToolName("github", "search")
+	if _, ok := subReg.Get(exposed); !ok {
+		t.Fatalf("subagent should mount bound MCP tool %q", exposed)
+	}
+	schemas := subReg.Schemas()
+	found := false
+	for _, s := range schemas {
+		if s.Name == exposed {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("Registry.Schemas() missing MCP tool %q (got %d schemas)", exposed, len(schemas))
+	}
+}
