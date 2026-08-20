@@ -1,3 +1,0 @@
-{"seq":1,"type":"start","data":{"agent_id":"default","goal":"second turn"}}
-{"seq":1,"type":"step","data":{"step":1}}
-{"seq":2,"type":"end","data":{"status":"completed"}}

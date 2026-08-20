@@ -348,6 +348,7 @@ OpenAI-compat 路径上，模型常把 `write`/`edit` 等内容里的未转义�
 | `memory_update` / `memory_read` | 跨会话持久记忆（user / project / agent 三级作用域） |
 | `table_upsert` / `table_get` / `table_query` / `table_delete` / `table_list` | 业务流水表（schema-free JSON；独立 `store.db`） |
 | `web_fetch` / `web_search` | 读网页 / 搜索 |
+| `browser_navigate` / `browser_snapshot` / `browser_act` / `browser_screenshot` / `browser_close` | 语义浏览器操控（Session 级 sticky Tab；默认仅内置 `browser` 专家绑定） |
 | `http_request` | 通用 HTTP/REST（文本/JSON；非二进制） |
 | `ask_user` | 向用户提问（全局，无需 Agent 绑定） |
 | `sleep` | 等待 |
@@ -427,6 +428,7 @@ Agent 可用能力按三层合成；Skill 与连接器共用同一 Ambient 开�
 |------|------|------|
 | `http_request` | 临时/探索/任意 REST；一个稳定 schema 覆盖多数 API | `POST` JSON、带 `Authorization` 的 GET |
 | `web_fetch` / `web_search` | 读页面与搜索，不做通用 REST 客户端 | 文档页、搜索结果 |
+| `browser_*` | 多步网页交互（navigate / a11y snapshot refs / act / screenshot）；CDP 为 adapter（`cdp_url` 附着或自动 launch 无头） | SPA 表单、多页状态；由内置专家 `browser` 经 `delegate_agent` 使用 |
 | MCP Tool | 产品级、需强 inputSchema / 复杂鉴权的集成 | 业务动作封装 |
 | 领域 builtin | 极少；仅高频产品能力 | `web_search` 提供商 |
 | Skill 文档 | API 用法与约定（按需 `read_skill`），不占常驻 tool schema | OpenAPI 说明 |
@@ -671,7 +673,7 @@ Zone C — Scratch:  当前 Turn user/tool + 调用末尾 ephemeral user（turn-
 
 中间画布为唯一内容视图 **Document Stage**：按文件类型切换 toolbar + surface（文档 / 幻灯片 / 表格 / 源码 / 差异 / 预览）。AI 改稿（doc/slides/sheet）走**普通 session turn**，不另开 `/office/ai`。右侧不再有独立 Browser tab。
 
-Agent 自动化无头浏览器（Settings / `web_fetch` CDP）与此 UI 无关，保持独立。
+Agent 自动化浏览器（Settings / `web_fetch` 渲染 + 内置 `browser` 专家的 sticky `browser_*`；CDP attach 或本地 launch）与此 UI 无关，保持独立。
 
 ### 13.1 路由与格式
 

@@ -286,6 +286,7 @@ func New(cfg Config) *Core {
 	// lifecycle + env tar status). Tools only face port.Sandbox + the factory.
 	eng.SetExecution(sb)
 	br := dqbrowser.New(appCfg.Runtime.Browser)
+	eng.SetBrowser(br)
 	computerCtl := dqcomputer.New(appCfg.Runtime.Computer)
 	eng.RegisterTool(&builtin.ExecShell{Sandbox: sb})
 	eng.RegisterTool(&builtin.ReadFile{})
@@ -307,12 +308,15 @@ func New(cfg Config) *Core {
 	eng.RegisterTool(&builtin.WebFetch{ConfigFunc: searchCfgFn, Browser: br, Egress: sb})
 	eng.RegisterTool(&builtin.WebSearch{ConfigFunc: searchCfgFn, Egress: sb})
 	eng.RegisterTool(&builtin.HTTPRequest{ConfigFunc: searchCfgFn, Egress: sb})
-	eng.RegisterTool(&builtin.Computer{
-		Ctl: computerCtl,
-		SupportsImage: func(modelID string) bool {
-			return modelCfg.SupportsVision(modelID)
-		},
-	})
+	supportsImage := func(modelID string) bool {
+		return modelCfg.SupportsVision(modelID)
+	}
+	eng.RegisterTool(&builtin.BrowserNavigate{Browser: br, Egress: sb})
+	eng.RegisterTool(&builtin.BrowserSnapshot{Browser: br})
+	eng.RegisterTool(&builtin.BrowserAct{Browser: br})
+	eng.RegisterTool(&builtin.BrowserScreenshot{Browser: br, SupportsImage: supportsImage})
+	eng.RegisterTool(&builtin.BrowserClose{Browser: br})
+	eng.RegisterTool(&builtin.Computer{Ctl: computerCtl, SupportsImage: supportsImage})
 	eng.RegisterTool(&builtin.AskUser{})
 	eng.RegisterTool(&builtin.Sleep{})
 	eng.RegisterTool(&builtin.ReadSkill{})

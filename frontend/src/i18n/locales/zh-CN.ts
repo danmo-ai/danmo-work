@@ -712,7 +712,7 @@ export default {
     browserExecutablePath: '浏览器可执行文件',
     browserExecutablePathPlaceholder: '留空则自动探测 Chrome/Edge/Chromium',
     browserCdpUrl: 'CDP 地址',
-    browserCdpUrlPlaceholder: '例如 http://127.0.0.1:9222（可选，优先于本地启动）',
+    browserCdpUrlPlaceholder: '可选；例如 http://127.0.0.1:9222 则附着该浏览器，留空则自动启动无头 Chrome/Edge/Chromium',
     browserStatus: '浏览器引擎',
     browserUnavailable: '不可用',
     runtimeCompaction: '上下文压缩',

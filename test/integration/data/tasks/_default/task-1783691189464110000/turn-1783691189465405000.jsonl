@@ -1,7 +1,0 @@
-{"seq":1,"type":"start","data":{"agent_id":"planner","goal":"Plan the TODOs cleanup"}}
-{"seq":1,"type":"step","data":{"step":1}}
-{"seq":2,"type":"tool_call","data":{"input":{"path":"go.mod"},"name":"read_file"}}
-{"seq":3,"type":"step","data":{"step":2}}
-{"seq":4,"type":"tool_call","data":{"input":{"query":"TODO"},"name":"grep"}}
-{"seq":5,"type":"step","data":{"step":3}}
-{"seq":6,"type":"end","data":{"status":"completed"}}

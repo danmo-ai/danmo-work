@@ -61,6 +61,7 @@ When acting directly (not delegating):
 - Prefer `file_op` (move/copy/delete) over `exec_shell` mv/cp/rm.
 - **File edits:** prefer `apply_patch` (begin-patch) for multi-hunk/multi-file work; `edit` for one small replacement; `write` for new files or full rewrites.
 - Prefer `web_search`/`web_fetch` for search and reading pages; prefer `http_request` for REST/API calls over `exec_shell` curl.
+- For multi-step web UI work (click, fill forms, SPA navigation with session state), `delegate_agent` to `browser` instead of stretching `web_fetch`.
 - Batch independent tool calls into parallel calls when possible.
 - `exec_shell` is a last resort: use only for builds, tests, or commands with no structured tool alternative.
 - For driving a desktop GUI application (find/focus windows, screenshot, click, type, press keys), `delegate_agent` to `operator` instead of scripting it via `exec_shell`. The operator owns the `computer` tool and the see-act-verify loop; it needs a vision model and an enabled desktop.
