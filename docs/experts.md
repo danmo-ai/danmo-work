@@ -72,9 +72,9 @@ delegate_agent(agent_id="<id>", goal="...")
 | `danmo-make` | Danmo Make | 本机图片/视频/音频生成 | **内置插件** `danmo-make`：skill + MCP（需单独安装 Make） |
 | `novel` | Novel Writing | 长篇/网文：章合同→草稿→审稿→Commit | **内置插件** `novel`：`novel-writing` + craft KB `kb-novel-craft` |
 | `browser` | Browser | 多步网页交互（navigate / snapshot / act） | **内置插件** `browser`：skill + `browser_*` 工具 |
-| `operator` | Operator | 桌面 GUI 自动化（computer 工具） | skill `computer-use`（仍内置 embed） |
+| `operator` | Operator | 桌面 GUI 自动化（computer 工具） | **内置插件** `operator`：skill `computer-use` + `computer` 工具 |
 
-能力包专家（GitHub / Danmo Make / Novel / Browser）以**内置插件**形式随二进制同步到 `~/.danmo-work/plugins/`，专家定义、技能、MCP、知识库同包管理；不可卸载。其余轻量专家仍在 `core/resource/home` 内置同步。
+能力包专家（GitHub / Danmo Make / Novel / Browser / Operator）以**内置插件**形式随二进制同步到 `~/.danmo-work/plugins/`，专家定义、技能、MCP/知识库（如有）同包管理；不可卸载。其余轻量专家仍在 `core/resource/home` 内置同步。
 
 市场安装的专家（如 **CodeGraph**）同样会出现在可召唤列表中（`mode=subagent`）。
 
@@ -95,7 +95,7 @@ delegate_agent(agent_id="<id>", goal="...")
 
 ## 5. 市场、内置插件与自定义专家
 
-- **内置插件（Builtin plugins）**：产品随包能力（如 `github` / `danmo-make` / `novel` / `browser`）以 Agent Plugins 布局落在 `~/.danmo-work/plugins/<name>/`，开机 hash 同步；含 `skills/`、`mcp.json`、`ai.danmo.work/experts/`、可选 knowledge。不可卸载。
+- **内置插件（Builtin plugins）**：产品随包能力（如 `github` / `danmo-make` / `novel` / `browser` / `operator`）以 Agent Plugins 布局落在 `~/.danmo-work/plugins/<name>/`，开机 hash 同步；含 `skills/`、可选 `mcp.json`、`ai.danmo.work/experts/`、可选 knowledge。不可卸载。
 - **市场（Market）**：安装 `kind: plugin`（推荐）或 `skill` / `connector`。历史上的 `kind: expert` / `bundle` 已由插件取代。
 - **自定义**：在 Teams 新建子专家，绑定技能、工具、知识库与 MCP；主专家开启协作后即可被 `@` / 图标召唤。
 - **Ambient**：子专家默认不继承全量 Ambient MCP；需要的连接器应写在专家的 `mcpServers` 绑定里（如 GitHub、Danmo Make）。

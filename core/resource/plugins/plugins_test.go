@@ -10,7 +10,10 @@ import (
 
 func TestBuiltinPluginNames(t *testing.T) {
 	names := BuiltinPluginNames()
-	want := map[string]bool{"github": true, "danmo-make": true, "novel": true, "browser": true}
+	want := map[string]bool{
+		"github": true, "danmo-make": true, "novel": true,
+		"browser": true, "operator": true,
+	}
 	if len(names) != len(want) {
 		t.Fatalf("names=%v want %d entries", names, len(want))
 	}
@@ -22,6 +25,11 @@ func TestBuiltinPluginNames(t *testing.T) {
 }
 
 func TestBuiltinPluginManifestsAndExperts(t *testing.T) {
+	// plugin name → expert markdown id (usually same; operator skill differs)
+	expertID := map[string]string{
+		"github": "github", "danmo-make": "danmo-make", "novel": "novel",
+		"browser": "browser", "operator": "operator",
+	}
 	for _, name := range BuiltinPluginNames() {
 		data, err := fs.ReadFile(FS, name+"/plugin.json")
 		if err != nil {
@@ -30,10 +38,8 @@ func TestBuiltinPluginManifestsAndExperts(t *testing.T) {
 		if !strings.Contains(string(data), `"name": "`+name+`"`) {
 			t.Errorf("%s: plugin.json name mismatch", name)
 		}
-		expertPath := name + "/ai.danmo.work/experts/" + name + ".md"
-		if name == "novel" {
-			expertPath = name + "/ai.danmo.work/experts/novel.md"
-		}
+		eid := expertID[name]
+		expertPath := name + "/ai.danmo.work/experts/" + eid + ".md"
 		ed, err := fs.ReadFile(FS, expertPath)
 		if err != nil {
 			t.Fatalf("%s: expert: %v", name, err)
@@ -53,8 +59,8 @@ func TestBuiltinPluginManifestsAndExperts(t *testing.T) {
 		if err := yaml.Unmarshal([]byte(parts[1]), &fm); err != nil {
 			t.Fatalf("%s: frontmatter: %v", name, err)
 		}
-		if fm.ID != name {
-			t.Errorf("%s: id=%q", name, fm.ID)
+		if fm.ID != eid {
+			t.Errorf("%s: id=%q want %q", name, fm.ID, eid)
 		}
 		if fm.Source != "builtin" {
 			t.Errorf("%s: source=%q want builtin", name, fm.Source)
@@ -81,6 +87,32 @@ func TestNovelPluginPacksSkillAndCraftKB(t *testing.T) {
 	}
 	if _, err := fs.ReadFile(FS, "novel/ai.danmo.work/knowledge/01-pacing-structure.md"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestBrowserAndOperatorPluginsPackSkills(t *testing.T) {
+	if _, err := fs.ReadFile(FS, "browser/skills/browser/SKILL.md"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fs.ReadFile(FS, "operator/skills/computer-use/SKILL.md"); err != nil {
+		t.Fatal(err)
+	}
+	op, err := fs.ReadFile(FS, "operator/ai.danmo.work/experts/operator.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(op), "computer-use") {
+		t.Fatal("operator expert should bind computer-use skill")
+	}
+	if !strings.Contains(string(op), "tool_id: computer") {
+		t.Fatal("operator expert should bind computer tool")
+	}
+	br, err := fs.ReadFile(FS, "browser/ai.danmo.work/experts/browser.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(br), "browser_navigate") {
+		t.Fatal("browser expert should bind browser_* tools")
 	}
 }
 

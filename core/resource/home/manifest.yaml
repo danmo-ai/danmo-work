@@ -8,7 +8,6 @@ agents:
   - data
   - team
   - comms
-  - operator
 skills:
   - debugging
   - playable-slides
@@ -22,4 +21,3 @@ skills:
   - sheet-writing
   - deep-research
   - skill-creator
-  - computer-use

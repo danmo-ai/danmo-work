@@ -44,7 +44,7 @@ func TestSyncBuiltinToFSCopiesAgentsSkills(t *testing.T) {
 	}
 
 	// Migrated packs must not remain under home sync targets.
-	for _, name := range []string{"github.md", "novel.md", "browser.md", "danmo-make.md"} {
+	for _, name := range []string{"github.md", "novel.md", "browser.md", "danmo-make.md", "operator.md"} {
 		if _, err := os.Stat(filepath.Join(dataDir, "agents", name)); err == nil {
 			t.Fatalf("migrated agent %s should not be synced from home", name)
 		}

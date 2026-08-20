@@ -24,6 +24,7 @@ var migratedBuiltinAgentFiles = []string{
 	"danmo-make.md",
 	"novel.md",
 	"browser.md",
+	"operator.md",
 }
 
 var migratedBuiltinSkillDirs = []string{
@@ -31,6 +32,7 @@ var migratedBuiltinSkillDirs = []string{
 	"danmo-make",
 	"novel-writing",
 	"browser",
+	"computer-use",
 }
 
 var migratedBuiltinKnowledgeDirs = []string{

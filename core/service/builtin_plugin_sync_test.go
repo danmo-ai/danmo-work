@@ -153,8 +153,8 @@ func TestBuiltinPluginsRegisterExpertsAndMCP(t *testing.T) {
 	}
 
 	list := pm.ListInstalled()
-	if len(list) < 4 {
-		t.Fatalf("installed plugins=%d", len(list))
+	if len(list) < 5 {
+		t.Fatalf("installed plugins=%d want >=5", len(list))
 	}
 	var novel *domain.PluginInstalled
 	for i := range list {

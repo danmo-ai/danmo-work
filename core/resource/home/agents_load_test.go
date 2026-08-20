@@ -54,47 +54,16 @@ func TestKnowledgeDirsEmptyAfterPluginMigration(t *testing.T) {
 	}
 }
 
-func TestBuiltinOperatorExpertOwnsComputerTool(t *testing.T) {
+func TestHomeEmbedHasNoToolBoundCapabilityExperts(t *testing.T) {
 	templates, err := LoadAgentTemplates()
 	if err != nil {
 		t.Fatalf("LoadAgentTemplates: %v", err)
 	}
-	var op *AgentTemplate
-	for i := range templates {
-		if templates[i].Agent.ID == "operator" {
-			op = &templates[i]
-			break
+	for _, tmpl := range templates {
+		switch tmpl.Agent.ID {
+		case "browser", "operator", "github", "danmo-make", "novel":
+			t.Errorf("agent %q should live in builtin plugins, not home embed", tmpl.Agent.ID)
 		}
-	}
-	if op == nil {
-		t.Fatal("missing builtin operator agent template")
-	}
-	if op.Agent.Mode != domain.AgentModeSubagent {
-		t.Fatalf("operator mode=%s, want subagent", op.Agent.Mode)
-	}
-	if op.Agent.InheritAmbient == nil || *op.Agent.InheritAmbient {
-		t.Fatalf("operator should set inherit_ambient=false, got %v", op.Agent.InheritAmbient)
-	}
-	hasSkill := false
-	for _, id := range op.Agent.SkillIDs {
-		if id == "computer-use" {
-			hasSkill = true
-		}
-	}
-	if !hasSkill {
-		t.Fatalf("operator needs skill computer-use; skills=%v", op.Agent.SkillIDs)
-	}
-	hasComputer := false
-	for _, b := range op.Agent.Tools {
-		if b.ToolID == "computer" {
-			hasComputer = true
-		}
-	}
-	if !hasComputer {
-		t.Fatalf("operator must bind computer tool; tools=%v", op.Agent.Tools)
-	}
-	if _, err := loadSkillByID("computer-use"); err != nil {
-		t.Fatalf("computer-use skill must load: %v", err)
 	}
 }
 
