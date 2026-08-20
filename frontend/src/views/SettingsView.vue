@@ -3178,9 +3178,9 @@ onUnmounted(() => {
 }
 
 .settings-sidebar__title {
-  font-size: var(--dq-font-size-body);
-  font-weight: 600;
-  color: var(--dq-label-tertiary);
+  font-size: var(--dq-font-size-nav);
+  font-weight: 500;
+  color: var(--dq-sidebar-section-fg, var(--dq-label-tertiary));
 }
 
 .settings-sidebar__menu {
@@ -3197,9 +3197,9 @@ onUnmounted(() => {
   border: none;
   border-radius: var(--dq-radius-button);
   background: transparent;
-  color: var(--dq-label-primary);
-  font-size: var(--dq-font-size-body);
-  font-weight: 500;
+  color: var(--dq-sidebar-item-fg, var(--dq-label-secondary));
+  font-size: var(--dq-font-size-nav);
+  font-weight: 400;
   cursor: pointer;
   text-align: left;
   transition: background var(--dq-transition-hover), color var(--dq-transition-hover);
@@ -3207,12 +3207,12 @@ onUnmounted(() => {
 }
 
 .settings-sidebar__item:hover {
-  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
+  background: var(--dq-fill-tertiary);
 }
 
 .settings-sidebar__item.is-active {
   background: color-mix(in srgb, var(--dq-accent) 12%, var(--dq-fill-tertiary));
-  color: var(--dq-accent);
+  color: var(--dq-sidebar-item-active-fg, var(--dq-label-secondary));
   box-shadow: inset 2px 0 0 var(--dq-accent);
 }
 
@@ -3387,7 +3387,7 @@ onUnmounted(() => {
 .settings-form-group__title {
   margin: 0 0 4px;
   font-size: var(--dq-font-size-body);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--dq-label-primary);
 }
 

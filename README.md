@@ -13,7 +13,7 @@
 - **Turn Log is state.** Every tool call lands in SQLite (`history.db`). Recover from a crash, replay a turn, edit a tool result, or resume days later — JSONL is export-only.
 - **Everywhere.** Web · Desktop (Tauri) · CLI · TUI · Feishu / QQ / WeChat / WeCom — one engine, tools always running on your machine.
 
-[![Screenshot tour — multi-agent, Document Stage, browser preview, skills, sandbox, IM](docs/screenshots/carousel.gif)](docs/screenshots/carousel.html?lang=en)
+[![Screenshot tour — multi-agent Plan, Trajectory, Document Stage, preview annotate, experts, skills, sandbox, IM](docs/screenshots/carousel.gif)](docs/screenshots/carousel.html?lang=en)
 
 [Interactive carousel (captions)](docs/screenshots/carousel.html?lang=en) · [Architecture tour](docs/demo/product-tour.html?lang=en) · [Office co-edit tour](docs/demo/office-coedit-tour.html?lang=en&tour=1)
 
