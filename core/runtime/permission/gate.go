@@ -164,7 +164,7 @@ func (g *Gate) CheckRequest(req Request) Result {
 
 func isHostEgressTool(name string) bool {
 	switch name {
-	case "http_request", "web_fetch", "web_search":
+	case "http_request", "web_fetch", "web_search", "browser_navigate":
 		return true
 	default:
 		return false

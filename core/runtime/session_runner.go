@@ -51,6 +51,7 @@ type Engine struct {
 	stream        port.EventStream
 	sandbox       port.Sandbox
 	execution     port.ExecutionBackend
+	browser       port.Browser
 	turnRunner    *TurnRunner
 	toolCatalog   *tool.Registry
 	compactionMgr *CompactionManager
@@ -271,6 +272,13 @@ func (e *Engine) SetExecution(ex port.ExecutionBackend) {
 	e.execution = ex
 }
 
+// SetBrowser wires the CDP/headless browser manager for sticky session cleanup.
+func (e *Engine) SetBrowser(br port.Browser) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.browser = br
+}
+
 func (e *Engine) sandboxStatus() domain.SandboxStatus {
 	e.mu.Lock()
 	sb := e.sandbox
@@ -352,14 +360,19 @@ func (e *Engine) clearTurnDomains(turnID string) {
 	}
 }
 
-// RevokeSessionNetworkGrants clears Soft + Hard session network grants.
+// RevokeSessionNetworkGrants clears Soft + Hard session network grants and
+// closes any sticky browser tab for the session.
 func (e *Engine) RevokeSessionNetworkGrants(sessionID string) {
 	e.mu.Lock()
 	delete(e.sessionPerm, sessionID)
 	sb := e.sandbox
+	br := e.browser
 	e.mu.Unlock()
 	if sb != nil {
 		sb.RevokeSessionDomains(sessionID)
+	}
+	if br != nil {
+		_ = br.ClosePage(context.Background(), sessionID)
 	}
 }
 
