@@ -189,6 +189,53 @@ func TestBuiltinGitHubExpertOwnsConnectorAndGh(t *testing.T) {
 	}
 }
 
+func TestBuiltinOperatorExpertBindsComputer(t *testing.T) {
+	templates, err := LoadAgentTemplates()
+	if err != nil {
+		t.Fatalf("LoadAgentTemplates: %v", err)
+	}
+	var op *AgentTemplate
+	for i := range templates {
+		if templates[i].Agent.ID == "operator" {
+			op = &templates[i]
+			break
+		}
+	}
+	if op == nil {
+		t.Fatal("missing builtin operator agent template")
+	}
+	if op.Agent.Mode != domain.AgentModeSubagent {
+		t.Fatalf("operator mode=%s, want subagent", op.Agent.Mode)
+	}
+	if op.Agent.InheritAmbient == nil || *op.Agent.InheritAmbient {
+		t.Fatalf("operator should set inherit_ambient=false, got %v", op.Agent.InheritAmbient)
+	}
+	hasSkill := false
+	for _, id := range op.Agent.SkillIDs {
+		if id == "computer-use" {
+			hasSkill = true
+		}
+	}
+	if !hasSkill {
+		t.Fatalf("operator needs skill computer-use; skills=%v", op.Agent.SkillIDs)
+	}
+	hasComputer := false
+	for _, b := range op.Agent.Tools {
+		if b.ToolID == "computer" {
+			hasComputer = true
+			if b.RiskLevel != domain.RiskHigh {
+				t.Fatalf("computer binding risk=%s, want high", b.RiskLevel)
+			}
+		}
+	}
+	if !hasComputer {
+		t.Fatalf("operator must bind computer tool; tools=%v", op.Agent.Tools)
+	}
+	if _, err := loadSkillByID("computer-use"); err != nil {
+		t.Fatalf("computer-use skill must load: %v", err)
+	}
+}
+
 func loadSkillByID(id string) (*domain.Skill, error) {
 	templates, err := LoadSkillTemplates()
 	if err != nil {

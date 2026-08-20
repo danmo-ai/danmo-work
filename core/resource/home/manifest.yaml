@@ -11,6 +11,7 @@ agents:
   - comms
   - danmo-make
   - github
+  - operator
 skills:
   - debugging
   - novel-writing
@@ -27,3 +28,4 @@ skills:
   - danmo-make
   - deep-research
   - skill-creator
+  - computer-use
