@@ -216,15 +216,16 @@ const statusHint = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--dq-font-size-body);
+  /* Footnote tier — caption + quaternary so thinking (body/tertiary) reads first */
+  font-size: var(--dq-font-size-caption);
   font-weight: 500;
-  color: var(--dq-label-tertiary);
+  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
   transition: color 0.12s ease;
 }
 
 .tool-group__header:hover .tool-group__names,
 .tool-group.is-expanded .tool-group__names {
-  color: var(--dq-label-secondary);
+  color: var(--dq-label-tertiary);
 }
 
 .tool-group.is-running .tool-group__names,
@@ -283,7 +284,7 @@ const statusHint = computed(() => {
 }
 
 .tool-group__body :deep(.dq-tool-card__header) {
-  min-height: 24px;
+  min-height: 22px;
   padding: 1px 0;
 }
 
@@ -292,7 +293,14 @@ const statusHint = computed(() => {
 }
 
 .tool-group__body :deep(.dq-tool-card__name) {
+  font-size: var(--dq-font-size-caption);
   font-weight: 500;
+  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
+}
+
+.tool-group__body :deep(.dq-tool-card__summary),
+.tool-group__body :deep(.dq-tool-card__preview) {
+  font-size: var(--dq-font-size-caption);
   color: var(--dq-label-quaternary, var(--dq-label-tertiary));
 }
 

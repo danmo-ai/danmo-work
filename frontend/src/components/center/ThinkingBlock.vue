@@ -129,8 +129,8 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Narrative tier: body + tertiary — one step above tool footnotes (caption/quaternary) */
   font-size: var(--dq-font-size-body);
-  /* Quiet reasoning footnote — must not compete with the answer prose */
   color: var(--dq-label-tertiary);
   transition: color 0.12s ease;
 }

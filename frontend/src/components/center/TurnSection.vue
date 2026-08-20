@@ -120,7 +120,7 @@ const showStatus = () => {
 .turn-section {
   display: flex;
   flex-direction: column;
-  gap: var(--dq-chat-block-gap, 4px);
+  gap: var(--dq-chat-block-gap, 6px);
   padding-bottom: 6px;
 }
 
@@ -262,7 +262,7 @@ const showStatus = () => {
 .turn-section__body {
   display: flex;
   flex-direction: column;
-  gap: var(--dq-chat-block-gap, 4px);
+  gap: var(--dq-chat-block-gap, 6px);
 }
 
 .turn-section__agent {
@@ -305,6 +305,30 @@ const showStatus = () => {
   margin-top: 0;
   padding: 3px 0 3px 12px;
   border-left: 2px solid color-mix(in srgb, var(--dq-label-primary) 9%, transparent);
+}
+
+/* Step rhythm: breathing between thought → tools; keep consecutive tools tighter */
+.turn-section__timeline
+  :deep(.turn__event:has(> .thinking-block) + .turn__event:has(> .tool-group, > .dq-tool-card)) {
+  margin-top: 6px;
+}
+
+.turn-section__timeline
+  :deep(
+    .turn__event:has(> .tool-group, > .dq-tool-card)
+      + .turn__event:has(> .tool-group, > .dq-tool-card)
+  ) {
+  margin-top: 4px;
+}
+
+.turn-section__timeline
+  :deep(.turn__event:has(> .tool-group, > .dq-tool-card) + .turn__event:has(> .thinking-block)) {
+  margin-top: 6px;
+}
+
+.turn-section__timeline
+  :deep(.turn__event:has(> .thinking-block) + .turn__event:has(> .thinking-block)) {
+  margin-top: 4px;
 }
 
 /* Rail segments that follow prose keep breathing room before the line resumes */

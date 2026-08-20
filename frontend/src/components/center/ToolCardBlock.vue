@@ -122,3 +122,16 @@ const statusLabel = computed(() => {
     </div>
   </DqToolCard>
 </template>
+
+<style scoped>
+/* Standalone process-rail tool (rare; groups cover the common path) */
+:deep(.dq-tool-card__name),
+:deep(.dq-tool-card__summary),
+:deep(.dq-tool-card__preview) {
+  font-size: var(--dq-font-size-caption);
+}
+
+:deep(.dq-tool-card:not(.is-running):not(.is-error):not(.is-awaiting) .dq-tool-card__name) {
+  color: var(--dq-label-quaternary, var(--dq-label-tertiary));
+}
+</style>
