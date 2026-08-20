@@ -16,8 +16,8 @@
 | CLI entry | `cli/main.go` |
 | TUI entry | `tui/main.go` |
 | Frontend | `frontend/` → build to `out/frontend/dist/` |
-| Builtin home pack | `core/resource/home/` (core agents/skills; `go:embed` → `SyncBuiltinToFS`) |
-| Builtin plugins | `core/resource/plugins/` (capability packs: github / danmo-make / novel / browser / operator; `SyncBuiltinPlugins`) |
+| Builtin home pack | `core/resource/home/` (primary `team` + shared/orphan skills; `SyncBuiltinToFS`) |
+| Builtin plugins | `core/resource/plugins/` (all builtin subagent experts; `SyncBuiltinPlugins`) |
 | Reasoning dialects | `core/adapter/llm/REASONING_DIALECTS.md` + `domain.ReasoningDialectInfos` |
 | Optional OCI env | `environments/agent-base/` → CI Release asset (not in app packs); `make build-env-tar` locally |
 | Bundled ripgrep | `scripts/fetch_ripgrep.sh` → `out/rg/<target>/rg` + `~/.danmo-work/bin/rg`; desktop packs stage it into the bundle (`resources/rg/`); `make fetch-ripgrep` locally |

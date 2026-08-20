@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "researcher",
+  "version": "1.0.0",
+  "description": "Research and investigation expert (binds shared deep-research skill).",
+  "author": { "name": "Danmo" },
+  "license": "MIT",
+  "keywords": ["researcher", "research", "expert", "builtin"]
+}

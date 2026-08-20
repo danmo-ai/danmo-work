@@ -38,16 +38,23 @@ func TestSyncBuiltinToFSCopiesAgentsSkills(t *testing.T) {
 		t.Fatal("builtin skill was not overwritten")
 	}
 
-	agentPath := filepath.Join(dataDir, "agents", "explorer.md")
+	agentPath := filepath.Join(dataDir, "agents", "team.md")
 	if _, err := os.Stat(agentPath); err != nil {
-		t.Fatalf("missing builtin agent: %v", err)
+		t.Fatalf("missing builtin primary agent: %v", err)
 	}
 
 	// Migrated packs must not remain under home sync targets.
-	for _, name := range []string{"github.md", "novel.md", "browser.md", "danmo-make.md", "operator.md"} {
+	for _, name := range []string{
+		"github.md", "novel.md", "browser.md", "danmo-make.md", "operator.md",
+		"implementer.md", "explorer.md", "reviewer.md", "researcher.md",
+		"document.md", "data.md", "comms.md",
+	} {
 		if _, err := os.Stat(filepath.Join(dataDir, "agents", name)); err == nil {
 			t.Fatalf("migrated agent %s should not be synced from home", name)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "agents", "team.md")); err != nil {
+		t.Fatalf("primary team agent missing from home sync: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(paths.KnowledgeDir(), "kb-novel-craft")); err == nil {
 		t.Fatal("kb-novel-craft should not sync to KnowledgeDir from home")

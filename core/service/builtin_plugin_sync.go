@@ -25,6 +25,13 @@ var migratedBuiltinAgentFiles = []string{
 	"novel.md",
 	"browser.md",
 	"operator.md",
+	"implementer.md",
+	"explorer.md",
+	"reviewer.md",
+	"researcher.md",
+	"document.md",
+	"data.md",
+	"comms.md", // merged into document plugin
 }
 
 var migratedBuiltinSkillDirs = []string{

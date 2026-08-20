@@ -1,13 +1,6 @@
 version: "1"
 agents:
-  - implementer
-  - reviewer
-  - explorer
-  - researcher
-  - document
-  - data
   - team
-  - comms
 skills:
   - debugging
   - playable-slides

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "data",
+  "version": "1.0.0",
+  "description": "Data analysis and reporting expert.",
+  "author": { "name": "Danmo" },
+  "license": "MIT",
+  "keywords": ["data", "analysis", "expert", "builtin"]
+}
