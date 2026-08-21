@@ -24,6 +24,15 @@ const emit = defineEmits<{
   download: []
 }>()
 
+function onToggleCollapse(event?: MouseEvent) {
+  // Blur before body show/hide so the browser doesn't keep-focus-scroll the
+  // header control and leave the session scroller feeling stuck.
+  const t = event?.currentTarget
+  if (t instanceof HTMLElement) t.blur()
+  emit('toggle-collapse')
+}
+
+
 const { t } = useI18n()
 
 function turnStatusLabel(status?: string) {
@@ -57,7 +66,7 @@ const showStatus = () => {
         'is-running': turn.status === 'running' || summary.runningTools > 0,
         'is-failed': turn.status === 'failed' || turn.status === 'timeout' || summary.errorTools > 0,
       }"
-      @click="emit('toggle-collapse')"
+      @click="onToggleCollapse($event)"
     >
       <div class="turn-section__header-left">
         <button
@@ -66,7 +75,7 @@ const showStatus = () => {
           :class="{ 'is-collapsed': collapsed }"
           :aria-label="collapsed ? t('sessions.expandTurn') : t('sessions.collapseTurn')"
           :title="collapsed ? t('sessions.expandTurn') : t('sessions.collapseTurn')"
-          @click.stop="emit('toggle-collapse')"
+          @click.stop="onToggleCollapse($event)"
         >
           <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="6 9 12 15 18 9" />
