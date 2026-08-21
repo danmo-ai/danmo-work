@@ -193,6 +193,7 @@ onBeforeUnmount(() => {
 .thinking-block__body {
   max-height: 280px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   margin: 4px 0 6px;
   padding: 8px 10px;
   border-radius: 8px;

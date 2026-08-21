@@ -14,7 +14,8 @@
     "test:composer-experts": "node --experimental-strip-types scripts/test-composer-experts.mjs",
     "test:novel-workbench": "node --experimental-strip-types scripts/test-novel-workbench.mjs",
     "check-i18n": "NODE_ENV=production node --experimental-strip-types scripts/check-i18n.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:nested-scroll": "node --experimental-strip-types scripts/test-nested-scroll-chain.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.8.0",

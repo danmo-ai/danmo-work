@@ -36,6 +36,7 @@ import {
 } from '@danqing/dq-shell'
 import type { RightWorkspaceTab } from '@/stores/workspaceUi'
 import { renderMarkdown } from '@/utils/markdown-render'
+import { nestedWheelRedirectDelta } from '@/utils/nested-scroll-chain'
 import { toast } from '@/utils/feedback'
 import { apiBaseUrl, saveBlobAs } from '@/utils/desktop'
 import type { ElementAttachment } from '@/types/element-attachment'
@@ -308,10 +309,13 @@ onMounted(() => {
       composerResizeObs = new ResizeObserver(() => updateComposerOverlayHeight())
       composerResizeObs.observe(composerWrapRef.value)
     }
+    // Non-passive so we can preventDefault when nested scrollports trap the wheel.
+    scrollAreaRef.value?.addEventListener('wheel', onScrollAreaWheel, { passive: false })
   })
   window.addEventListener('resize', syncComposerLayout)
 })
 onUnmounted(() => {
+  scrollAreaRef.value?.removeEventListener('wheel', onScrollAreaWheel)
   composerResizeObs?.disconnect()
   composerResizeObs = null
   window.removeEventListener('resize', syncComposerLayout)
@@ -667,6 +671,40 @@ const {
   toggleTurnBodyCollapse,
   clearCollapseOverrides,
 } = useTurnCollapse(() => visibleTurns.value)
+
+/**
+ * Expand/collapse mid-turn process without leaving the fold control focused.
+ * A focused button + large layout insert makes browsers keep-focus-scroll the
+ * control, which fights the stream scroller until a wheel gesture "unlocks" it.
+ * Pin the control's viewport position so expand doesn't jump the transcript.
+ */
+async function onProcessFoldClick(turnId: string, event: MouseEvent) {
+  const root = scrollAreaRef.value
+  const btn = event.currentTarget as HTMLElement | null
+  const anchorTop = btn?.getBoundingClientRect().top
+  const wasCollapsed = isProcessCollapsed(turnId)
+  btn?.blur()
+  toggleProcessCollapse(turnId)
+  await nextTick()
+  if (root && btn && anchorTop != null) {
+    const nextTop = btn.getBoundingClientRect().top
+    root.scrollTop += nextTop - anchorTop
+  }
+  // Expanding process usually moves the user away from the live bottom.
+  if (wasCollapsed) userScrolledUp.value = true
+  // Keep keyboard PageUp/Down targeting the transcript scroller.
+  root?.focus({ preventScroll: true })
+}
+
+/** Redirect nested wheel/trackpad deltas to the session scroller when trapped. */
+function onScrollAreaWheel(event: WheelEvent) {
+  const root = scrollAreaRef.value
+  if (!root || event.ctrlKey || event.defaultPrevented) return
+  const delta = nestedWheelRedirectDelta(root, event.target, event.deltaX, event.deltaY)
+  if (delta == null) return
+  event.preventDefault()
+  root.scrollTop += delta
+}
 
 /** Drill-in crumbs are always two levels: 全部 Turn / current turn.
  *  Do not walk parentTurnId into the trail (that made parent→sub look like three). */
@@ -1725,6 +1763,7 @@ function onTitleKeydown(e: KeyboardEvent) {
       <div
         ref="scrollAreaRef"
         class="session-workspace__scroll"
+        tabindex="-1"
         :class="{ 'has-approval-rail': (approvalAnchors?.length ?? 0) > 0 }"
         :style="{ paddingBottom: `${composerOverlayPx + 28}px` }"
         @scroll="onScrollAreaScroll"
@@ -1776,7 +1815,7 @@ function onTitleKeydown(e: KeyboardEvent) {
                 type="button"
                 class="turn__process-fold"
                 :class="{ 'is-collapsed': isProcessCollapsed(turn.id) }"
-                @click="toggleProcessCollapse(turn.id)"
+                @click="onProcessFoldClick(turn.id, $event)"
               >
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <polyline points="6 9 12 15 18 9" />
@@ -2190,6 +2229,9 @@ function onTitleKeydown(e: KeyboardEvent) {
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* Keyboard focus target after fold toggles — no visible ring (mouse users). */
+  outline: none;
+  overscroll-behavior: contain;
 }
 
 
