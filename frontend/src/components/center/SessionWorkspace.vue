@@ -680,20 +680,26 @@ const {
  */
 async function onProcessFoldClick(turnId: string, event: MouseEvent) {
   const root = scrollAreaRef.value
-  const btn = event.currentTarget as HTMLElement | null
-  const anchorTop = btn?.getBoundingClientRect().top
+  const btn = (event.currentTarget as HTMLElement | null) ?? (event.target as HTMLElement | null)?.closest('button')
+  const anchorTop = btn?.getBoundingClientRect().top ?? null
   const wasCollapsed = isProcessCollapsed(turnId)
-  btn?.blur()
+
+  // Toggle first so a blur/focus side-effect cannot race the override Map update.
   toggleProcessCollapse(turnId)
+
+  // Drop button focus after state flips — keep-focus-scroll was fighting the stream scroller.
+  if (btn && document.activeElement === btn) btn.blur()
+
   await nextTick()
   if (root && btn && anchorTop != null) {
     const nextTop = btn.getBoundingClientRect().top
     root.scrollTop += nextTop - anchorTop
   }
-  // Expanding process usually moves the user away from the live bottom.
   if (wasCollapsed) userScrolledUp.value = true
-  // Keep keyboard PageUp/Down targeting the transcript scroller.
-  root?.focus({ preventScroll: true })
+  // Defer focus so it cannot run in the same turn as the collapse override write.
+  requestAnimationFrame(() => {
+    root?.focus({ preventScroll: true })
+  })
 }
 
 /** Redirect nested wheel/trackpad deltas to the session scroller when trapped. */
