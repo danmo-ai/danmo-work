@@ -68,6 +68,50 @@ func TestSyncBuiltinPluginsMaterializesPacks(t *testing.T) {
 	}
 }
 
+func TestSyncBuiltinPluginsRemovesRetiredOperatorPlugin(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("WORK_HOME", root)
+	dataDir := filepath.Join(root, "data")
+	pluginsDir := filepath.Join(root, "plugins")
+	legacy := filepath.Join(pluginsDir, "operator")
+	if err := os.MkdirAll(legacy, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacy, "plugin.json"), []byte(`{"name":"operator"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	installedPath := filepath.Join(pluginsDir, "installed.json")
+	manifest := domain.PluginInstalledManifest{
+		Plugins: map[string]domain.PluginInstalled{
+			"operator": {Name: "operator", RootPath: legacy, Builtin: true},
+		},
+	}
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(installedPath, append(data, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SyncBuiltinPlugins(dataDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(legacy); err == nil {
+		t.Fatal("retired operator plugin dir should be removed")
+	}
+	got, err := os.ReadFile(installedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), `"operator"`) {
+		t.Fatalf("installed.json still references operator: %s", got)
+	}
+	if _, err := os.Stat(filepath.Join(pluginsDir, "computer", "plugin.json")); err != nil {
+		t.Fatalf("computer plugin missing: %v", err)
+	}
+}
+
 func TestSyncBuiltinPluginsIdempotent(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("WORK_HOME", root)

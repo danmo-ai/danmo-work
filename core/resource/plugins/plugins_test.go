@@ -12,7 +12,7 @@ func TestBuiltinPluginNames(t *testing.T) {
 	names := BuiltinPluginNames()
 	want := map[string]bool{
 		"github": true, "danmo-make": true, "novel": true,
-		"browser": true, "operator": true,
+		"browser": true, "computer": true,
 		"implementer": true, "explorer": true, "reviewer": true,
 		"researcher": true, "document": true, "data": true,
 	}
@@ -93,11 +93,11 @@ func TestNovelPluginPacksSkillAndCraftKB(t *testing.T) {
 	}
 }
 
-func TestBrowserAndOperatorPluginsPackSkills(t *testing.T) {
+func TestBrowserAndComputerPluginsPackSkills(t *testing.T) {
 	if _, err := fs.ReadFile(FS, "browser/skills/browser/SKILL.md"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fs.ReadFile(FS, "operator/skills/computer-use/SKILL.md"); err != nil {
+	if _, err := fs.ReadFile(FS, "computer/skills/computer-use/SKILL.md"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -118,7 +118,7 @@ func TestThinCodingPluginsRelyOnHomeSkills(t *testing.T) {
 func TestBuiltinPluginCategories(t *testing.T) {
 	want := map[string]string{
 		"implementer": "coding", "explorer": "coding", "reviewer": "coding", "github": "coding",
-		"researcher": "research", "browser": "research", "operator": "research",
+		"researcher": "research", "browser": "research", "computer": "research",
 		"document": "office", "data": "office",
 		"novel": "creative", "danmo-make": "creative",
 	}

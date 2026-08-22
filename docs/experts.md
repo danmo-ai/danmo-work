@@ -71,7 +71,7 @@ delegate_agent(agent_id="<id>", goal="...")
 | 编码 | `github` | GitHub | 专家 + skill + bound MCP |
 | 调研/自动化 | `researcher` | Researcher | 专家（技能用 home：deep-research） |
 | 调研/自动化 | `browser` | Browser | 专家 + skill + `browser_*` |
-| 调研/自动化 | `operator` | Operator | 专家 + `computer-use` + `computer` |
+| 调研/自动化 | `computer` | Computer | 专家 + `computer-use` + `computer` |
 | 职场写作 | `document` | Document | 专家（含原 Comms：邮件/消息/通知；技能用 home） |
 | 职场写作 | `data` | Data | 专家 |
 | 创作 | `novel` | Novel Writing | 专家 + `novel-writing` + KB `kb-novel-craft` |

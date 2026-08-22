@@ -24,7 +24,8 @@ var migratedBuiltinAgentFiles = []string{
 	"danmo-make.md",
 	"novel.md",
 	"browser.md",
-	"operator.md",
+	"operator.md", // legacy id before rename to computer
+	"computer.md",
 	"implementer.md",
 	"explorer.md",
 	"reviewer.md",
@@ -44,6 +45,11 @@ var migratedBuiltinSkillDirs = []string{
 
 var migratedBuiltinKnowledgeDirs = []string{
 	"kb-novel-craft",
+}
+
+// retiredBuiltinPlugins are embedded pack names removed or renamed; cleaned on every sync.
+var retiredBuiltinPlugins = []string{
+	"operator", // renamed to computer
 }
 
 // SyncBuiltinPlugins materializes embedded first-party plugins into
@@ -66,6 +72,7 @@ func SyncBuiltinPlugins(dataDir string) error {
 
 	// Always strip migrated leftovers so native agents cannot shadow plugins.
 	cleanMigratedBuiltinLeftovers(dataDir)
+	cleanRetiredBuiltinPlugins(pluginsDir)
 
 	if hashMatches {
 		return ensureBuiltinInstalledRecords(pluginsDir)
@@ -160,6 +167,10 @@ func ensureBuiltinInstalledRecords(pluginsDir string) error {
 		}
 	}
 
+	for _, name := range retiredBuiltinPlugins {
+		delete(installed, name)
+	}
+
 	m := domain.PluginInstalledManifest{Plugins: installed}
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
@@ -178,6 +189,17 @@ func loadPluginManifestFile(root string) (*domain.PluginManifest, error) {
 		return nil, err
 	}
 	return &mf, nil
+}
+
+func cleanRetiredBuiltinPlugins(pluginsDir string) {
+	for _, name := range retiredBuiltinPlugins {
+		path := filepath.Join(pluginsDir, name)
+		if _, err := os.Stat(path); err != nil {
+			continue
+		}
+		log.Printf("[builtin-plugins] removing retired plugin: %s", name)
+		_ = os.RemoveAll(path)
+	}
 }
 
 func cleanMigratedBuiltinLeftovers(dataDir string) {

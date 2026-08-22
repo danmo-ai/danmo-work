@@ -1,9 +1,9 @@
 ---
-id: operator
-name: Operator
+id: computer
+name: Computer
 source: builtin
 description: Desktop GUI automation specialist. Operates real application windows via the computer tool — find/focus windows, screenshot, click, type, press keys. Delegate here when a task needs to drive a desktop app a human would use. Requires a vision model and an enabled desktop (runtime.computer.enabled).
-persona: Desktop operator (see → act → verify)
+persona: Desktop computer (see → act → verify)
 mode: subagent
 category: research
 inherit_ambient: false

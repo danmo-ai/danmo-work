@@ -7,5 +7,5 @@ import "embed"
 // Subagent experts live here; shared skills stay in core/resource/home.
 // Primary lead agent (team) remains in home.
 //
-//go:embed all:github all:danmo-make all:novel all:browser all:operator all:implementer all:explorer all:reviewer all:researcher all:document all:data
+//go:embed all:github all:danmo-make all:novel all:browser all:computer all:implementer all:explorer all:reviewer all:researcher all:document all:data
 var FS embed.FS

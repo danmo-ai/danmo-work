@@ -1,9 +1,9 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "operator",
+  "name": "computer",
   "version": "1.0.0",
   "description": "Desktop GUI automation expert: computer tool + computer-use skill.",
   "author": { "name": "Danmo" },
   "license": "MIT",
-  "keywords": ["operator", "computer-use", "expert", "builtin", "desktop"]
+  "keywords": ["computer", "computer-use", "expert", "builtin", "desktop"]
 }
