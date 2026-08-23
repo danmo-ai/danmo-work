@@ -44,6 +44,21 @@ const projects = useProjectsStore()
 const themeStore = useThemeStore()
 const localeStore = useLocaleStore()
 
+const primaryAgents = computed(() =>
+  sessions.agents.filter((a) => a.mode !== 'subagent'),
+)
+
+function defaultPrimaryAgentId(): string {
+  return primaryAgents.value[0]?.id ?? ''
+}
+
+function resolveChannelAgentId(configured?: string): string {
+  if (configured && primaryAgents.value.some((a) => a.id === configured)) {
+    return configured
+  }
+  return defaultPrimaryAgentId()
+}
+
 const LANGUAGE_OPTIONS: { id: LocalePreference; labelKey: string }[] = [
   { id: 'system', labelKey: 'settings.languageSystem' },
   { id: 'zh-CN', labelKey: 'settings.languageZhCN' },
@@ -535,17 +550,17 @@ onMounted(async () => {
   if (weixin.status) {
     weixinForm.value = {
       enabled: weixin.status.enabled,
-      defaultAgentId: weixin.status.defaultAgentId || sessions.agents[0]?.id || '',
+      defaultAgentId: resolveChannelAgentId(weixin.status.defaultAgentId),
       defaultModelId: weixin.status.defaultModelId || '',
       autoApprove: !!weixin.status.autoApprove,
     }
-  } else if (sessions.agents.length) {
-    weixinForm.value.defaultAgentId = sessions.agents[0].id
+  } else if (primaryAgents.value.length) {
+    weixinForm.value.defaultAgentId = defaultPrimaryAgentId()
   }
   if (feishu.status) {
     feishuForm.value = {
       enabled: feishu.status.enabled,
-      defaultAgentId: feishu.status.defaultAgentId || sessions.agents[0]?.id || '',
+      defaultAgentId: resolveChannelAgentId(feishu.status.defaultAgentId),
       defaultModelId: feishu.status.defaultModelId || '',
       autoApprove: !!feishu.status.autoApprove,
       domain: (feishu.status.domain === 'lark' ? 'lark' : 'feishu'),
@@ -554,8 +569,8 @@ onMounted(async () => {
       projectId: feishu.status.projectId || projects.sortedProjects[0]?.id || '',
       richProgress: feishu.status.richProgress !== false,
     }
-  } else if (sessions.agents.length) {
-    feishuForm.value.defaultAgentId = sessions.agents[0].id
+  } else if (primaryAgents.value.length) {
+    feishuForm.value.defaultAgentId = defaultPrimaryAgentId()
     if (!feishuForm.value.projectId && projects.sortedProjects.length) {
       feishuForm.value.projectId = projects.sortedProjects[0].id
     }
@@ -563,7 +578,7 @@ onMounted(async () => {
   if (wecom.status) {
     wecomForm.value = {
       enabled: wecom.status.enabled,
-      defaultAgentId: wecom.status.defaultAgentId || sessions.agents[0]?.id || '',
+      defaultAgentId: resolveChannelAgentId(wecom.status.defaultAgentId),
       defaultModelId: wecom.status.defaultModelId || '',
       autoApprove: wecom.status.autoApprove !== false,
       botId: wecom.status.botId || '',
@@ -571,8 +586,8 @@ onMounted(async () => {
       wsUrl: wecom.status.wsUrl || '',
       projectId: wecom.status.projectId || projects.sortedProjects[0]?.id || '',
     }
-  } else if (sessions.agents.length) {
-    wecomForm.value.defaultAgentId = sessions.agents[0].id
+  } else if (primaryAgents.value.length) {
+    wecomForm.value.defaultAgentId = defaultPrimaryAgentId()
     if (!wecomForm.value.projectId && projects.sortedProjects.length) {
       wecomForm.value.projectId = projects.sortedProjects[0].id
     }
@@ -580,7 +595,7 @@ onMounted(async () => {
   if (qq.status) {
     qqForm.value = {
       enabled: qq.status.enabled,
-      defaultAgentId: qq.status.defaultAgentId || sessions.agents[0]?.id || '',
+      defaultAgentId: resolveChannelAgentId(qq.status.defaultAgentId),
       defaultModelId: qq.status.defaultModelId || '',
       autoApprove: !!qq.status.autoApprove,
       appId: qq.status.appId || '',
@@ -590,8 +605,8 @@ onMounted(async () => {
       requireMention: qq.status.requireMention !== false,
       nativeC2cStream: qq.status.nativeC2cStream !== false,
     }
-  } else if (sessions.agents.length) {
-    qqForm.value.defaultAgentId = sessions.agents[0].id
+  } else if (primaryAgents.value.length) {
+    qqForm.value.defaultAgentId = defaultPrimaryAgentId()
     if (!qqForm.value.projectId && projects.sortedProjects.length) {
       qqForm.value.projectId = projects.sortedProjects[0].id
     }
@@ -1837,7 +1852,7 @@ onUnmounted(() => {
               <span class="settings-field__label">{{ $t('settings.weixinDefaultAgent') }}</span>
               <DqSelect v-model="weixinForm.defaultAgentId" :placeholder="$t('settings.weixinSelectAgent')">
                 <DqOption
-                  v-for="a in sessions.agents"
+                  v-for="a in primaryAgents"
                   :key="a.id"
                   :value="a.id"
                   :label="a.name || a.id"
@@ -1971,7 +1986,7 @@ onUnmounted(() => {
               <span class="settings-field__label">{{ $t('settings.weixinDefaultAgent') }}</span>
               <DqSelect v-model="feishuForm.defaultAgentId" :placeholder="$t('settings.weixinSelectAgent')">
                 <DqOption
-                  v-for="a in sessions.agents"
+                  v-for="a in primaryAgents"
                   :key="a.id"
                   :value="a.id"
                   :label="a.name || a.id"
@@ -2072,7 +2087,7 @@ onUnmounted(() => {
               <span class="settings-field__label">{{ $t('settings.weixinDefaultAgent') }}</span>
               <DqSelect v-model="qqForm.defaultAgentId" :placeholder="$t('settings.weixinSelectAgent')">
                 <DqOption
-                  v-for="a in sessions.agents"
+                  v-for="a in primaryAgents"
                   :key="a.id"
                   :value="a.id"
                   :label="a.name || a.id"
@@ -2273,7 +2288,7 @@ onUnmounted(() => {
               <span class="settings-field__label">{{ $t('settings.weixinDefaultAgent') }}</span>
               <DqSelect v-model="wecomForm.defaultAgentId" :placeholder="$t('settings.weixinSelectAgent')">
                 <DqOption
-                  v-for="a in sessions.agents"
+                  v-for="a in primaryAgents"
                   :key="a.id"
                   :value="a.id"
                   :label="a.name || a.id"

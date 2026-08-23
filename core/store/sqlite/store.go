@@ -221,6 +221,9 @@ func (s *Store) migrate() error {
 	if err := migrateKnowledgeSchema(s.db); err != nil {
 		return err
 	}
+	if err := migrateUsageRollupCache(s.db); err != nil {
+		return err
+	}
 	return nil
 }
 

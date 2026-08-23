@@ -95,6 +95,9 @@ func wecomConfigure(h *Handler) gin.HandlerFunc {
 		if req.ProjectID != "" {
 			wc.ProjectID = req.ProjectID
 		}
+		if !validateChannelDefaultAgent(h, c, wc.DefaultAgentID) {
+			return
+		}
 		if req.Enabled {
 			if wc.DefaultAgentID == "" {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "defaultAgentId required when enabling wecom"})

@@ -7,7 +7,7 @@
 **必读（上限：这些文件本身，禁止扩读）：**
 
 1. `novel-state.yaml` — stage、`frozen_batch`、`gates`、`blockers`、`qc_profile`。
-2. 本章 `chapters/chNNN-contract.yaml`（写正文时须 `accepted` 或用户明示豁免）。
+2. 本章 `chapters/chNNN-contract.yaml`（写正文时须 `accepted` 或用户明示豁免；`unit_id` 非空且能在本卷纲剧情单元表对上）。
 3. `continuity/chapter_summaries.md` **近 3 章**尾部（不要整本摘要）。
 4. `table_query` 开放 `foreshadows`、`continuity_issues`、`reader_debts`（若有）。
 
@@ -43,4 +43,4 @@ blockers: []  # 人类可读阻断原因
 
 ## 阻断
 
-缺少必读文件、合同非 `accepted`（写正文时）、Frozen_Canon 空（续写）、批次未冻结（批量写）→ **停止**，列缺失项。
+缺少必读文件、合同非 `accepted`（写正文时）、`unit_id` 空或对不上卷纲单元、Frozen_Canon 空（续写）、批次未冻结（批量写）→ **停止**，列缺失项。空/错 `unit_id` 退回 `novel-plan` 补卷纲，不要空造合同。

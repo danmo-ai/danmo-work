@@ -237,3 +237,95 @@ func TestScanBuiltinKnowledgeDir(t *testing.T) {
 		t.Fatal("expected search hits in novel craft KB")
 	}
 }
+
+func TestScanKnowledgeDirPrunesStaleAndReadsPluginFiles(t *testing.T) {
+	dir := t.TempDir()
+	st, err := sqlitestore.New(filepath.Join(dir, "work.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(dir, "knowledge")
+	mgr := service.NewKnowledgeManager(
+		st.KnowledgeBases(),
+		st.KnowledgeDocs(),
+		st.KnowledgeIndex(),
+		root,
+		nil,
+	)
+	ctx := context.Background()
+	const kbID = "kb-novel-craft"
+	pluginKB := filepath.Join(dir, "plugins", "novel", "ai.danmo.work", "knowledge")
+	if err := os.MkdirAll(pluginKB, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginKB, "_meta.json"), []byte(
+		`{"id":"kb-novel-craft","name":"小说创作技法"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginKB, "05-style-deslop.md"), []byte(
+		"# 文风与去 AI 味\n\nP0 阻断套话。\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	now := "2026-01-01T00:00:00Z"
+	stale := []domain.KnowledgeDoc{
+		{ID: "doc-kb-novel-craft-07-anti-ai-prose", KBID: kbID, Title: "去 AI 味（P0 / P1）", Path: kbID + "/07-anti-ai-prose.md", CreatedAt: now, UpdatedAt: now},
+		{ID: "05-style-deslop", KBID: kbID, Title: "文风与去 AI 味", Path: kbID + "/05-style-deslop.md", CreatedAt: now, UpdatedAt: now},
+	}
+	if err := st.KnowledgeBases().Upsert(ctx, domain.KnowledgeBase{ID: kbID, Name: "小说创作技法", CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range stale {
+		if err := st.KnowledgeDocs().Upsert(ctx, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mgr.SetPluginKBRoots([]string{pluginKB})
+	if err := mgr.ScanPluginBase(ctx, pluginKB); err != nil {
+		t.Fatal(err)
+	}
+
+	docs, err := mgr.ListDocs(ctx, kbID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(docs) != 1 {
+		t.Fatalf("docs=%d want 1 after prune, got %#v", len(docs), docs)
+	}
+	if docs[0].ID != "doc-kb-novel-craft-05-style-deslop" {
+		t.Fatalf("id=%q", docs[0].ID)
+	}
+	got, err := mgr.GetDoc(ctx, docs[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got.Content, "P0 阻断套话") {
+		t.Fatalf("content=%q", got.Content)
+	}
+
+	userRel := filepath.Join(root, kbID)
+	if err := os.MkdirAll(userRel, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	userDoc := domain.KnowledgeDoc{
+		ID: "doc-user-note", KBID: kbID, Title: "作者笔记",
+		Path: kbID + "/doc-user-note.md", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := os.WriteFile(filepath.Join(userRel, "doc-user-note.md"), []byte("# 作者笔记\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.KnowledgeDocs().Upsert(ctx, userDoc); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.ScanPluginBase(ctx, pluginKB); err != nil {
+		t.Fatal(err)
+	}
+	docs, err = mgr.ListDocs(ctx, kbID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(docs) != 2 {
+		t.Fatalf("user doc should survive prune: %#v", docs)
+	}
+}

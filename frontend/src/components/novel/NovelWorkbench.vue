@@ -95,7 +95,8 @@ const readPane = ref<'contract' | 'prose' | null>(null)
 /** Chapter number for detail page when pane has no file yet. */
 const readChapterNum = ref<number | null>(null)
 const activeBookId = ref<string | null>(null)
-const treeOpen = ref({ outline: true, setup: false, setupWorld: true, setupCast: true, prose: true })
+const treeOpen = ref<string[]>(['outline', 'prose'])
+const setupOpen = ref<string[]>(['world', 'cast'])
 const bookOutlineRows = ref<BookOutlineVolumeRow[]>([])
 const volumeUnitRows = ref<Record<string, VolumeUnitRow[]>>({})
 const treeSel = ref<{ kind: 'book' | 'volume' | 'setup' | 'chapter'; name?: string; n?: number }>({
@@ -481,13 +482,10 @@ async function openBook(bookId: string, opts?: { keepView?: boolean }) {
     await loadBatchFreezeStatus(bookId)
     await loadChapterMeta(bookId, chapterEntries.value)
     await loadOutlinePreviews(bookId)
-    treeOpen.value = {
-      outline: !chapterEntries.value.some((e) => Boolean(e.prose)),
-      setup: false,
-      setupWorld: true,
-      setupCast: true,
-      prose: true,
-    }
+    treeOpen.value = chapterEntries.value.some((e) => Boolean(e.prose))
+      ? ['prose']
+      : ['outline', 'prose']
+    setupOpen.value = ['world', 'cast']
     void persistActiveBook(bookId)
     if (!opts?.keepView) void selectBookOutline()
   } catch {
@@ -773,106 +771,93 @@ function escapeHtml(s: string) {
     <template v-else-if="view === 'book' && selectedBookId">
       <div class="novel-wb__book">
         <aside class="novel-wb__tree">
-          <button type="button" class="novel-wb__folder" @click="treeOpen.outline = !treeOpen.outline">
-            <span class="novel-wb__twist">{{ treeOpen.outline ? '▾' : '▸' }}</span>
-            {{ t('novelWorkbench.folderOutline') }}
-          </button>
-          <template v-if="treeOpen.outline">
-            <button
-              type="button"
-              class="novel-wb__tree-item"
-              :class="{ 'novel-wb__tree-item--on': treeSel.kind === 'book' }"
-              @click="selectBookOutline()"
-            >
-              {{ t('novelWorkbench.bookOutline') }}
-            </button>
-            <button
-              v-for="v in visibleVolumeFiles"
-              :key="v.name"
-              type="button"
-              class="novel-wb__tree-item"
-              :class="{ 'novel-wb__tree-item--on': treeSel.kind === 'volume' && treeSel.name === v.name }"
-              @click="selectVolume(v)"
-            >
-              {{ volumeLabel(v.name) }}
-            </button>
-            <button type="button" class="novel-wb__tree-item novel-wb__tree-item--ghost" @click="runAction('volume', undefined, undefined, nextVolume)">
-              + {{ t('novelWorkbench.actionVolumeOutline', { n: nextVolume }) }}
-            </button>
-          </template>
-
-          <button type="button" class="novel-wb__folder" @click="treeOpen.setup = !treeOpen.setup">
-            <span class="novel-wb__twist">{{ treeOpen.setup ? '▾' : '▸' }}</span>
-            {{ t('novelWorkbench.folderSetup') }}
-          </button>
-          <template v-if="treeOpen.setup">
-            <button
-              type="button"
-              class="novel-wb__tree-item"
-              :class="{ 'novel-wb__tree-item--on': treeSel.kind === 'setup' && treeSel.name === 'book-bible.md' }"
-              @click="selectSetupDoc(novelBiblePath(selectedBookId), 'book-bible.md')"
-            >
-              {{ t('novelWorkbench.setupDoc_bible') }}
-            </button>
-            <button type="button" class="novel-wb__folder novel-wb__folder--sub" @click="treeOpen.setupWorld = !treeOpen.setupWorld">
-              <span class="novel-wb__twist">{{ treeOpen.setupWorld ? '▾' : '▸' }}</span>
-              {{ t('novelWorkbench.folderSetupWorld') }}
-            </button>
-            <template v-if="treeOpen.setupWorld">
+          <DqCollapse v-model="treeOpen">
+            <DqCollapseItem name="outline" :title="t('novelWorkbench.folderOutline')">
               <button
-                v-for="f in worldDocs"
-                :key="f.name"
                 type="button"
-                class="novel-wb__tree-item novel-wb__tree-item--nested"
-                :class="{ 'novel-wb__tree-item--on': treeSel.kind === 'setup' && treeSel.name === f.name }"
-                @click="selectSetupDoc(f.path || `${novelCanonDir(selectedBookId)}/${f.name}`, f.name)"
+                class="novel-wb__tree-item"
+                :class="{ 'novel-wb__tree-item--on': treeSel.kind === 'book' }"
+                @click="selectBookOutline()"
               >
-                {{ setupDocTitle(f.name) }}
+                {{ t('novelWorkbench.bookOutline') }}
               </button>
-              <p v-if="!worldDocs.length" class="novel-wb__tree-unit">{{ t('novelWorkbench.noCanonYet') }}</p>
-            </template>
-            <button type="button" class="novel-wb__folder novel-wb__folder--sub" @click="treeOpen.setupCast = !treeOpen.setupCast">
-              <span class="novel-wb__twist">{{ treeOpen.setupCast ? '▾' : '▸' }}</span>
-              {{ t('novelWorkbench.folderSetupCast') }}
-            </button>
-            <template v-if="treeOpen.setupCast">
               <button
-                v-for="f in castDocs"
-                :key="f.name"
+                v-for="v in visibleVolumeFiles"
+                :key="v.name"
                 type="button"
-                class="novel-wb__tree-item novel-wb__tree-item--nested"
-                :class="{ 'novel-wb__tree-item--on': treeSel.kind === 'setup' && treeSel.name === f.name }"
-                @click="selectSetupDoc(f.path || `${novelCastDir(selectedBookId)}/${f.name}`, f.name)"
+                class="novel-wb__tree-item"
+                :class="{ 'novel-wb__tree-item--on': treeSel.kind === 'volume' && treeSel.name === v.name }"
+                @click="selectVolume(v)"
               >
-                {{ setupDocTitle(f.name) }}
+                {{ volumeLabel(v.name) }}
               </button>
-            </template>
-          </template>
+              <button type="button" class="novel-wb__tree-item novel-wb__tree-item--ghost" @click="runAction('volume', undefined, undefined, nextVolume)">
+                + {{ t('novelWorkbench.actionVolumeOutline', { n: nextVolume }) }}
+              </button>
+            </DqCollapseItem>
 
-          <button type="button" class="novel-wb__folder" @click="treeOpen.prose = !treeOpen.prose">
-            <span class="novel-wb__twist">{{ treeOpen.prose ? '▾' : '▸' }}</span>
-            {{ t('novelWorkbench.folderProse') }}
-            <span class="novel-wb__tree-meta">{{ treeChapters.length }}</span>
-          </button>
-          <template v-if="treeOpen.prose">
-            <button
-              v-for="entry in treeChapters"
-              :key="entry.chapter"
-              type="button"
-              class="novel-wb__tree-item"
-              :class="{
-                'novel-wb__tree-item--on': treeSel.kind === 'chapter' && treeSel.n === entry.chapter,
-                'novel-wb__tree-item--dim': !entry.prose,
-              }"
-              @click="selectChapter(entry.chapter, entry.prose ? 'prose' : 'contract')"
-            >
-              <span>{{ chapterTreeName(entry) }}</span>
-              <span v-if="!entry.prose && entry.contract" class="novel-wb__tree-meta">
-                {{ t('novelWorkbench.contractOnly') }}
-              </span>
-            </button>
-            <p v-if="!treeChapters.length" class="novel-wb__tree-unit">{{ t('novelWorkbench.noChapters') }}</p>
-          </template>
+            <DqCollapseItem name="setup" :title="t('novelWorkbench.folderSetup')">
+              <button
+                type="button"
+                class="novel-wb__tree-item"
+                :class="{ 'novel-wb__tree-item--on': treeSel.kind === 'setup' && treeSel.name === 'book-bible.md' }"
+                @click="selectSetupDoc(novelBiblePath(selectedBookId), 'book-bible.md')"
+              >
+                {{ t('novelWorkbench.setupDoc_bible') }}
+              </button>
+              <DqCollapse v-model="setupOpen" class="novel-wb__tree-sub">
+                <DqCollapseItem name="world" :title="t('novelWorkbench.folderSetupWorld')">
+                  <button
+                    v-for="f in worldDocs"
+                    :key="f.name"
+                    type="button"
+                    class="novel-wb__tree-item novel-wb__tree-item--nested"
+                    :class="{ 'novel-wb__tree-item--on': treeSel.kind === 'setup' && treeSel.name === f.name }"
+                    @click="selectSetupDoc(f.path || `${novelCanonDir(selectedBookId)}/${f.name}`, f.name)"
+                  >
+                    {{ setupDocTitle(f.name) }}
+                  </button>
+                  <p v-if="!worldDocs.length" class="novel-wb__tree-unit">{{ t('novelWorkbench.noCanonYet') }}</p>
+                </DqCollapseItem>
+                <DqCollapseItem name="cast" :title="t('novelWorkbench.folderSetupCast')">
+                  <button
+                    v-for="f in castDocs"
+                    :key="f.name"
+                    type="button"
+                    class="novel-wb__tree-item novel-wb__tree-item--nested"
+                    :class="{ 'novel-wb__tree-item--on': treeSel.kind === 'setup' && treeSel.name === f.name }"
+                    @click="selectSetupDoc(f.path || `${novelCastDir(selectedBookId)}/${f.name}`, f.name)"
+                  >
+                    {{ setupDocTitle(f.name) }}
+                  </button>
+                </DqCollapseItem>
+              </DqCollapse>
+            </DqCollapseItem>
+
+            <DqCollapseItem name="prose">
+              <template #title>
+                <span>{{ t('novelWorkbench.folderProse') }}</span>
+                <span class="novel-wb__tree-meta">{{ treeChapters.length }}</span>
+              </template>
+              <button
+                v-for="entry in treeChapters"
+                :key="entry.chapter"
+                type="button"
+                class="novel-wb__tree-item"
+                :class="{
+                  'novel-wb__tree-item--on': treeSel.kind === 'chapter' && treeSel.n === entry.chapter,
+                  'novel-wb__tree-item--dim': !entry.prose,
+                }"
+                @click="selectChapter(entry.chapter, entry.prose ? 'prose' : 'contract')"
+              >
+                <span>{{ chapterTreeName(entry) }}</span>
+                <span v-if="!entry.prose && entry.contract" class="novel-wb__tree-meta">
+                  {{ t('novelWorkbench.contractOnly') }}
+                </span>
+              </button>
+              <p v-if="!treeChapters.length" class="novel-wb__tree-unit">{{ t('novelWorkbench.noChapters') }}</p>
+            </DqCollapseItem>
+          </DqCollapse>
         </aside>
 
         <div class="novel-wb__preview">
@@ -982,6 +967,24 @@ function escapeHtml(s: string) {
               >
                 {{ t('novelWorkbench.actionReview') }}
               </button>
+              <button
+                v-if="readingEntry?.prose"
+                type="button"
+                class="novel-wb__btn novel-wb__btn--ghost"
+                :disabled="!isActionAllowed('polish', readingChapter)"
+                @click="runAction('polish', readingChapter, readPath || undefined)"
+              >
+                {{ t('novelWorkbench.actionPolish') }}
+              </button>
+              <button
+                v-if="readingEntry?.prose"
+                type="button"
+                class="novel-wb__btn novel-wb__btn--ghost"
+                :disabled="!isActionAllowed('commit', readingChapter)"
+                @click="runAction('commit', readingChapter, readPath || undefined)"
+              >
+                {{ t('novelWorkbench.actionCommit') }}
+              </button>
             </template>
           </div>
 
@@ -1075,40 +1078,35 @@ function escapeHtml(s: string) {
   padding: 6px 0 16px;
 }
 
-.novel-wb__folder {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  margin: 6px 0 0;
+.novel-wb__tree :deep(.dq-collapse-item__header) {
   padding: 6px 12px;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
   font-size: var(--dq-font-size-caption);
   font-weight: 650;
-  text-align: left;
-  cursor: pointer;
+  border-radius: 6px;
 }
 
-.novel-wb__folder:hover {
+.novel-wb__tree :deep(.dq-collapse-item__header:hover) {
   background: color-mix(in srgb, var(--dq-accent) 8%, transparent);
 }
 
-.novel-wb__folder--sub {
+.novel-wb__tree :deep(.dq-collapse-item__title) {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.novel-wb__tree-sub {
+  margin-left: 4px;
+}
+
+.novel-wb__tree-sub :deep(.dq-collapse-item__header) {
   padding-left: 28px;
-  margin-top: 2px;
   font-weight: 600;
 }
 
 .novel-wb__tree-item--nested {
   padding-left: 40px;
-}
-
-.novel-wb__twist {
-  width: 12px;
-  opacity: 0.55;
 }
 
 .novel-wb__tree-item--dim {

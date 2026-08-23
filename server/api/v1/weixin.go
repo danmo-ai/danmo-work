@@ -184,6 +184,9 @@ func weixinConfigure(h *Handler) gin.HandlerFunc {
 			// Prefer in-chat numbered approval for new Weixin setups.
 			wx.AutoApprove = false
 		}
+		if !validateChannelDefaultAgent(h, c, wx.DefaultAgentID) {
+			return
+		}
 		if req.Enabled {
 			if wx.DefaultAgentID == "" {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "defaultAgentId required when enabling weixin"})

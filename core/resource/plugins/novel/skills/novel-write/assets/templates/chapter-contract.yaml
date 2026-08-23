@@ -1,5 +1,6 @@
 # 章合同：一章一合同，先合同后正文。字段从简，只写本章用得上的。
 chapter: 1
+unit_id: ""              # 必填：所属剧情单元，如 v01-U2；空或对不上卷纲 → 退回补卷纲
 title_working: ""
 scene: ""                # pov | time | location，一行写完
 purpose: ""              # 一句话：本章必须完成的叙事任务
@@ -20,6 +21,8 @@ constraint_checks:
   goldfinger_ratio_ok: true
   timeline_monotonic: true
   active_plot_lines_le_3: true
+  endgame_reserve_ok: true    # 透支两问皆否（KB 强约束）
+  agency_settled: true        # 关键节点四问：收益回到承诺所有者
 word_target: 3000        # 番茄常见 2000-3500
 continuity_risks: []     # 可能撞车的旧设定
 status: proposed         # proposed|accepted|drafted|reviewed

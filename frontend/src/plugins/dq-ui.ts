@@ -22,6 +22,8 @@ import {
   DqSurfaceCard,
   DqSwitch,
   DqTag,
+  DqCollapse,
+  DqCollapseItem,
 } from '@danqing/dq-shell'
 
 const DQ_COMPONENTS = {
@@ -46,6 +48,8 @@ const DQ_COMPONENTS = {
   DqSlider,
   DqCheckbox,
   DqSwitch,
+  DqCollapse,
+  DqCollapseItem,
 } as const
 
 export function installDanQingUi(app: App) {

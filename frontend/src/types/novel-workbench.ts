@@ -190,9 +190,13 @@ export function parseNovelStateExtended(raw: string): NovelExtendedState {
   }
 }
 
-export function parseContractYaml(raw: string): { status: string; title: string } {
+export function parseContractYaml(raw: string): { status: string; title: string; unitId: string } {
   const status = yamlScalar(raw, 'status').toLowerCase()
-  return { status: status || 'proposed', title: yamlScalar(raw, 'title_working') }
+  return {
+    status: status || 'proposed',
+    title: yamlScalar(raw, 'title_working'),
+    unitId: yamlScalar(raw, 'unit_id'),
+  }
 }
 
 export function parseReviewVerdict(raw: string): 'PASS' | 'FAIL' | null {
@@ -807,7 +811,8 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       return [
         '开一本新书并立项：',
         '- 先用 ask_user 澄清题材、读者承诺、篇幅/平台、禁忌（一次一问即可）。',
-        '- 创建 novel/<book-id>/ 标准英文树：novel-state.yaml、book-bible.md、canon/(+cast/)、outline/(+volumes/)、chapters/、continuity/、reviews/（可选 extras/、_archive/）。',
+        '- 创建 novel/<book-id>/ 标准英文树：novel-state.yaml、book-bible.md（含终局储备三行）、canon/world.md、canon/glossary.md、canon/cast/、outline/(+volumes/)、chapters/、continuity/、reviews/（可选 extras/、_archive/）。',
+        '- 人物卡用 cast-card.md；世界四层用 world.md。',
         '- 角色先 status=candidate，经我确认后再变 canon；确认前不要写正文。',
         '- 落盘后更新 novel-state（stage=init 或 outline）。',
         '- 按 read_skill novel-setup/references/init.md 与 project-layout.md 执行。',
@@ -816,9 +821,9 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       return [
         `书目录：${root}/`,
         '基于现有 book-bible / canon 产出总纲与卷纲（不写章节正文）：',
-        `- 总纲 ${root}/outline/book_outline.md（模板 book-outline.md：一句话故事 / 读者承诺 / 分卷结构表 / 主线伏笔 / 结局方向）。`,
-        `- 卷纲 ${root}/outline/volumes/vNN.md（模板 volume-outline.md：卷目标 / 冲突与起终 / 节奏锚点 / 剧情单元 / 情绪人物弧 / 反转 / 伏笔）。`,
-        '卷纲写到「一段章」的剧情单元为止（功能+因果+主爽点形态）。不要写每章任务/爽点/钩子。',
+        `- 总纲 ${root}/outline/book_outline.md（模板 book-outline.md：一句话故事 / 读者承诺 / 分卷结构表 / 主线伏笔 / 结局方向 / 终局储备——与圣经同一张表）。`,
+        `- 卷纲 ${root}/outline/volumes/vNN.md（模板 volume-outline.md：卷目标 / 冲突与起终 / 终局边界 / 节奏锚点 / 剧情单元 / 情绪人物弧 / 反转 / 伏笔）。`,
+        '卷纲写到「一段章」的剧情单元为止（功能+主角目标+因果+形态+禁提前+下钩）。不要写每章任务/爽点/钩子。',
         '每卷卷纲写完停下来等我确认。',
         '按 read_skill novel-plan/references/outline.md 执行。',
       ].join('\n')
@@ -827,8 +832,8 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         `为本书写第 ${vol || 'N'} 卷卷纲（书目录：${root}/）。`,
         `唯一落盘：${root}/outline/volumes/v${volPad}.md（模板 volume-outline.md，先 read_skill novel-plan/assets/templates/volume-outline.md）。`,
         '先读 outline/book_outline.md 与 canon/ 相关设定、continuity/ 未回收伏笔，保持与前后卷衔接。',
-        '内容：卷目标 / 核心冲突与对立升级 / 起终状态 / 节奏锚点 / 剧情单元表（一段章：功能、因果、主爽点形态）/ 情绪与人物弧 / 反转 / 伏笔。',
-        '卷纲写到剧情单元为止，不写章合同、不写正文。每章任务/爽点/钩子只进章合同，须能指回某个单元。',
+        '内容：卷目标 / 核心冲突与对立升级 / 起终状态 / 终局边界 / 节奏锚点 / 剧情单元表（一段章：功能、主角目标、因果、主爽点形态、禁止提前释放、下一单元钩子）/ 情绪与人物弧 / 反转 / 伏笔。',
+        '卷纲写到剧情单元为止，不写章合同、不写正文。每章任务/爽点/钩子只进章合同，须填 unit_id 指回某个单元。',
         '写完停下来等我确认，再进入章合同阶段。',
         '按 read_skill novel-plan/references/outline.md 执行。',
       ].join('\n')
@@ -836,6 +841,8 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       return [
         `书目录：${root}/`,
         '整理/补全人物卡与世界观资产：写入 canon/ 与 table_*（characters、locations 等，带 book_id）。',
+        '世界用模板 novel-setup/assets/templates/world.md（规则/势力/日常/禁忌四层）→ canon/world.md。',
+        '人物用模板 novel-setup/assets/templates/cast-card.md → canon/cast/。名词表用 glossary.md。',
         '新实体先 status=candidate，经 ask_user 确认后再变 canon；确认前不要写正文。',
         '按 read_skill novel-setup/references/init.md + table-schema.md 执行。',
       ].join('\n')
@@ -844,15 +851,15 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         `书目录：${root}/`,
         '设计或修订金手指：约束、代价、成长曲线、与读者承诺一致；写入 canon/ 或 table_* resources，并用模板 goldfinger-card。',
         '先 candidate，经 ask_user 确认后再 canon；不要在未确认时改已定稿正文。',
-        '按 read_skill novel-plan/assets/templates/goldfinger-card.md 与 KB「世界观与金手指」执行。',
+        '按 read_skill novel-setup/assets/templates/goldfinger-card.md 与 KB「世界观与金手指」执行。',
       ].join('\n')
     case 'contract':
       return [
         `为第 ${ch || 'N'} 章写章合同（尚不写正文）。`,
-        '先读本卷纲：定位本章所属剧情单元与最近锚点，再下推 purpose / beats / pleasure_point。卷纲无单元表则先补卷纲。',
+        '先读本卷纲：定位本章所属剧情单元与最近锚点，填写 unit_id（vNN-U#，如 v04-U2），再下推 purpose / beats / pleasure_point / forbidden。unit_id 空或对不上则先补卷纲，不要空造合同。',
         `唯一落盘：${root}/chapters/ch${chPad}-contract.yaml（YAML；模板 chapter-contract.yaml）。`,
-        `可选 table_upsert chapter_contracts 作索引（book_id=${bookId}，file 指向该 yaml），不能代替文件。`,
-        '含：purpose、beats / forbidden、pleasure_point、state_deltas、伏笔、hook(type+out)、word_target、连续性风险；status=proposed。',
+        `可选 table_upsert chapter_contracts 作索引（book_id=${bookId}，unit_id 与 file 指向该 yaml），不能代替文件。`,
+        '含：unit_id、purpose、beats / forbidden、pleasure_point、state_deltas、伏笔、hook(type+out)、word_target、连续性风险；status=proposed。',
         '里程碑章或本批首章需 ask_user 接受后再进入写作。',
         '按 read_skill novel-write/references/chapter-contract.md 执行。',
       ].join('\n')
@@ -898,7 +905,7 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       const bTo = ctx.batchTo && ctx.batchTo > 0 ? ctx.batchTo : 8
       return [
         `批次冻结（书：${root}/，第 ${bFrom}–${bTo} 章）。`,
-        `为该批写或确认章合同（chapters/chNNN-contract.yaml，status=accepted）；连续 3 章 pleasure_point 为空必须重排。`,
+        `为该批写或确认章合同（chapters/chNNN-contract.yaml，status=accepted）；每章 unit_id 必须指向本卷一个剧情单元；连续 3 章 pleasure_point 为空必须重排。`,
         `落盘 continuity/batch-freeze.yaml（模板 batch-freeze.yaml）只记范围与状态，不要重复 purpose/爽点/钩子。硬逻辑审核后 status=frozen。`,
         '冻结前禁止批量写正文。用户确认后更新 novel-state frozen_batch 与 artifacts.batch_freeze。',
         '按 read_skill novel-write/references/batch-freeze.md 执行。',

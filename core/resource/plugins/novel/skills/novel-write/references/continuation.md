@@ -7,7 +7,7 @@
 1. 扫描已有正文、大纲、`canon/`、`continuity/`、`reviews/`（若有）。
 2. `write` `canon/style-fingerprint.md`（模板 `style-fingerprint.md`）：句式、禁语、POV、对话占比、章末习惯。
 3. 提取作品 DNA：读者承诺、主冲突、金手指边界、活跃伏笔、人物状态快照。
-4. `novel-state.yaml` 设 `continuation_mode: true`；`stage: continuation`。
+4. `novel-state.yaml` 设 `continuation_mode: true`；`stage: writing`（尚无正文则 `setup`）。禁止自造 `continuation` 阶段。
 
 ## CP2 — 卡点诊断
 

@@ -22,11 +22,11 @@ Lock canon and outlines. **No chapter contracts, no chapter bodies.** New entiti
 
 | Intent | Load | search_kb |
 |--------|------|-----------|
-| 总纲 / 卷纲 | `novel-plan/references/outline.md` | 节奏与结构, 爽点与追读, 题材与平台 |
-| 人设 / 世界观 | `novel-setup/references/init.md` + canon files | 人设与群像, 世界观与金手指 |
-| 金手指 | template `goldfinger-card.md` | 世界观与金手指 |
+| 总纲 / 卷纲 | `novel-plan/references/outline.md` | 节奏与结构, 爽点与追读, 题材与平台, 强约束 |
+| 人设 / 世界观 | `canon/world.md` + `cast-card.md` | 人设与群像, 世界观与金手指 |
+| 金手指 | `novel-setup/assets/templates/goldfinger-card.md` | 世界观与金手指 |
 
-Templates: `novel-plan/assets/templates/*`. After user OK on a volume, set `novel-state.yaml` `stage: outline`.
+Templates: `novel-plan/assets/templates/*`（总纲/卷纲）+ `novel-setup/assets/templates/`（world / cast-card / goldfinger-card）. After user OK on a volume, set `novel-state.yaml` `stage: outline`.
 
 ## Stop
 

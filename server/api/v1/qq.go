@@ -113,6 +113,9 @@ func qqConfigure(h *Handler) gin.HandlerFunc {
 		if req.NativeC2CStream != nil {
 			qc.NativeC2CStream = req.NativeC2CStream
 		}
+		if !validateChannelDefaultAgent(h, c, qc.DefaultAgentID) {
+			return
+		}
 		if req.Enabled {
 			if qc.DefaultAgentID == "" {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "defaultAgentId required when enabling qq"})

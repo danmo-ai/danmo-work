@@ -168,7 +168,7 @@ func (m *KnowledgeManager) ScanPluginBase(ctx context.Context, root string) erro
 		return nil
 	}
 	return m.scanKnowledgeDir(ctx, id, root, func(fname string) string {
-		return strings.TrimSuffix(fname, ".md")
+		return knowledgeSeedDocID(id, fname)
 	})
 }
 
@@ -186,13 +186,30 @@ func pluginKnowledgeID(root string) string {
 // so builtin seed docs never collide across knowledge bases.
 func (m *KnowledgeManager) ScanBuiltinKnowledgeDir(ctx context.Context, id, root string) error {
 	return m.scanKnowledgeDir(ctx, id, root, func(fname string) string {
-		return "doc-" + id + "-" + strings.TrimSuffix(fname, ".md")
+		return knowledgeSeedDocID(id, fname)
 	})
 }
 
+func knowledgeSeedDocID(kbID, fname string) string {
+	return "doc-" + kbID + "-" + strings.TrimSuffix(fname, ".md")
+}
+
+func knowledgeDocFilename(d domain.KnowledgeDoc) string {
+	if d.Path != "" {
+		base := filepath.Base(d.Path)
+		if base != "" && base != "." && base != string(filepath.Separator) {
+			return base
+		}
+	}
+	if d.ID != "" {
+		return d.ID + ".md"
+	}
+	return ""
+}
+
 // scanKnowledgeDir is the shared filesystem → DB ingest for KB directories
-// defined on disk (_meta.json + *.md). Seed-if-missing: existing bases and
-// docs are never overwritten; newly created docs are indexed inline.
+// defined on disk (_meta.json + *.md). Seed-if-missing for live files;
+// stale seed rows (deleted/renamed files, or old unprefixed ids) are pruned.
 func (m *KnowledgeManager) scanKnowledgeDir(ctx context.Context, id, root string, docIDFor func(fname string) string) error {
 	meta := readKBmeta(filepath.Join(root, "_meta.json"))
 	name := meta["name"]
@@ -212,12 +229,16 @@ func (m *KnowledgeManager) scanKnowledgeDir(ctx context.Context, id, root string
 	if err != nil {
 		return nil
 	}
+	liveIDs := map[string]struct{}{}
+	liveFiles := map[string]struct{}{}
 	for _, f := range files {
 		fname := filepath.Base(f)
 		if strings.HasPrefix(fname, ".") {
 			continue
 		}
 		docID := docIDFor(fname)
+		liveIDs[docID] = struct{}{}
+		liveFiles[fname] = struct{}{}
 		if _, err := m.docs.Get(ctx, docID); err == nil {
 			continue
 		}
@@ -243,7 +264,40 @@ func (m *KnowledgeManager) scanKnowledgeDir(ctx context.Context, id, root string
 			log.Printf("[knowledge] doc %q index: %v", docID, err)
 		}
 	}
+	m.pruneStaleSeedDocs(ctx, id, liveIDs, liveFiles)
 	return nil
+}
+
+// pruneStaleSeedDocs drops index rows for pack files that were deleted/renamed,
+// or ingested under a previous id scheme. User-created docs that still exist
+// under KnowledgeDir are kept.
+func (m *KnowledgeManager) pruneStaleSeedDocs(ctx context.Context, kbID string, liveIDs, liveFiles map[string]struct{}) {
+	docs, err := m.docs.ListByKB(ctx, kbID)
+	if err != nil {
+		return
+	}
+	for _, d := range docs {
+		base := knowledgeDocFilename(d)
+		if _, ok := liveFiles[base]; ok {
+			if _, ok := liveIDs[d.ID]; !ok {
+				log.Printf("[knowledge] prune stale seed id %q (%s)", d.ID, base)
+				m.dropDocRecord(ctx, d.ID)
+			}
+			continue
+		}
+		if _, err := os.Stat(m.absPath(d)); err == nil {
+			continue
+		}
+		log.Printf("[knowledge] prune missing file %q (%s)", d.ID, base)
+		m.dropDocRecord(ctx, d.ID)
+	}
+}
+
+func (m *KnowledgeManager) dropDocRecord(ctx context.Context, id string) {
+	_ = m.index.DeleteByDoc(ctx, id)
+	if err := m.docs.Delete(ctx, id); err != nil {
+		log.Printf("[knowledge] prune delete %q: %v", id, err)
+	}
 }
 
 func pluginNameFromKBPath(root string) string {
@@ -587,11 +641,23 @@ func (m *KnowledgeManager) readContent(ctx context.Context, d domain.KnowledgeDo
 	if err == nil {
 		return string(b), nil
 	}
-	for _, root := range m.pluginKBRoots {
-		pluginPath := filepath.Join(root, d.ID+".md")
-		b, err := os.ReadFile(pluginPath)
-		if err == nil {
-			return string(b), nil
+	m.mu.RLock()
+	roots := append([]string{}, m.pluginKBRoots...)
+	m.mu.RUnlock()
+	names := []string{}
+	if d.ID != "" {
+		names = append(names, d.ID+".md")
+	}
+	if base := knowledgeDocFilename(d); base != "" && base != d.ID+".md" {
+		names = append(names, base)
+	}
+	for _, root := range roots {
+		for _, name := range names {
+			pluginPath := filepath.Join(root, name)
+			b, readErr := os.ReadFile(pluginPath)
+			if readErr == nil {
+				return string(b), nil
+			}
 		}
 	}
 	return "", fmt.Errorf("read knowledge doc %s: %w", d.ID, err)

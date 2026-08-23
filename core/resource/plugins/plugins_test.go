@@ -89,6 +89,28 @@ func TestNovelPluginPacksSkillAndCraftKB(t *testing.T) {
 	if _, err := fs.Stat(FS, "novel/skills/novel-writing"); err == nil {
 		t.Fatal("novel-writing should be replaced by setup/plan/write/review")
 	}
+	for _, p := range []string{
+		"novel/skills/novel-setup/assets/templates/world.md",
+		"novel/skills/novel-setup/assets/templates/cast-card.md",
+		"novel/skills/novel-setup/assets/templates/glossary.md",
+		"novel/skills/novel-setup/assets/templates/goldfinger-card.md",
+		"novel/skills/novel-write/assets/templates/chapter-contract.yaml",
+		"novel/skills/novel-plan/assets/templates/volume-outline.md",
+	} {
+		if _, err := fs.ReadFile(FS, p); err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
+	}
+	contract, err := fs.ReadFile(FS, "novel/skills/novel-write/assets/templates/chapter-contract.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(contract), "unit_id:") {
+		t.Fatal("chapter-contract.yaml must require unit_id")
+	}
+	if _, err := fs.Stat(FS, "novel/skills/novel-plan/assets/templates/goldfinger-card.md"); err == nil {
+		t.Fatal("goldfinger-card.md belongs under novel-setup, not novel-plan")
+	}
 	meta, err := fs.ReadFile(FS, "novel/ai.danmo.work/knowledge/_meta.json")
 	if err != nil {
 		t.Fatal(err)

@@ -6,7 +6,7 @@
 2. Read `novel-state.yaml` — confirm next chapter index.  
 3. **knowledge_gate:** `search_kb` 文风与去 AI 味；写章末钩子或章首接钩前再 `search_kb` 爽点与追读（不要复述选型表）。开篇三章可加「节奏与结构」。
 4. **asset_gate:** `table_query` characters/locations/foreshadows involved; all on-page major cast should be `canon` (or user-approved exception).  
-5. Load accepted contract from `novel/<book-id>/chapters/chNNN-contract.yaml` (`status=accepted` or user waiver).  
+5. Load accepted contract from `novel/<book-id>/chapters/chNNN-contract.yaml` (`status=accepted` or user waiver; `unit_id` must match a volume 剧情单元).  
 6. `memory_read` prefs + recent summaries (last 3–5 chapters).  
 7. 若 beats 含场景标签 → `read_skill` `scene-routing.md`。
 

@@ -213,4 +213,31 @@ func TestBuiltinPluginsRegisterExpertsAndMCP(t *testing.T) {
 	if len(novel.Components.Knowledge) != 1 || novel.Components.Knowledge[0] != "kb-novel-craft" {
 		t.Fatalf("novel knowledge components=%v", novel.Components.Knowledge)
 	}
+
+	plan, err := sm.Get(context.Background(), "novel-plan")
+	if err != nil {
+		t.Fatalf("novel-plan skill: %v", err)
+	}
+	if plan.Dir == "" {
+		t.Fatal("novel-plan Dir should be the plugin skill folder")
+	}
+	files, err := sm.Files(context.Background(), "novel-plan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("novel-plan files should be listed from the plugin pack, not data/skills")
+	}
+	var sawOutline bool
+	for _, f := range files {
+		if f.Path == "references/outline.md" {
+			sawOutline = true
+		}
+	}
+	if !sawOutline {
+		t.Fatalf("novel-plan files=%v", files)
+	}
+	if _, err := sm.File(context.Background(), "novel-plan", "references/outline.md"); err != nil {
+		t.Fatalf("read plugin skill file: %v", err)
+	}
 }

@@ -22,7 +22,7 @@ Contract → draft only. Review and Commit belong to `novel-review`.
 
 | Intent | Load | search_kb |
 |--------|------|-----------|
-| 章合同 | `novel-write/references/chapter-contract.md` | 节奏与结构, 爽点与追读, 题材与平台 |
+| 章合同 | `novel-write/references/chapter-contract.md` | 节奏与结构, 爽点与追读, 题材与平台, 强约束 |
 | 批次冻结 | `novel-write/references/batch-freeze.md` | 节奏与结构, 爽点与追读 |
 | 写正文 | `preflight.md` + `chapter-write.md` + `scene-routing.md` | 文风与去 AI 味, 爽点与追读, 情绪与场景 |
 | 续写接手 | `novel-write/references/continuation.md` | 文风与去 AI 味, 情绪与场景 |

@@ -122,6 +122,38 @@ func TestUsageRepoAddDeltaRollupAndSeries(t *testing.T) {
 	}
 }
 
+func TestUsageRepoNullCacheCoalesce(t *testing.T) {
+	st, err := New(filepath.Join(t.TempDir(), "usage-null.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := st.Usage()
+	ctx := context.Background()
+
+	d0 := domain.UsageDelta{PromptTokens: 1000, CompletionTokens: 50, Model: "m1", AgentID: "a1"}
+	if err := repo.AddDelta(ctx, "turn-a", "sess-a", "proj-a", d0, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate legacy row: cache columns stayed NULL after schema add.
+	if err := st.DB().Exec(`UPDATE llm_usage_rollups SET cache_read_tokens = NULL, cache_creation_tokens = NULL WHERE grain = ? AND ref_id = ?`,
+		string(domain.UsageGrainModel), "m1").Error; err != nil {
+		t.Fatal(err)
+	}
+
+	d1 := domain.UsageDelta{PromptTokens: 200, CompletionTokens: 10, CacheReadTokens: 80, CacheCreationTokens: 5, Model: "m1", AgentID: "a1"}
+	if err := repo.AddDelta(ctx, "turn-b", "sess-a", "proj-a", d1, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	global, err := repo.Get(ctx, domain.UsageGrainModel, "m1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if global.CacheReadTokens != 80 || global.CacheCreationTokens != 5 {
+		t.Fatalf("global model cache after NULL coalesce: %+v", global)
+	}
+}
+
 func TestUsageSinkViaStreamManager(t *testing.T) {
 	st, err := New(filepath.Join(t.TempDir(), "usage-sink.db"))
 	if err != nil {

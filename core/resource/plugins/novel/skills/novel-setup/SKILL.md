@@ -22,9 +22,9 @@ Scaffold one book. **Stop when the tree and bible exist.** Do not outline volume
 
 1. `read_skill` `novel-setup/references/init.md` + `project-layout.md` + `table-schema.md`.
 2. `search_kb` 题材与平台 + 人设与群像.
-3. Create `novel/<book-id>/` English tree; `write` `book-bible.md` and `novel-state.yaml` (`stage: init`).
-4. Cast starts `candidate`; confirm via `ask_user` before `canon`.
-5. Templates: `novel-setup/assets/templates/*`.
+3. Create `novel/<book-id>/` English tree; `write` `book-bible.md`（含终局储备）、`novel-state.yaml` (`stage: init`)、`canon/world.md`、`canon/glossary.md`.
+4. Cast starts `candidate` from `cast-card.md`; confirm via `ask_user` before `canon`.
+5. Templates: `novel-setup/assets/templates/*`（bible / state / world / glossary / cast-card / goldfinger-card）.
 
 ## Stop
 

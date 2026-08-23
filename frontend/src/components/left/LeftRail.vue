@@ -76,14 +76,6 @@ const DEFAULT_VISIBLE_TASKS = 4
 const expandedProjects = ref<Set<string>>(new Set())
 const expandedSessionProjects = ref<Set<string>>(new Set())
 
-function toggleProject(id: string) {
-  if (expandedProjects.value.has(id)) {
-    expandedProjects.value.delete(id)
-  } else {
-    expandedProjects.value.add(id)
-  }
-}
-
 function expandProject(id: string) {
   expandedProjects.value.add(id)
 }
@@ -279,6 +271,20 @@ const userPlan = computed(() => 'Danmo')
 /** Default collapsed so chats/projects stay primary; persist only after user toggles. */
 const resourcesCollapsed = ref(localStorage.getItem('app-resources-collapsed') !== '0')
 watch(resourcesCollapsed, (v) => localStorage.setItem('app-resources-collapsed', v ? '1' : '0'))
+
+const resourceOpen = computed({
+  get: () => (resourcesCollapsed.value ? [] : ['resources']),
+  set: (names: string[]) => {
+    resourcesCollapsed.value = !names.includes('resources')
+  },
+})
+
+const expandedProjectNames = computed({
+  get: () => [...expandedProjects.value],
+  set: (names: string[]) => {
+    expandedProjects.value = new Set(names)
+  },
+})
 
 const sidebarSearch = ref('')
 const filteredProjects = computed(() => {
@@ -586,13 +592,10 @@ watch(() => projects.projects.length, (len) => {
             </nav>
 
             <nav v-else class="project-tree" :aria-label="t('navigation.projectListAria')">
-              <div v-for="p in filteredProjects" :key="p.id" class="project-tree__group">
-                <div class="project-tree__row" :class="{ 'is-active': false }" @click="toggleProject(p.id)">
-                  <span class="project-tree__toggle" :class="{ 'is-expanded': expandedProjects.has(p.id) }">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M9 18l6-6-6-6" />
-                    </svg>
-                  </span>
+              <DqCollapse v-model="expandedProjectNames">
+              <DqCollapseItem v-for="p in filteredProjects" :key="p.id" :name="p.id" class="project-tree__group">
+                <template #title>
+                  <span class="project-tree__row-title">
                   <svg class="project-tree__folder-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
                   </svg>
@@ -632,9 +635,10 @@ watch(() => projects.projects.length, (len) => {
                       </template>
                     </DqDropdown>
                   </span>
-                </div>
+                  </span>
+                </template>
 
-                <div v-if="expandedProjects.has(p.id)" class="project-tree__sessions">
+                <div class="project-tree__sessions">
                   <div
                     v-for="t_ in visibleSessions(p)"
                     :key="t_.id"
@@ -700,31 +704,16 @@ watch(() => projects.projects.length, (len) => {
                     {{ $t('navigation.newSessionPrompt') }}
                   </button>
                 </div>
-              </div>
+              </DqCollapseItem>
+              </DqCollapse>
             </nav>
           </div>
           <div class="module-sidebar__divider" />
 
           <div class="module-sidebar__modules">
-            <button
-              type="button"
-              class="module-sidebar__section-toggle"
-              @click="resourcesCollapsed = !resourcesCollapsed"
-            >
-              <span>{{ $t('navigation.resources') }}</span>
-              <svg
-                viewBox="0 0 24 24"
-                width="14"
-                height="14"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                :style="{ transform: resourcesCollapsed ? 'rotate(-90deg)' : 'none' }"
-              >
-                <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </button>
-            <nav v-show="!resourcesCollapsed" class="module-sidebar__menu" :aria-label="t('navigation.moduleNavAria')">
+            <DqCollapse v-model="resourceOpen" class="module-sidebar__resource-collapse">
+            <DqCollapseItem name="resources" :title="$t('navigation.resources')">
+            <nav class="module-sidebar__menu" :aria-label="t('navigation.moduleNavAria')">
               <button
                 v-for="item in menuItems"
                 :key="item.module"
@@ -745,6 +734,8 @@ watch(() => projects.projects.length, (len) => {
                 <span>{{ item.label }}</span>
               </button>
             </nav>
+            </DqCollapseItem>
+            </DqCollapse>
           </div>
 
         </div>
@@ -1126,6 +1117,32 @@ watch(() => projects.projects.length, (len) => {
   flex-direction: column;
 }
 
+.project-tree :deep(.dq-collapse-item__header) {
+  height: 32px;
+  padding: 0 8px 0 10px;
+  border-radius: 8px;
+  color: var(--dq-sidebar-item-emphasis-fg, var(--dq-label-secondary));
+}
+
+.project-tree :deep(.dq-collapse-item__header:hover) {
+  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
+  color: var(--dq-accent);
+}
+
+.project-tree :deep(.dq-collapse-item__header:hover) .project-tree__folder-icon,
+.project-tree :deep(.dq-collapse-item__header:hover) .project-tree__actions {
+  color: var(--dq-accent);
+  opacity: 1;
+}
+
+.project-tree__row-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
 .project-tree__row {
   display: flex;
   align-items: center;
@@ -1445,6 +1462,23 @@ watch(() => projects.projects.length, (len) => {
 
 .module-sidebar__modules {
   padding: 8px 0;
+}
+
+.module-sidebar__resource-collapse :deep(.dq-collapse-item__header) {
+  width: calc(100% - 16px);
+  margin: 0 8px 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--dq-sidebar-section-fg, var(--dq-label-tertiary));
+  font-size: var(--dq-font-size-caption);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.module-sidebar__resource-collapse :deep(.dq-collapse-item__header:hover) {
+  color: var(--dq-label-secondary);
+  background: color-mix(in srgb, var(--dq-label-primary) 4%, transparent);
 }
 
 .module-sidebar__section-toggle {

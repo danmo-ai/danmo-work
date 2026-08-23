@@ -16,7 +16,7 @@ Official name: **章合同** / chapter contract. Do not introduce other product 
 
 Book/volume planning stays in `outline/` (`outline.md`) and **stops at 剧情单元（一段章）**. Per-chapter planning is **only** 章合同 under `chapters/`. Do not copy `purpose` / `pleasure_point` / `hook` into 卷纲 or `batch-freeze.yaml`.
 
-写合同前先读本卷纲：定位本章所属单元 + 最近锚点，再下推 `purpose` / `beats` / `pleasure_point`。卷纲只有目标句、没有单元表 → 退回 `novel-plan` 补卷纲，不要空造合同。
+写合同前先读本卷纲：定位本章所属单元 + 最近锚点，填 `unit_id`（`vNN-U#`，如 `v04-U2`），再下推 `purpose` / `beats` / `pleasure_point` / `forbidden`（禁提前进 forbidden）。卷纲只有目标句、没有单元表，或 `unit_id` 对不上任一单元 → 退回 `novel-plan` 补卷纲，不要空造合同。
 
 A batch of contracts: **连续 3 章 `pleasure_point` 为空必须重排** before freeze or draft.
 
@@ -27,6 +27,7 @@ Copy `assets/templates/chapter-contract.yaml`. Keep it lean — fill only what t
 | Field | Purpose |
 |-------|---------|
 | `chapter` / `title_working` | Identity |
+| `unit_id` | Required. Volume unit id, `vNN-U#`. Empty or mismatch → stop, back to `novel-plan`. |
 | `scene` | One line: `pov \| time \| location` |
 | `purpose` | One-sentence chapter job |
 | `beats` | 3–5 beats that must land, in order |
@@ -38,7 +39,7 @@ Copy `assets/templates/chapter-contract.yaml`. Keep it lean — fill only what t
 | `hook.type` / `hook.out` | Type from KB「爽点与追读」选型表; `out` = concrete event, not slogan |
 | `micro_payoff` | 本章微兑现（追读力 KB） |
 | `reader_debt` | 待接钩子列表（开放债务） |
-| `constraint_checks` | 强约束自检（金手指/时间线/叙事线） |
+| `constraint_checks` | 强约束自检（金手指/时间线/叙事线/终局储备/代理权） |
 | `word_target` | 番茄常见 2000–3500 |
 | `continuity_risks` | What could break |
 | `status` | `proposed` → `accepted` → `drafted` → `reviewed` |
@@ -46,10 +47,11 @@ Copy `assets/templates/chapter-contract.yaml`. Keep it lean — fill only what t
 ## Process
 
 1. Read the volume outline unit covering this chapter; if missing, stop and send back to `novel-plan`.
-2. Draft contract at `chapters/chNNN-contract.yaml` (YAML template).
-3. `table_upsert` `chapter_contracts` with matching `book_id` / `chapter` / `status` / `file`.
-4. `ask_user` to accept if this is a milestone chapter or first chapter of a batch.
-5. Only then proceed to `chapter-write.md`.
+2. Set `unit_id` to that row (`vNN-U#`). Copy 功能 → `purpose`, 主爽点形态 → `pleasure_point`, 禁止提前释放 → `forbidden`, 本段主角目标 into `beats` / `state_deltas` as needed.
+3. Draft contract at `chapters/chNNN-contract.yaml` (YAML template).
+4. `table_upsert` `chapter_contracts` with matching `book_id` / `chapter` / `unit_id` / `status` / `file`.
+5. `ask_user` to accept if this is a milestone chapter or first chapter of a batch.
+6. Only then proceed to `chapter-write.md`.
 
 ## Status vocabulary
 

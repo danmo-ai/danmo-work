@@ -172,8 +172,23 @@ func (m *SkillManager) Delete(ctx context.Context, id string) error {
 	return os.RemoveAll(filepath.Join(m.globalDir, id))
 }
 
+func (m *SkillManager) skillDir(ctx context.Context, skillID string) (string, error) {
+	sk, err := m.Get(ctx, skillID)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(sk.Dir) != "" {
+		return sk.Dir, nil
+	}
+	return filepath.Join(m.globalDir, skillID), nil
+}
+
 func (m *SkillManager) Files(ctx context.Context, skillID string) ([]domain.SkillFile, error) {
-	return readSkillFiles(m.globalDir, skillID)
+	dir, err := m.skillDir(ctx, skillID)
+	if err != nil {
+		return nil, err
+	}
+	return readSkillFilesFromDir(dir, skillID)
 }
 
 func (m *SkillManager) File(ctx context.Context, skillID, path string) (domain.SkillFile, error) {
@@ -181,7 +196,11 @@ func (m *SkillManager) File(ctx context.Context, skillID, path string) (domain.S
 	if err != nil {
 		return domain.SkillFile{}, err
 	}
-	fullPath := filepath.Join(m.globalDir, skillID, p)
+	dir, err := m.skillDir(ctx, skillID)
+	if err != nil {
+		return domain.SkillFile{}, err
+	}
+	fullPath := filepath.Join(dir, p)
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		return domain.SkillFile{}, err
@@ -209,7 +228,14 @@ func (m *SkillManager) UpsertFile(ctx context.Context, f domain.SkillFile) error
 	if f.SkillID == "" {
 		return fmt.Errorf("skillId required")
 	}
+	sk, err := m.Get(ctx, f.SkillID)
+	if err == nil && (sk.Source == "builtin" || sk.Builtin) {
+		return fmt.Errorf("cannot modify builtin skill %q", f.SkillID)
+	}
 	skillDir := filepath.Join(m.globalDir, f.SkillID)
+	if err == nil && strings.TrimSpace(sk.Dir) != "" {
+		skillDir = sk.Dir
+	}
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		return err
 	}
@@ -225,12 +251,28 @@ func (m *SkillManager) DeleteFile(ctx context.Context, skillID, path string) err
 	if err != nil {
 		return err
 	}
-	return os.Remove(filepath.Join(m.globalDir, skillID, p))
+	sk, err := m.Get(ctx, skillID)
+	if err == nil && (sk.Source == "builtin" || sk.Builtin) {
+		return fmt.Errorf("cannot modify builtin skill %q", skillID)
+	}
+	dir, err := m.skillDir(ctx, skillID)
+	if err != nil {
+		return err
+	}
+	return os.Remove(filepath.Join(dir, p))
 }
 
 func (m *SkillManager) DeleteFiles(ctx context.Context, skillID string) error {
+	sk, err := m.Get(ctx, skillID)
+	if err == nil && (sk.Source == "builtin" || sk.Builtin) {
+		return fmt.Errorf("cannot modify builtin skill %q", skillID)
+	}
+	dir := filepath.Join(m.globalDir, skillID)
+	if err == nil && strings.TrimSpace(sk.Dir) != "" {
+		dir = sk.Dir
+	}
 	for _, prefix := range []string{"scripts", "references", "assets"} {
-		_ = os.RemoveAll(filepath.Join(m.globalDir, skillID, prefix))
+		_ = os.RemoveAll(filepath.Join(dir, prefix))
 	}
 	return nil
 }
@@ -358,7 +400,10 @@ func writeSkillFile(dir string, s domain.Skill) error {
 }
 
 func readSkillFiles(baseDir, skillID string) ([]domain.SkillFile, error) {
-	skillDir := filepath.Join(baseDir, skillID)
+	return readSkillFilesFromDir(filepath.Join(baseDir, skillID), skillID)
+}
+
+func readSkillFilesFromDir(skillDir, skillID string) ([]domain.SkillFile, error) {
 	var files []domain.SkillFile
 	for _, sub := range []string{"scripts", "references", "assets"} {
 		subDir := filepath.Join(skillDir, sub)

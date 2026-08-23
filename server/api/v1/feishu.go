@@ -105,6 +105,9 @@ func feishuConfigure(h *Handler) gin.HandlerFunc {
 		if req.RichProgress != nil {
 			fs.RichProgress = req.RichProgress
 		}
+		if !validateChannelDefaultAgent(h, c, fs.DefaultAgentID) {
+			return
+		}
 		if req.Enabled {
 			if fs.DefaultAgentID == "" {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "defaultAgentId required when enabling feishu"})

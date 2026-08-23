@@ -66,6 +66,7 @@ assert.equal(ext.blockers.length, 1)
 
 assert.equal(parseContractYaml('status: accepted').status, 'accepted')
 assert.equal(parseContractYaml('title_working: 孙馆长\nstatus: proposed').title, '孙馆长')
+assert.equal(parseContractYaml('unit_id: v04-U2\nstatus: proposed').unitId, 'v04-U2')
 assert.equal(parseReviewVerdict('### VERDICT\nPASS'), 'PASS')
 assert.equal(parseReviewVerdict('### VERDICT\nFAIL'), 'FAIL')
 assert.equal(parseBatchFreezeYaml('status: frozen').status, 'frozen')
@@ -164,6 +165,21 @@ const freezePrefill = buildNovelStagePrefill('batch-freeze', {
 })
 assert.ok(freezePrefill.includes('novel-write/references/batch-freeze.md'))
 assert.ok(freezePrefill.includes('章合同'))
+assert.ok(freezePrefill.includes('unit_id'))
+
+const contractPrefill = buildNovelStagePrefill('contract', { bookId: 'star-inn', chapter: 4 })
+assert.ok(contractPrefill.includes('unit_id'))
+assert.ok(contractPrefill.includes('vNN-U#'))
+
+const goldPrefill = buildNovelStagePrefill('goldfinger', { bookId: 'star-inn' })
+assert.ok(goldPrefill.includes('novel-setup/assets/templates/goldfinger-card.md'))
+
+const assetsPrefill = buildNovelStagePrefill('assets', { bookId: 'star-inn' })
+assert.ok(assetsPrefill.includes('world.md'))
+assert.ok(assetsPrefill.includes('cast-card.md'))
+
+const outlinePrefill = buildNovelStagePrefill('outline', { bookId: 'star-inn' })
+assert.ok(outlinePrefill.includes('终局储备'))
 
 assert.equal(chapterNumFromName('ch001.md'), 1)
 assert.equal(isNovelChapterPath('novel/b/chapters/ch003.md'), true)
@@ -198,6 +214,10 @@ assert.deepEqual(
 assert.equal(
   parseVolumeUnitRows(`| 单元 | 章范围 | 功能（本段必须完成） | 由上一单元如何导致 | 主爽点形态 |\n| U1 | ch001-ch008 | 开局夺权 | | 智斗 |\n`)[0].purpose,
   '开局夺权',
+)
+assert.equal(
+  parseVolumeUnitRows(`| 单元 | 章范围 | 功能（本段必须完成） | 本段主角目标 | 由上一单元如何导致 | 主爽点形态 | 禁止提前释放 | 下一单元钩子 |\n| U2 | ch009-ch016 | 宗门大比 | 保住名额 | 夺权余波 | 战力 | 金手指上限 | 师尊现身 |\n`)[0].purpose,
+  '宗门大比',
 )
 assert.deepEqual(parseChapterRange('ch001-ch008'), { from: 1, to: 8 })
 assert.equal(setupDocLabel('book-bible.md'), 'bible')

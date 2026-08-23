@@ -6,7 +6,7 @@ Use after review PASS, or when user asks only for deslop.
 
 1. `search_kb` / `get_kb_doc`「文风与去 AI 味」(knowledge_gate).  
 2. `read_file` the chapter.  
-3. Apply P0 removals first, then P1.  
+3. Apply P0 removals first（毒句式 1 处即修、一级词密集 ≥3），then P1.  
 4. Prefer `edit` for local fixes; `write` only if whole-file rewrite is clearer.  
 5. Re-scan P0 checklist; do not claim deslop without file changes.
 

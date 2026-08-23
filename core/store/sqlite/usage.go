@@ -34,6 +34,16 @@ type usageRollupModel struct {
 
 func (usageRollupModel) TableName() string { return "llm_usage_rollups" }
 
+// migrateUsageRollupCache normalizes NULL cache counters left by pre-cache
+// schema rows. SQLite NULL + n stays NULL on upsert until coalesced to zero.
+func migrateUsageRollupCache(db *gorm.DB) error {
+	return db.Exec(`
+		UPDATE llm_usage_rollups
+		SET cache_read_tokens = 0
+		WHERE cache_read_tokens IS NULL
+	`).Error
+}
+
 func usageRollupToDomain(m usageRollupModel) domain.UsageRollup {
 	return domain.UsageRollup{
 		Grain:               domain.UsageGrain(m.Grain),
@@ -158,8 +168,10 @@ func upsertUsageDelta(tx *gorm.DB, grain domain.UsageGrain, refID, projectID, se
 			"prompt_tokens":         gorm.Expr("prompt_tokens + ?", delta.PromptTokens),
 			"completion_tokens":     gorm.Expr("completion_tokens + ?", delta.CompletionTokens),
 			"total_tokens":          gorm.Expr("total_tokens + ?", delta.TotalTokens),
-			"cache_read_tokens":     gorm.Expr("cache_read_tokens + ?", delta.CacheReadTokens),
-			"cache_creation_tokens": gorm.Expr("cache_creation_tokens + ?", delta.CacheCreationTokens),
+			// SQLite NULL + n stays NULL; rows created before cache columns landed
+			// must coalesce or cache totals never accumulate on model/agent grains.
+			"cache_read_tokens":     gorm.Expr("COALESCE(cache_read_tokens, 0) + ?", delta.CacheReadTokens),
+			"cache_creation_tokens": gorm.Expr("COALESCE(cache_creation_tokens, 0) + ?", delta.CacheCreationTokens),
 			"call_count":            gorm.Expr("call_count + 1"),
 			"max_prompt_tokens":     gorm.Expr("MAX(max_prompt_tokens, ?)", delta.PromptTokens),
 			"updated_at":            at,
