@@ -1513,46 +1513,32 @@ onUnmounted(() => {
                 </DqSelect>
               </div>
 
-              <!-- OS sandbox backend params -->
-              <template v-if="!isContainerBackend">
-                <div class="settings-form-row">
-                  <div class="settings-field settings-field--half">
-                    <span class="settings-field__label">{{ $t('settings.sandboxMode') }}</span>
-                    <DqSelect v-model="runtimeForm.sandboxMode">
-                      <DqOption value="read-only" :label="$t('settings.sandboxModeReadOnly')" />
-                      <DqOption value="workspace-write" :label="$t('settings.sandboxModeWorkspaceWrite')" />
-                      <DqOption value="danger-full-access" :label="$t('settings.sandboxModeDanger')" />
-                    </DqSelect>
-                  </div>
-                  <div class="settings-field settings-field--half">
-                    <span class="settings-field__label">{{ $t('settings.sandboxNetwork') }}</span>
-                    <DqSelect v-model="runtimeForm.sandboxNetwork">
-                      <DqOption value="deny" :label="$t('settings.sandboxNetworkDeny')" />
-                      <DqOption value="allowlist" :label="$t('settings.sandboxNetworkAllowlistRecommended')" />
-                      <DqOption value="allow" :label="$t('settings.sandboxNetworkAllow')" />
-                    </DqSelect>
-                  </div>
+              <div class="settings-form-row">
+                <div v-if="!isContainerBackend" class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.sandboxMode') }}</span>
+                  <DqSelect v-model="runtimeForm.sandboxMode">
+                    <DqOption value="read-only" :label="$t('settings.sandboxModeReadOnly')" />
+                    <DqOption value="workspace-write" :label="$t('settings.sandboxModeWorkspaceWrite')" />
+                    <DqOption value="danger-full-access" :label="$t('settings.sandboxModeDanger')" />
+                  </DqSelect>
                 </div>
-                <p class="settings-form-group__desc">{{ $t('settings.sandboxNetworkDesc') }}</p>
-              </template>
+                <div class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.sandboxNetwork') }}</span>
+                  <DqSelect v-model="runtimeForm.sandboxNetwork">
+                    <DqOption value="deny" :label="$t('settings.sandboxNetworkDeny')" />
+                    <DqOption value="allowlist" :label="$t('settings.sandboxNetworkAllowlistRecommended')" />
+                    <DqOption value="allow" :label="$t('settings.sandboxNetworkAllow')" />
+                  </DqSelect>
+                </div>
+                <div v-if="isContainerBackend" class="settings-field settings-field--half">
+                  <span class="settings-field__label">{{ $t('settings.envImage') }}</span>
+                  <DqInput v-model="runtimeForm.envImage" :placeholder="$t('settings.envImagePlaceholder')" />
+                </div>
+              </div>
+              <p class="settings-form-group__desc">{{ $t('settings.sandboxNetworkDesc') }}</p>
 
               <!-- Container backend params (podman / docker / apple-container) -->
-              <template v-else>
-                <div class="settings-form-row">
-                  <div class="settings-field settings-field--half">
-                    <span class="settings-field__label">{{ $t('settings.sandboxNetwork') }}</span>
-                    <DqSelect v-model="runtimeForm.sandboxNetwork">
-                      <DqOption value="deny" :label="$t('settings.sandboxNetworkDeny')" />
-                      <DqOption value="allowlist" :label="$t('settings.sandboxNetworkAllowlistRecommended')" />
-                      <DqOption value="allow" :label="$t('settings.sandboxNetworkAllow')" />
-                    </DqSelect>
-                  </div>
-                  <div class="settings-field settings-field--half">
-                    <span class="settings-field__label">{{ $t('settings.envImage') }}</span>
-                    <DqInput v-model="runtimeForm.envImage" :placeholder="$t('settings.envImagePlaceholder')" />
-                  </div>
-                </div>
-                <p class="settings-form-group__desc">{{ $t('settings.sandboxNetworkDesc') }}</p>
+              <template v-if="isContainerBackend">
                 <div class="settings-form-row">
                   <div class="settings-field settings-field--half">
                     <span class="settings-field__label">{{ $t('settings.envWorkspaceMount') }}</span>
