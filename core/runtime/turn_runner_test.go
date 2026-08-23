@@ -634,7 +634,7 @@ func TestSnipHeadPreservesLastUserMessage(t *testing.T) {
 		{Role: RoleAssistant, Content: "old response 2"},
 		{Role: RoleUser, Content: "current goal — must survive"},
 	}
-	out := tr.snipHead(msgs, 10) // budget=10 tokens, very small
+	out := tr.snipHead(msgs, 10, 3) // budget=10 tokens, very small
 
 	foundLastUser := false
 	for _, m := range out {
@@ -659,7 +659,7 @@ func TestSnipHeadPreservesGoalAndTurnWorkUnderExtremeBudget(t *testing.T) {
 		{Role: RoleUser, Content: "current goal — must survive even under extreme budget"},
 		{Role: RoleAssistant, Content: "this turn work after the goal"},
 	}
-	out := tr.snipHead(msgs, 1) // budget impossible to satisfy
+	out := tr.snipHead(msgs, 1, 3) // budget impossible to satisfy
 
 	foundGoal, foundWork := false, false
 	for _, m := range out {
@@ -678,6 +678,121 @@ func TestSnipHeadPreservesGoalAndTurnWorkUnderExtremeBudget(t *testing.T) {
 	}
 }
 
+func TestCompactMessagesBelowPressureNoOp(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, nil, nil, nil)
+	long := strings.Repeat("x", defaultToolTruncateChars+500)
+	cfg := turnRunCfg{
+		compactionMaxTokens:    128000,
+		compactionTriggerRatio: 0.85,
+		toolTruncateChars:      defaultToolTruncateChars,
+	}
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "goal"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c1", Name: "read_file"}}},
+		{Role: RoleTool, ToolCallID: "c1", Name: "read_file", Content: long},
+	}
+	if estimateTurnTokens(msgs) > highWaterTokens(cfg) {
+		t.Fatal("fixture must stay below pressure")
+	}
+	out := tr.compactMessages(msgs, cfg)
+	if out[3].Content != long {
+		t.Fatalf("below pressure: tool result must stay full, got len=%d", len(out[3].Content))
+	}
+}
+
+func TestCompactMessagesPrunesUnderPressure(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, nil, nil, nil)
+	long := strings.Repeat("x", defaultToolTruncateChars+500)
+	cfg := turnRunCfg{
+		compactionMaxTokens:     10000,
+		compactionTriggerRatio:  0.42,
+		compactionLowWaterRatio: 0.20,
+		toolTruncateChars:       defaultToolTruncateChars,
+		keepRecentToolSteps:     1,
+	}
+	pad := strings.Repeat("word ", 80)
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "goal " + pad},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "old", Name: "read_file", Arguments: map[string]any{"path": "a.txt"}}}},
+		{Role: RoleTool, ToolCallID: "old", Name: "read_file", Content: long},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "new", Name: "read_file", Arguments: map[string]any{"path": "b.txt"}}}},
+		{Role: RoleTool, ToolCallID: "new", Name: "read_file", Content: long},
+	}
+	if estimateTurnTokens(msgs) <= highWaterTokens(cfg) {
+		t.Fatal("fixture must exceed pressure")
+	}
+	out := tr.compactMessages(msgs, cfg)
+	var oldPruned, newFull bool
+	for _, m := range out {
+		if m.Role == RoleTool && m.ToolCallID == "old" {
+			oldPruned = strings.Contains(m.Content, toolResultPruneMarker)
+		}
+		if m.Role == RoleTool && m.ToolCallID == "new" && m.Content == long {
+			newFull = true
+		}
+	}
+	if !oldPruned {
+		t.Fatal("under pressure: older tool result should be pruned")
+	}
+	if !newFull {
+		t.Fatal("under pressure: recent tool result should stay full")
+	}
+}
+
+func TestSnipHeadRemovesPostGoalToolPairs(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, nil, nil, nil)
+	pad := strings.Repeat("word ", 80)
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "delegate goal"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "old", Name: "grep"}}},
+		{Role: RoleTool, ToolCallID: "old", Name: "grep", Content: "old-out " + pad},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "mid", Name: "grep"}}},
+		{Role: RoleTool, ToolCallID: "mid", Name: "grep", Content: "mid-out " + pad},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "new", Name: "grep"}}},
+		{Role: RoleTool, ToolCallID: "new", Name: "grep", Content: "new-out " + pad},
+	}
+	out := tr.snipHead(msgs, 10, 2)
+	foundOld, foundMid, foundNew := false, false, false
+	for _, m := range out {
+		if m.Role == RoleTool && strings.Contains(m.Content, "old-out") {
+			foundOld = true
+		}
+		if m.Role == RoleTool && strings.Contains(m.Content, "mid-out") {
+			foundMid = true
+		}
+		if m.Role == RoleTool && strings.Contains(m.Content, "new-out") {
+			foundNew = true
+		}
+	}
+	if foundOld {
+		t.Fatal("oldest post-goal tool pair should be snipped")
+	}
+	if !foundMid || !foundNew {
+		t.Fatal("recent post-goal tail should survive")
+	}
+}
+
+func TestPruneToolResults_SkipsRecentSteps(t *testing.T) {
+	long := strings.Repeat("x", defaultToolTruncateChars+100)
+	msgs := []Message{
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "old-1", Name: "read_file"}}},
+		{Role: RoleTool, ToolCallID: "old-1", Name: "read_file", Content: long},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "new-1", Name: "read_file"}}},
+		{Role: RoleTool, ToolCallID: "new-1", Name: "read_file", Content: long},
+	}
+	protected := recentToolCallIDs(msgs, 1)
+	out := pruneToolResults(msgs, defaultToolTruncateChars, protected)
+	if !strings.Contains(out[1].Content, toolResultPruneMarker) {
+		t.Fatal("old step should be pruned")
+	}
+	if out[3].Content != long {
+		t.Fatal("protected recent step should stay full")
+	}
+}
+
 func TestCompactMessagesSnipsToLowWaterAndDoesNotRetrigger(t *testing.T) {
 	tr := NewTurnRunner(nil, nil, nil, nil, nil)
 	pad := strings.Repeat("word ", 80) // ~100 tokens per message (chars/4)
@@ -686,7 +801,6 @@ func TestCompactMessagesSnipsToLowWaterAndDoesNotRetrigger(t *testing.T) {
 		compactionTriggerRatio:  0.5, // high water = 200
 		compactionLowWaterRatio: 0.2, // low water = 80
 		toolTruncateChars:       20000,
-		keepRecentToolSteps:     3,
 	}
 	msgs := []Message{
 		{Role: RoleSystem, Content: "sys"},
@@ -750,7 +864,6 @@ func TestCompactMessagesStopsAtLastUserWhenTurnExceedsLowWater(t *testing.T) {
 		compactionTriggerRatio:  0.5,
 		compactionLowWaterRatio: 0.05,
 		toolTruncateChars:       20000,
-		keepRecentToolSteps:     3,
 	}
 	msgs := []Message{
 		{Role: RoleSystem, Content: "sys"},

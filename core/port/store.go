@@ -334,6 +334,21 @@ type TurnLogStore interface {
 	ListSessionEntries(sessionID string) []TurnLogEntryRecord
 	LoadRawLog(turnID string) ([]byte, error)
 	LoadTurnLogZip(turnID string, events []domain.StreamEvent) ([]byte, error)
+	// RecallToolResult returns the durable tool_result output for callID in
+	// turnID (full text at execute time; compaction does not mutate the log).
+	RecallToolResult(turnID, callID string) (RecalledToolResult, bool)
+	// RecallToolResultInSession searches non-nested turns in the session
+	// (newest first) when call_id is not found in the current turn.
+	RecallToolResultInSession(sessionID, callID string) (RecalledToolResult, bool)
+}
+
+// RecalledToolResult is a tool_result read from the durable turn log.
+type RecalledToolResult struct {
+	TurnID          string
+	CallID          string
+	ToolName        string
+	Output          string
+	IngestTruncated bool // capped by runtime.tools.max_output_chars at execute
 }
 
 // IncompleteToolCall is a tool invocation recorded in turn JSONL without a

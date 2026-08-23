@@ -67,3 +67,11 @@ func (m *TurnLogManager) LoadRawLog(turnID string) ([]byte, error) {
 func (m *TurnLogManager) LoadTurnLogZip(turnID string, events []domain.StreamEvent) ([]byte, error) {
 	return m.store.LoadTurnLogZip(turnID, events)
 }
+
+func (m *TurnLogManager) RecallToolResult(turnID, callID string) (port.RecalledToolResult, bool) {
+	return m.store.RecallToolResult(turnID, callID)
+}
+
+func (m *TurnLogManager) RecallToolResultInSession(sessionID, callID string) (port.RecalledToolResult, bool) {
+	return m.store.RecallToolResultInSession(sessionID, callID)
+}

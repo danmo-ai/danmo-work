@@ -1659,6 +1659,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent, planMode bool) *tool.Regi
 		},
 		&builtin.MemoryUpdate{Store: e.memories},
 		&builtin.MemoryRead{Store: e.memories, TopK: cfg.memoryReadTopK},
+		&builtin.RecallToolResult{Store: e.turnLog},
 		delegator,
 	}
 	handlers = append(handlers, e.coreTableTools()...)
@@ -1684,6 +1685,7 @@ func (e *Engine) buildWorkerRegistry(agent domain.Agent, planMode bool) *tool.Re
 		},
 		&builtin.MemoryUpdate{Store: e.memories},
 		&builtin.MemoryRead{Store: e.memories, TopK: cfg.memoryReadTopK},
+		&builtin.RecallToolResult{Store: e.turnLog},
 	}
 	handlers = append(handlers, e.coreTableTools()...)
 	reg := tool.NewRegistry(handlers...)

@@ -99,7 +99,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("runtime.compaction.cut_tokens", 16000)
 	v.SetDefault("runtime.compaction.turn_interval", 6)
 	v.SetDefault("runtime.compaction.sub_interval", 4)
-	v.SetDefault("runtime.compaction.tool_truncate", 2000)
+	v.SetDefault("runtime.compaction.tool_truncate", 8192)
 	v.SetDefault("runtime.compaction.keep_recent_tool_steps", 3)
 	v.SetDefault("search.provider", string(domain.SearchProviderDuckDuckGo))
 	v.SetDefault("search.base_url", "")

@@ -80,7 +80,7 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     compactionCutTokens: rt.compaction?.cutTokens ?? 16000,
     compactionTurnInterval: rt.compaction?.turnInterval ?? 6,
     compactionSubInterval: rt.compaction?.subInterval ?? 4,
-    compactionToolTruncate: rt.compaction?.toolTruncate ?? 2000,
+    compactionToolTruncate: rt.compaction?.toolTruncate ?? 8192,
     compactionKeepRecentToolSteps: rt.compaction?.keepRecentToolSteps ?? 3,
   }
 }

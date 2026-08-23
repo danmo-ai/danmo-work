@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	turnToolTextMaxChars       = 2000
+	defaultToolTruncateChars   = 8192
 	defaultKeepRecentToolSteps = 3
-	turnHugeResultThreshold    = 60000
+	toolResultPruneMarker      = "\n\n[... tool result middle pruned ...]\n\n"
 	defaultMaxToolOutputChars  = 50000
 	turnTokenEstimateDivisor   = 4
 	doomPatternWindow          = 8
@@ -245,7 +245,7 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 		compactionMaxTokens:     128000,
 		compactionTriggerRatio:  0.85,
 		compactionLowWaterRatio: 0.70,
-		toolTruncateChars:       turnToolTextMaxChars,
+		toolTruncateChars:       defaultToolTruncateChars,
 		keepRecentToolSteps:     defaultKeepRecentToolSteps,
 	}
 	if p.ConfigStore != nil {
@@ -1092,12 +1092,18 @@ func (p *TurnRunner) compactMessages(messages []Message, cfg turnRunCfg) []Messa
 	if len(messages) <= 1 {
 		return messages
 	}
-	messages = p.dedupToolResults(messages)
-	messages = truncateToolResults(messages, cfg.toolTruncateChars, cfg.keepRecentToolSteps)
 	messages = p.enforceToolPairing(messages)
 	high := highWaterTokens(cfg)
-	if high > 0 && estimateTurnTokens(messages) > high {
-		messages = p.snipHead(messages, lowWaterTokens(cfg))
+	if high <= 0 || estimateTurnTokens(messages) <= high {
+		// Below pressure: no dedup/prune/snip — keep the LLM prefix stable for KV cache.
+		return messages
+	}
+	// Pressure compaction: dedup → prune (skip recent tail) → snip to low water.
+	protected := recentToolCallIDs(messages, cfg.keepRecentToolSteps)
+	messages = p.dedupToolResults(messages)
+	messages = pruneToolResults(messages, cfg.toolTruncateChars, protected)
+	if estimateTurnTokens(messages) > high {
+		messages = p.snipHead(messages, lowWaterTokens(cfg), cfg.keepRecentToolSteps)
 	}
 	return messages
 }
@@ -1160,8 +1166,7 @@ func (p *TurnRunner) dedupToolResults(messages []Message) []Message {
 	return result
 }
 
-// recentToolCallIDs returns tool_call IDs belonging to the last keepSteps
-// assistant messages that issued tools (one LLM step each).
+// recentToolCallIDs returns tool_call IDs in the last keepSteps assistant batches.
 func recentToolCallIDs(messages []Message, keepSteps int) map[string]struct{} {
 	if keepSteps <= 0 {
 		return nil
@@ -1186,34 +1191,68 @@ func recentToolCallIDs(messages []Message, keepSteps int) map[string]struct{} {
 	return protected
 }
 
-// truncateToolResults caps older tool results; the latest keepRecentSteps LLM
-// tool-call batches keep full content (still subject to max_output_chars at execute).
-func truncateToolResults(messages []Message, maxChars, keepRecentSteps int) []Message {
-	if maxChars <= 0 {
-		maxChars = turnToolTextMaxChars
+func toolResultPruneHeadTail(threshold int) (head, tail int) {
+	markerLen := len(toolResultPruneMarker)
+	budget := threshold - markerLen
+	if budget < 64 {
+		return threshold / 2, 0
 	}
-	protected := recentToolCallIDs(messages, keepRecentSteps)
+	head = budget * 3 / 4
+	tail = budget / 8
+	if head+tail > budget {
+		tail = budget - head
+	}
+	return head, tail
+}
+
+func isToolResultPruned(content string) bool {
+	return strings.Contains(content, toolResultPruneMarker)
+}
+
+// pruneToolResultContent rewrites one over-budget tool result to head+marker+tail.
+// Idempotent: already-pruned or within-threshold content is unchanged.
+func pruneToolResultContent(content string, threshold int) string {
+	if threshold <= 0 {
+		threshold = defaultToolTruncateChars
+	}
+	if len(content) <= threshold || isToolResultPruned(content) {
+		return content
+	}
+	head, tail := toolResultPruneHeadTail(threshold)
+	headEnd := truncateUTF8Boundary(content, head)
+	headPart := content[:headEnd]
+	if tail <= 0 {
+		return headPart + toolResultPruneMarker
+	}
+	tailStart := len(content) - tail
+	for tailStart > headEnd && tailStart < len(content) && !utf8.RuneStart(content[tailStart]) {
+		tailStart++
+	}
+	if tailStart <= headEnd {
+		return headPart + toolResultPruneMarker
+	}
+	return headPart + toolResultPruneMarker + content[tailStart:]
+}
+
+// pruneToolResults rewrites over-budget tool results outside the protected window.
+func pruneToolResults(messages []Message, threshold int, protected map[string]struct{}) []Message {
+	if threshold <= 0 {
+		threshold = defaultToolTruncateChars
+	}
 	result := make([]Message, len(messages))
 	copy(result, messages)
 	for i := range result {
 		if result[i].Role != RoleTool {
 			continue
 		}
-		if _, ok := protected[result[i].ToolCallID]; ok {
-			continue
+		if protected != nil {
+			if _, ok := protected[result[i].ToolCallID]; ok {
+				continue
+			}
 		}
-		content := result[i].Content
-		limit := maxChars
-		if isHugeResult(content) {
-			limit = turnHugeResultThreshold
-		}
-		result[i].Content = limitToolOutput(content, limit)
+		result[i].Content = pruneToolResultContent(result[i].Content, threshold)
 	}
 	return result
-}
-
-func isHugeResult(content string) bool {
-	return len(content) > turnHugeResultThreshold
 }
 
 // limitToolOutput hard-caps tool result text at maxChars bytes, backing up to
@@ -1300,7 +1339,25 @@ func keepCompleteToolPairs(messages []Message) []Message {
 	return out
 }
 
-func (p *TurnRunner) snipHead(messages []Message, budget int) []Message {
+// postGoalRetainStart is the first index that must not be removed during
+// post-goal snipping (Harness-style recent tail).
+func postGoalRetainStart(messages []Message, lastUserIdx, keepBatches int) int {
+	if lastUserIdx < 0 || keepBatches <= 0 {
+		return len(messages)
+	}
+	found := 0
+	for i := len(messages) - 1; i > lastUserIdx; i-- {
+		if messages[i].Role == RoleAssistant && len(messages[i].ToolCalls) > 0 {
+			found++
+			if found >= keepBatches {
+				return i
+			}
+		}
+	}
+	return lastUserIdx + 1
+}
+
+func (p *TurnRunner) snipHead(messages []Message, budget, keepRecentSteps int) []Message {
 	systemCount := 0
 	for _, m := range messages {
 		if m.Role == RoleSystem {
@@ -1313,8 +1370,6 @@ func (p *TurnRunner) snipHead(messages []Message, budget int) []Message {
 	result := make([]Message, len(messages))
 	copy(result, messages)
 
-	// Protect the last user message — it is the current turn's goal.
-	// Removing it would make the turn meaningless.
 	lastUserIdx := -1
 	for i := len(result) - 1; i >= systemCount; i-- {
 		if result[i].Role == RoleUser {
@@ -1323,19 +1378,39 @@ func (p *TurnRunner) snipHead(messages []Message, budget int) []Message {
 		}
 	}
 
-	i := systemCount
-	for i < len(result) {
-		cur := estimateTurnTokens(result)
-		if cur <= budget {
+	// Phase 1: drop pre-goal history (multi-turn sessions). Never remove the goal.
+	end := len(result)
+	if lastUserIdx >= 0 {
+		end = lastUserIdx
+	}
+	result = snipRange(result, systemCount, end, budget, -1)
+
+	if estimateTurnTokens(result) <= budget {
+		return result
+	}
+
+	// Phase 2: drop oldest post-goal assistant+tool pairs (delegate sub-turns).
+	if lastUserIdx < 0 {
+		return result
+	}
+	retainStart := postGoalRetainStart(result, lastUserIdx, keepRecentSteps)
+	return snipRange(result, lastUserIdx+1, retainStart, budget, lastUserIdx)
+}
+
+// snipRange removes messages in [start, end) until budget is met or the range
+// is exhausted. goalIdx is the protected user goal index (adjusted as removals
+// shift indices); pass -1 when not applicable.
+func snipRange(messages []Message, start, end, budget, goalIdx int) []Message {
+	result := messages
+	i := start
+	for i < end && i < len(result) {
+		if estimateTurnTokens(result) <= budget {
 			break
 		}
-
-		// Stop if the next message to remove is the protected last user message
-		// or beyond it (everything after the user message is the current turn's work).
-		if lastUserIdx >= 0 && i >= lastUserIdx {
-			break
+		if goalIdx >= 0 && i == goalIdx {
+			i++
+			continue
 		}
-
 		m := result[i]
 		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
 			ids := make(map[string]bool)
@@ -1343,26 +1418,40 @@ func (p *TurnRunner) snipHead(messages []Message, budget int) []Message {
 				ids[tc.ID] = true
 			}
 			result = removeAt(result, i)
-			if lastUserIdx > i {
-				lastUserIdx--
+			if goalIdx > i {
+				goalIdx--
 			}
-			for j := i; j < len(result); {
+			if end > i {
+				end--
+			}
+			for j := i; j < len(result) && j < end; {
 				rj := result[j]
 				if rj.Role == RoleTool && ids[rj.ToolCallID] {
 					result = removeAt(result, j)
-					if lastUserIdx > j {
-						lastUserIdx--
+					if goalIdx > j {
+						goalIdx--
+					}
+					if end > j {
+						end--
 					}
 				} else {
 					j++
 				}
 			}
-		} else {
-			result = removeAt(result, i)
-			if lastUserIdx > i {
-				lastUserIdx--
-			}
+			continue
 		}
+		// Phase 1 may drop plain user/assistant history before the goal.
+		if goalIdx < 0 || i < goalIdx {
+			result = removeAt(result, i)
+			if goalIdx > i {
+				goalIdx--
+			}
+			if end > i {
+				end--
+			}
+			continue
+		}
+		i++
 	}
 	return result
 }

@@ -566,11 +566,16 @@ Tool 刚执行完时已按 `runtime.tools.max_output_chars` 做硬上限（§6.3
 
 ```
 每 Step（step > 1，且 compaction.enabled）:
-  1. 去重: 同 tool+input → 保留最新，旧结果摘要
-  2. 渐进截断: 超大 tool result 截断并保留摘要
-  3. 配对完整性: 过滤孤儿 tool_result
-  4. 头尾截断: 超高水位（MaxTokens * TriggerRatio）→ 删除最旧非 system 消息直到低水位（MaxTokens * LowWaterRatio；assistant+tool_results 成对；不删本轮 last user）
+  1. 配对完整性: 过滤孤儿 tool_result（始终）
+  2. 低于高水位（MaxTokens * TriggerRatio）: 不裁剪（含去重；保持 LLM 前缀稳定以利 KV cache）
+  3. 超高水位时（Harness-style pressure compaction）:
+     a. 去重: 同 tool+input → 保留最新，旧结果摘要
+     b. 渐进截断: 超大 tool result（超过 toolTruncate，默认 8192）→ head + marker + tail；最近 keepRecentToolSteps 批（默认 3）豁免
+     c. 仍超阈值 → 删除最旧 assistant+tool 对直到低水位；最近 keepRecentToolSteps 批豁免
 ```
+
+Compaction 仅修改内存中的 LLM messages；tool 执行时的完整输出仍落在 durable turn log。
+当上下文中的结果被 prune/snip 后，Agent 可调用 `recall_tool_result(call_id)` 从 log 取回（受 `max_output_chars` 执行时硬上限约束；不自动写回上下文）。
 
 ### 10.2 Session 级压缩（`CompactionManager`）
 
@@ -593,9 +598,10 @@ Tool 刚执行完时已按 `runtime.tools.max_output_chars` 做硬上限（§6.3
 |------|--------|----------|------|
 | **Memory** | Agent tool（显式） | 跨 Session，SQLite | `memory_read` / UI |
 | **Compaction Checkpoint** | 引擎自动摘要 | Session 内 | 注入 system prompt |
+| **Turn log recall** | 工具执行时落盘 | Turn 内 durable | `recall_tool_result`（读 log，不自动注入上下文） |
 | **Knowledge** | 人工文档（`~/.danmo-work/knowledge/` MD SoT） | 绑定 Agent KB | 章级 `search_kb` + 自动 top-K 注入（FTS5 BM25；可选向量混合） |
 
-会话内被压缩丢掉的消息召回（BM25-at-compaction）为后续议题，与 durable Memory 独立。
+会话内被压缩丢掉的消息召回（BM25-at-compaction）为后续议题，与 durable Memory 独立。Turn 内 compaction 仅改内存 messages；完整 tool 输出仍在 turn log，可用 `recall_tool_result(call_id)` 取回（受 `max_output_chars` 执行时硬上限约束）。
 
 ### 10.4 KV Cache 友好分区（设计目标）
 

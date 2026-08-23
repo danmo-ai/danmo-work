@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"danmo-work/core/domain"
@@ -660,5 +661,59 @@ func TestLoadSessionMessagesRepairsRetainSkipInsideToolPair(t *testing.T) {
 	}
 	if msgs[1].Role != "tool" || msgs[1].ToolCallID != "c2" || msgs[1].Content != "PAIRED" {
 		t.Fatalf("expected c2 result, got %+v", msgs[1])
+	}
+}
+
+func TestRecallToolResult(t *testing.T) {
+	s := newTestStore(t)
+	_ = s.Create("turn-1", "sess-recall", "proj-a", "a", "g")
+	s.Append("turn-1", "tool_result", map[string]any{"call_id": "c1", "name": "grep", "output": "first"})
+	s.Append("turn-1", "tool_result", map[string]any{"call_id": "c1", "name": "grep", "output": "latest full text"})
+
+	got, ok := s.RecallToolResult("turn-1", "c1")
+	if !ok {
+		t.Fatal("expected recall ok")
+	}
+	if got.Output != "latest full text" || got.ToolName != "grep" || got.TurnID != "turn-1" {
+		t.Fatalf("unexpected recall: %+v", got)
+	}
+	if got.IngestTruncated {
+		t.Fatal("expected ingest truncated false")
+	}
+
+	if _, ok := s.RecallToolResult("turn-1", "missing"); ok {
+		t.Fatal("expected missing call_id to fail")
+	}
+}
+
+func TestRecallToolResultIngestTruncated(t *testing.T) {
+	s := newTestStore(t)
+	_ = s.Create("turn-1", "sess-trunc", "proj-a", "a", "g")
+	out := strings.Repeat("x", 100) + "\n...[truncated, 50000 total chars]"
+	s.Append("turn-1", "tool_result", map[string]any{"call_id": "c1", "name": "read_file", "output": out})
+
+	got, ok := s.RecallToolResult("turn-1", "c1")
+	if !ok || !got.IngestTruncated {
+		t.Fatalf("expected ingest truncated, got %+v ok=%v", got, ok)
+	}
+}
+
+func TestRecallToolResultInSession(t *testing.T) {
+	s := newTestStore(t)
+	_ = s.Create("turn-1", "sess-sess", "proj-a", "a", "g1")
+	s.Append("turn-1", "tool_result", map[string]any{"call_id": "old", "name": "grep", "output": "old turn"})
+	s.EndTurn("turn-1", domain.TurnCompleted)
+
+	_ = s.Create("turn-2", "sess-sess", "proj-a", "a", "g2")
+	s.Append("turn-2", "tool_result", map[string]any{"call_id": "new", "name": "grep", "output": "new turn"})
+	s.EndTurn("turn-2", domain.TurnCompleted)
+
+	got, ok := s.RecallToolResultInSession("sess-sess", "new")
+	if !ok || got.Output != "new turn" || got.TurnID != "turn-2" {
+		t.Fatalf("expected newest turn match, got %+v ok=%v", got, ok)
+	}
+	got, ok = s.RecallToolResultInSession("sess-sess", "old")
+	if !ok || got.Output != "old turn" || got.TurnID != "turn-1" {
+		t.Fatalf("expected older turn match, got %+v ok=%v", got, ok)
 	}
 }

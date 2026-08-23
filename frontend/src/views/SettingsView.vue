@@ -249,7 +249,7 @@ const runtimeForm = ref({
   compactionCutTokens: 16000,
   compactionTurnInterval: 6,
   compactionSubInterval: 4,
-  compactionToolTruncate: 2000,
+  compactionToolTruncate: 8192,
   compactionKeepRecentToolSteps: 3,
 })
 
@@ -1791,7 +1791,7 @@ onUnmounted(() => {
                 <div class="settings-field settings-field--half">
                   <span class="settings-field__label">{{ $t('settings.compactionToolTruncate') }}</span>
                   <div class="slider-row">
-                    <DqSlider v-model="runtimeForm.compactionToolTruncate" :min="500" :max="8000" :step="500" />
+                    <DqSlider v-model="runtimeForm.compactionToolTruncate" :min="1024" :max="32768" :step="1024" />
                     <span class="slider-row__value">{{ runtimeForm.compactionToolTruncate }}</span>
                   </div>
                 </div>

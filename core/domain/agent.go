@@ -107,6 +107,7 @@ var PlanModeAllowedToolIDs = map[string]struct{}{
 	// Skills / memory read
 	"read_skill":  {},
 	"memory_read": {},
+	"recall_tool_result": {},
 	// Knowledge base read
 	"search_kb":    {},
 	"list_kb_docs": {},
@@ -122,7 +123,7 @@ var PlanModeAllowedToolIDs = map[string]struct{}{
 // handlers with catalog stubs (e.g. ask_user with OnAsk=nil).
 var coreToolIDs = map[string]struct{}{
 	"ask_user": {}, "read_skill": {}, "delegate_agent": {},
-	"memory_update": {}, "memory_read": {},
+	"memory_update": {}, "memory_read": {}, "recall_tool_result": {},
 	"search_kb": {}, "list_kb_docs": {}, "get_kb_doc": {},
 	"table_upsert": {}, "table_get": {}, "table_query": {}, "table_delete": {}, "table_list": {},
 }

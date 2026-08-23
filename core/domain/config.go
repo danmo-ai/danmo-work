@@ -89,10 +89,12 @@ type ConfigCompactionSection struct {
 	CutTokens    int `json:"cutTokens" mapstructure:"cut_tokens"`
 	TurnInterval int `json:"turnInterval" mapstructure:"turn_interval"`
 	SubInterval  int `json:"subInterval" mapstructure:"sub_interval"`
+	// ToolTruncate is the in-turn prune threshold (chars). Over-budget tool
+	// results are rewritten to head+marker+tail when token pressure qualifies.
+	// Default 8192.
 	ToolTruncate int `json:"toolTruncate" mapstructure:"tool_truncate"`
-	// KeepRecentToolSteps is how many latest LLM steps (assistant tool_call
-	// batches) keep full tool results during turn-internal truncation.
-	// Older steps are truncated to ToolTruncate. Default 3.
+	// KeepRecentToolSteps is how many latest LLM tool-call batches keep full
+	// results during turn-internal prune/snip (pressure-gated). Default 3.
 	KeepRecentToolSteps int `json:"keepRecentToolSteps" mapstructure:"keep_recent_tool_steps"`
 }
 
