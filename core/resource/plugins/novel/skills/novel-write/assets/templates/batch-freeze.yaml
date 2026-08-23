@@ -1,0 +1,9 @@
+# 批次冻结：只记范围与状态。章级规划以 chapters/chNNN-contract.yaml 为准。
+batch_id: "batch-01"
+from_ch: 1
+to_ch: 8
+status: proposed  # proposed|frozen|superseded
+frozen_at: ""
+frozen_chapters: []  # [1,2,3,...] 用户确认后可写正文的章号
+hard_issues_closed: true
+notes: ""

@@ -1,0 +1,23 @@
+book_id: ""
+title: ""
+stage: init  # init|setup|outline|writing|review|idle
+next_action: ""
+last_committed_ch: 0
+qc_profile: general  # male_power|female_emotion|mystery|general
+continuation_mode: false
+frozen_batch:          # optional; set when batch frozen
+  from: 0
+  to: 0
+  frozen_at: ""
+artifacts:
+  book_bible: missing  # missing|in_progress|ready|stale|blocked
+  world_canon: missing
+  cast_registry: missing
+  volume_outline: missing
+  batch_freeze: missing  # missing|ready|frozen
+gates:
+  knowledge: unknown   # unknown|pass|fail
+  asset: unknown
+  qc: unknown
+blockers: []
+notes: ""

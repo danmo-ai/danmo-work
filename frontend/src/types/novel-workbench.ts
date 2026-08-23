@@ -23,14 +23,7 @@ export interface NovelExtendedState extends NovelStateSummary {
   blockers: string[]
 }
 
-export type NovelPipelinePhase =
-  | 'init'
-  | 'setup'
-  | 'outline'
-  | 'batch_freeze'
-  | 'chapter_loop'
-  | 'continuation'
-  | 'idle'
+export type NovelPipelinePhase = 'init' | 'setup' | 'outline' | 'writing' | 'review' | 'idle'
 
 export type NovelChapterPhase =
   | 'empty'
@@ -41,7 +34,7 @@ export type NovelChapterPhase =
   | 'review_pass'
   | 'committed'
 
-/** Full novel-writing skill pipeline (routes.md order). */
+/** Workbench actions; each maps to a focused novel-* skill. */
 export type NovelStageAction =
   | 'init'
   | 'outline'
@@ -197,9 +190,9 @@ export function parseNovelStateExtended(raw: string): NovelExtendedState {
   }
 }
 
-export function parseContractYaml(raw: string): { status: string } {
+export function parseContractYaml(raw: string): { status: string; title: string } {
   const status = yamlScalar(raw, 'status').toLowerCase()
-  return { status: status || 'proposed' }
+  return { status: status || 'proposed', title: yamlScalar(raw, 'title_working') }
 }
 
 export function parseReviewVerdict(raw: string): 'PASS' | 'FAIL' | null {
@@ -278,18 +271,15 @@ export function buildChapterPhases(
 }
 
 export function inferBookPipelinePhase(ctx: NovelBookContext): NovelPipelinePhase {
-  const { state, hasBookOutline, hasVolumeOutline, batchFreezeFrozen, continuationMode } = ctx
-  if (continuationMode || state.stage === 'continuation') return 'continuation'
-  if (state.stage === 'batch_freeze' || (hasVolumeOutline && !batchFreezeFrozen)) {
-    return hasVolumeOutline && !batchFreezeFrozen ? 'batch_freeze' : 'chapter_loop'
+  if (ctx.state.stage === 'idle') return 'idle'
+  if (!ctx.hasBookOutline) return 'init'
+  const phases = Object.values(ctx.chapterPhases)
+  if (phases.some((p) => p === 'drafted' || p === 'review_fail' || p === 'review_pass')) {
+    return 'review'
   }
-  if (state.stage === 'init' || !hasBookOutline) return hasBookOutline ? 'setup' : 'init'
-  if (state.stage === 'outline' || !hasVolumeOutline) return 'outline'
-  if (hasVolumeOutline && !batchFreezeFrozen && ctx.entries.some((e) => e.prose)) {
-    return 'chapter_loop'
-  }
-  if (hasVolumeOutline && !batchFreezeFrozen) return 'batch_freeze'
-  return 'chapter_loop'
+  if (ctx.entries.length > 0 || ctx.hasVolumeOutline) return 'writing'
+  if (ctx.castFileCount === 0) return 'setup'
+  return 'outline'
 }
 
 export function computeBookPipeline(ctx: NovelBookContext): NovelBookPipeline {
@@ -319,8 +309,6 @@ export function computeBookPipeline(ctx: NovelBookContext): NovelBookPipeline {
   if (phase === 'init') primaryAction = 'init'
   else if (phase === 'setup') primaryAction = 'assets'
   else if (phase === 'outline') primaryAction = 'outline'
-  else if (phase === 'batch_freeze') primaryAction = 'batch-freeze'
-  else if (phase === 'continuation') primaryAction = 'continuation'
   else {
     const sorted = [...ctx.entries].sort((a, b) => a.chapter - b.chapter)
     for (const e of sorted) {
@@ -419,7 +407,7 @@ export function buildConstraintFooter(
   if (blockers.length) lines.push(`- 阻断项：${blockers.join('；')}`)
   lines.push('- 若门禁未 PASS，禁止写正文/Commit；用 ask_user 说明阻断项。')
   lines.push('- 完成后更新 novel-state.yaml 的 gates/blockers 字段。')
-  lines.push('- read_skill novel-writing/references/preflight.md')
+  lines.push('- read_skill novel-write/references/preflight.md')
   lines.push('- Team：delegate_agent.goal 必须包含本消息任务正文原文，禁止改写。')
   return lines.join('\n')
 }
@@ -439,10 +427,13 @@ export const NOVEL_PIPELINE_STEPS: { id: NovelPipelinePhase; action?: NovelStage
   { id: 'init', action: 'init' },
   { id: 'setup', action: 'assets' },
   { id: 'outline', action: 'outline' },
-  { id: 'batch_freeze', action: 'batch-freeze' },
-  { id: 'chapter_loop', action: 'write' },
-  { id: 'continuation', action: 'continuation' },
+  { id: 'writing', action: 'write' },
+  { id: 'review', action: 'review' },
 ]
+
+export function novelActiveBookPath(): string {
+  return 'novel/.active-book'
+}
 
 export function novelBookDir(bookId: string): string {
   return `novel/${bookId}`
@@ -472,12 +463,135 @@ export function novelVolumesDir(bookId: string): string {
   return `novel/${bookId}/outline/volumes`
 }
 
-/** Volume number from names like v01.md, v02-三眼时间回廊.md. */
+/** Volume number from names like v01.md, v02-三眼时间回廊.md, volume01-chapter-index.md. */
 export function volumeNumFromName(name: string): number | null {
-  const m = name.match(/^v(\d+)/i)
+  const m = name.match(/^(?:volume|vol|v)0*(\d+)/i)
   if (!m) return null
   const n = Number.parseInt(m[1], 10)
   return Number.isFinite(n) ? n : null
+}
+
+export function isBookOutlineName(name: string): boolean {
+  return name.toLowerCase() === 'book_outline.md'
+}
+
+/** Volume-level outline at outline root or outline/volumes/. */
+export function isVolumeOutlineName(name: string): boolean {
+  if (isBookOutlineName(name)) return false
+  if (volumeNumFromName(name) != null) return true
+  return /chapter-index/i.test(name)
+}
+
+export function mergeVolumeOutlineFiles(
+  outlineRoot: NovelFileNode[],
+  volumeDir: NovelFileNode[],
+): NovelFileNode[] {
+  const fromDir = volumeDir.filter((n) => !n.isDir)
+  const seen = new Set(fromDir.map((n) => n.name.toLowerCase()))
+  const extras = outlineRoot.filter(
+    (n) => !n.isDir && isVolumeOutlineName(n.name) && !seen.has(n.name.toLowerCase()),
+  )
+  return [...fromDir, ...extras]
+}
+
+export interface BookOutlineVolumeRow {
+  vol: string
+  goal: string
+  climax: string
+  twist: string
+}
+
+export interface VolumeUnitRow {
+  id: string
+  range: string
+  purpose: string
+}
+
+function markdownTableCells(line: string): string[] {
+  const trimmed = line.trim()
+  if (!trimmed.startsWith('|')) return []
+  return trimmed
+    .split('|')
+    .slice(1, -1)
+    .map((c) => c.trim())
+}
+
+function isMarkdownSepRow(cells: string[]): boolean {
+  return cells.length > 0 && cells.every((c) => /^:?-+:?$/.test(c) || c === '')
+}
+
+/** Parse 分卷结构 rows from book_outline.md. */
+export function parseBookOutlineVolumeRows(md: string): BookOutlineVolumeRow[] {
+  const rows: BookOutlineVolumeRow[] = []
+  let inTable = false
+  for (const line of md.split(/\r?\n/)) {
+    const cells = markdownTableCells(line)
+    if (!cells.length) {
+      if (inTable && rows.length) break
+      continue
+    }
+    if (isMarkdownSepRow(cells)) continue
+    if (cells[0] === '卷' || cells.includes('卷目标')) {
+      inTable = true
+      continue
+    }
+    if (!inTable) continue
+    if (!cells[0]) continue
+    rows.push({
+      vol: cells[0],
+      goal: cells[1] ?? '',
+      climax: cells[2] ?? '',
+      twist: cells[3] ?? '',
+    })
+  }
+  return rows
+}
+
+/** Parse 剧情单元, or a legacy chapter-index table, from a volume outline. */
+export function parseChapterRange(s: string): { from: number; to: number } | null {
+  const m = s.match(/ch?\s*(\d+)\s*[-–~至到]\s*ch?\s*(\d+)/i) || s.match(/(\d+)\s*[-–~至到]\s*(\d+)/)
+  if (!m) return null
+  const from = Number.parseInt(m[1], 10)
+  const to = Number.parseInt(m[2], 10)
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return null
+  return { from: Math.min(from, to), to: Math.max(from, to) }
+}
+
+export function parseVolumeUnitRows(md: string): VolumeUnitRow[] {
+  const rows: VolumeUnitRow[] = []
+  let mode: 'unit' | 'legacy' | null = null
+  for (const line of md.split(/\r?\n/)) {
+    const cells = markdownTableCells(line)
+    if (!cells.length) {
+      if (mode && rows.length) break
+      continue
+    }
+    if (isMarkdownSepRow(cells)) continue
+    if (cells[0] === '单元' || cells.includes('章范围')) {
+      mode = 'unit'
+      continue
+    }
+    if (cells[0] === '章' || cells.includes('一句任务')) {
+      mode = 'legacy'
+      continue
+    }
+    if (!mode) continue
+    if (!cells[0]) continue
+    if (mode === 'unit') {
+      rows.push({
+        id: cells[0],
+        range: cells[1] ?? '',
+        purpose: cells[2] ?? '',
+      })
+    } else {
+      rows.push({
+        id: cells[0],
+        range: cells[0],
+        purpose: cells[1] ?? '',
+      })
+    }
+  }
+  return rows
 }
 
 /** Next volume to outline = max existing volume file + 1 (fallback 1). */
@@ -497,6 +611,22 @@ export function novelReviewsDir(bookId: string): string {
 
 export function novelCanonDir(bookId: string): string {
   return `novel/${bookId}/canon`
+}
+
+/** Display name for a 设定 file. Known canon filenames get short labels; cast cards drop the numeric prefix. */
+export function setupDocLabel(name: string): string {
+  const key = name.toLowerCase()
+  const known: Record<string, string> = {
+    'book-bible.md': 'bible',
+    'world.md': 'world',
+    'glossary.md': 'glossary',
+    'reveal-schedule.md': 'reveal',
+    'writing-rules.md': 'rules',
+    'platform-positioning.md': 'platform',
+    'goldfinger.md': 'goldfinger',
+  }
+  if (known[key]) return known[key]
+  return name.replace(/^\d+-/, '').replace(/\.md$/i, '')
 }
 
 export function novelCastDir(bookId: string): string {
@@ -680,50 +810,51 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         '- 创建 novel/<book-id>/ 标准英文树：novel-state.yaml、book-bible.md、canon/(+cast/)、outline/(+volumes/)、chapters/、continuity/、reviews/（可选 extras/、_archive/）。',
         '- 角色先 status=candidate，经我确认后再变 canon；确认前不要写正文。',
         '- 落盘后更新 novel-state（stage=init 或 outline）。',
-        '- 按 read_skill novel-writing/references/init.md 与 project-layout.md 执行。',
+        '- 按 read_skill novel-setup/references/init.md 与 project-layout.md 执行。',
       ].join('\n')
     case 'outline':
       return [
         `书目录：${root}/`,
         '基于现有 book-bible / canon 产出总纲与卷纲（不写章节正文）：',
         `- 总纲 ${root}/outline/book_outline.md（模板 book-outline.md：一句话故事 / 读者承诺 / 分卷结构表 / 主线伏笔 / 结局方向）。`,
-        `- 卷纲 ${root}/outline/volumes/vNN.md（模板 volume-outline.md：卷目标 / 核心冲突 / 节奏锚点 / 章纲表）。`,
-        '章纲表固定四列「章号 | 一句任务 | 爽点 | 钩子」，连续 3 行无爽点必须重排（KB 节奏与结构）。',
+        `- 卷纲 ${root}/outline/volumes/vNN.md（模板 volume-outline.md：卷目标 / 冲突与起终 / 节奏锚点 / 剧情单元 / 情绪人物弧 / 反转 / 伏笔）。`,
+        '卷纲写到「一段章」的剧情单元为止（功能+因果+主爽点形态）。不要写每章任务/爽点/钩子。',
         '每卷卷纲写完停下来等我确认。',
-        '按 read_skill novel-writing/references/outline.md 执行。',
+        '按 read_skill novel-plan/references/outline.md 执行。',
       ].join('\n')
     case 'volume':
       return [
         `为本书写第 ${vol || 'N'} 卷卷纲（书目录：${root}/）。`,
-        `唯一落盘：${root}/outline/volumes/v${volPad}.md（模板 volume-outline.md，先 read_skill novel-writing/assets/templates/volume-outline.md）。`,
+        `唯一落盘：${root}/outline/volumes/v${volPad}.md（模板 volume-outline.md，先 read_skill novel-plan/assets/templates/volume-outline.md）。`,
         '先读 outline/book_outline.md 与 canon/ 相关设定、continuity/ 未回收伏笔，保持与前后卷衔接。',
-        '内容：卷目标一句话 / 核心冲突（对手+代价）/ 节奏锚点（卷高潮章位、中点反转、伏笔埋收）/ 章纲表（固定四列：章号 | 一句任务 | 爽点 | 钩子）。',
-        '章纲表连续 3 行无爽点必须重排；卷纲只到章纲表为止，不写章合同、不写正文。',
+        '内容：卷目标 / 核心冲突与对立升级 / 起终状态 / 节奏锚点 / 剧情单元表（一段章：功能、因果、主爽点形态）/ 情绪与人物弧 / 反转 / 伏笔。',
+        '卷纲写到剧情单元为止，不写章合同、不写正文。每章任务/爽点/钩子只进章合同，须能指回某个单元。',
         '写完停下来等我确认，再进入章合同阶段。',
-        '按 read_skill novel-writing/references/outline.md 执行。',
+        '按 read_skill novel-plan/references/outline.md 执行。',
       ].join('\n')
     case 'assets':
       return [
         `书目录：${root}/`,
         '整理/补全人物卡与世界观资产：写入 canon/ 与 table_*（characters、locations 等，带 book_id）。',
         '新实体先 status=candidate，经 ask_user 确认后再变 canon；确认前不要写正文。',
-        '按 read_skill novel-writing/references/init.md + table-schema.md 执行。',
+        '按 read_skill novel-setup/references/init.md + table-schema.md 执行。',
       ].join('\n')
     case 'goldfinger':
       return [
         `书目录：${root}/`,
         '设计或修订金手指：约束、代价、成长曲线、与读者承诺一致；写入 canon/ 或 table_* resources，并用模板 goldfinger-card。',
         '先 candidate，经 ask_user 确认后再 canon；不要在未确认时改已定稿正文。',
-        '按 read_skill novel-writing/assets/templates/goldfinger-card.md 与 KB「金手指约束」执行。',
+        '按 read_skill novel-plan/assets/templates/goldfinger-card.md 与 KB「世界观与金手指」执行。',
       ].join('\n')
     case 'contract':
       return [
         `为第 ${ch || 'N'} 章写章合同（尚不写正文）。`,
+        '先读本卷纲：定位本章所属剧情单元与最近锚点，再下推 purpose / beats / pleasure_point。卷纲无单元表则先补卷纲。',
         `唯一落盘：${root}/chapters/ch${chPad}-contract.yaml（YAML；模板 chapter-contract.yaml）。`,
         `可选 table_upsert chapter_contracts 作索引（book_id=${bookId}，file 指向该 yaml），不能代替文件。`,
         '含：purpose、beats / forbidden、pleasure_point、state_deltas、伏笔、hook(type+out)、word_target、连续性风险；status=proposed。',
         '里程碑章或本批首章需 ask_user 接受后再进入写作。',
-        '按 read_skill novel-writing/references/chapter-contract.md 执行。',
+        '按 read_skill novel-write/references/chapter-contract.md 执行。',
       ].join('\n')
     case 'write':
       return [
@@ -731,26 +862,26 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         '前提：该章合同已 accepted（否则先补合同）。',
         '流程：preflight → knowledge/asset 门 → scene-routing（若 beats 有场景标签）→ 按合同草稿 → 不要跳过审稿与 Commit。',
         'P0 审稿不过不得定稿；不要只在对话里贴正文。',
-        '按 read_skill novel-writing/references/preflight.md 与 chapter-write.md 执行。',
+        '按 read_skill novel-write/references/preflight.md 与 chapter-write.md 执行。',
       ].join('\n')
     case 'continue':
       return [
         `接着写下一章（书：${root}/）。`,
         '先读 novel-state.yaml、近 3 章摘要、未回收伏笔与开放 continuity_issues；补/更新章合同后再写正文。',
         '审一轮，P0 不过不得定稿；Commit 落盘并更新 novel-state。不要只在对话里贴正文。',
-        '按 read_skill novel-writing/references/chapter-write.md 与 continuity-commit.md 执行。',
+        '按 read_skill novel-write/references/chapter-write.md 与 novel-review/references/continuity-commit.md 执行。',
       ].join('\n')
     case 'review':
       return [
         `审阅 ${chPath}：按六透镜 + ReaderPull + StrongConstraints + 去 AI 味 P0/P1 出审查报告，写入 ${root}/reviews/，`,
         'blocking 记入 continuity_issues；SCORES 段按 qc_profile 加权。',
-        'qc_gate FAIL 不得宣称定稿。按 read_skill novel-writing/references/review-gates.md 执行。',
+        'qc_gate FAIL 不得宣称定稿。按 read_skill novel-review/references/review-gates.md 执行。',
       ].join('\n')
     case 'polish':
       return [
         `对 ${chPath} 做去 AI 味润色（deslop）：先 knowledge_gate（去 AI 味 / 文风），再 edit 落盘。`,
         '先清 P0 再 P1；不要改情节 Canon；需要改情节则回到审稿/章合同。',
-        '按 read_skill novel-writing/references/polish-deslop.md 执行。',
+        '按 read_skill novel-review/references/polish-deslop.md 执行。',
       ].join('\n')
     case 'commit':
       return [
@@ -760,34 +891,36 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         '更新：章节定稿文件、table_*（timeline / foreshadows / characters / contracts）、memory、novel-state。',
         '追加 continuity/chapter_summaries.md 固定 5 字段块（事件 / 状态变化 / 伏笔 / 钩子 / 下章指向）。',
         '关闭已修复的 continuity_issues。每满 10 个已提交章写 continuity/phase-NN.md。',
-        '按 read_skill novel-writing/references/continuity-commit.md 执行。完成=工具证据，勿口头宣称。',
+        '按 read_skill novel-review/references/continuity-commit.md 执行。完成=工具证据，勿口头宣称。',
       ].join('\n')
     case 'batch-freeze':
       const bFrom = ctx.batchFrom && ctx.batchFrom > 0 ? ctx.batchFrom : 1
       const bTo = ctx.batchTo && ctx.batchTo > 0 ? ctx.batchTo : 8
       return [
-        `批次细纲冻结（书：${root}/，第 ${bFrom}–${bTo} 章）。`,
-        `落盘 continuity/batch-freeze.yaml（模板 batch-freeze.yaml）；硬逻辑审核后 status=frozen。`,
+        `批次冻结（书：${root}/，第 ${bFrom}–${bTo} 章）。`,
+        `为该批写或确认章合同（chapters/chNNN-contract.yaml，status=accepted）；连续 3 章 pleasure_point 为空必须重排。`,
+        `落盘 continuity/batch-freeze.yaml（模板 batch-freeze.yaml）只记范围与状态，不要重复 purpose/爽点/钩子。硬逻辑审核后 status=frozen。`,
         '冻结前禁止批量写正文。用户确认后更新 novel-state frozen_batch 与 artifacts.batch_freeze。',
-        '按 read_skill novel-writing/references/batch-freeze.md 执行。',
+        '按 read_skill novel-write/references/batch-freeze.md 执行。',
       ].join('\n')
     case 'continuation':
       return [
         `续写/接手本书（${root}/）：CP1 反向解析 → style-fingerprint.md → CP2 卡点诊断 → CP3 Frozen_Canon。`,
         'Frozen_Canon 未确认禁止写正文；首次续写 500–1000 字试写待确认。',
-        '按 read_skill novel-writing/references/continuation.md 执行。',
+        '按 read_skill novel-write/references/continuation.md 执行。',
       ].join('\n')
     case 'batch-review':
       return [
         `批量审稿（书：${root}/）：最近 1–5 章有正文但未 PASS 的章节。`,
         '每章独立 review 文件；更新 gates.qc 与 blockers。',
-        '按 read_skill novel-writing/references/review-gates.md 与 preflight.md 执行。',
+        '按 read_skill novel-review/references/review-gates.md 与 novel-write/references/preflight.md 执行。',
       ].join('\n')
     case 'preflight':
       return [
-        `写前预检（书：${root}/）：读 state、合同、摘要、cast、foreshadows；写 continuity/preflight-log.md 一行回执。`,
+        `写前预检（书：${root}/）：必读 state、本章合同、近 3 章摘要、开放伏笔/债务；按需读上场人物卡。禁止整本 bible / 全卷纲。`,
+        '写 continuity/preflight-log.md 一行回执。',
         '更新 novel-state gates/blockers。阻断则停止并 ask_user。',
-        '按 read_skill novel-writing/references/preflight.md 执行。',
+        '按 read_skill novel-write/references/preflight.md 执行。',
       ].join('\n')
     default:
       return ''

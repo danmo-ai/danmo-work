@@ -81,8 +81,13 @@ func TestDocumentPluginAbsorbedComms(t *testing.T) {
 }
 
 func TestNovelPluginPacksSkillAndCraftKB(t *testing.T) {
-	if _, err := fs.ReadFile(FS, "novel/skills/novel-writing/SKILL.md"); err != nil {
-		t.Fatal(err)
+	for _, skill := range []string{"novel-setup", "novel-plan", "novel-write", "novel-review"} {
+		if _, err := fs.ReadFile(FS, "novel/skills/"+skill+"/SKILL.md"); err != nil {
+			t.Fatalf("%s: %v", skill, err)
+		}
+	}
+	if _, err := fs.Stat(FS, "novel/skills/novel-writing"); err == nil {
+		t.Fatal("novel-writing should be replaced by setup/plan/write/review")
 	}
 	meta, err := fs.ReadFile(FS, "novel/ai.danmo.work/knowledge/_meta.json")
 	if err != nil {

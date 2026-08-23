@@ -78,7 +78,7 @@ delegate_agent(agent_id="<id>", goal="...")
 | 调研/自动化 | `computer` | Computer | 专家 + `computer-use` + `computer` |
 | 职场写作 | `document` | Document | 专家（含原 Comms：邮件/消息/通知；技能用 home） |
 | 职场写作 | `data` | Data | 专家 |
-| 创作 | `novel` | Novel Writing | 专家 + `novel-writing` + KB `kb-novel-craft` |
+| 创作 | `novel` | Novel Writing | 专家 + `novel-setup` / `novel-plan` / `novel-write` / `novel-review` + KB `kb-novel-craft` |
 | 创作 | `danmo-make` | Danmo Make | 专家 + skill + bound MCP |
 
 **Comms 已并入 Document**：职场沟通写作不再单独召唤 `comms`。
@@ -93,10 +93,10 @@ delegate_agent(agent_id="<id>", goal="...")
 
 1. 主专家选 **Team**（或开启协作）。
 2. Composer `@` / 专家图标选中「Novel Writing」，描述本章目标后发送。
-3. 专家按 `novel-writing` 技能走：立项 → 大纲 → 章合同 → 正文 → 审稿门禁 → table/memory/文件 Commit。
-4. 技法检索走知识库 `kb-novel-craft`（节奏、爽点、去 AI 味等）；本书设定用项目文件 + `table_*`。
+3. 专家按阶段技能走：`novel-setup` 立项 → `novel-plan` 设定/大纲 → `novel-write` 章合同/正文 → `novel-review` 审稿/润色/Commit。
+4. 技法检索走知识库 `kb-novel-craft`（节奏与结构、爽点与追读、文风与去 AI 味等）；本书设定用项目文件 + `table_*`。
 
-详细 SOP 见技能 `novel-writing` 的 `references/`（应用内 `read_skill`）。
+详细 SOP 见各技能的 `references/`（应用内 `read_skill`）。
 
 ---
 
@@ -126,16 +126,12 @@ delegate_agent(agent_id="<id>", goal="...")
 
 小说工作台是 **流程控制台**（不是纯文件浏览器）：
 
-1. **Pipeline Stepper**：立项 → 设定 → 大纲 → 批次冻结 → 章循环 → 续写  
-2. **三门禁面板**：`knowledge` / `asset` / `qc`（读 `novel-state.yaml` 的 `gates` + 磁盘启发式）  
-3. **主 CTA**：引擎计算下一合法动作；非法动作 disabled + 阻断原因  
+1. **流程轨**：立项 → 设定 → 大纲 → 写作 → 审改  
+2. **门禁点**：`knowledge` / `asset` / `qc`（读 `novel-state.yaml` 的 `gates` + 磁盘启发式）  
+3. **主 CTA**：引擎计算下一合法动作，注入 Composer + 选中 `novel`  
 4. **章状态机**：无合同 → 合同草案 → 待写 → 待审 → 审未过/待提交 → 已提交  
 
-技能流水线：
-
-`立项 → 大纲/资产/金手指 → 批次冻结（批量写前）→ 章合同 → 写 → 审稿（ReaderPull/强约束）→ 润色 → Commit`
-
-续写分支：`continuation (CP1–CP3 Frozen_Canon) → 批次冻结 → …`
+技能流水线：`novel-setup` → `novel-plan` → `novel-write` → `novel-review`。批次冻结与续写接手收在「更多」动作里。
 
 动作 Prefill Composer（可勾选 `novel` chip），末尾附带 **工作台约束块**；**不跳转** Files。书落在 `novel/<book-id>/`（`canon/`、`outline/`、`chapters/`、`continuity/`、`reviews/`；章合同=`chapters/chNNN-contract.yaml`）。
 
@@ -143,4 +139,4 @@ delegate_agent(agent_id="<id>", goal="...")
 |------|---------|--------------|
 | asset | `canon/cast/` 有文件 | `table_query` + 读人物卡 |
 | qc | review `### VERDICT` | `review-gates.md` |
-| batch | `batch-freeze.yaml` frozen | `batch-freeze.md` |
+| batch | `batch-freeze.yaml` frozen | `novel-write/references/batch-freeze.md` |

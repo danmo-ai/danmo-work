@@ -18,15 +18,21 @@ import {
   parseBatchFreezeYaml,
   parseContractYaml,
   parseNovelStateExtended,
+  parseBookOutlineVolumeRows,
   parseNovelStateYaml,
   parseReviewVerdict,
+  parseChapterRange,
+  parseVolumeUnitRows,
+  mergeVolumeOutlineFiles,
+  isVolumeOutlineName,
+  setupDocLabel,
   sortChapterNodes,
   volumeNumFromName,
 } from '../src/types/novel-workbench.ts'
 
 const yaml = `
 title: "星际旅店"
-stage: chapter_loop
+stage: writing
 last_committed_ch: 3
 next_action: "写第4章钩子"
 qc_profile: male_power
@@ -46,7 +52,7 @@ blockers:
 `
 const summary = parseNovelStateYaml(yaml)
 assert.equal(summary.title, '星际旅店')
-assert.equal(summary.stage, 'chapter_loop')
+assert.equal(summary.stage, 'writing')
 assert.equal(summary.lastCommittedCh, 3)
 
 const ext = parseNovelStateExtended(yaml)
@@ -59,6 +65,7 @@ assert.equal(ext.gates.qc, 'fail')
 assert.equal(ext.blockers.length, 1)
 
 assert.equal(parseContractYaml('status: accepted').status, 'accepted')
+assert.equal(parseContractYaml('title_working: 孙馆长\nstatus: proposed').title, '孙馆长')
 assert.equal(parseReviewVerdict('### VERDICT\nPASS'), 'PASS')
 assert.equal(parseReviewVerdict('### VERDICT\nFAIL'), 'FAIL')
 assert.equal(parseBatchFreezeYaml('status: frozen').status, 'frozen')
@@ -119,6 +126,8 @@ assert.equal(reviewOk.allowed, true)
 const constrained = buildConstrainedPrefill('write', { bookId: 'star-inn', chapter: 2 }, pipe, [])
 assert.ok(constrained.includes('工作台约束'))
 assert.ok(constrained.includes('preflight.md'))
+assert.ok(constrained.includes('novel-write/'))
+assert.equal(pipe.phase, 'review')
 
 const stages = [
   'init',
@@ -144,7 +153,17 @@ for (const action of stages) {
     chapterPath: 'novel/star-inn/chapters/ch004.md',
   })
   assert.ok(text.trim().length > 0, action)
+  assert.ok(!text.includes('章纲'), `${action} must not say 章纲`)
+  assert.ok(!text.includes('细纲'), `${action} must not say 细纲`)
 }
+
+const freezePrefill = buildNovelStagePrefill('batch-freeze', {
+  bookId: 'star-inn',
+  batchFrom: 1,
+  batchTo: 8,
+})
+assert.ok(freezePrefill.includes('novel-write/references/batch-freeze.md'))
+assert.ok(freezePrefill.includes('章合同'))
 
 assert.equal(chapterNumFromName('ch001.md'), 1)
 assert.equal(isNovelChapterPath('novel/b/chapters/ch003.md'), true)
@@ -159,5 +178,30 @@ assert.deepEqual(sorted.map((n) => n.name), ['ch2.md', 'ch10.md'])
 assert.deepEqual(inferNovelBookNextStep(0, entries), { action: 'write', chapter: 1 })
 assert.equal(nextVolumeNumber([]), 1)
 assert.equal(volumeNumFromName('v12-补.md'), 12)
+assert.equal(volumeNumFromName('volume01-chapter-index.md'), 1)
+assert.equal(isVolumeOutlineName('book_outline.md'), false)
+assert.equal(isVolumeOutlineName('volume01-chapter-index.md'), true)
+assert.deepEqual(
+  mergeVolumeOutlineFiles(
+    [
+      { name: 'book_outline.md', path: 'o/book_outline.md', isDir: false },
+      { name: 'volume01-chapter-index.md', path: 'o/volume01-chapter-index.md', isDir: false },
+    ],
+    [{ name: 'v02.md', path: 'o/volumes/v02.md', isDir: false }],
+  ).map((n) => n.name),
+  ['v02.md', 'volume01-chapter-index.md'],
+)
+assert.deepEqual(
+  parseBookOutlineVolumeRows(`## 分卷结构\n\n| 卷 | 卷目标 | 卷高潮 | 主反转 |\n|----|--------|--------|--------|\n| v01 | 拿到碎片 | 宗门大比 | 师尊是敌 |\n`),
+  [{ vol: 'v01', goal: '拿到碎片', climax: '宗门大比', twist: '师尊是敌' }],
+)
+assert.equal(
+  parseVolumeUnitRows(`| 单元 | 章范围 | 功能（本段必须完成） | 由上一单元如何导致 | 主爽点形态 |\n| U1 | ch001-ch008 | 开局夺权 | | 智斗 |\n`)[0].purpose,
+  '开局夺权',
+)
+assert.deepEqual(parseChapterRange('ch001-ch008'), { from: 1, to: 8 })
+assert.equal(setupDocLabel('book-bible.md'), 'bible')
+assert.equal(setupDocLabel('reveal-schedule.md'), 'reveal')
+assert.equal(setupDocLabel('00-孙悟空.md'), '孙悟空')
 
 console.log('novel-workbench helpers ok')

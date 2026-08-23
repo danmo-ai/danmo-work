@@ -15,10 +15,13 @@ import {
   chapterNumFromName,
   computeBookPipeline,
   inferChapterNextAction,
-  inferNovelBookNextStep,
+  isBookOutlineName,
   isNovelChapterPath,
   isNovelContractName,
   isNovelContractPath,
+  mergeVolumeOutlineFiles,
+  parseBookOutlineVolumeRows,
+  parseVolumeUnitRows,
   novelBatchFreezePath,
   novelBiblePath,
   novelBookDir,
@@ -26,27 +29,27 @@ import {
   novelCastDir,
   novelChapterFilePath,
   novelChapterReviewPath,
-  novelChapterSummariesPath,
   novelChaptersDir,
   novelContinuityDir,
+  novelActiveBookPath,
   novelOutlineDir,
   novelReviewsDir,
   novelStatePath,
   novelVolumesDir,
   nextVolumeNumber,
-  NOVEL_PIPELINE_STEPS,
   parseBatchFreezeYaml,
+  parseContractYaml,
   parseNovelStateExtended,
-  parseNovelStateYaml,
+  setupDocLabel,
   sortWorkbenchDocNodes,
-  type GateStatus,
-  type NovelBookNextStep,
+  type BookOutlineVolumeRow,
   type NovelChapterEntry,
   type NovelChapterPhase,
   type NovelExtendedState,
   type NovelFileNode,
   type NovelStageAction,
   type NovelStateSummary,
+  type VolumeUnitRow,
 } from '@/types/novel-workbench'
 
 function nodePath(bookId: string, dir: string, node: NovelFileNode): string {
@@ -91,8 +94,19 @@ const readLoading = ref(false)
 const readPane = ref<'contract' | 'prose' | null>(null)
 /** Chapter number for detail page when pane has no file yet. */
 const readChapterNum = ref<number | null>(null)
+const activeBookId = ref<string | null>(null)
+const treeOpen = ref({ outline: true, setup: false, setupWorld: true, setupCast: true, prose: true })
+const bookOutlineRows = ref<BookOutlineVolumeRow[]>([])
+const volumeUnitRows = ref<Record<string, VolumeUnitRow[]>>({})
+const treeSel = ref<{ kind: 'book' | 'volume' | 'setup' | 'chapter'; name?: string; n?: number }>({
+  kind: 'book',
+})
 
 const projectId = computed(() => sessions.selectedProjectId)
+
+const visibleVolumeFiles = computed(() =>
+  mergeVolumeOutlineFiles(outlineFiles.value, volumeFiles.value),
+)
 
 const selectedLead = computed(() =>
   sessions.agents.find((a) => a.id === sessions.selectedAgentId) ?? null,
@@ -100,10 +114,6 @@ const selectedLead = computed(() =>
 const canDelegate = computed(() => Boolean(selectedLead.value?.canDelegate))
 const hasNovelExpert = computed(() =>
   sessions.agents.some((a) => a.id === 'novel' && a.mode === 'subagent'),
-)
-
-const bookNextStep = computed((): NovelBookNextStep =>
-  inferNovelBookNextStep(bookState.value?.lastCommittedCh ?? 0, chapterEntries.value),
 )
 
 const bookContext = computed(() => {
@@ -122,7 +132,7 @@ const bookContext = computed(() => {
     chapterPhases,
     castFileCount: castFiles.value.length,
     hasBookOutline: Boolean(bookOutlineFile.value),
-    hasVolumeOutline: volumeFiles.value.length > 0,
+    hasVolumeOutline: visibleVolumeFiles.value.length > 0,
     hasBatchFreezeFile: continuityFiles.value.some((f) => f.name === 'batch-freeze.yaml'),
     batchFreezeFrozen: batchFreezeFrozen.value,
   }
@@ -143,16 +153,6 @@ function phaseLabel(phase: NovelChapterPhase): string {
   return t(`novelWorkbench.${map[phase]}`)
 }
 
-function gateStatusLabel(status: GateStatus): string {
-  const map: Record<GateStatus, string> = {
-    pass: 'gatePass',
-    fail: 'gateFail',
-    unknown: 'gateUnknown',
-    skipped: 'gateSkipped',
-  }
-  return t(`novelWorkbench.${map[status]}`)
-}
-
 function blockerText(key: string): string {
   const m = key.match(/^blocker\.(.+)$/)
   if (m) {
@@ -168,12 +168,11 @@ function stepperLabel(id: string): string {
     init: 'stepperInit',
     setup: 'stepperSetup',
     outline: 'stepperOutline',
-    batch_freeze: 'stepperBatchFreeze',
-    chapter_loop: 'stepperChapterLoop',
-    continuation: 'stepperContinuation',
-    idle: 'stepperChapterLoop',
+    writing: 'stepperWriting',
+    review: 'stepperReview',
+    idle: 'stepperWriting',
   }
-  return t(`novelWorkbench.${map[id] ?? 'stepperChapterLoop'}`)
+  return t(`novelWorkbench.${map[id] ?? 'stepperWriting'}`)
 }
 
 function primaryActionLabel(action: NovelStageAction, chapter?: number): string {
@@ -208,21 +207,96 @@ function isActionAllowed(action: NovelStageAction, chapter?: number): boolean {
   return canRunAction(action, bookContext.value, chapter).allowed
 }
 
-const hasAnyProse = computed(() => chapterEntries.value.some((e) => Boolean(e.prose)))
-
-const nextVolume = computed(() => nextVolumeNumber(volumeFiles.value))
+const nextVolume = computed(() => nextVolumeNumber(visibleVolumeFiles.value))
 
 const bookOutlineFile = computed(() =>
-  outlineFiles.value.find((f) => f.name === 'book_outline.md') ?? null,
+  outlineFiles.value.find((f) => isBookOutlineName(f.name)) ?? null,
 )
 
-function runBookNextStep() {
-  const step = bookNextStep.value
-  if (step.action === 'continue') {
-    runAction('continue')
+const worldDocs = computed(() => canonFiles.value.filter((n) => !n.isDir))
+const castDocs = computed(() => castFiles.value.filter((n) => !n.isDir))
+
+const SETUP_DOC_KEYS = new Set(['bible', 'world', 'glossary', 'reveal', 'rules', 'platform', 'goldfinger'])
+
+function setupDocTitle(name: string): string {
+  const id = setupDocLabel(name)
+  if (SETUP_DOC_KEYS.has(id)) return t(`novelWorkbench.setupDoc_${id}`)
+  return id
+}
+
+/** Contract-only chapters stay in the tree; they are the writing queue. */
+const treeChapters = computed(() =>
+  chapterEntries.value.filter((e) => Boolean(e.contract || e.prose)),
+)
+
+function chapterTreeName(entry: NovelChapterEntry): string {
+  const title = parseContractYaml(contractRaws.value[entry.chapter] || '').title.trim()
+  const pad = String(entry.chapter).padStart(3, '0')
+  return title ? `第${pad}章_${title}` : t('novelWorkbench.chapterN', { n: entry.chapter })
+}
+
+const deskCrumb = computed(() => {
+  if (treeSel.value.kind === 'book') return `${t('novelWorkbench.folderOutline')} / ${t('novelWorkbench.bookOutline')}`
+  if (treeSel.value.kind === 'volume') {
+    return `${t('novelWorkbench.folderOutline')} / ${volumeLabel(treeSel.value.name || '')}`
+  }
+  if (treeSel.value.kind === 'setup') {
+    return `${t('novelWorkbench.folderSetup')} / ${setupDocTitle(treeSel.value.name || '')}`
+  }
+  if (treeSel.value.kind === 'chapter' && treeSel.value.n != null) {
+    const e = chapterEntries.value.find((x) => x.chapter === treeSel.value.n)
+    return `${t('novelWorkbench.folderProse')} / ${e ? chapterTreeName(e) : t('novelWorkbench.chapterN', { n: treeSel.value.n })}`
+  }
+  return ''
+})
+
+function volumeLabel(name: string): string {
+  return name.replace(/\.md$/i, '')
+}
+
+async function selectBookOutline() {
+  treeSel.value = { kind: 'book' }
+  readPane.value = null
+  readChapterNum.value = null
+  const bookId = selectedBookId.value
+  const f = bookOutlineFile.value
+  if (bookId && f) {
+    await openRead(nodePath(bookId, novelOutlineDir(bookId), f), f.name)
     return
   }
-  runAction(step.action, step.chapter)
+  readPath.value = null
+  readTitle.value = t('novelWorkbench.bookOutline')
+  readContent.value = ''
+}
+
+async function selectVolume(node: NovelFileNode) {
+  const bookId = selectedBookId.value
+  if (!bookId) return
+  treeSel.value = { kind: 'volume', name: node.name }
+  readPane.value = null
+  readChapterNum.value = null
+  await openRead(volumeNodePath(bookId, node), node.name)
+}
+
+async function selectSetupDoc(path: string, title: string) {
+  treeSel.value = { kind: 'setup', name: title }
+  readPane.value = null
+  readChapterNum.value = null
+  await openRead(path, title)
+}
+
+function selectChapter(n: number, pane: 'contract' | 'prose' = 'prose') {
+  treeSel.value = { kind: 'chapter', n }
+  openChapterFromList(n, pane)
+}
+
+function volumeNodePath(bookId: string, node: NovelFileNode): string {
+  const p = (node.path || '').replace(/\\/g, '/')
+  if (p) return p
+  if (volumeFiles.value.some((v) => v.name === node.name)) {
+    return `${novelVolumesDir(bookId)}/${node.name}`
+  }
+  return `${novelOutlineDir(bookId)}/${node.name}`
 }
 
 const readingChapter = computed(() => {
@@ -264,6 +338,16 @@ watch(projectId, () => {
   selectedBookId.value = null
   void loadShelf()
 }, { immediate: true })
+
+const runningTurnCount = computed(
+  () => sessions.turns.filter((turn) => turn.status === 'running').length,
+)
+watch(runningTurnCount, (n, prev) => {
+  if ((prev ?? 0) > 0 && n === 0) void onRefresh()
+})
+watch(() => workspaceUi.filesReloadToken, () => {
+  void onRefresh()
+})
 
 async function listDir(path: string): Promise<NovelFileNode[]> {
   if (!projectId.value) return []
@@ -349,7 +433,13 @@ async function loadShelf() {
       return
     }
     const kids = await listDir('novel')
-    const dirs = kids.filter((n) => n.isDir)
+    try {
+      const raw = await readFile(novelActiveBookPath())
+      activeBookId.value = raw.trim().split('\n')[0] || null
+    } catch {
+      activeBookId.value = null
+    }
+    const dirs = kids.filter((n) => n.isDir && !n.name.startsWith('.'))
     const rows = await Promise.all(
       dirs.map(async (d) => ({
         id: d.name,
@@ -390,6 +480,16 @@ async function openBook(bookId: string, opts?: { keepView?: boolean }) {
     castFiles.value = sortWorkbenchDocNodes(castNodes)
     await loadBatchFreezeStatus(bookId)
     await loadChapterMeta(bookId, chapterEntries.value)
+    await loadOutlinePreviews(bookId)
+    treeOpen.value = {
+      outline: !chapterEntries.value.some((e) => Boolean(e.prose)),
+      setup: false,
+      setupWorld: true,
+      setupCast: true,
+      prose: true,
+    }
+    void persistActiveBook(bookId)
+    if (!opts?.keepView) void selectBookOutline()
   } catch {
     chapterEntries.value = []
     continuityFiles.value = []
@@ -403,8 +503,48 @@ async function openBook(bookId: string, opts?: { keepView?: boolean }) {
     reviewRaws.value = {}
     batchFreezeFrozen.value = false
     bookState.value = null
+    bookOutlineRows.value = []
+    volumeUnitRows.value = {}
   } finally {
     loading.value = false
+  }
+}
+
+async function loadOutlinePreviews(bookId: string) {
+  bookOutlineRows.value = []
+  volumeUnitRows.value = {}
+  const bookFile = outlineFiles.value.find((f) => isBookOutlineName(f.name))
+  if (bookFile) {
+    try {
+      const raw = await readFile(nodePath(bookId, novelOutlineDir(bookId), bookFile))
+      bookOutlineRows.value = parseBookOutlineVolumeRows(raw)
+    } catch {
+      /* ignore */
+    }
+  }
+  const previews: Record<string, VolumeUnitRow[]> = {}
+  await Promise.all(
+    mergeVolumeOutlineFiles(outlineFiles.value, volumeFiles.value).map(async (f) => {
+      try {
+        previews[f.name] = parseVolumeUnitRows(await readFile(volumeNodePath(bookId, f)))
+      } catch {
+        previews[f.name] = []
+      }
+    }),
+  )
+  volumeUnitRows.value = previews
+}
+
+async function persistActiveBook(bookId: string) {
+  if (!projectId.value) return
+  try {
+    await fetchJSON(`/projects/${projectId.value}/files/content`, {
+      method: 'PUT',
+      body: JSON.stringify({ path: novelActiveBookPath(), content: `${bookId}\n` }),
+    })
+    activeBookId.value = bookId
+  } catch {
+    /* console is read-mostly; missing write permission should not block */
   }
 }
 
@@ -422,7 +562,7 @@ async function openRead(path: string, title: string, pane?: 'contract' | 'prose'
   } else {
     readPane.value = null
   }
-  view.value = 'read'
+  view.value = 'book'
   readLoading.value = true
   try {
     readContent.value = await readFile(path)
@@ -450,7 +590,6 @@ function openChapterDoc(kind: 'contract' | 'prose') {
     readPath.value = null
     readTitle.value = t('novelWorkbench.badgeContract')
     readContent.value = ''
-    view.value = 'read'
     return
   }
 
@@ -482,14 +621,6 @@ function backToShelf() {
   view.value = 'shelf'
   selectedBookId.value = null
   void loadShelf()
-}
-
-function backToBook() {
-  view.value = 'book'
-  readPath.value = null
-  readPane.value = null
-  readChapterNum.value = null
-  if (selectedBookId.value) void openBook(selectedBookId.value)
 }
 
 function runAction(action: NovelStageAction, chapter?: number, chapterPath?: string, volume?: number) {
@@ -548,14 +679,19 @@ function runChapterNextAction(chapter: number) {
 }
 
 async function onRefresh() {
-  if (view.value === 'shelf') await loadShelf()
-  else if (view.value === 'book' && selectedBookId.value) await openBook(selectedBookId.value)
-  else if (view.value === 'read' && selectedBookId.value) {
-    const pane = readPane.value
-    await openBook(selectedBookId.value, { keepView: true })
-    if (pane === 'contract' || pane === 'prose') openChapterDoc(pane)
-    else if (readPath.value) await openRead(readPath.value, readTitle.value)
+  if (view.value === 'shelf') {
+    await loadShelf()
+    return
   }
+  if (!selectedBookId.value) return
+  const pane = readPane.value
+  const path = readPath.value
+  const title = readTitle.value
+  const sel = { ...treeSel.value }
+  await openBook(selectedBookId.value, { keepView: true })
+  treeSel.value = sel
+  if (pane === 'contract' || pane === 'prose') openChapterDoc(pane)
+  else if (path) await openRead(path, title)
 }
 
 const readHtml = computed(() => {
@@ -581,14 +717,13 @@ function escapeHtml(s: string) {
         v-if="view !== 'shelf'"
         type="button"
         class="novel-wb__link"
-        @click="view === 'read' ? backToBook() : backToShelf()"
+        @click="backToShelf()"
       >
-        ← {{ view === 'read' ? t('novelWorkbench.backBook') : t('novelWorkbench.backShelf') }}
+        ← {{ t('novelWorkbench.backShelf') }}
       </button>
       <span class="novel-wb__heading">
         <template v-if="view === 'shelf'">{{ t('novelWorkbench.shelf') }}</template>
-        <template v-else-if="view === 'book'">{{ selectedBookId }}</template>
-        <template v-else>{{ readTitle }}</template>
+        <template v-else>{{ bookState?.title || selectedBookId }}</template>
       </span>
       <button type="button" class="novel-wb__link" :disabled="loading || readLoading" @click="onRefresh">
         {{ t('novelWorkbench.refresh') }}
@@ -608,7 +743,12 @@ function escapeHtml(s: string) {
       </div>
       <ul v-else class="novel-wb__list">
         <li v-for="b in books" :key="b.id">
-          <button type="button" class="novel-wb__row" @click="openBook(b.id)">
+          <button
+            type="button"
+            class="novel-wb__row"
+            :class="{ 'novel-wb__row--active': activeBookId === b.id }"
+            @click="openBook(b.id)"
+          >
             <span class="novel-wb__row-title">{{ b.state?.title || b.id }}</span>
             <span class="novel-wb__row-meta">
               {{ b.id }}
@@ -631,455 +771,236 @@ function escapeHtml(s: string) {
     </template>
 
     <template v-else-if="view === 'book' && selectedBookId">
-      <div class="novel-wb__scroll">
-        <div v-if="bookState" class="novel-wb__state">
-          <div>{{ bookState.title || selectedBookId }}</div>
-          <div class="novel-wb__row-meta">
-            stage={{ bookState.stage || '—' }}
-            · last=ch{{ bookState.lastCommittedCh }}
-            <template v-if="pipeline">
-              · {{ t('novelWorkbench.progressLabel', { committed: pipeline.progress.committed, total: pipeline.progress.totalWithContract || pipeline.progress.committed }) }}
+      <div class="novel-wb__book">
+        <aside class="novel-wb__tree">
+          <button type="button" class="novel-wb__folder" @click="treeOpen.outline = !treeOpen.outline">
+            <span class="novel-wb__twist">{{ treeOpen.outline ? '▾' : '▸' }}</span>
+            {{ t('novelWorkbench.folderOutline') }}
+          </button>
+          <template v-if="treeOpen.outline">
+            <button
+              type="button"
+              class="novel-wb__tree-item"
+              :class="{ 'novel-wb__tree-item--on': treeSel.kind === 'book' }"
+              @click="selectBookOutline()"
+            >
+              {{ t('novelWorkbench.bookOutline') }}
+            </button>
+            <button
+              v-for="v in visibleVolumeFiles"
+              :key="v.name"
+              type="button"
+              class="novel-wb__tree-item"
+              :class="{ 'novel-wb__tree-item--on': treeSel.kind === 'volume' && treeSel.name === v.name }"
+              @click="selectVolume(v)"
+            >
+              {{ volumeLabel(v.name) }}
+            </button>
+            <button type="button" class="novel-wb__tree-item novel-wb__tree-item--ghost" @click="runAction('volume', undefined, undefined, nextVolume)">
+              + {{ t('novelWorkbench.actionVolumeOutline', { n: nextVolume }) }}
+            </button>
+          </template>
+
+          <button type="button" class="novel-wb__folder" @click="treeOpen.setup = !treeOpen.setup">
+            <span class="novel-wb__twist">{{ treeOpen.setup ? '▾' : '▸' }}</span>
+            {{ t('novelWorkbench.folderSetup') }}
+          </button>
+          <template v-if="treeOpen.setup">
+            <button
+              type="button"
+              class="novel-wb__tree-item"
+              :class="{ 'novel-wb__tree-item--on': treeSel.kind === 'setup' && treeSel.name === 'book-bible.md' }"
+              @click="selectSetupDoc(novelBiblePath(selectedBookId), 'book-bible.md')"
+            >
+              {{ t('novelWorkbench.setupDoc_bible') }}
+            </button>
+            <button type="button" class="novel-wb__folder novel-wb__folder--sub" @click="treeOpen.setupWorld = !treeOpen.setupWorld">
+              <span class="novel-wb__twist">{{ treeOpen.setupWorld ? '▾' : '▸' }}</span>
+              {{ t('novelWorkbench.folderSetupWorld') }}
+            </button>
+            <template v-if="treeOpen.setupWorld">
+              <button
+                v-for="f in worldDocs"
+                :key="f.name"
+                type="button"
+                class="novel-wb__tree-item novel-wb__tree-item--nested"
+                :class="{ 'novel-wb__tree-item--on': treeSel.kind === 'setup' && treeSel.name === f.name }"
+                @click="selectSetupDoc(f.path || `${novelCanonDir(selectedBookId)}/${f.name}`, f.name)"
+              >
+                {{ setupDocTitle(f.name) }}
+              </button>
+              <p v-if="!worldDocs.length" class="novel-wb__tree-unit">{{ t('novelWorkbench.noCanonYet') }}</p>
             </template>
-            <template v-if="bookState.nextAction"> · {{ bookState.nextAction }}</template>
-          </div>
-        </div>
+            <button type="button" class="novel-wb__folder novel-wb__folder--sub" @click="treeOpen.setupCast = !treeOpen.setupCast">
+              <span class="novel-wb__twist">{{ treeOpen.setupCast ? '▾' : '▸' }}</span>
+              {{ t('novelWorkbench.folderSetupCast') }}
+            </button>
+            <template v-if="treeOpen.setupCast">
+              <button
+                v-for="f in castDocs"
+                :key="f.name"
+                type="button"
+                class="novel-wb__tree-item novel-wb__tree-item--nested"
+                :class="{ 'novel-wb__tree-item--on': treeSel.kind === 'setup' && treeSel.name === f.name }"
+                @click="selectSetupDoc(f.path || `${novelCastDir(selectedBookId)}/${f.name}`, f.name)"
+              >
+                {{ setupDocTitle(f.name) }}
+              </button>
+            </template>
+          </template>
 
-        <div v-if="pipeline" class="novel-wb__stepper" role="list">
-          <div
-            v-for="step in NOVEL_PIPELINE_STEPS"
-            :key="step.id"
-            role="listitem"
-            class="novel-wb__step"
-            :class="{
-              'novel-wb__step--active': pipeline.phase === step.id,
-              'novel-wb__step--done': NOVEL_PIPELINE_STEPS.findIndex((s) => s.id === pipeline.phase) > NOVEL_PIPELINE_STEPS.findIndex((s) => s.id === step.id),
-            }"
-          >
-            {{ stepperLabel(step.id) }}
-          </div>
-        </div>
+          <button type="button" class="novel-wb__folder" @click="treeOpen.prose = !treeOpen.prose">
+            <span class="novel-wb__twist">{{ treeOpen.prose ? '▾' : '▸' }}</span>
+            {{ t('novelWorkbench.folderProse') }}
+            <span class="novel-wb__tree-meta">{{ treeChapters.length }}</span>
+          </button>
+          <template v-if="treeOpen.prose">
+            <button
+              v-for="entry in treeChapters"
+              :key="entry.chapter"
+              type="button"
+              class="novel-wb__tree-item"
+              :class="{
+                'novel-wb__tree-item--on': treeSel.kind === 'chapter' && treeSel.n === entry.chapter,
+                'novel-wb__tree-item--dim': !entry.prose,
+              }"
+              @click="selectChapter(entry.chapter, entry.prose ? 'prose' : 'contract')"
+            >
+              <span>{{ chapterTreeName(entry) }}</span>
+              <span v-if="!entry.prose && entry.contract" class="novel-wb__tree-meta">
+                {{ t('novelWorkbench.contractOnly') }}
+              </span>
+            </button>
+            <p v-if="!treeChapters.length" class="novel-wb__tree-unit">{{ t('novelWorkbench.noChapters') }}</p>
+          </template>
+        </aside>
 
-        <div v-if="pipeline" class="novel-wb__gates">
-          <span class="novel-wb__gates-label">{{ t('novelWorkbench.gatePanel') }}</span>
-          <span class="novel-wb__gate" :class="`novel-wb__gate--${pipeline.gates.knowledge}`">
-            {{ t('novelWorkbench.gateKnowledge') }}: {{ gateStatusLabel(pipeline.gates.knowledge) }}
-          </span>
-          <span class="novel-wb__gate" :class="`novel-wb__gate--${pipeline.gates.asset}`">
-            {{ t('novelWorkbench.gateAsset') }}: {{ gateStatusLabel(pipeline.gates.asset) }}
-          </span>
-          <span class="novel-wb__gate" :class="`novel-wb__gate--${pipeline.gates.qc}`">
-            {{ t('novelWorkbench.gateQc') }}: {{ gateStatusLabel(pipeline.gates.qc) }}
-          </span>
-        </div>
-        <p v-if="pipeline?.blockers.length" class="novel-wb__hint novel-wb__hint--pad">
-          {{ t('novelWorkbench.blockersTitle') }}:
-          {{ pipeline.blockers.map(blockerText).join(' · ') }}
-        </p>
+        <div class="novel-wb__preview">
+          <div class="novel-wb__preview-bar">
+            <div>
+              <div class="novel-wb__row-title">{{ deskCrumb }}</div>
+              <div class="novel-wb__row-meta">{{ readTitle }}</div>
+            </div>
+            <div class="novel-wb__preview-actions">
+              <button
+                v-if="treeSel.kind === 'book'"
+                type="button"
+                class="novel-wb__btn"
+                @click="runAction('outline')"
+              >
+                {{ t('novelWorkbench.actionOutline') }}
+              </button>
+              <button
+                v-else-if="treeSel.kind === 'volume'"
+                type="button"
+                class="novel-wb__btn"
+                @click="runAction('volume', undefined, undefined, nextVolume)"
+              >
+                {{ t('novelWorkbench.actionVolumeOutline', { n: nextVolume }) }}
+              </button>
+              <button
+                v-else-if="treeSel.kind === 'setup'"
+                type="button"
+                class="novel-wb__btn"
+                @click="runAction('assets')"
+              >
+                {{ t('novelWorkbench.actionAssets') }}
+              </button>
+              <button
+                v-else-if="treeSel.kind === 'chapter' && pipeline?.primaryAction"
+                type="button"
+                class="novel-wb__btn"
+                @click="runChapterNextAction(treeSel.n!)"
+              >
+                {{ primaryActionLabel(inferChapterNextAction(bookContext?.chapterPhases[treeSel.n!]!) || pipeline.primaryAction, treeSel.n) }}
+              </button>
+              <button
+                v-else-if="pipeline?.primaryAction"
+                type="button"
+                class="novel-wb__btn"
+                @click="runPrimaryAction"
+              >
+                {{ primaryActionLabel(pipeline.primaryAction, pipeline.primaryChapter) }}
+              </button>
+            </div>
+          </div>
 
-        <div v-if="pipeline?.primaryAction" class="novel-wb__group">
-          <div class="novel-wb__group-label">{{ t('novelWorkbench.primaryCta') }}</div>
-          <div class="novel-wb__actions novel-wb__actions--tight">
-            <button type="button" class="novel-wb__btn" @click="runPrimaryAction">
-              {{ primaryActionLabel(pipeline.primaryAction, pipeline.primaryChapter) }}
+          <div v-if="treeSel.kind === 'chapter'" class="novel-wb__tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              class="novel-wb__tab"
+              :class="{
+                'novel-wb__tab--active': readingIsContract,
+                'novel-wb__tab--missing': !readingEntry?.contract,
+              }"
+              :aria-selected="readingIsContract"
+              @click="openChapterDoc('contract')"
+            >
+              {{ t('novelWorkbench.badgeContract') }}
             </button>
             <button
               type="button"
-              class="novel-wb__btn novel-wb__btn--ghost"
-              :disabled="!isActionAllowed('batch-freeze')"
-              @click="runAction('batch-freeze')"
+              role="tab"
+              class="novel-wb__tab"
+              :class="{
+                'novel-wb__tab--active': readingIsProse,
+                'novel-wb__tab--missing': !readingEntry?.prose,
+              }"
+              :aria-selected="readingIsProse"
+              @click="openChapterDoc('prose')"
             >
-              {{ t('novelWorkbench.actionBatchFreeze') }}
-            </button>
-            <button
-              type="button"
-              class="novel-wb__btn novel-wb__btn--ghost"
-              @click="runAction('continuation')"
-            >
-              {{ t('novelWorkbench.actionContinuation') }}
-            </button>
-            <button
-              type="button"
-              class="novel-wb__btn novel-wb__btn--ghost"
-              :disabled="!isActionAllowed('batch-review')"
-              @click="runAction('batch-review')"
-            >
-              {{ t('novelWorkbench.actionBatchReview') }}
-            </button>
-            <button
-              type="button"
-              class="novel-wb__btn novel-wb__btn--ghost"
-              @click="runAction('preflight')"
-            >
-              {{ t('novelWorkbench.actionPreflight') }}
+              {{ t('novelWorkbench.badgeProse') }}
             </button>
           </div>
-        </div>
 
-        <div class="novel-wb__group">
-          <div class="novel-wb__group-label">{{ t('novelWorkbench.groupSetup') }}</div>
-          <div class="novel-wb__actions novel-wb__actions--tight">
-            <button type="button" class="novel-wb__btn novel-wb__btn--ghost" @click="runAction('assets')">
-              {{ t('novelWorkbench.actionAssets') }}
-            </button>
-            <button type="button" class="novel-wb__btn novel-wb__btn--ghost" @click="runAction('goldfinger')">
-              {{ t('novelWorkbench.actionGoldfinger') }}
-            </button>
+          <div v-if="treeSel.kind === 'chapter'" class="novel-wb__actions">
+            <template v-if="readingIsContract">
+              <button
+                type="button"
+                class="novel-wb__btn novel-wb__btn--ghost"
+                @click="runAction('contract', readingChapter || treeSel.n, readPath || undefined)"
+              >
+                {{ t('novelWorkbench.actionAskContract') }}
+              </button>
+            </template>
+            <template v-else-if="readingIsProse && readingChapter">
+              <button
+                type="button"
+                class="novel-wb__btn novel-wb__btn--ghost"
+                :disabled="!isActionAllowed('write', readingChapter)"
+                @click="runAction('write', readingChapter, readPath || undefined)"
+              >
+                {{ readingEntry?.prose ? t('novelWorkbench.actionAskRewrite') : t('novelWorkbench.actionAskWrite', { n: readingChapter }) }}
+              </button>
+              <button
+                v-if="readingEntry?.prose"
+                type="button"
+                class="novel-wb__btn novel-wb__btn--ghost"
+                :disabled="!isActionAllowed('review', readingChapter)"
+                @click="runAction('review', readingChapter, readPath || undefined)"
+              >
+                {{ t('novelWorkbench.actionReview') }}
+              </button>
+            </template>
           </div>
-          <div v-if="canonFiles.length || castFiles.length" class="novel-wb__quick">
-            <button
-              v-for="f in canonFiles"
-              :key="nodePath(selectedBookId, novelCanonDir(selectedBookId), f)"
-              type="button"
-              class="novel-wb__chip"
-              @click="openRead(nodePath(selectedBookId, novelCanonDir(selectedBookId), f), f.name)"
-            >
-              canon/{{ f.name }}
-            </button>
-            <button
-              v-for="f in castFiles"
-              :key="nodePath(selectedBookId, novelCastDir(selectedBookId), f)"
-              type="button"
-              class="novel-wb__chip"
-              @click="openRead(nodePath(selectedBookId, novelCastDir(selectedBookId), f), f.name)"
-            >
-              cast/{{ f.name }}
-            </button>
-          </div>
-          <p v-else class="novel-wb__hint novel-wb__hint--pad">
-            {{ t('novelWorkbench.noCanonYet') }}
-          </p>
-        </div>
 
-        <div class="novel-wb__group">
-          <div class="novel-wb__group-label">{{ t('novelWorkbench.groupVolumes') }}</div>
-          <div class="novel-wb__actions novel-wb__actions--tight">
-            <button type="button" class="novel-wb__btn novel-wb__btn--ghost" @click="runAction('outline')">
-              {{ t('novelWorkbench.actionOutline') }}
-            </button>
-            <button
-              type="button"
-              class="novel-wb__btn novel-wb__btn--ghost"
-              @click="runAction('volume', undefined, undefined, nextVolume)"
-            >
-              {{ t('novelWorkbench.actionVolumeOutline', { n: nextVolume }) }}
-            </button>
+          <div v-if="readLoading" class="novel-wb__empty">{{ t('novelWorkbench.loading') }}</div>
+          <div v-else-if="treeSel.kind === 'book' && !bookOutlineFile" class="novel-wb__empty">
+            {{ t('novelWorkbench.noBookOutline') }}
           </div>
-          <div class="novel-wb__quick">
-            <button
-              v-if="bookOutlineFile"
-              type="button"
-              class="novel-wb__chip"
-              @click="openRead(nodePath(selectedBookId, novelOutlineDir(selectedBookId), bookOutlineFile), bookOutlineFile.name)"
-            >
-              outline/book_outline.md
-            </button>
-            <button
-              v-for="f in volumeFiles"
-              :key="nodePath(selectedBookId, novelVolumesDir(selectedBookId), f)"
-              type="button"
-              class="novel-wb__chip"
-              @click="openRead(nodePath(selectedBookId, novelVolumesDir(selectedBookId), f), f.name)"
-            >
-              volumes/{{ f.name }}
-            </button>
+          <div v-else-if="treeSel.kind === 'volume' && !readContent" class="novel-wb__empty">
+            {{ t('novelWorkbench.volumeUnitsEmpty') }}
           </div>
-          <p v-if="!bookOutlineFile && !volumeFiles.length" class="novel-wb__hint novel-wb__hint--pad">
-            {{ t('novelWorkbench.noVolumesYet') }}
-          </p>
-        </div>
-
-        <div class="novel-wb__group">
-          <div class="novel-wb__group-label">{{ t('novelWorkbench.groupNext') }}</div>
-          <div class="novel-wb__actions novel-wb__actions--tight">
-            <button type="button" class="novel-wb__btn" @click="runBookNextStep">
-              <template v-if="bookNextStep.action === 'write'">
-                {{ t('novelWorkbench.actionWrite', { n: bookNextStep.chapter }) }}
-              </template>
-              <template v-else-if="bookNextStep.action === 'contract'">
-                {{ t('novelWorkbench.actionContract', { n: bookNextStep.chapter }) }}
-              </template>
-              <template v-else>
-                {{ t('novelWorkbench.actionContinue') }}
-              </template>
-            </button>
-            <button
-              v-if="hasAnyProse && bookNextStep.action !== 'continue'"
-              type="button"
-              class="novel-wb__btn novel-wb__btn--ghost"
-              @click="runAction('continue')"
-            >
-              {{ t('novelWorkbench.actionContinue') }}
-            </button>
+          <div v-else-if="readingIsProse && !readingEntry?.prose" class="novel-wb__empty">
+            {{ t('novelWorkbench.noProseYet') }}
           </div>
-          <p v-if="bookState?.nextAction" class="novel-wb__hint novel-wb__hint--pad">
-            {{ bookState.nextAction }}
-          </p>
-        </div>
-
-        <div class="novel-wb__group">
-          <div class="novel-wb__group-label">{{ t('novelWorkbench.groupFiles') }}</div>
-          <div class="novel-wb__quick">
-            <button
-              type="button"
-              class="novel-wb__chip"
-              @click="openRead(novelBiblePath(selectedBookId), 'book-bible.md')"
-            >
-              bible
-            </button>
-            <button
-              type="button"
-              class="novel-wb__chip"
-              @click="openRead(novelStatePath(selectedBookId), 'novel-state.yaml')"
-            >
-              state
-            </button>
-            <button
-              type="button"
-              class="novel-wb__chip"
-              @click="openRead(novelChapterSummariesPath(selectedBookId), 'chapter_summaries.md')"
-            >
-              summaries
-            </button>
+          <div v-else-if="readingIsContract && !readingEntry?.contract" class="novel-wb__empty">
+            {{ t('novelWorkbench.noContractYet') }}
           </div>
-          <div v-if="outlineFiles.length" class="novel-wb__quick">
-            <button
-              v-for="f in outlineFiles"
-              :key="nodePath(selectedBookId, novelOutlineDir(selectedBookId), f)"
-              type="button"
-              class="novel-wb__chip"
-              @click="openRead(nodePath(selectedBookId, novelOutlineDir(selectedBookId), f), f.name)"
-            >
-              outline/{{ f.name }}
-            </button>
-          </div>
-          <div v-if="continuityFiles.length" class="novel-wb__quick">
-            <button
-              v-for="f in continuityFiles"
-              :key="nodePath(selectedBookId, novelContinuityDir(selectedBookId), f)"
-              type="button"
-              class="novel-wb__chip"
-              @click="openRead(nodePath(selectedBookId, novelContinuityDir(selectedBookId), f), f.name)"
-            >
-              continuity/{{ f.name }}
-            </button>
-          </div>
-          <div v-if="reviewFiles.length" class="novel-wb__quick">
-            <button
-              v-for="f in reviewFiles.slice(-6)"
-              :key="nodePath(selectedBookId, novelReviewsDir(selectedBookId), f)"
-              type="button"
-              class="novel-wb__chip"
-              @click="openRead(nodePath(selectedBookId, novelReviewsDir(selectedBookId), f), f.name)"
-            >
-              reviews/{{ f.name }}
-            </button>
-          </div>
-        </div>
-
-        <div class="novel-wb__group">
-          <div class="novel-wb__group-label">{{ t('novelWorkbench.chapters') }}</div>
-          <div v-if="loading" class="novel-wb__empty">{{ t('novelWorkbench.loading') }}</div>
-          <ul v-else-if="chapterEntries.length" class="novel-wb__list novel-wb__list--embedded">
-            <li
-              v-for="entry in chapterEntries"
-              :key="`${selectedBookId}-${entry.chapter}`"
-              class="novel-wb__chapter"
-            >
-              <div class="novel-wb__chapter-head">
-                <span class="novel-wb__row-title">{{
-                  t('novelWorkbench.chapterN', { n: entry.chapter })
-                }}</span>
-                <span
-                  v-if="bookContext?.chapterPhases[entry.chapter]"
-                  class="novel-wb__phase-badge"
-                  :class="`novel-wb__phase-badge--${bookContext.chapterPhases[entry.chapter]}`"
-                >
-                  {{ phaseLabel(bookContext.chapterPhases[entry.chapter]) }}
-                </span>
-                <span class="novel-wb__row-meta">{{ entry.label }}</span>
-              </div>
-              <div class="novel-wb__chapter-files">
-                <button
-                  v-if="entry.contract"
-                  type="button"
-                  class="novel-wb__chip"
-                  @click="openRead(chapterNodePath(selectedBookId, entry.contract!), entry.contract!.name, 'contract')"
-                >
-                  {{ t('novelWorkbench.badgeContract') }}
-                </button>
-                <button
-                  v-if="entry.prose"
-                  type="button"
-                  class="novel-wb__chip"
-                  @click="openRead(chapterNodePath(selectedBookId, entry.prose!), entry.prose!.name, 'prose')"
-                >
-                  {{ t('novelWorkbench.badgeProse') }}
-                </button>
-                <button
-                  v-else
-                  type="button"
-                  class="novel-wb__chip novel-wb__chip--muted"
-                  @click="openChapterFromList(entry.chapter, 'prose')"
-                >
-                  {{ t('novelWorkbench.badgeProse') }} · {{ t('novelWorkbench.noProseYet') }}
-                </button>
-                <button
-                  v-if="bookContext && inferChapterNextAction(bookContext.chapterPhases[entry.chapter])"
-                  type="button"
-                  class="novel-wb__chip novel-wb__chip--action"
-                  @click="runChapterNextAction(entry.chapter)"
-                >
-                  →
-                  {{
-                    primaryActionLabel(
-                      inferChapterNextAction(bookContext.chapterPhases[entry.chapter])!,
-                      entry.chapter,
-                    )
-                  }}
-                </button>
-              </div>
-            </li>
-          </ul>
-          <div v-else class="novel-wb__empty">{{ t('novelWorkbench.noChapters') }}</div>
+          <div v-else class="novel-wb__reader novel-wb__reader--desk" v-html="readHtml" />
         </div>
       </div>
-    </template>
-
-    <template v-else-if="view === 'read'">
-      <div v-if="readingChapter != null" class="novel-wb__tabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          class="novel-wb__tab"
-          :class="{
-            'novel-wb__tab--active': readingIsContract,
-            'novel-wb__tab--missing': !readingEntry?.contract,
-          }"
-          :aria-selected="readingIsContract"
-          @click="openChapterDoc('contract')"
-        >
-          {{ t('novelWorkbench.badgeContract') }}
-          <span v-if="!readingEntry?.contract" class="novel-wb__tab-hint">{{
-            t('novelWorkbench.noContractYet')
-          }}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="novel-wb__tab"
-          :class="{
-            'novel-wb__tab--active': readingIsProse,
-            'novel-wb__tab--missing': !readingEntry?.prose,
-          }"
-          :aria-selected="readingIsProse"
-          @click="openChapterDoc('prose')"
-        >
-          {{ t('novelWorkbench.badgeProse') }}
-          <span v-if="!readingEntry?.prose" class="novel-wb__tab-hint">{{
-            t('novelWorkbench.noProseYet')
-          }}</span>
-        </button>
-      </div>
-      <div v-if="readingChapter != null" class="novel-wb__actions">
-        <template v-if="readingIsContract">
-          <button
-            type="button"
-            class="novel-wb__btn"
-            @click="runAction('contract', readingChapter, readPath || undefined)"
-          >
-            {{
-              readingEntry?.contract
-                ? t('novelWorkbench.actionAskContract')
-                : t('novelWorkbench.actionContract', { n: readingChapter })
-            }}
-          </button>
-        </template>
-        <template v-else-if="readingIsProse">
-          <button
-            type="button"
-            class="novel-wb__btn"
-            :disabled="!isActionAllowed('write', readingChapter)"
-            @click="runAction('write', readingChapter, readPath || undefined)"
-          >
-            {{
-              readingEntry?.prose
-                ? t('novelWorkbench.actionAskRewrite')
-                : t('novelWorkbench.actionAskWrite', { n: readingChapter })
-            }}
-          </button>
-          <button
-            v-if="readingEntry?.prose"
-            type="button"
-            class="novel-wb__btn novel-wb__btn--ghost"
-            :disabled="!isActionAllowed('review', readingChapter)"
-            @click="runAction('review', readingChapter, readPath || undefined)"
-          >
-            {{ t('novelWorkbench.actionReview') }}
-          </button>
-          <button
-            v-if="readingEntry?.prose"
-            type="button"
-            class="novel-wb__btn novel-wb__btn--ghost"
-            :disabled="!isActionAllowed('polish', readingChapter)"
-            @click="runAction('polish', readingChapter, readPath || undefined)"
-          >
-            {{ t('novelWorkbench.actionPolish') }}
-          </button>
-          <button
-            v-if="readingEntry?.prose"
-            type="button"
-            class="novel-wb__btn novel-wb__btn--ghost"
-            :disabled="!isActionAllowed('commit', readingChapter)"
-            @click="runAction('commit', readingChapter, readPath || undefined)"
-          >
-            {{ t('novelWorkbench.actionCommit') }}
-          </button>
-        </template>
-      </div>
-      <div v-if="readLoading" class="novel-wb__empty">{{ t('novelWorkbench.loading') }}</div>
-      <div
-        v-else-if="readingIsProse && !readingEntry?.prose"
-        class="novel-wb__empty"
-      >
-        {{ t('novelWorkbench.noProseYet') }}
-      </div>
-      <div
-        v-else-if="readingIsContract && !readingEntry?.contract"
-        class="novel-wb__empty"
-      >
-        {{ t('novelWorkbench.noContractYet') }}
-      </div>
-      <div v-else class="novel-wb__reader" v-html="readHtml" />
-      <nav
-        v-if="readingChapter != null"
-        class="novel-wb__chapter-nav"
-        :aria-label="t('novelWorkbench.chapterNav')"
-      >
-        <button
-          type="button"
-          class="novel-wb__link"
-          :disabled="!prevChapterEntry"
-          @click="goAdjacentChapter(-1)"
-        >
-          ← {{
-            prevChapterEntry
-              ? t('novelWorkbench.prevChapter', { n: prevChapterEntry.chapter })
-              : t('novelWorkbench.prevChapterNone')
-          }}
-        </button>
-        <button
-          type="button"
-          class="novel-wb__link"
-          :disabled="!nextChapterEntry"
-          @click="goAdjacentChapter(1)"
-        >
-          {{
-            nextChapterEntry
-              ? t('novelWorkbench.nextChapter', { n: nextChapterEntry.chapter })
-              : t('novelWorkbench.nextChapterNone')
-          }} →
-        </button>
-      </nav>
     </template>
   </div>
 </template>
@@ -1136,6 +1057,167 @@ function escapeHtml(s: string) {
   overflow: auto;
   display: flex;
   flex-direction: column;
+}
+
+.novel-wb__book {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.novel-wb__tree {
+  flex: 0 0 220px;
+  min-width: 188px;
+  max-width: 260px;
+  overflow: auto;
+  border-right: 1px solid color-mix(in srgb, var(--dq-border-subtle, #000) 50%, transparent);
+  padding: 6px 0 16px;
+}
+
+.novel-wb__folder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 6px 0 0;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--dq-font-size-caption);
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.novel-wb__folder:hover {
+  background: color-mix(in srgb, var(--dq-accent) 8%, transparent);
+}
+
+.novel-wb__folder--sub {
+  padding-left: 28px;
+  margin-top: 2px;
+  font-weight: 600;
+}
+
+.novel-wb__tree-item--nested {
+  padding-left: 40px;
+}
+
+.novel-wb__twist {
+  width: 12px;
+  opacity: 0.55;
+}
+
+.novel-wb__tree-item--dim {
+  opacity: 0.72;
+}
+
+.novel-wb__tree-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 6px 12px 6px 28px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--dq-font-size-caption);
+  text-align: left;
+  cursor: pointer;
+}
+
+.novel-wb__tree-item:hover {
+  background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
+}
+
+.novel-wb__tree-item--on {
+  background: color-mix(in srgb, var(--dq-accent) 14%, transparent);
+  font-weight: 650;
+}
+
+.novel-wb__tree-item--ghost {
+  opacity: 0.65;
+}
+
+.novel-wb__tree-meta {
+  opacity: 0.5;
+  font-weight: 400;
+}
+
+.novel-wb__tree-unit {
+  margin: 0;
+  padding: 2px 12px 2px 20px;
+  font-size: var(--dq-font-size-caption);
+  opacity: 0.55;
+  line-height: 1.35;
+}
+
+.novel-wb__preview {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.novel-wb__preview-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px 8px;
+}
+
+.novel-wb__preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.novel-wb__reader--desk {
+  flex: 1;
+  min-height: 0;
+}
+
+.novel-wb__stage {
+  flex: 1;
+  min-width: 0;
+}
+
+.novel-wb__stepper--rail {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 8px 8px 0;
+  gap: 4px;
+}
+
+.novel-wb__inject {
+  margin: 0;
+  padding: 0 12px 8px;
+  font-size: var(--dq-font-size-caption);
+  opacity: 0.7;
+}
+
+.novel-wb__more {
+  margin: 4px 12px 8px;
+  font-size: var(--dq-font-size-caption);
+}
+
+.novel-wb__more summary {
+  cursor: pointer;
+  opacity: 0.7;
+  font-weight: 650;
+}
+
+.novel-wb__row--active {
+  background: color-mix(in srgb, var(--dq-accent) 12%, transparent);
 }
 
 .novel-wb__empty {
@@ -1293,6 +1375,94 @@ function escapeHtml(s: string) {
   font-size: var(--dq-font-size-caption);
   opacity: 0.45;
   background: color-mix(in srgb, var(--dq-border-subtle, #000) 30%, transparent);
+}
+
+.novel-wb__step--btn {
+  width: 100%;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.novel-wb__step--btn:hover {
+  opacity: 0.85;
+}
+
+.novel-wb__step--current {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dq-accent) 45%, transparent);
+}
+
+.novel-wb__nav {
+  display: block;
+  width: calc(100% - 16px);
+  margin: 0 8px 4px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--dq-font-size-caption);
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.novel-wb__nav:hover {
+  background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
+  opacity: 1;
+}
+
+.novel-wb__nav--on {
+  background: color-mix(in srgb, var(--dq-accent) 12%, transparent);
+  opacity: 1;
+  font-weight: 650;
+}
+
+.novel-wb__cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px 8px;
+}
+
+.novel-wb__card {
+  margin: 6px 12px 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dq-border-subtle, #000) 18%, transparent);
+}
+
+.novel-wb__cards .novel-wb__card {
+  margin: 0;
+}
+
+.novel-wb__card-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.novel-wb__mini {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.novel-wb__mini li {
+  display: flex;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: var(--dq-font-size-caption);
+  opacity: 0.85;
+}
+
+.novel-wb__mini strong {
+  flex: 0 0 auto;
+  font-weight: 650;
 }
 
 .novel-wb__step--active {
