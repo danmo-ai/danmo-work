@@ -35,7 +35,7 @@ import {
   type OfficeEditAttachment,
 } from '@/types/office-edit-attachment'
 import { prependSkillSummon } from '@/types/composer-skills'
-import { listSummonableExperts, prependExpertSummon } from '@/types/composer-experts'
+import { expertSummonModeForOutgoing, listSummonableExperts, prependExpertSummon } from '@/types/composer-experts'
 import {
   COMPOSER_SLASH_COMMANDS,
   detectSlashQuery,
@@ -747,11 +747,15 @@ async function buildOutgoing() {
   let text = buildComposerUserInput(content.value, attachments.value)
   // Experts first (collaboration), then skills, then user body.
   if (canDelegateExperts.value && selectedExperts.value.length) {
+    const summonMode = expertSummonModeForOutgoing(selectedExperts.value.length, text)
     text = prependExpertSummon(
       text,
       selectedExperts.value,
-      (name, id) => t('composer.useExpertLine', { name, id }),
-      t('composer.delegateExpertHint'),
+      (name, id) =>
+        summonMode === 'relay'
+          ? t('composer.useExpertRelayLine', { name, id })
+          : t('composer.useExpertLine', { name, id }),
+      summonMode === 'relay' ? t('composer.delegateExpertRelayHint') : t('composer.delegateExpertHint'),
     )
   }
   text = prependSkillSummon(

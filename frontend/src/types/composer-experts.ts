@@ -58,6 +58,12 @@ export function groupSummonableExperts(
     .filter((g) => g.agents.length > 0)
 }
 
+/** How the lead should treat delegate_agent.goal when experts are summoned from the UI. */
+export type ExpertSummonMode = 'coordinate' | 'relay'
+
+/** Workbench constraint block — also signals pass-through delegation in runtime policy. */
+export const WORKBENCH_CONSTRAINT_MARKER = '【工作台约束 — 必须遵守】'
+
 /** Prefix user input so the model delegates via delegate_agent. */
 export function buildExpertSummonPrefix(
   experts: Agent[],
@@ -80,4 +86,14 @@ export function prependExpertSummon(
   const prefix = buildExpertSummonPrefix(experts, useExpertLine, delegateHint)
   if (!prefix) return userInput
   return userInput.trim() ? `${prefix}${userInput}` : prefix.trimEnd()
+}
+
+/** Relay when UI expert chips are selected or workbench constraint block is present. */
+export function expertSummonModeForOutgoing(
+  expertCount: number,
+  userInput: string,
+): ExpertSummonMode {
+  if (expertCount > 0) return 'relay'
+  if (userInput.includes(WORKBENCH_CONSTRAINT_MARKER)) return 'relay'
+  return 'coordinate'
 }

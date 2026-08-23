@@ -14,6 +14,7 @@
 - `search_kb` 节奏与结构 before locking volume shape (knowledge_gate).  
 - After user OK on volume outline, update `novel-state.yaml` and `memory_update` project checkpoint.  
 - Do not batch-write chapters until asset_gate: core cast + world skeleton are `canon`.  
+- **Next stage:** `batch-freeze.md`（批量写正文前冻结批次细纲）；单章可经用户确认 bypass。  
 - Per-chapter acceptance specs belong in **章合同** (`chapters/chNNN-contract.yaml`), never under `outline/`.  
 - Write outline files only under `outline/` (use `outline/volumes/` for per-volume briefs).
 

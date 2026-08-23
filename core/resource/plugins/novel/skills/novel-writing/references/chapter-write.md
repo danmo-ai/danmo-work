@@ -2,11 +2,13 @@
 
 ## Preflight
 
-1. Read `novel-state.yaml` — confirm next chapter index.  
-2. **knowledge_gate:** `search_kb` for style / 爽点 / pacing relevant to this chapter.  
-3. **asset_gate:** `table_query` characters/locations/foreshadows involved; all on-page major cast should be `canon` (or user-approved exception).  
-4. Load accepted contract from `novel/<book-id>/chapters/chNNN-contract.yaml` (`status=accepted` or user waiver).  
-5. `memory_read` prefs + recent summaries (last 3–5 chapters).  
+1. `read_skill` → `preflight.md` — 读取回执 + 更新 `novel-state` gates。
+2. Read `novel-state.yaml` — confirm next chapter index.  
+3. **knowledge_gate:** `search_kb` for style / 爽点 / pacing relevant to this chapter.  
+4. **asset_gate:** `table_query` characters/locations/foreshadows involved; all on-page major cast should be `canon` (or user-approved exception).  
+5. Load accepted contract from `novel/<book-id>/chapters/chNNN-contract.yaml` (`status=accepted` or user waiver).  
+6. `memory_read` prefs + recent summaries (last 3–5 chapters).  
+7. 若 beats 含场景标签 → `read_skill` `scene-routing.md`。
 
 ## Context package (optional file)
 

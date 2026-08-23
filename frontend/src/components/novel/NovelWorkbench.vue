@@ -8,17 +8,24 @@ import { toast } from '@/utils/feedback'
 import { renderMarkdown } from '@/utils/markdown-render'
 import {
   buildChapterEntries,
+  buildChapterPhases,
+  buildConstrainedPrefill,
   buildNovelStagePrefill,
+  canRunAction,
   chapterNumFromName,
+  computeBookPipeline,
+  inferChapterNextAction,
   inferNovelBookNextStep,
   isNovelChapterPath,
   isNovelContractName,
   isNovelContractPath,
+  novelBatchFreezePath,
   novelBiblePath,
   novelBookDir,
   novelCanonDir,
   novelCastDir,
   novelChapterFilePath,
+  novelChapterReviewPath,
   novelChapterSummariesPath,
   novelChaptersDir,
   novelContinuityDir,
@@ -27,10 +34,16 @@ import {
   novelStatePath,
   novelVolumesDir,
   nextVolumeNumber,
+  NOVEL_PIPELINE_STEPS,
+  parseBatchFreezeYaml,
+  parseNovelStateExtended,
   parseNovelStateYaml,
   sortWorkbenchDocNodes,
+  type GateStatus,
   type NovelBookNextStep,
   type NovelChapterEntry,
+  type NovelChapterPhase,
+  type NovelExtendedState,
   type NovelFileNode,
   type NovelStageAction,
   type NovelStateSummary,
@@ -65,6 +78,10 @@ const volumeFiles = ref<NovelFileNode[]>([])
 const reviewFiles = ref<NovelFileNode[]>([])
 const canonFiles = ref<NovelFileNode[]>([])
 const castFiles = ref<NovelFileNode[]>([])
+const extendedState = ref<NovelExtendedState | null>(null)
+const contractRaws = ref<Record<number, string>>({})
+const reviewRaws = ref<Record<number, string>>({})
+const batchFreezeFrozen = ref(false)
 const bookState = ref<NovelStateSummary | null>(null)
 const readPath = ref<string | null>(null)
 const readTitle = ref('')
@@ -88,6 +105,108 @@ const hasNovelExpert = computed(() =>
 const bookNextStep = computed((): NovelBookNextStep =>
   inferNovelBookNextStep(bookState.value?.lastCommittedCh ?? 0, chapterEntries.value),
 )
+
+const bookContext = computed(() => {
+  const bookId = selectedBookId.value
+  if (!bookId || !extendedState.value) return null
+  const chapterPhases = buildChapterPhases(
+    chapterEntries.value,
+    extendedState.value.lastCommittedCh,
+    contractRaws.value,
+    reviewRaws.value,
+  )
+  return {
+    bookId,
+    state: extendedState.value,
+    entries: chapterEntries.value,
+    chapterPhases,
+    castFileCount: castFiles.value.length,
+    hasBookOutline: Boolean(bookOutlineFile.value),
+    hasVolumeOutline: volumeFiles.value.length > 0,
+    hasBatchFreezeFile: continuityFiles.value.some((f) => f.name === 'batch-freeze.yaml'),
+    batchFreezeFrozen: batchFreezeFrozen.value,
+  }
+})
+
+const pipeline = computed(() => (bookContext.value ? computeBookPipeline(bookContext.value) : null))
+
+function phaseLabel(phase: NovelChapterPhase): string {
+  const map: Record<NovelChapterPhase, string> = {
+    empty: 'phaseEmpty',
+    contract_draft: 'phaseContractDraft',
+    contract_ready: 'phaseContractReady',
+    drafted: 'phaseDrafted',
+    review_fail: 'phaseReviewFail',
+    review_pass: 'phaseReviewPass',
+    committed: 'phaseCommitted',
+  }
+  return t(`novelWorkbench.${map[phase]}`)
+}
+
+function gateStatusLabel(status: GateStatus): string {
+  const map: Record<GateStatus, string> = {
+    pass: 'gatePass',
+    fail: 'gateFail',
+    unknown: 'gateUnknown',
+    skipped: 'gateSkipped',
+  }
+  return t(`novelWorkbench.${map[status]}`)
+}
+
+function blockerText(key: string): string {
+  const m = key.match(/^blocker\.(.+)$/)
+  if (m) {
+    const part = m[1]
+    const camel = 'blocker' + part.charAt(0).toUpperCase() + part.slice(1)
+    return t(`novelWorkbench.${camel}`)
+  }
+  return key
+}
+
+function stepperLabel(id: string): string {
+  const map: Record<string, string> = {
+    init: 'stepperInit',
+    setup: 'stepperSetup',
+    outline: 'stepperOutline',
+    batch_freeze: 'stepperBatchFreeze',
+    chapter_loop: 'stepperChapterLoop',
+    continuation: 'stepperContinuation',
+    idle: 'stepperChapterLoop',
+  }
+  return t(`novelWorkbench.${map[id] ?? 'stepperChapterLoop'}`)
+}
+
+function primaryActionLabel(action: NovelStageAction, chapter?: number): string {
+  switch (action) {
+    case 'init':
+      return t('novelWorkbench.actionInit')
+    case 'outline':
+      return t('novelWorkbench.actionOutline')
+    case 'assets':
+      return t('novelWorkbench.actionAssets')
+    case 'batch-freeze':
+      return t('novelWorkbench.actionBatchFreeze')
+    case 'continuation':
+      return t('novelWorkbench.actionContinuation')
+    case 'contract':
+      return t('novelWorkbench.actionContract', { n: chapter ?? 'N' })
+    case 'write':
+      return t('novelWorkbench.actionWrite', { n: chapter ?? 'N' })
+    case 'continue':
+      return t('novelWorkbench.actionContinue')
+    case 'review':
+      return t('novelWorkbench.actionReview')
+    case 'commit':
+      return t('novelWorkbench.actionCommit')
+    default:
+      return action
+  }
+}
+
+function isActionAllowed(action: NovelStageAction, chapter?: number): boolean {
+  if (!bookContext.value) return action === 'init'
+  return canRunAction(action, bookContext.value, chapter).allowed
+}
 
 const hasAnyProse = computed(() => chapterEntries.value.some((e) => Boolean(e.prose)))
 
@@ -173,10 +292,47 @@ async function readFile(path: string): Promise<string> {
 async function loadState(bookId: string): Promise<NovelStateSummary | null> {
   try {
     const raw = await readFile(novelStatePath(bookId))
-    return parseNovelStateYaml(raw)
+    extendedState.value = parseNovelStateExtended(raw)
+    bookState.value = extendedState.value
+    return extendedState.value
   } catch {
+    extendedState.value = null
     return null
   }
+}
+
+async function loadBatchFreezeStatus(bookId: string) {
+  try {
+    const raw = await readFile(novelBatchFreezePath(bookId))
+    batchFreezeFrozen.value = parseBatchFreezeYaml(raw).status === 'frozen'
+  } catch {
+    batchFreezeFrozen.value = extendedState.value?.batchFreezeArtifact === 'frozen'
+  }
+}
+
+async function loadChapterMeta(bookId: string, entries: NovelChapterEntry[]) {
+  const contracts: Record<number, string> = {}
+  const reviews: Record<number, string> = {}
+  await Promise.all(
+    entries.map(async (e) => {
+      if (e.contract) {
+        try {
+          contracts[e.chapter] = await readFile(chapterNodePath(bookId, e.contract))
+        } catch {
+          /* ignore */
+        }
+      }
+      if (e.prose) {
+        try {
+          reviews[e.chapter] = await readFile(novelChapterReviewPath(bookId, e.chapter))
+        } catch {
+          /* ignore */
+        }
+      }
+    }),
+  )
+  contractRaws.value = contracts
+  reviewRaws.value = reviews
 }
 
 async function loadShelf() {
@@ -232,6 +388,8 @@ async function openBook(bookId: string, opts?: { keepView?: boolean }) {
     reviewFiles.value = sortWorkbenchDocNodes(revNodes)
     canonFiles.value = sortWorkbenchDocNodes(canonNodes)
     castFiles.value = sortWorkbenchDocNodes(castNodes)
+    await loadBatchFreezeStatus(bookId)
+    await loadChapterMeta(bookId, chapterEntries.value)
   } catch {
     chapterEntries.value = []
     continuityFiles.value = []
@@ -240,7 +398,10 @@ async function openBook(bookId: string, opts?: { keepView?: boolean }) {
     reviewFiles.value = []
     canonFiles.value = []
     castFiles.value = []
-    canonFiles.value = []
+    extendedState.value = null
+    contractRaws.value = {}
+    reviewRaws.value = {}
+    batchFreezeFrozen.value = false
     bookState.value = null
   } finally {
     loading.value = false
@@ -333,7 +494,30 @@ function backToBook() {
 
 function runAction(action: NovelStageAction, chapter?: number, chapterPath?: string, volume?: number) {
   const bookId = selectedBookId.value ?? undefined
-  let text = buildNovelStagePrefill(action, { bookId, chapter, chapterPath, volume })
+  const ctx = bookContext.value
+  const pipe = pipeline.value
+
+  if (ctx && pipe && action !== 'init') {
+    const decision = canRunAction(action, ctx, chapter)
+    if (!decision.allowed) {
+      toast.warning(decision.blockers.map(blockerText).join(' · ') || t('novelWorkbench.actionBlocked'))
+      return
+    }
+  }
+
+  const batchFrom = pipe?.frozenBatch?.from ?? 1
+  const batchTo = pipe?.frozenBatch?.to ?? Math.max(8, (chapter ?? 0) + 7)
+
+  let text =
+    pipe && action !== 'init'
+      ? buildConstrainedPrefill(
+          action,
+          { bookId, chapter, chapterPath, volume, batchFrom, batchTo },
+          pipe,
+          ctx ? canRunAction(action, ctx, chapter).blockers : [],
+        )
+      : buildNovelStagePrefill(action, { bookId, chapter, chapterPath, volume, batchFrom, batchTo })
+
   if (!canDelegate.value) {
     text = `${t('novelWorkbench.needTeamHint')}\n\n${text}`
     toast.warning(t('composer.expertNeedDelegate'))
@@ -341,6 +525,26 @@ function runAction(action: NovelStageAction, chapter?: number, chapterPath?: str
     workspaceUi.requestComposerSelectExperts(['novel'])
   }
   workspaceUi.prefillComposer(text)
+}
+
+function runPrimaryAction() {
+  const pipe = pipeline.value
+  if (!pipe?.primaryAction) return
+  runAction(pipe.primaryAction, pipe.primaryChapter)
+}
+
+function runChapterNextAction(chapter: number) {
+  const ctx = bookContext.value
+  if (!ctx) return
+  const phase = ctx.chapterPhases[chapter]
+  if (!phase) return
+  const action = inferChapterNextAction(phase)
+  if (!action) return
+  const chPath =
+    action === 'write' || action === 'review' || action === 'polish' || action === 'commit'
+      ? novelChapterFilePath(ctx.bookId, chapter)
+      : undefined
+  runAction(action, chapter, chPath)
 }
 
 async function onRefresh() {
@@ -413,6 +617,9 @@ function escapeHtml(s: string) {
                 · ch{{ b.state.lastCommittedCh }}
               </template>
             </span>
+            <span v-if="b.state?.lastCommittedCh" class="novel-wb__row-progress">
+              {{ t('novelWorkbench.progressLabel', { committed: b.state.lastCommittedCh, total: b.state.lastCommittedCh }) }}
+            </span>
           </button>
         </li>
       </ul>
@@ -430,7 +637,81 @@ function escapeHtml(s: string) {
           <div class="novel-wb__row-meta">
             stage={{ bookState.stage || '—' }}
             · last=ch{{ bookState.lastCommittedCh }}
+            <template v-if="pipeline">
+              · {{ t('novelWorkbench.progressLabel', { committed: pipeline.progress.committed, total: pipeline.progress.totalWithContract || pipeline.progress.committed }) }}
+            </template>
             <template v-if="bookState.nextAction"> · {{ bookState.nextAction }}</template>
+          </div>
+        </div>
+
+        <div v-if="pipeline" class="novel-wb__stepper" role="list">
+          <div
+            v-for="step in NOVEL_PIPELINE_STEPS"
+            :key="step.id"
+            role="listitem"
+            class="novel-wb__step"
+            :class="{
+              'novel-wb__step--active': pipeline.phase === step.id,
+              'novel-wb__step--done': NOVEL_PIPELINE_STEPS.findIndex((s) => s.id === pipeline.phase) > NOVEL_PIPELINE_STEPS.findIndex((s) => s.id === step.id),
+            }"
+          >
+            {{ stepperLabel(step.id) }}
+          </div>
+        </div>
+
+        <div v-if="pipeline" class="novel-wb__gates">
+          <span class="novel-wb__gates-label">{{ t('novelWorkbench.gatePanel') }}</span>
+          <span class="novel-wb__gate" :class="`novel-wb__gate--${pipeline.gates.knowledge}`">
+            {{ t('novelWorkbench.gateKnowledge') }}: {{ gateStatusLabel(pipeline.gates.knowledge) }}
+          </span>
+          <span class="novel-wb__gate" :class="`novel-wb__gate--${pipeline.gates.asset}`">
+            {{ t('novelWorkbench.gateAsset') }}: {{ gateStatusLabel(pipeline.gates.asset) }}
+          </span>
+          <span class="novel-wb__gate" :class="`novel-wb__gate--${pipeline.gates.qc}`">
+            {{ t('novelWorkbench.gateQc') }}: {{ gateStatusLabel(pipeline.gates.qc) }}
+          </span>
+        </div>
+        <p v-if="pipeline?.blockers.length" class="novel-wb__hint novel-wb__hint--pad">
+          {{ t('novelWorkbench.blockersTitle') }}:
+          {{ pipeline.blockers.map(blockerText).join(' · ') }}
+        </p>
+
+        <div v-if="pipeline?.primaryAction" class="novel-wb__group">
+          <div class="novel-wb__group-label">{{ t('novelWorkbench.primaryCta') }}</div>
+          <div class="novel-wb__actions novel-wb__actions--tight">
+            <button type="button" class="novel-wb__btn" @click="runPrimaryAction">
+              {{ primaryActionLabel(pipeline.primaryAction, pipeline.primaryChapter) }}
+            </button>
+            <button
+              type="button"
+              class="novel-wb__btn novel-wb__btn--ghost"
+              :disabled="!isActionAllowed('batch-freeze')"
+              @click="runAction('batch-freeze')"
+            >
+              {{ t('novelWorkbench.actionBatchFreeze') }}
+            </button>
+            <button
+              type="button"
+              class="novel-wb__btn novel-wb__btn--ghost"
+              @click="runAction('continuation')"
+            >
+              {{ t('novelWorkbench.actionContinuation') }}
+            </button>
+            <button
+              type="button"
+              class="novel-wb__btn novel-wb__btn--ghost"
+              :disabled="!isActionAllowed('batch-review')"
+              @click="runAction('batch-review')"
+            >
+              {{ t('novelWorkbench.actionBatchReview') }}
+            </button>
+            <button
+              type="button"
+              class="novel-wb__btn novel-wb__btn--ghost"
+              @click="runAction('preflight')"
+            >
+              {{ t('novelWorkbench.actionPreflight') }}
+            </button>
           </div>
         </div>
 
@@ -608,6 +889,13 @@ function escapeHtml(s: string) {
                 <span class="novel-wb__row-title">{{
                   t('novelWorkbench.chapterN', { n: entry.chapter })
                 }}</span>
+                <span
+                  v-if="bookContext?.chapterPhases[entry.chapter]"
+                  class="novel-wb__phase-badge"
+                  :class="`novel-wb__phase-badge--${bookContext.chapterPhases[entry.chapter]}`"
+                >
+                  {{ phaseLabel(bookContext.chapterPhases[entry.chapter]) }}
+                </span>
                 <span class="novel-wb__row-meta">{{ entry.label }}</span>
               </div>
               <div class="novel-wb__chapter-files">
@@ -634,6 +922,20 @@ function escapeHtml(s: string) {
                   @click="openChapterFromList(entry.chapter, 'prose')"
                 >
                   {{ t('novelWorkbench.badgeProse') }} · {{ t('novelWorkbench.noProseYet') }}
+                </button>
+                <button
+                  v-if="bookContext && inferChapterNextAction(bookContext.chapterPhases[entry.chapter])"
+                  type="button"
+                  class="novel-wb__chip novel-wb__chip--action"
+                  @click="runChapterNextAction(entry.chapter)"
+                >
+                  →
+                  {{
+                    primaryActionLabel(
+                      inferChapterNextAction(bookContext.chapterPhases[entry.chapter])!,
+                      entry.chapter,
+                    )
+                  }}
                 </button>
               </div>
             </li>
@@ -696,6 +998,7 @@ function escapeHtml(s: string) {
           <button
             type="button"
             class="novel-wb__btn"
+            :disabled="!isActionAllowed('write', readingChapter)"
             @click="runAction('write', readingChapter, readPath || undefined)"
           >
             {{
@@ -708,6 +1011,7 @@ function escapeHtml(s: string) {
             v-if="readingEntry?.prose"
             type="button"
             class="novel-wb__btn novel-wb__btn--ghost"
+            :disabled="!isActionAllowed('review', readingChapter)"
             @click="runAction('review', readingChapter, readPath || undefined)"
           >
             {{ t('novelWorkbench.actionReview') }}
@@ -716,6 +1020,7 @@ function escapeHtml(s: string) {
             v-if="readingEntry?.prose"
             type="button"
             class="novel-wb__btn novel-wb__btn--ghost"
+            :disabled="!isActionAllowed('polish', readingChapter)"
             @click="runAction('polish', readingChapter, readPath || undefined)"
           >
             {{ t('novelWorkbench.actionPolish') }}
@@ -724,6 +1029,7 @@ function escapeHtml(s: string) {
             v-if="readingEntry?.prose"
             type="button"
             class="novel-wb__btn novel-wb__btn--ghost"
+            :disabled="!isActionAllowed('commit', readingChapter)"
             @click="runAction('commit', readingChapter, readPath || undefined)"
           >
             {{ t('novelWorkbench.actionCommit') }}
@@ -963,6 +1269,84 @@ function escapeHtml(s: string) {
   border-style: dashed;
 }
 
+.novel-wb__chip--action {
+  border-color: var(--dq-accent);
+  color: var(--dq-accent);
+  font-weight: 600;
+}
+
+.novel-wb__row-progress {
+  font-size: var(--dq-font-size-caption);
+  opacity: 0.5;
+}
+
+.novel-wb__stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 12px 4px;
+}
+
+.novel-wb__step {
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: var(--dq-font-size-caption);
+  opacity: 0.45;
+  background: color-mix(in srgb, var(--dq-border-subtle, #000) 30%, transparent);
+}
+
+.novel-wb__step--active {
+  opacity: 1;
+  background: color-mix(in srgb, var(--dq-accent) 18%, transparent);
+  color: var(--dq-accent);
+  font-weight: 650;
+}
+
+.novel-wb__step--done {
+  opacity: 0.7;
+}
+
+.novel-wb__gates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 8px;
+  font-size: var(--dq-font-size-caption);
+}
+
+.novel-wb__gates-label {
+  font-weight: 650;
+  opacity: 0.65;
+}
+
+.novel-wb__gate--pass {
+  color: var(--dq-success, #2a7);
+}
+
+.novel-wb__gate--fail {
+  color: var(--dq-danger, #c33);
+}
+
+.novel-wb__gate--unknown {
+  opacity: 0.55;
+}
+
+.novel-wb__phase-badge {
+  font-size: var(--dq-font-size-caption);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
+}
+
+.novel-wb__phase-badge--review_fail {
+  background: color-mix(in srgb, var(--dq-danger, #c33) 15%, transparent);
+}
+
+.novel-wb__phase-badge--committed {
+  opacity: 0.65;
+}
+
 .novel-wb__actions {
   flex-shrink: 0;
   display: flex;
@@ -992,6 +1376,11 @@ function escapeHtml(s: string) {
 .novel-wb__btn--ghost {
   background: color-mix(in srgb, var(--dq-accent) 12%, transparent);
   color: var(--dq-accent);
+}
+
+.novel-wb__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .novel-wb__chapter {

@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict'
 import {
   buildExpertSummonPrefix,
+  expertSummonModeForOutgoing,
   filterSummonableExperts,
   groupSummonableExperts,
   listSummonableExperts,
   normalizeExpertCategory,
   prependExpertSummon,
+  WORKBENCH_CONSTRAINT_MARKER,
 } from '../src/types/composer-experts.ts'
 
 const agents = [
@@ -45,14 +47,33 @@ assert.equal(
   'Delegate Document (document)\nUse tool.\n\n',
 )
 
-const out = prependExpertSummon(
+const coordinateOut = prependExpertSummon(
   'Write a report',
   [agents[1]],
   (name, id) => `请用 delegate_agent(agent_id=${id}) 委派「${name}」；goal 写清意图，勿代做。`,
   '',
 )
-assert.ok(out.startsWith('请用 delegate_agent(agent_id=document) 委派「Document」'))
-assert.ok(out.endsWith('Write a report'))
-assert.ok(!out.includes('召集上述专家'))
+assert.ok(coordinateOut.startsWith('请用 delegate_agent(agent_id=document) 委派「Document」'))
+assert.ok(coordinateOut.includes('goal 写清意图'))
+assert.ok(coordinateOut.endsWith('Write a report'))
+
+const relayOut = prependExpertSummon(
+  '写第 4 章正文',
+  [agents[3]],
+  (name, id) =>
+    `请用 delegate_agent(agent_id=${id}) 委派「${name}」。goal 必须原文转述下方用户任务正文，禁止扩写。`,
+  '同一正文分别委派，勿拆 scope。',
+)
+assert.ok(relayOut.includes('agent_id=novel'))
+assert.ok(relayOut.includes('原文转述'))
+assert.ok(relayOut.includes('勿拆 scope'))
+assert.ok(relayOut.endsWith('写第 4 章正文'))
+
+assert.equal(expertSummonModeForOutgoing(1, 'hello'), 'relay')
+assert.equal(expertSummonModeForOutgoing(0, 'hello'), 'coordinate')
+assert.equal(
+  expertSummonModeForOutgoing(0, `task\n${WORKBENCH_CONSTRAINT_MARKER}`),
+  'relay',
+)
 
 console.log('composer-experts helpers ok')

@@ -32,6 +32,9 @@ Copy `assets/templates/chapter-contract.yaml`. Keep it lean — fill only what t
 | `state_deltas` | `"谁: 从X→Y"` — deltas only |
 | `info_control.reveals` / `.foreshadowing` | Information control; FS-ids with `plant\|advance\|payoff` |
 | `hook.type` / `hook.out` | Type from KB 断章钩子六类; `out` = concrete event, not slogan |
+| `micro_payoff` | 本章微兑现（追读力 KB） |
+| `reader_debt` | 待接钩子列表（开放债务） |
+| `constraint_checks` | 强约束自检（金手指/时间线/叙事线） |
 | `word_target` | 番茄常见 2000–3500 |
 | `continuity_risks` | What could break |
 | `status` | `proposed` → `accepted` → `drafted` → `reviewed` |

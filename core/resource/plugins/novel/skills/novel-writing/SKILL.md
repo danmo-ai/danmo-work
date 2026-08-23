@@ -1,12 +1,12 @@
 ---
 name: novel-writing
 source: builtin
-description: Long-form / webnovel production with durable canon files, chapter contracts, continuity ledgers, and review gates. Use when opening a book, outlining volumes, writing or continuing chapters, checking continuity, deslopping AI prose, designing 爽点/金手指/hooks, or resuming a novel project.
+description: Long-form / webnovel production with durable canon files, chapter contracts, continuity ledgers, batch freeze, continuation engine, and review gates. Use when opening a book, outlining volumes, freezing batch outlines, writing or continuing chapters, checking continuity, deslopping AI prose, designing 爽点/金手指/hooks, or resuming a novel project.
 license: MIT
 compatibility: Requires write, edit, read_file, grep, glob; Core table_*, memory_*, search_kb/list_kb_docs/get_kb_doc; ask_user; todowrite optional
 metadata:
   author: danmo-work
-  version: "1.0"
+  version: "1.1"
   category: creative-writing
 ---
 
@@ -32,7 +32,7 @@ Engineering-style long-form fiction for Danmo Work. **Skills guide; tools mutate
 |------|---------|-----------|
 | `knowledge_gate` | Craft rules loaded | `search_kb` / `get_kb_doc` or `read_skill` refs cited for the stage |
 | `asset_gate` | Character canon check | 1. `table_query characters` — verify all cast in this scene are `status=canon`<br>2. `read_file canon/cast/<name>.md` — load the sheet for each involved character<br>3. If any cast is missing or `candidate`: stop, create draft sheet → `ask_user` to promote to `canon` |
-| `qc_gate` | Review done | Review file written; no open P0 / blocking issues |
+| `qc_gate` | Review done | Review file written; `### VERDICT` PASS; no open P0 |
 
 ## Danmo tool binding
 
@@ -52,13 +52,16 @@ Load the matching reference with `read_skill` **before** heavy work. Path = skil
 
 | Intent | Load | Also search_kb themes |
 |--------|------|------------------------|
-| New book / 立项 | `references/init.md`, `references/project-layout.md`, `references/table-schema.md` | 题材速览, 人设 |
-| Outline / 卷纲 / 章纲列表 | `references/outline.md` | 节奏与结构, 番茄平台 |
-| Chapter contract / 章合同 | `references/chapter-contract.md` | 节奏, 爽点, 番茄平台 |
-| Write chapter | `references/chapter-write.md` | 文风, 情绪, 爽点, 番茄平台 |
-| Review | `references/review-gates.md` | 去 AI 味, 世界观 |
+| New book / 立项 | `references/init.md`, `project-layout.md`, `table-schema.md` | 题材速览, 人设 |
+| Outline / 卷纲 | `references/outline.md` | 节奏与结构, 番茄平台 |
+| Batch freeze | `references/batch-freeze.md`, `preflight.md` | 节奏, 爽点 |
+| Chapter contract | `references/chapter-contract.md` | 节奏, 爽点, 番茄平台 |
+| Write chapter | `references/preflight.md`, `chapter-write.md`, `scene-routing.md` | 文风, 爽点, 追读力 |
+| Review | `references/review-gates.md` | 去 AI 味, 题材 QC |
+| Batch review | `references/review-gates.md` | 去 AI 味, 追读力 |
 | Deslop / polish | `references/polish-deslop.md` | 去 AI 味, 语言与文风 |
 | Commit / resume | `references/continuity-commit.md` | 金手指（若涉及） |
+| Continuation | `references/continuation.md` | 文风, 情绪 |
 | Routing help | `references/routes.md` | — |
 
 Templates: `novel-writing/assets/templates/*` via `read_skill`.
@@ -66,16 +69,18 @@ Templates: `novel-writing/assets/templates/*` via `read_skill`.
 ## Chapter loop (mandatory)
 
 ```text
-preflight(novel-state) → knowledge_gate → asset_gate
+preflight → knowledge_gate → asset_gate
   → chapter_contract → draft(write) → review(one round)
   → fix P0 → commit(table + memory + chapter file)
 ```
+
+Batch path: `outline → batch-freeze →` per-chapter loop above.
 
 Every 10 committed chapters: write a phase summary into `continuity/` and `memory_update` (agent/project).
 
 ## Human stops
 
-Use `ask_user` before: locking reader promise; promoting `candidate`→`canon`; approving volume outline; batch-writing >3 chapters; proceeding past major QC FAIL.
+Use `ask_user` before: locking reader promise; promoting `candidate`→`canon`; approving volume outline; batch-writing >3 chapters; proceeding past major QC FAIL; **续写 Frozen_Canon 未确认**; **批次未冻结却批量写正文**.
 
 ## Stop condition
 

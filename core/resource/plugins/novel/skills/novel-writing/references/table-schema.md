@@ -43,6 +43,12 @@ Mirror/index only. Authoritative contract body is always
 
 `id`, `book_id`, `chapter`, `severity` (`P0|P1`), `lens`, `quote`, `status` (`open|fixed`)
 
+## `reader_debts`
+
+`id`, `book_id`, `chapter`, `hook_summary`, `hook_type`, `status` (`open|paid|downgraded`), `payoff_ch`, `urgency`
+
+Track open chapter-end hooks per KB「追读力」；开放债务建议 ≤5。
+
 ## Query habits
 
 - Prefer `table_query` with `book_id` + chapter/relevance filters.  

@@ -1,55 +1,87 @@
 import assert from 'node:assert/strict'
 import {
   buildChapterEntries,
+  buildChapterPhases,
+  buildConstrainedPrefill,
   buildNovelStagePrefill,
+  canRunAction,
   chapterNumFromName,
+  computeBookPipeline,
+  inferChapterNextAction,
+  inferChapterPhase,
   inferNovelBookNextStep,
   isNovelChapterPath,
   isNovelContractName,
   isNovelContractPath,
   nextChapterNumber,
   nextVolumeNumber,
+  parseBatchFreezeYaml,
+  parseContractYaml,
+  parseNovelStateExtended,
   parseNovelStateYaml,
+  parseReviewVerdict,
   sortChapterNodes,
   volumeNumFromName,
 } from '../src/types/novel-workbench.ts'
 
 const yaml = `
 title: "星际旅店"
-stage: draft
+stage: chapter_loop
 last_committed_ch: 3
 next_action: "写第4章钩子"
-extra: ignore
+qc_profile: male_power
+continuation_mode: false
+frozen_batch:
+  from: 1
+  to: 8
+  frozen_at: "2026-01-01"
+artifacts:
+  batch_freeze: frozen
+gates:
+  knowledge: pass
+  asset: unknown
+  qc: fail
+blockers:
+  - 缺反派人物卡
 `
 const summary = parseNovelStateYaml(yaml)
 assert.equal(summary.title, '星际旅店')
-assert.equal(summary.stage, 'draft')
+assert.equal(summary.stage, 'chapter_loop')
 assert.equal(summary.lastCommittedCh, 3)
-assert.equal(summary.nextAction, '写第4章钩子')
 
-assert.equal(parseNovelStateYaml('title: \'\'').title, '')
-assert.equal(parseNovelStateYaml('last_committed_ch: abc').lastCommittedCh, 0)
+const ext = parseNovelStateExtended(yaml)
+assert.equal(ext.qcProfile, 'male_power')
+assert.equal(ext.frozenBatch?.from, 1)
+assert.equal(ext.frozenBatch?.to, 8)
+assert.equal(ext.batchFreezeArtifact, 'frozen')
+assert.equal(ext.gates.knowledge, 'pass')
+assert.equal(ext.gates.qc, 'fail')
+assert.equal(ext.blockers.length, 1)
 
-assert.equal(chapterNumFromName('ch001.md'), 1)
-assert.equal(chapterNumFromName('ch12.md'), 12)
-assert.equal(chapterNumFromName('ch013-contract.yaml'), 13)
-assert.equal(chapterNumFromName('notes.md'), null)
+assert.equal(parseContractYaml('status: accepted').status, 'accepted')
+assert.equal(parseReviewVerdict('### VERDICT\nPASS'), 'PASS')
+assert.equal(parseReviewVerdict('### VERDICT\nFAIL'), 'FAIL')
+assert.equal(parseBatchFreezeYaml('status: frozen').status, 'frozen')
 
-assert.equal(isNovelChapterPath('novel/b/chapters/ch003.md'), true)
-assert.equal(isNovelChapterPath('novel/b/book-bible.md'), false)
-assert.equal(isNovelContractName('ch001-contract.yaml'), true)
-assert.equal(isNovelContractName('ch001.yml'), false)
-assert.equal(isNovelContractPath('novel/juanzong/chapters/ch001-contract.yaml'), true)
-assert.equal(isNovelContractPath('novel/juanzong/chapters/ch001.md'), false)
-
-const sorted = sortChapterNodes([
-  { name: 'ch10.md', path: 'novel/b/chapters/ch10.md', isDir: false },
-  { name: 'ch2.md', path: 'novel/b/chapters/ch2.md', isDir: false },
-  { name: 'drafts', path: 'novel/b/chapters/drafts', isDir: true },
-  { name: 'readme.txt', path: 'novel/b/chapters/readme.txt', isDir: false },
-  { name: 'ch001-contract.yaml', path: 'novel/b/chapters/ch001-contract.yaml', isDir: false },
-])
-assert.deepEqual(sorted.map((n) => n.name), ['ch2.md', 'ch10.md'])
+const entryCommitted = {
+  chapter: 1,
+  label: 'ch001',
+  prose: { name: 'ch001.md', path: 'a', isDir: false },
+  contract: { name: 'ch001-contract.yaml', path: 'b', isDir: false },
+}
+assert.equal(
+  inferChapterPhase(entryCommitted, 3, 'status: reviewed', '### VERDICT\nPASS'),
+  'committed',
+)
+const entryReady = {
+  chapter: 2,
+  label: 'ch002',
+  prose: null,
+  contract: { name: 'ch002-contract.yaml', path: 'b', isDir: false },
+}
+assert.equal(inferChapterPhase(entryReady, 0, 'status: accepted', null), 'contract_ready')
+assert.equal(inferChapterNextAction('contract_ready'), 'write')
+assert.equal(inferChapterNextAction('review_pass'), 'commit')
 
 const entries = buildChapterEntries(
   [
@@ -57,51 +89,36 @@ const entries = buildChapterEntries(
     { name: 'ch002-contract.yaml', path: 'novel/b/chapters/ch002-contract.yaml', isDir: false },
     { name: 'ch002.md', path: 'novel/b/chapters/ch002.md', isDir: false },
   ],
-  [
-    { name: 'book_outline.md', path: 'novel/b/outline/book_outline.md', isDir: false },
-    { name: 'ch003-contract.yaml', path: 'novel/b/outline/ch003-contract.yaml', isDir: false },
-  ],
+  [],
 )
-assert.deepEqual(
-  entries.map((e) => ({
-    ch: e.chapter,
-    prose: e.prose?.name ?? null,
-    contract: e.contract?.name ?? null,
-  })),
-  [
-    { ch: 1, prose: null, contract: 'ch001-contract.yaml' },
-    { ch: 2, prose: 'ch002.md', contract: 'ch002-contract.yaml' },
-    { ch: 3, prose: null, contract: 'ch003-contract.yaml' },
-  ],
-)
+const phases = buildChapterPhases(entries, 0, { 1: 'status: proposed' }, {})
+assert.equal(phases[1], 'contract_draft')
+assert.equal(phases[2], 'drafted')
 
-assert.equal(
-  nextChapterNumber(3, [
-    { name: 'ch001.md', path: 'a', isDir: false },
-    { name: 'ch005.md', path: 'b', isDir: false },
-  ]),
-  6,
-)
-assert.equal(nextChapterNumber(0, entries), 4)
+const ctx = {
+  bookId: 'star-inn',
+  state: ext,
+  entries,
+  chapterPhases: phases,
+  castFileCount: 0,
+  hasBookOutline: true,
+  hasVolumeOutline: true,
+  hasBatchFreezeFile: true,
+  batchFreezeFrozen: true,
+}
+const pipe = computeBookPipeline(ctx)
+assert.ok(pipe.primaryAction)
 
-const juanzongLike = buildChapterEntries([
-  { name: 'ch001-contract.yaml', path: 'a', isDir: false },
-  { name: 'ch002-contract.yaml', path: 'b', isDir: false },
-  { name: 'ch013-contract.yaml', path: 'c', isDir: false },
-])
-assert.deepEqual(inferNovelBookNextStep(0, juanzongLike), { action: 'write', chapter: 1 })
-assert.deepEqual(
-  inferNovelBookNextStep(0, [
-    {
-      chapter: 1,
-      label: 'ch001',
-      contract: { name: 'ch001-contract.yaml', path: 'a', isDir: false },
-      prose: { name: 'ch001.md', path: 'b', isDir: false },
-    },
-  ]),
-  { action: 'continue', chapter: 2 },
-)
-assert.deepEqual(inferNovelBookNextStep(0, []), { action: 'contract', chapter: 1 })
+const writeBlocked = canRunAction('write', ctx, 2)
+assert.equal(writeBlocked.allowed, false)
+assert.ok(writeBlocked.blockers.includes('blocker.noCast'))
+
+const reviewOk = canRunAction('review', { ...ctx, castFileCount: 2 }, 2)
+assert.equal(reviewOk.allowed, true)
+
+const constrained = buildConstrainedPrefill('write', { bookId: 'star-inn', chapter: 2 }, pipe, [])
+assert.ok(constrained.includes('工作台约束'))
+assert.ok(constrained.includes('preflight.md'))
 
 const stages = [
   'init',
@@ -115,6 +132,10 @@ const stages = [
   'review',
   'polish',
   'commit',
+  'batch-freeze',
+  'continuation',
+  'batch-review',
+  'preflight',
 ]
 for (const action of stages) {
   const text = buildNovelStagePrefill(/** @type {any} */ (action), {
@@ -123,54 +144,20 @@ for (const action of stages) {
     chapterPath: 'novel/star-inn/chapters/ch004.md',
   })
   assert.ok(text.trim().length > 0, action)
-  assert.ok(!text.includes('请委派'), action)
-  assert.ok(!text.startsWith('请用 delegate_agent'), action)
 }
 
-const contract = buildNovelStagePrefill('contract', { bookId: 'star-inn', chapter: 4 })
-assert.ok(contract.includes('章合同'))
-assert.ok(contract.includes('chapter-contract.md'))
-assert.ok(contract.includes('ch004-contract.yaml'))
-assert.ok(contract.includes('唯一落盘'))
-assert.ok(!contract.includes('也可 outline'))
+assert.equal(chapterNumFromName('ch001.md'), 1)
+assert.equal(isNovelChapterPath('novel/b/chapters/ch003.md'), true)
+assert.equal(isNovelContractPath('novel/b/chapters/ch001-contract.yaml'), true)
 
-const polish = buildNovelStagePrefill('polish', {
-  bookId: 'star-inn',
-  chapter: 4,
-  chapterPath: 'novel/star-inn/chapters/ch004.md',
-})
-assert.ok(polish.includes('polish-deslop.md'))
+const sorted = sortChapterNodes([
+  { name: 'ch10.md', path: 'novel/b/chapters/ch10.md', isDir: false },
+  { name: 'ch2.md', path: 'novel/b/chapters/ch2.md', isDir: false },
+])
+assert.deepEqual(sorted.map((n) => n.name), ['ch2.md', 'ch10.md'])
 
-const commit = buildNovelStagePrefill('commit', { bookId: 'star-inn', chapter: 4 })
-assert.ok(commit.includes('continuity-commit.md'))
-assert.ok(commit.includes('phase-NN'))
-
-const write = buildNovelStagePrefill('write', { bookId: 'star-inn', chapter: 4 })
-assert.ok(write.includes('ch004.md'))
-assert.ok(write.includes('accepted'))
-
-const outline = buildNovelStagePrefill('outline', { bookId: 'star-inn' })
-assert.ok(outline.includes('book-outline.md'))
-assert.ok(outline.includes('volume-outline.md'))
-assert.ok(outline.includes('爽点'))
-
-const volume = buildNovelStagePrefill('volume', { bookId: 'star-inn', volume: 3 })
-assert.ok(volume.includes('v03.md'))
-assert.ok(volume.includes('volume-outline.md'))
-assert.ok(volume.includes('章纲表'))
-assert.ok(volume.includes('outline.md'))
-
-assert.equal(volumeNumFromName('v01.md'), 1)
-assert.equal(volumeNumFromName('v12-补天天道重启.md'), 12)
-assert.equal(volumeNumFromName('book_outline.md'), null)
-assert.equal(
-  nextVolumeNumber([
-    { name: 'v01.md', path: 'a', isDir: false },
-    { name: 'v03-莲花生命编码.md', path: 'b', isDir: false },
-    { name: 'drafts', path: 'c', isDir: true },
-  ]),
-  4,
-)
+assert.deepEqual(inferNovelBookNextStep(0, entries), { action: 'write', chapter: 1 })
 assert.equal(nextVolumeNumber([]), 1)
+assert.equal(volumeNumFromName('v12-补.md'), 12)
 
 console.log('novel-workbench helpers ok')

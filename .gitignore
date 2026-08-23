@@ -29,6 +29,8 @@
 /desktop/src-tauri/resources/codegraph/codegraph.tar.gz
 /desktop/src-tauri/resources/codegraph/codegraph.zip
 /desktop/src-tauri/resources/codegraph/CODEGRAPH_VERSION
+/desktop/src-tauri/resources/rg/rg
+/desktop/src-tauri/resources/rg/rg.exe
 /desktop/src-tauri/resources/first_launch/
 
 # SQLite / runtime data (local & test artifacts)

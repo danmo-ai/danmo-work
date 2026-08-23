@@ -85,6 +85,9 @@ func TestBuildSystemPromptPolicies(t *testing.T) {
 	if !strings.Contains(withDelegate, "<delegation-policy>") {
 		t.Fatal("expected delegation-policy when canDelegate")
 	}
+	if !strings.Contains(withDelegate, "Explicit summon (pass-through)") {
+		t.Fatal("expected explicit summon pass-through rules in delegation-policy")
+	}
 	if !strings.Contains(withDelegate, "<available_agents>") || !strings.Contains(withDelegate, "explorer") {
 		t.Fatalf("expected available_agents roster:\n%s", withDelegate)
 	}

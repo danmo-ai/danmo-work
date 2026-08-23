@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "novel",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Novel / webnovel writing expert: novel-writing skill + craft knowledge base.",
   "author": { "name": "Danmo" },
   "license": "MIT",

@@ -12,6 +12,35 @@ export interface NovelStateSummary {
   nextAction: string
 }
 
+export type GateStatus = 'unknown' | 'pass' | 'fail' | 'skipped'
+
+export interface NovelExtendedState extends NovelStateSummary {
+  qcProfile: string
+  continuationMode: boolean
+  frozenBatch: { from: number; to: number } | null
+  batchFreezeArtifact: string
+  gates: { knowledge: GateStatus; asset: GateStatus; qc: GateStatus }
+  blockers: string[]
+}
+
+export type NovelPipelinePhase =
+  | 'init'
+  | 'setup'
+  | 'outline'
+  | 'batch_freeze'
+  | 'chapter_loop'
+  | 'continuation'
+  | 'idle'
+
+export type NovelChapterPhase =
+  | 'empty'
+  | 'contract_draft'
+  | 'contract_ready'
+  | 'drafted'
+  | 'review_fail'
+  | 'review_pass'
+  | 'committed'
+
 /** Full novel-writing skill pipeline (routes.md order). */
 export type NovelStageAction =
   | 'init'
@@ -25,35 +54,395 @@ export type NovelStageAction =
   | 'review'
   | 'polish'
   | 'commit'
+  | 'batch-freeze'
+  | 'continuation'
+  | 'batch-review'
+  | 'preflight'
 
 export interface NovelStagePrefillCtx {
   bookId?: string
   chapter?: number
   chapterPath?: string
   volume?: number
+  batchFrom?: number
+  batchTo?: number
+}
+
+export interface NovelActionDecision {
+  allowed: boolean
+  blockers: string[]
+}
+
+export interface NovelBookPipeline {
+  phase: NovelPipelinePhase
+  primaryAction: NovelStageAction | null
+  primaryChapter?: number
+  gates: { knowledge: GateStatus; asset: GateStatus; qc: GateStatus }
+  blockers: string[]
+  progress: { committed: number; totalWithContract: number; percent: number }
+  frozenBatch: { from: number; to: number } | null
+}
+
+export interface NovelBookContext {
+  bookId: string
+  state: NovelExtendedState
+  entries: NovelChapterEntry[]
+  chapterPhases: Record<number, NovelChapterPhase>
+  castFileCount: number
+  hasBookOutline: boolean
+  hasVolumeOutline: boolean
+  hasBatchFreezeFile: boolean
+  batchFreezeFrozen: boolean
+}
+
+function yamlScalar(raw: string, key: string): string {
+  const re = new RegExp(`^${key}:\\s*(.*)$`, 'm')
+  const m = raw.match(re)
+  if (!m) return ''
+  let v = (m[1] ?? '').trim()
+  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+    v = v.slice(1, -1)
+  }
+  if (v === '""' || v === "''") return ''
+  return v
+}
+
+function yamlNestedScalar(raw: string, parent: string, key: string): string {
+  const blockRe = new RegExp(`^${parent}:\\s*\\n([\\s\\S]*?)(?=^\\S|$)`, 'm')
+  const block = raw.match(blockRe)
+  if (!block) return ''
+  const re = new RegExp(`^\\s+${key}:\\s*(.*)$`, 'm')
+  const m = block[1].match(re)
+  if (!m) return ''
+  return (m[1] ?? '').trim().replace(/^["']|["']$/g, '')
 }
 
 /** Parse a few scalar fields from novel-state.yaml without a YAML dependency. */
 export function parseNovelStateYaml(raw: string): NovelStateSummary {
-  const pick = (key: string): string => {
-    const re = new RegExp(`^${key}:\\s*(.*)$`, 'm')
-    const m = raw.match(re)
-    if (!m) return ''
-    let v = (m[1] ?? '').trim()
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-      v = v.slice(1, -1)
-    }
-    if (v === '""' || v === "''") return ''
-    return v
-  }
-  const last = Number.parseInt(pick('last_committed_ch'), 10)
+  const last = Number.parseInt(yamlScalar(raw, 'last_committed_ch'), 10)
   return {
-    title: pick('title'),
-    stage: pick('stage'),
+    title: yamlScalar(raw, 'title'),
+    stage: yamlScalar(raw, 'stage'),
     lastCommittedCh: Number.isFinite(last) ? last : 0,
-    nextAction: pick('next_action'),
+    nextAction: yamlScalar(raw, 'next_action'),
   }
 }
+
+export function parseNovelStateExtended(raw: string): NovelExtendedState {
+  const base = parseNovelStateYaml(raw)
+  const from = Number.parseInt(yamlNestedScalar(raw, 'frozen_batch', 'from'), 10)
+  const to = Number.parseInt(yamlNestedScalar(raw, 'frozen_batch', 'to'), 10)
+  let frozenBatch =
+    Number.isFinite(from) && Number.isFinite(to) && from > 0 && to >= from
+      ? { from, to }
+      : null
+  if (!frozenBatch) {
+    const batchBlock = raw.match(/^frozen_batch:\s*\n((?:[ \t].*\n?)*)/m)
+    if (batchBlock) {
+      const f = batchBlock[1].match(/^\s+from:\s*(\d+)/m)
+      const t = batchBlock[1].match(/^\s+to:\s*(\d+)/m)
+      const fromN = f ? Number.parseInt(f[1], 10) : NaN
+      const toN = t ? Number.parseInt(t[1], 10) : NaN
+      if (Number.isFinite(fromN) && Number.isFinite(toN) && fromN > 0 && toN >= fromN) {
+        frozenBatch = { from: fromN, to: toN }
+      }
+    }
+  }
+
+  const parseGateBlock = (rawYaml: string): { knowledge: GateStatus; asset: GateStatus; qc: GateStatus } => {
+    const defaults: { knowledge: GateStatus; asset: GateStatus; qc: GateStatus } = {
+      knowledge: 'unknown',
+      asset: 'unknown',
+      qc: 'unknown',
+    }
+    const block = rawYaml.match(/^gates:\s*\n((?:[ \t].*\n?)*)/m)
+    if (!block) return defaults
+    const parseOne = (k: string): GateStatus => {
+      const m = block[1].match(new RegExp(`^\\s+${k}:\\s*(\\w+)`, 'm'))
+      const v = (m?.[1] ?? '').toLowerCase()
+      if (v === 'pass' || v === 'fail' || v === 'skipped') return v
+      return 'unknown'
+    }
+    return {
+      knowledge: parseOne('knowledge'),
+      asset: parseOne('asset'),
+      qc: parseOne('qc'),
+    }
+  }
+
+  const artifactsBlock = raw.match(/^artifacts:\s*\n((?:[ \t].*\n?)*)/m)
+  let batchFreezeArtifact = yamlNestedScalar(raw, 'artifacts', 'batch_freeze')
+  if (!batchFreezeArtifact && artifactsBlock) {
+    const m = artifactsBlock[1].match(/^\s+batch_freeze:\s*(.+)$/m)
+    if (m) batchFreezeArtifact = m[1].trim().replace(/^["']|["']$/g, '')
+  }
+
+  const blockers: string[] = []
+  const blockerBlock = raw.match(/^blockers:\s*\n((?:\s+-\s+.+\n?)*)/m)
+  if (blockerBlock) {
+    for (const line of blockerBlock[1].split('\n')) {
+      const m = line.match(/^\s*-\s+(.*)$/)
+      if (m?.[1]?.trim()) blockers.push(m[1].trim())
+    }
+  }
+
+  return {
+    ...base,
+    qcProfile: yamlScalar(raw, 'qc_profile') || 'general',
+    continuationMode: /continuation_mode:\s*true/i.test(raw),
+    frozenBatch,
+    batchFreezeArtifact,
+    gates: parseGateBlock(raw),
+    blockers,
+  }
+}
+
+export function parseContractYaml(raw: string): { status: string } {
+  const status = yamlScalar(raw, 'status').toLowerCase()
+  return { status: status || 'proposed' }
+}
+
+export function parseReviewVerdict(raw: string): 'PASS' | 'FAIL' | null {
+  const m = raw.match(/###\s*VERDICT\s*\n\s*(PASS|FAIL)/i)
+  if (!m) return null
+  return m[1].toUpperCase() === 'PASS' ? 'PASS' : 'FAIL'
+}
+
+export function parseBatchFreezeYaml(raw: string): { status: string } {
+  return { status: yamlScalar(raw, 'status').toLowerCase() || 'proposed' }
+}
+
+export function inferChapterPhase(
+  entry: NovelChapterEntry,
+  lastCommittedCh: number,
+  contractRaw?: string,
+  reviewRaw?: string,
+): NovelChapterPhase {
+  if (entry.chapter <= lastCommittedCh && entry.prose) return 'committed'
+
+  const contractStatus = contractRaw ? parseContractYaml(contractRaw).status : ''
+  const verdict = reviewRaw ? parseReviewVerdict(reviewRaw) : null
+
+  if (entry.prose) {
+    if (verdict === 'FAIL') return 'review_fail'
+    if (verdict === 'PASS') return 'review_pass'
+    return 'drafted'
+  }
+
+  if (entry.contract) {
+    if (contractStatus === 'accepted' || contractStatus === 'drafted' || contractStatus === 'reviewed') {
+      return 'contract_ready'
+    }
+    return 'contract_draft'
+  }
+
+  return 'empty'
+}
+
+export function inferChapterNextAction(phase: NovelChapterPhase): NovelStageAction | null {
+  switch (phase) {
+    case 'empty':
+      return 'contract'
+    case 'contract_draft':
+      return 'contract'
+    case 'contract_ready':
+      return 'write'
+    case 'drafted':
+    case 'review_fail':
+      return 'review'
+    case 'review_pass':
+      return 'commit'
+    case 'committed':
+      return null
+    default:
+      return null
+  }
+}
+
+export function buildChapterPhases(
+  entries: NovelChapterEntry[],
+  lastCommittedCh: number,
+  contractRaws: Record<number, string> = {},
+  reviewRaws: Record<number, string> = {},
+): Record<number, NovelChapterPhase> {
+  const out: Record<number, NovelChapterPhase> = {}
+  for (const e of entries) {
+    out[e.chapter] = inferChapterPhase(
+      e,
+      lastCommittedCh,
+      contractRaws[e.chapter],
+      reviewRaws[e.chapter],
+    )
+  }
+  return out
+}
+
+export function inferBookPipelinePhase(ctx: NovelBookContext): NovelPipelinePhase {
+  const { state, hasBookOutline, hasVolumeOutline, batchFreezeFrozen, continuationMode } = ctx
+  if (continuationMode || state.stage === 'continuation') return 'continuation'
+  if (state.stage === 'batch_freeze' || (hasVolumeOutline && !batchFreezeFrozen)) {
+    return hasVolumeOutline && !batchFreezeFrozen ? 'batch_freeze' : 'chapter_loop'
+  }
+  if (state.stage === 'init' || !hasBookOutline) return hasBookOutline ? 'setup' : 'init'
+  if (state.stage === 'outline' || !hasVolumeOutline) return 'outline'
+  if (hasVolumeOutline && !batchFreezeFrozen && ctx.entries.some((e) => e.prose)) {
+    return 'chapter_loop'
+  }
+  if (hasVolumeOutline && !batchFreezeFrozen) return 'batch_freeze'
+  return 'chapter_loop'
+}
+
+export function computeBookPipeline(ctx: NovelBookContext): NovelBookPipeline {
+  const phase = inferBookPipelinePhase(ctx)
+  const committed = ctx.state.lastCommittedCh
+  const totalWithContract = ctx.entries.filter((e) => e.contract).length
+  const percent =
+    totalWithContract > 0 ? Math.min(100, Math.round((committed / totalWithContract) * 100)) : 0
+
+  const assetGate: GateStatus =
+    ctx.castFileCount > 0 ? 'pass' : ctx.state.gates.asset === 'fail' ? 'fail' : 'unknown'
+
+  const gates = {
+    knowledge: ctx.state.gates.knowledge,
+    asset: assetGate,
+    qc: ctx.state.gates.qc,
+  }
+
+  const blockers = [...ctx.state.blockers]
+  if (assetGate === 'unknown' && ctx.castFileCount === 0) {
+    blockers.push('blocker.noCast')
+  }
+
+  let primaryAction: NovelStageAction | null = null
+  let primaryChapter: number | undefined
+
+  if (phase === 'init') primaryAction = 'init'
+  else if (phase === 'setup') primaryAction = 'assets'
+  else if (phase === 'outline') primaryAction = 'outline'
+  else if (phase === 'batch_freeze') primaryAction = 'batch-freeze'
+  else if (phase === 'continuation') primaryAction = 'continuation'
+  else {
+    const sorted = [...ctx.entries].sort((a, b) => a.chapter - b.chapter)
+    for (const e of sorted) {
+      const ph = ctx.chapterPhases[e.chapter] ?? 'empty'
+      const next = inferChapterNextAction(ph)
+      if (next) {
+        primaryAction = next
+        primaryChapter = e.chapter
+        break
+      }
+    }
+    if (!primaryAction) {
+      primaryAction = 'continue'
+      primaryChapter = nextChapterNumber(committed, ctx.entries)
+    }
+  }
+
+  return {
+    phase,
+    primaryAction,
+    primaryChapter,
+    gates,
+    blockers,
+    progress: { committed, totalWithContract, percent },
+    frozenBatch: ctx.state.frozenBatch,
+  }
+}
+
+export function canRunAction(action: NovelStageAction, ctx: NovelBookContext, chapter?: number): NovelActionDecision {
+  const blockers: string[] = []
+  const ch = chapter ?? ctx.entries.find((e) => ctx.chapterPhases[e.chapter] !== 'committed')?.chapter
+
+  if (action === 'write' || action === 'review' || action === 'commit' || action === 'polish') {
+    if (ctx.castFileCount === 0) blockers.push('blocker.noCast')
+  }
+
+  if (action === 'write') {
+    if (!chapter && !ch) blockers.push('blocker.noChapter')
+    const target = chapter ?? ch ?? 0
+    const phase = ctx.chapterPhases[target]
+    if (phase !== 'contract_ready' && phase !== 'contract_draft') {
+      if (phase === 'empty') blockers.push('blocker.needContract')
+      else if (phase === 'drafted' || phase === 'review_fail' || phase === 'review_pass') {
+        blockers.push('blocker.alreadyDrafted')
+      } else if (phase === 'committed') blockers.push('blocker.alreadyCommitted')
+    }
+    if (
+      ctx.hasVolumeOutline &&
+      !ctx.batchFreezeFrozen &&
+      ctx.entries.filter((e) => !e.prose && e.chapter >= target).length > 1
+    ) {
+      blockers.push('blocker.needBatchFreeze')
+    }
+  }
+
+  if (action === 'review') {
+    const target = chapter ?? ch ?? 0
+    const phase = ctx.chapterPhases[target]
+    if (phase !== 'drafted' && phase !== 'review_fail') {
+      blockers.push('blocker.needDraft')
+    }
+  }
+
+  if (action === 'commit' || action === 'polish') {
+    const target = chapter ?? ch ?? 0
+    const phase = ctx.chapterPhases[target]
+    if (phase !== 'review_pass') {
+      blockers.push('blocker.needReviewPass')
+    }
+  }
+
+  if (action === 'batch-freeze') {
+    if (!ctx.hasVolumeOutline) blockers.push('blocker.needVolumeOutline')
+    if (ctx.batchFreezeFrozen) blockers.push('blocker.batchAlreadyFrozen')
+  }
+
+  if (action === 'batch-review') {
+    const drafted = ctx.entries.filter((e) => ctx.chapterPhases[e.chapter] === 'drafted' || ctx.chapterPhases[e.chapter] === 'review_fail')
+    if (!drafted.length) blockers.push('blocker.noDraftToReview')
+  }
+
+  return { allowed: blockers.length === 0, blockers }
+}
+
+export function buildConstraintFooter(
+  pipeline: NovelBookPipeline,
+  action: NovelStageAction,
+  blockers: string[],
+): string {
+  const lines = [
+    '---',
+    '【工作台约束 — 必须遵守】',
+    `- 当前书阶段：${pipeline.phase}；请求动作：${action}`,
+    `- knowledge_gate：${pipeline.gates.knowledge} | asset_gate：${pipeline.gates.asset} | qc_gate：${pipeline.gates.qc}`,
+  ]
+  if (blockers.length) lines.push(`- 阻断项：${blockers.join('；')}`)
+  lines.push('- 若门禁未 PASS，禁止写正文/Commit；用 ask_user 说明阻断项。')
+  lines.push('- 完成后更新 novel-state.yaml 的 gates/blockers 字段。')
+  lines.push('- read_skill novel-writing/references/preflight.md')
+  lines.push('- Team：delegate_agent.goal 必须包含本消息任务正文原文，禁止改写。')
+  return lines.join('\n')
+}
+
+export function buildConstrainedPrefill(
+  action: NovelStageAction,
+  ctx: NovelStagePrefillCtx,
+  pipeline?: NovelBookPipeline,
+  blockers?: string[],
+): string {
+  const body = buildNovelStagePrefill(action, ctx)
+  if (!pipeline) return body
+  return `${body}\n\n${buildConstraintFooter(pipeline, action, blockers ?? [])}`
+}
+
+export const NOVEL_PIPELINE_STEPS: { id: NovelPipelinePhase; action?: NovelStageAction }[] = [
+  { id: 'init', action: 'init' },
+  { id: 'setup', action: 'assets' },
+  { id: 'outline', action: 'outline' },
+  { id: 'batch_freeze', action: 'batch-freeze' },
+  { id: 'chapter_loop', action: 'write' },
+  { id: 'continuation', action: 'continuation' },
+]
 
 export function novelBookDir(bookId: string): string {
   return `novel/${bookId}`
@@ -116,6 +505,15 @@ export function novelCastDir(bookId: string): string {
 
 export function novelChapterSummariesPath(bookId: string): string {
   return `novel/${bookId}/continuity/chapter_summaries.md`
+}
+
+export function novelBatchFreezePath(bookId: string): string {
+  return `novel/${bookId}/continuity/batch-freeze.yaml`
+}
+
+export function novelChapterReviewPath(bookId: string, chapter: number): string {
+  const pad = String(chapter).padStart(3, '0')
+  return `novel/${bookId}/reviews/ch${pad}-review.md`
 }
 
 export function novelChapterFilePath(bookId: string, chapter: number): string {
@@ -331,9 +729,9 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       return [
         `写第 ${ch || 'N'} 章正文到 ${chPath}。`,
         '前提：该章合同已 accepted（否则先补合同）。',
-        '流程：preflight → knowledge/asset 门 → 按合同草稿 → 不要跳过审稿与 Commit。',
+        '流程：preflight → knowledge/asset 门 → scene-routing（若 beats 有场景标签）→ 按合同草稿 → 不要跳过审稿与 Commit。',
         'P0 审稿不过不得定稿；不要只在对话里贴正文。',
-        '按 read_skill novel-writing/references/chapter-write.md 执行。',
+        '按 read_skill novel-writing/references/preflight.md 与 chapter-write.md 执行。',
       ].join('\n')
     case 'continue':
       return [
@@ -344,8 +742,8 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       ].join('\n')
     case 'review':
       return [
-        `审阅 ${chPath}：按六透镜 + 去 AI 味 P0/P1 出审查报告，写入 ${root}/reviews/，`,
-        'blocking 记入 continuity_issues；需要修订则直接改章节文件。',
+        `审阅 ${chPath}：按六透镜 + ReaderPull + StrongConstraints + 去 AI 味 P0/P1 出审查报告，写入 ${root}/reviews/，`,
+        'blocking 记入 continuity_issues；SCORES 段按 qc_profile 加权。',
         'qc_gate FAIL 不得宣称定稿。按 read_skill novel-writing/references/review-gates.md 执行。',
       ].join('\n')
     case 'polish':
@@ -363,6 +761,33 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         '追加 continuity/chapter_summaries.md 固定 5 字段块（事件 / 状态变化 / 伏笔 / 钩子 / 下章指向）。',
         '关闭已修复的 continuity_issues。每满 10 个已提交章写 continuity/phase-NN.md。',
         '按 read_skill novel-writing/references/continuity-commit.md 执行。完成=工具证据，勿口头宣称。',
+      ].join('\n')
+    case 'batch-freeze':
+      const bFrom = ctx.batchFrom && ctx.batchFrom > 0 ? ctx.batchFrom : 1
+      const bTo = ctx.batchTo && ctx.batchTo > 0 ? ctx.batchTo : 8
+      return [
+        `批次细纲冻结（书：${root}/，第 ${bFrom}–${bTo} 章）。`,
+        `落盘 continuity/batch-freeze.yaml（模板 batch-freeze.yaml）；硬逻辑审核后 status=frozen。`,
+        '冻结前禁止批量写正文。用户确认后更新 novel-state frozen_batch 与 artifacts.batch_freeze。',
+        '按 read_skill novel-writing/references/batch-freeze.md 执行。',
+      ].join('\n')
+    case 'continuation':
+      return [
+        `续写/接手本书（${root}/）：CP1 反向解析 → style-fingerprint.md → CP2 卡点诊断 → CP3 Frozen_Canon。`,
+        'Frozen_Canon 未确认禁止写正文；首次续写 500–1000 字试写待确认。',
+        '按 read_skill novel-writing/references/continuation.md 执行。',
+      ].join('\n')
+    case 'batch-review':
+      return [
+        `批量审稿（书：${root}/）：最近 1–5 章有正文但未 PASS 的章节。`,
+        '每章独立 review 文件；更新 gates.qc 与 blockers。',
+        '按 read_skill novel-writing/references/review-gates.md 与 preflight.md 执行。',
+      ].join('\n')
+    case 'preflight':
+      return [
+        `写前预检（书：${root}/）：读 state、合同、摘要、cast、foreshadows；写 continuity/preflight-log.md 一行回执。`,
+        '更新 novel-state gates/blockers。阻断则停止并 ask_user。',
+        '按 read_skill novel-writing/references/preflight.md 执行。',
       ].join('\n')
     default:
       return ''

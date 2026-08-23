@@ -38,6 +38,10 @@ delegate_agent(agent_id="<id>", goal="...")
 | 输入 `@` | 统一浮层：上区**技能**、下区**专家**；选中后去掉 `@query`，加入 chip |
 | 发送 | 前缀顺序：**专家委派提示 → 技能提示 → 用户正文** |
 
+**专家 chip = 明确委派（透传模式）**：选中专家 chip 后发送，Composer 会注入 **relay** 前缀，要求 Team 将 `delegate_agent.goal` **原文转述**用户任务正文，禁止 Team 扩写、拆步或改写意图。小说工作台预填 + novel chip 同样走此模式。
+
+若希望 Team **自行协调拆任务**（例如只说「帮我写小说」、不选专家 chip），则不要勾选专家 chip，让 Team 按 `<delegation-policy>` 正常分工。
+
 无协作权限时，专家按钮会提示切换到 Team，或在 Teams 为主专家开启协作；此时不会注入无效的 `delegate_agent` 前缀。
 
 ### 与技能 `@` 的区别
@@ -120,8 +124,23 @@ delegate_agent(agent_id="<id>", goal="...")
 - **右**：工作台宿主（当前仅「小说」；以后可扩展其它工作台）  
 - **底**：Composer 通栏  
 
-小说工作台自包含，按技能流水线分组：
+小说工作台是 **流程控制台**（不是纯文件浏览器）：
 
-`立项 → 大纲/资产/金手指 → 章合同 → 写/续写 →（读章）审稿/润色 → Commit`
+1. **Pipeline Stepper**：立项 → 设定 → 大纲 → 批次冻结 → 章循环 → 续写  
+2. **三门禁面板**：`knowledge` / `asset` / `qc`（读 `novel-state.yaml` 的 `gates` + 磁盘启发式）  
+3. **主 CTA**：引擎计算下一合法动作；非法动作 disabled + 阻断原因  
+4. **章状态机**：无合同 → 合同草案 → 待写 → 待审 → 审未过/待提交 → 已提交  
 
-并内嵌阅读 bible / state / canon / outline / continuity / reviews / 章节。动作只 Prefill Composer（可勾选 `novel` chip），**不跳转** Files / Doc Stage。书仍落在 `novel/<book-id>/`（标准英文目录：`canon/`、`outline/`、`chapters/`、`continuity/`、`reviews/`；章合同=`chapters/chNNN-contract.yaml`）。
+技能流水线：
+
+`立项 → 大纲/资产/金手指 → 批次冻结（批量写前）→ 章合同 → 写 → 审稿（ReaderPull/强约束）→ 润色 → Commit`
+
+续写分支：`continuation (CP1–CP3 Frozen_Canon) → 批次冻结 → …`
+
+动作 Prefill Composer（可勾选 `novel` chip），末尾附带 **工作台约束块**；**不跳转** Files。书落在 `novel/<book-id>/`（`canon/`、`outline/`、`chapters/`、`continuity/`、`reviews/`；章合同=`chapters/chNNN-contract.yaml`）。
+
+| 门禁 | UI 推断 | Agent 真执行 |
+|------|---------|--------------|
+| asset | `canon/cast/` 有文件 | `table_query` + 读人物卡 |
+| qc | review `### VERDICT` | `review-gates.md` |
+| batch | `batch-freeze.yaml` frozen | `batch-freeze.md` |
