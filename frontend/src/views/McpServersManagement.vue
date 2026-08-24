@@ -9,6 +9,7 @@ import { useMcpServersStore } from '@/stores/mcpServers'
 import { useMarketStore } from '@/stores/market'
 import { confirm, toast } from '@/utils/feedback'
 import type { MCPAuthMode, MCPServer, MCPToolDef } from '@/types'
+import { handleResourceRailArrowKeys } from '@/composables/useResourceRailKeyboard'
 
 type Transport = 'stdio' | 'sse' | 'streamable-http'
 type PageView = 'library' | 'market'
@@ -333,7 +334,16 @@ function onKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') {
     e.preventDefault()
     save()
+    return
   }
+
+  handleResourceRailArrowKeys(
+    e,
+    sortedServers.value,
+    selectedId,
+    selectServer,
+    !isCreating.value,
+  )
 }
 </script>
 
@@ -359,7 +369,8 @@ function onKeydown(e: KeyboardEvent) {
             </DqIconButton>
           </div>
           <DqEmpty v-if="!sortedServers.length" class="resource-rail__empty" :description="$t('connectors.noServers')" />
-          <nav v-else class="resource-rail__list" :aria-label="$t('connectors.serverList')">
+          <div v-else class="resource-rail__scroll">
+          <nav class="resource-rail__list" :aria-label="$t('connectors.serverList')">
             <button
               v-for="server in sortedServers"
               :key="server.id"
@@ -384,6 +395,7 @@ function onKeydown(e: KeyboardEvent) {
           <div v-if="!hasCodegraphConnector" class="resource-rail__group">
             <p class="resource-workspace__hint">{{ $t('connectors.codegraphMarketHint') }}</p>
             <DqButton size="sm" @click="openCodegraphMarket">{{ $t('connectors.installCodegraph') }}</DqButton>
+          </div>
           </div>
         </template>
         <MarketCatalogRail v-else v-model:selected-key="marketSelectedKey" kind="connector" />
@@ -540,42 +552,3 @@ function onKeydown(e: KeyboardEvent) {
     </template>
   </WorkspaceShell>
 </template>
-
-<style scoped>
-.resource-rail__page-view {
-  width: 100%;
-}
-.resource-rail__section > .resource-rail__section-head:first-child {
-  padding-inline: 10px;
-}
-.resource-rail__section {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-  overflow: hidden;
-}
-.resource-rail__section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 10px 6px 14px;
-  flex-shrink: 0;
-}
-.resource-rail__section-title {
-  font-size: var(--dq-font-size-caption);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--dq-label-tertiary);
-}
-.resource-rail__list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0 6px 6px;
-}
-.resource-rail__empty {
-  padding: 20px 12px;
-}
-</style>

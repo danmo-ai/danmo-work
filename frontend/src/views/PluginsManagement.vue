@@ -7,6 +7,7 @@ import { confirm, toast } from '@/utils/feedback'
 import WorkspaceShell from '@/components/common/WorkspaceShell.vue'
 import MarketBrowser from '@/components/market/MarketBrowser.vue'
 import MarketCatalogRail from '@/components/market/MarketCatalogRail.vue'
+import { handleResourceRailArrowKeysByKey } from '@/composables/useResourceRailKeyboard'
 
 type PageView = 'library' | 'market'
 
@@ -34,10 +35,31 @@ const sortedPlugins = computed(() =>
   [...store.items].sort((a, b) => a.name.localeCompare(b.name, locale.value)),
 )
 
+const pluginRailItems = computed(() =>
+  sortedPlugins.value.map((plugin) => ({ key: plugin.name })),
+)
+
+const selectedNameRef = computed({
+  get: () => store.selectedName,
+  set: (value: string | null) => {
+    store.selectedName = value
+  },
+})
+
 const selectedName = computed(() => store.selectedName)
 
 function selectPlugin(name: string | null) {
   store.selectedName = name
+}
+
+function onKeydown(e: KeyboardEvent) {
+  handleResourceRailArrowKeysByKey(
+    e,
+    pluginRailItems.value,
+    selectedNameRef,
+    selectPlugin,
+    pageView.value === 'library',
+  )
 }
 
 function initial(name: string) {
@@ -92,10 +114,11 @@ const marketSelected = computed(() => {
   <WorkspaceShell
     :has-selection="hasSelection"
     :custom-rail="true"
+    @keydown="onKeydown"
   >
     <template #rail>
-      <div class="plugins-rail">
-        <div class="plugins-rail__head">
+      <div class="resource-rail__section">
+        <div class="resource-rail__section-head">
           <DqSegmented
             v-model="pageView"
             block
@@ -104,34 +127,34 @@ const marketSelected = computed(() => {
           />
         </div>
         <template v-if="pageView === 'library'">
-          <div class="plugins-rail__list">
-            <div
+          <div class="resource-rail__scroll">
+            <button
               v-for="p in sortedPlugins"
               :key="p.name"
+              type="button"
               class="resource-rail__row"
               :class="{ 'is-active': selectedName === p.name }"
               @click="selectPlugin(p.name)"
             >
-              <div class="resource-rail__avatar">{{ initial(p.name) }}</div>
-              <div class="resource-rail__meta">
-                <div class="resource-rail__title">{{ p.name }}</div>
-                <div class="resource-rail__subtitle">
+              <span class="resource-rail__avatar">{{ initial(p.name) }}</span>
+              <span class="resource-rail__meta">
+                <span class="resource-rail__name">{{ p.name }}</span>
+                <span class="resource-rail__desc">
                   v{{ p.version || '0.0.0' }}
-                  <span v-if="p.builtin" class="plugins-rail__builtin"> · {{ t('plugins.builtin') }}</span>
-                </div>
-              </div>
-            </div>
+                  <span v-if="p.builtin"> · {{ t('plugins.builtin') }}</span>
+                </span>
+              </span>
+            </button>
             <div v-if="sortedPlugins.length === 0" class="resource-rail__empty">
               {{ t('plugins.empty') }}
             </div>
           </div>
         </template>
-        <template v-else>
-          <MarketCatalogRail
-            kind="plugin"
-            v-model:selected-key="marketSelectedKey"
-          />
-        </template>
+        <MarketCatalogRail
+          v-else
+          kind="plugin"
+          v-model:selected-key="marketSelectedKey"
+        />
       </div>
     </template>
 
@@ -195,31 +218,11 @@ const marketSelected = computed(() => {
 </template>
 
 <style scoped>
-.plugins-rail {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
-.plugins-rail__head {
-  padding: 8px 10px;
-  flex-shrink: 0;
-}
-.resource-rail__page-view {
-  width: 100%;
-}
-.plugins-rail__list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding-bottom: 8px;
-}
 .resource-rail__empty {
   padding: 24px 12px;
   text-align: center;
   color: var(--dq-color-text-tertiary);
   font-size: 13px;
-  flex-shrink: 0;
 }
 
 .detail-panel {

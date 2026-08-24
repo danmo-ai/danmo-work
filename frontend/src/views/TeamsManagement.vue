@@ -9,6 +9,7 @@ import { useKnowledgeStore } from '@/stores/knowledge'
 import { useRuntimeConfigStore } from '@/stores/runtimeConfig'
 import { confirm, toast } from '@/utils/feedback'
 import type { Agent, ToolBinding } from '@/types'
+import { handleResourceRailArrowKeys } from '@/composables/useResourceRailKeyboard'
 
 type ConfigTab = 'overview' | 'prompt' | 'skills' | 'tools' | 'knowledge'
 
@@ -310,7 +311,16 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') {
     e.preventDefault()
     void save()
+    return
   }
+
+  handleResourceRailArrowKeys(
+    e,
+    sortedAgents.value,
+    selectedId,
+    selectAgent,
+    !isCreating.value,
+  )
 }
 </script>
 
@@ -648,36 +658,6 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
 </template>
 
 <style scoped>
-.resource-rail__page-view {
-  width: 100%;
-}
-.resource-rail__section > .resource-rail__section-head:first-child {
-  padding-inline: 10px;
-}
-.resource-rail__section {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-  overflow: hidden;
-}
-
-.resource-rail__section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 10px 6px 14px;
-  flex-shrink: 0;
-}
-
-.resource-rail__section-title {
-  font-size: var(--dq-font-size-caption);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--dq-label-tertiary);
-}
-
 .resource-section--prompt {
   display: flex;
   flex-direction: column;

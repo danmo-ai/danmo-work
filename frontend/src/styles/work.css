@@ -1370,7 +1370,9 @@ body.teams-is-resizing {
 .resource-rail__body {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 6px;
 }
 
@@ -1472,6 +1474,44 @@ body.teams-is-resizing {
 }
 
 /* Scroll container for grouped resource rails (skills, teams, …) */
+.resource-rail__section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.resource-rail__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 10px 6px 14px;
+  flex-shrink: 0;
+}
+
+.resource-rail__section > .resource-rail__section-head:first-child {
+  padding-inline: 10px;
+}
+
+.resource-rail__section-title {
+  font-size: var(--dq-font-size-caption);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dq-label-tertiary);
+}
+
+.resource-rail__section-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.resource-rail__page-view {
+  width: 100%;
+}
+
 .resource-rail__scroll {
   flex: 1;
   min-height: 0;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSkillsStore } from '@/stores/skills'
 import { useProjectsStore } from '@/stores/projects'
@@ -10,6 +10,7 @@ import WorkspaceShell from '@/components/common/WorkspaceShell.vue'
 import MarketBrowser from '@/components/market/MarketBrowser.vue'
 import MarketCatalogRail from '@/components/market/MarketCatalogRail.vue'
 import { useMarketStore } from '@/stores/market'
+import { handleResourceRailArrowKeys } from '@/composables/useResourceRailKeyboard'
 
 type SkillTab = 'info' | 'body' | 'files' | 'tools'
 type PageView = 'library' | 'market'
@@ -442,16 +443,6 @@ function onFileEditorClose(open: boolean) {
   if (!open) closeFileEditor()
 }
 
-function isEditableTarget(target: EventTarget | null) {
-  return target instanceof HTMLElement && !!target.closest('input, textarea, select, [contenteditable="true"]')
-}
-
-function scrollActiveRailRowIntoView() {
-  nextTick(() => {
-    document.querySelector('.resource-rail__row.is-active')?.scrollIntoView({ block: 'nearest' })
-  })
-}
-
 function onKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') {
     e.preventDefault()
@@ -463,24 +454,13 @@ function onKeydown(e: KeyboardEvent) {
     return
   }
 
-  if (pageView.value !== 'library' || isCreating.value || isEditableTarget(e.target)) return
-  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
-
-  const items = sortedSkills.value
-  if (!items.length) return
-
-  e.preventDefault()
-  const idx = items.findIndex((s) => s.id === selectedId.value)
-  const nextIdx =
-    e.key === 'ArrowDown'
-      ? idx < 0
-        ? 0
-        : Math.min(idx + 1, items.length - 1)
-      : idx < 0
-        ? items.length - 1
-        : Math.max(idx - 1, 0)
-  selectSkill(items[nextIdx].id)
-  scrollActiveRailRowIntoView()
+  handleResourceRailArrowKeys(
+    e,
+    sortedSkills.value,
+    selectedId,
+    selectSkill,
+    pageView.value === 'library' && !isCreating.value,
+  )
 }
 
 function formatSize(bytes: number): string {
@@ -866,42 +846,6 @@ function formatSize(bytes: number): string {
 
 
 <style scoped>
-.resource-rail__section {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-  overflow: hidden;
-}
-
-.resource-rail__section-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.resource-rail__page-view {
-  width: 100%;
-}
-.resource-rail__section > .resource-rail__section-head:first-child {
-  padding-inline: 10px;
-}
-.resource-rail__section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 10px 6px 14px;
-  flex-shrink: 0;
-}
-
-.resource-rail__section-title {
-  font-size: var(--dq-font-size-caption);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--dq-label-tertiary);
-}
-
 .resource-rail__name-row {
   display: flex;
   align-items: center;

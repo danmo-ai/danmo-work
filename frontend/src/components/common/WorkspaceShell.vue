@@ -45,7 +45,7 @@ defineEmits<{
           </DqIconButton>
         </div>
       </template>
-      <div class="resource-rail__body" :class="{ 'resource-rail__body--flush': customRail }">
+      <div class="resource-rail__body">
         <slot name="rail" />
       </div>
     </aside>
@@ -70,12 +70,3 @@ defineEmits<{
     </main>
   </div>
 </template>
-
-<style scoped>
-.resource-rail__body--flush {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  flex: 1;
-}
-</style>

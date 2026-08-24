@@ -6,6 +6,7 @@ import { useAutomationsStore } from '@/stores/automations'
 import { useGlobalAgentsStore } from '@/stores/globalAgents'
 import { confirm, toast } from '@/utils/feedback'
 import type { Automation, AutomationTrigger } from '@/types'
+import { handleResourceRailArrowKeys } from '@/composables/useResourceRailKeyboard'
 
 const { t, locale } = useI18n()
 const automations = useAutomationsStore()
@@ -154,7 +155,16 @@ function onKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') {
     e.preventDefault()
     save()
+    return
   }
+
+  handleResourceRailArrowKeys(
+    e,
+    sortedAutomations.value,
+    selectedId,
+    selectAutomation,
+    !isCreating.value,
+  )
 }
 </script>
 
@@ -169,31 +179,37 @@ function onKeydown(e: KeyboardEvent) {
     @keydown="onKeydown"
   >
     <template #rail>
-      <div class="automations-filter">
-        <button type="button" :class="{ 'is-active': listFilter === 'current' }" @click="listFilter = 'current'">{{ $t('automations.filterCurrent') }}</button>
-        <button type="button" :class="{ 'is-active': listFilter === 'paused' }" @click="listFilter = 'paused'">{{ $t('automations.filterPaused') }}</button>
-        <button type="button" :class="{ 'is-active': listFilter === 'all' }" @click="listFilter = 'all'">{{ $t('automations.filterAll') }}</button>
+      <div class="resource-rail__section">
+        <div class="resource-rail__section-head">
+          <div class="automations-filter">
+            <button type="button" :class="{ 'is-active': listFilter === 'current' }" @click="listFilter = 'current'">{{ $t('automations.filterCurrent') }}</button>
+            <button type="button" :class="{ 'is-active': listFilter === 'paused' }" @click="listFilter = 'paused'">{{ $t('automations.filterPaused') }}</button>
+            <button type="button" :class="{ 'is-active': listFilter === 'all' }" @click="listFilter = 'all'">{{ $t('automations.filterAll') }}</button>
+          </div>
+        </div>
+        <DqEmpty v-if="!sortedAutomations.length" class="resource-rail__empty" :description="$t('automations.noAutomations')" />
+        <div v-else class="resource-rail__scroll">
+          <nav class="resource-rail__list" :aria-label="$t('automations.automationList')">
+            <button
+              v-for="item in sortedAutomations"
+              :key="item.id"
+              type="button"
+              class="resource-rail__row"
+              :class="{ 'is-active': selectedId === item.id && !isCreating }"
+              @click="selectAutomation(item.id)"
+            >
+              <span class="resource-rail__avatar">{{ initial(item.name) }}</span>
+              <span class="resource-rail__meta">
+                <span class="resource-rail__name">{{ item.name }}</span>
+                <span class="resource-rail__desc">{{ triggerLabel(item.trigger) }}</span>
+              </span>
+              <span class="resource-rail__tag" :class="item.enabled ? 'is-accent' : ''">
+                {{ item.enabled ? $t('automations.enabled') : $t('automations.disabled') }}
+              </span>
+            </button>
+          </nav>
+        </div>
       </div>
-      <DqEmpty v-if="!sortedAutomations.length" class="resource-rail__empty" :description="$t('automations.noAutomations')" />
-      <nav v-else class="resource-rail__list" :aria-label="$t('automations.automationList')">
-        <button
-          v-for="item in sortedAutomations"
-          :key="item.id"
-          type="button"
-          class="resource-rail__row"
-          :class="{ 'is-active': selectedId === item.id && !isCreating }"
-          @click="selectAutomation(item.id)"
-        >
-          <span class="resource-rail__avatar">{{ initial(item.name) }}</span>
-          <span class="resource-rail__meta">
-            <span class="resource-rail__name">{{ item.name }}</span>
-            <span class="resource-rail__desc">{{ triggerLabel(item.trigger) }}</span>
-          </span>
-          <span class="resource-rail__tag" :class="item.enabled ? 'is-accent' : ''">
-            {{ item.enabled ? $t('automations.enabled') : $t('automations.disabled') }}
-          </span>
-        </button>
-      </nav>
     </template>
 
     <template #empty>
@@ -295,7 +311,8 @@ function onKeydown(e: KeyboardEvent) {
 .automations-filter {
   display: flex;
   gap: 4px;
-  padding: 8px 10px 4px;
+  width: 100%;
+  padding: 0;
 }
 
 .automations-filter button {

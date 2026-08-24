@@ -5,6 +5,7 @@ import WorkspaceShell from '@/components/common/WorkspaceShell.vue'
 import MdEditor from '@/components/common/MdEditor.vue'
 import { useKnowledgeStore } from '@/stores/knowledge'
 import { confirm, toast } from '@/utils/feedback'
+import { handleResourceRailArrowKeys } from '@/composables/useResourceRailKeyboard'
 
 const SELECTED_KB_KEY = 'app-selected-kb-id'
 
@@ -36,6 +37,10 @@ const selectedBase = computed(() => knowledge.bases.find((b) => b.id === selecte
 
 const selectedDocs = computed(() =>
   selectedBaseId.value ? knowledge.documentsFor(selectedBaseId.value) : [],
+)
+
+const sortedDocs = computed(() =>
+  [...selectedDocs.value].sort((a, b) => a.title.localeCompare(b.title, locale.value)),
 )
 
 const hasSelection = computed(() => isCreatingDoc.value || !!selectedDocId.value)
@@ -299,7 +304,16 @@ function onKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') {
     e.preventDefault()
     if (hasSelection.value) void saveDocument()
+    return
   }
+
+  handleResourceRailArrowKeys(
+    e,
+    sortedDocs.value,
+    selectedDocId,
+    (id) => void openDocument(id),
+    !isCreatingDoc.value,
+  )
 }
 </script>
 
@@ -388,11 +402,12 @@ function onKeydown(e: KeyboardEvent) {
         </div>
 
         <DqEmpty
-          v-if="!selectedDocs.length && !isCreatingDoc"
+          v-if="!sortedDocs.length && !isCreatingDoc"
           class="resource-rail__empty"
           :description="$t('knowledge.noDocuments')"
         />
-        <nav v-else class="resource-rail__list" :aria-label="$t('knowledge.documents')">
+        <div v-else class="resource-rail__scroll">
+        <nav class="resource-rail__list" :aria-label="$t('knowledge.documents')">
           <button
             v-if="isCreatingDoc"
             type="button"
@@ -404,7 +419,7 @@ function onKeydown(e: KeyboardEvent) {
             </span>
           </button>
           <button
-            v-for="doc in selectedDocs"
+            v-for="doc in sortedDocs"
             :key="doc.id"
             type="button"
             class="resource-rail__row"
@@ -417,6 +432,7 @@ function onKeydown(e: KeyboardEvent) {
             </span>
           </button>
         </nav>
+        </div>
       </div>
     </template>
 
