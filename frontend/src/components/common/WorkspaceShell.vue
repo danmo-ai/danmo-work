@@ -32,7 +32,7 @@ defineEmits<{
     class="resource-shell float-island"
     :class="{ 'resource-shell--rail-hidden': hideRail }"
     tabindex="-1"
-    @keydown="$emit('keydown', $event)"
+    @keydown.capture="$emit('keydown', $event)"
   >
     <aside v-show="!hideRail" class="resource-rail">
       <template v-if="!customRail">

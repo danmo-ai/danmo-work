@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSkillsStore } from '@/stores/skills'
 import { useProjectsStore } from '@/stores/projects'
@@ -442,6 +442,16 @@ function onFileEditorClose(open: boolean) {
   if (!open) closeFileEditor()
 }
 
+function isEditableTarget(target: EventTarget | null) {
+  return target instanceof HTMLElement && !!target.closest('input, textarea, select, [contenteditable="true"]')
+}
+
+function scrollActiveRailRowIntoView() {
+  nextTick(() => {
+    document.querySelector('.resource-rail__row.is-active')?.scrollIntoView({ block: 'nearest' })
+  })
+}
+
 function onKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') {
     e.preventDefault()
@@ -450,7 +460,27 @@ function onKeydown(e: KeyboardEvent) {
       return
     }
     save()
+    return
   }
+
+  if (pageView.value !== 'library' || isCreating.value || isEditableTarget(e.target)) return
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+
+  const items = sortedSkills.value
+  if (!items.length) return
+
+  e.preventDefault()
+  const idx = items.findIndex((s) => s.id === selectedId.value)
+  const nextIdx =
+    e.key === 'ArrowDown'
+      ? idx < 0
+        ? 0
+        : Math.min(idx + 1, items.length - 1)
+      : idx < 0
+        ? items.length - 1
+        : Math.max(idx - 1, 0)
+  selectSkill(items[nextIdx].id)
+  scrollActiveRailRowIntoView()
 }
 
 function formatSize(bytes: number): string {
@@ -492,7 +522,7 @@ function formatSize(bytes: number): string {
           </div>
         </div>
         <DqEmpty v-if="!sortedSkills.length" class="resource-rail__empty" :description="$t('skills.noSkills')" />
-        <template v-else>
+        <div v-else class="resource-rail__scroll">
           <div v-if="builtinSkills.length" class="resource-rail__group">
             <div class="resource-rail__group-title">{{ $t('skills.builtinSkills') }}</div>
             <nav class="resource-rail__list" :aria-label="$t('skills.builtinSkills')">
@@ -578,7 +608,7 @@ function formatSize(bytes: number): string {
               </nav>
             </template>
           </div>
-        </template>
+        </div>
         </template>
         <MarketCatalogRail v-else v-model:selected-key="marketSelectedKey" kind="skill" />
       </div>
@@ -868,26 +898,6 @@ function formatSize(bytes: number): string {
   font-size: var(--dq-font-size-caption);
   font-weight: 600;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--dq-label-tertiary);
-}
-
-.resource-rail__list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0 6px 6px;
-}
-
-.resource-rail__group + .resource-rail__group {
-  margin-top: 8px;
-}
-
-.resource-rail__group-title {
-  padding: 8px 12px 4px;
-  font-size: var(--dq-font-size-caption);
-  font-weight: 600;
-  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--dq-label-tertiary);
 }

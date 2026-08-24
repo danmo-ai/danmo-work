@@ -332,7 +332,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
           </DqIconButton>
         </div>
         <DqEmpty v-if="!sortedAgents.length" class="resource-rail__empty" :description="$t('teams.noWorkers')" />
-        <template v-else>
+        <div v-else class="resource-rail__scroll">
           <div v-if="primaryAgents.length" class="resource-rail__group">
             <div class="resource-rail__group-title">{{ $t('teams.primaryAgents') }}</div>
             <nav class="resource-rail__list" :aria-label="$t('teams.primaryAgents')">
@@ -396,7 +396,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
               </button>
             </nav>
           </div>
-        </template>
+        </div>
       </div>
     </template>
 
@@ -674,26 +674,6 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
   font-size: var(--dq-font-size-caption);
   font-weight: 600;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--dq-label-tertiary);
-}
-
-.resource-rail__list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0 6px 6px;
-}
-
-.resource-rail__group + .resource-rail__group {
-  margin-top: 8px;
-}
-
-.resource-rail__group-title {
-  padding: 8px 12px 4px;
-  font-size: var(--dq-font-size-caption);
-  font-weight: 600;
-  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--dq-label-tertiary);
 }
