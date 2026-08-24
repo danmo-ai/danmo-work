@@ -44,13 +44,26 @@ export type NovelStageAction =
   | 'contract'
   | 'write'
   | 'continue'
+  | 'dialogue'
+  | 'hook'
+  | 'reversal'
   | 'review'
   | 'polish'
   | 'commit'
+  | 'review-polish-commit'
   | 'batch-freeze'
   | 'continuation'
   | 'batch-review'
   | 'preflight'
+
+export type NovelSkillId = 'novel-setup' | 'novel-plan' | 'novel-write' | 'novel-review'
+
+export interface NovelLoadProtocol {
+  skillId: NovelSkillId
+  skillRefs: string[]
+  kbThemes: string[]
+  readFiles: string[]
+}
 
 export interface NovelStagePrefillCtx {
   bookId?: string
@@ -345,7 +358,13 @@ export function canRunAction(action: NovelStageAction, ctx: NovelBookContext, ch
   const blockers: string[] = []
   const ch = chapter ?? ctx.entries.find((e) => ctx.chapterPhases[e.chapter] !== 'committed')?.chapter
 
-  if (action === 'write' || action === 'review' || action === 'commit' || action === 'polish') {
+  if (
+    action === 'write' ||
+    action === 'review' ||
+    action === 'commit' ||
+    action === 'polish' ||
+    action === 'review-polish-commit'
+  ) {
     if (ctx.castFileCount === 0) blockers.push('blocker.noCast')
   }
 
@@ -384,6 +403,16 @@ export function canRunAction(action: NovelStageAction, ctx: NovelBookContext, ch
     }
   }
 
+  if (action === 'review-polish-commit') {
+    if (!chapter && !ch) blockers.push('blocker.noChapter')
+    const target = chapter ?? ch ?? 0
+    const phase = ctx.chapterPhases[target]
+    if (phase === 'empty' || phase === 'contract_draft' || phase === 'contract_ready') {
+      blockers.push('blocker.needDraft')
+    }
+    if (phase === 'committed') blockers.push('blocker.alreadyCommitted')
+  }
+
   if (action === 'batch-freeze') {
     if (!ctx.hasVolumeOutline) blockers.push('blocker.needVolumeOutline')
     if (ctx.batchFreezeFrozen) blockers.push('blocker.batchAlreadyFrozen')
@@ -397,21 +426,263 @@ export function canRunAction(action: NovelStageAction, ctx: NovelBookContext, ch
   return { allowed: blockers.length === 0, blockers }
 }
 
+export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
+  switch (action) {
+    case 'init':
+    case 'assets':
+    case 'goldfinger':
+      return 'novel-setup'
+    case 'outline':
+    case 'volume':
+      return 'novel-plan'
+    case 'review':
+    case 'polish':
+    case 'commit':
+    case 'review-polish-commit':
+    case 'batch-review':
+      return 'novel-review'
+    default:
+      return 'novel-write'
+  }
+}
+
+function novelPrefillRoot(ctx: NovelStagePrefillCtx): string {
+  const bookId = (ctx.bookId ?? '').trim() || '<book-id>'
+  return `novel/${bookId}`
+}
+
+function novelPrefillChPad(ctx: NovelStagePrefillCtx): string {
+  const ch = ctx.chapter && ctx.chapter > 0 ? ctx.chapter : 0
+  return ch > 0 ? String(ch).padStart(3, '0') : 'NNN'
+}
+
+function novelPrefillVolPad(ctx: NovelStagePrefillCtx): string {
+  const vol = ctx.volume && ctx.volume > 0 ? ctx.volume : 0
+  return vol > 0 ? String(vol).padStart(2, '0') : 'NN'
+}
+
+export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStagePrefillCtx): NovelLoadProtocol {
+  const root = novelPrefillRoot(ctx)
+  const chPad = novelPrefillChPad(ctx)
+  const volPad = novelPrefillVolPad(ctx)
+  const state = `${root}/novel-state.yaml`
+  const bibleHint = `${root}/book-bible.md（只读终局储备三行，禁止整本）`
+  const summaries = `${root}/continuity/chapter_summaries.md（只读近 3 章块）`
+  const foreshadows = `${root}/continuity/（未回收伏笔 / continuity_issues）`
+  const contract = `${root}/chapters/ch${chPad}-contract.yaml`
+  const prose = ctx.chapterPath || `${root}/chapters/ch${chPad}.md`
+  const volume = `${root}/outline/volumes/v${volPad}.md`
+  const bookOutline = `${root}/outline/book_outline.md`
+  const cast = `${root}/canon/cast/（上场人物卡，按合同登场名单）`
+  const world = `${root}/canon/world.md`
+
+  switch (action) {
+    case 'init':
+      return {
+        skillId: 'novel-setup',
+        skillRefs: ['novel-setup/references/init.md', 'novel-setup/references/project-layout.md'],
+        kbThemes: ['题材与平台', '人设与群像'],
+        readFiles: [],
+      }
+    case 'assets':
+      return {
+        skillId: 'novel-setup',
+        skillRefs: [
+          'novel-setup/references/init.md',
+          'novel-setup/references/table-schema.md',
+          'novel-setup/assets/templates/world.md',
+          'novel-setup/assets/templates/cast-card.md',
+        ],
+        kbThemes: ['人设与群像', '世界观与金手指'],
+        readFiles: [state, bibleHint, world, `${root}/canon/cast/`],
+      }
+    case 'goldfinger':
+      return {
+        skillId: 'novel-setup',
+        skillRefs: ['novel-setup/assets/templates/goldfinger-card.md'],
+        kbThemes: ['世界观与金手指'],
+        readFiles: [state, bibleHint, world],
+      }
+    case 'outline':
+      return {
+        skillId: 'novel-plan',
+        skillRefs: [
+          'novel-plan/references/outline.md',
+          'novel-plan/assets/templates/book-outline.md',
+          'novel-plan/assets/templates/volume-outline.md',
+        ],
+        kbThemes: ['节奏与结构', '爽点与追读', '题材与平台', '强约束'],
+        readFiles: [state, bibleHint, world, `${root}/canon/cast/`],
+      }
+    case 'volume':
+      return {
+        skillId: 'novel-plan',
+        skillRefs: ['novel-plan/references/outline.md', 'novel-plan/assets/templates/volume-outline.md'],
+        kbThemes: ['节奏与结构', '强约束'],
+        readFiles: [state, bookOutline, volume, world, foreshadows],
+      }
+    case 'contract':
+      return {
+        skillId: 'novel-write',
+        skillRefs: [
+          'novel-write/references/chapter-contract.md',
+          'novel-write/assets/templates/chapter-contract.yaml',
+        ],
+        kbThemes: ['节奏与结构', '爽点与追读', '题材与平台', '强约束'],
+        readFiles: [state, `${root}/outline/volumes/（本卷纲：定位 unit_id 与最近锚点）`, bibleHint],
+      }
+    case 'write':
+      return {
+        skillId: 'novel-write',
+        skillRefs: [
+          'novel-write/references/preflight.md',
+          'novel-write/references/chapter-write.md',
+          'novel-write/references/scene-routing.md',
+        ],
+        kbThemes: ['文风与去 AI 味', '爽点与追读', '情绪与场景'],
+        readFiles: [state, contract, summaries, foreshadows, cast],
+      }
+    case 'continue':
+      return {
+        skillId: 'novel-write',
+        skillRefs: [
+          'novel-write/references/continuation.md',
+          'novel-write/references/chapter-write.md',
+        ],
+        kbThemes: ['文风与去 AI 味', '情绪与场景'],
+        readFiles: [state, summaries, foreshadows],
+      }
+    case 'dialogue':
+      return {
+        skillId: 'novel-write',
+        skillRefs: ['novel-write/references/scene-routing.md', 'novel-write/references/chapter-write.md'],
+        kbThemes: ['情绪与场景'],
+        readFiles: [state, contract, prose, cast],
+      }
+    case 'hook':
+      return {
+        skillId: 'novel-write',
+        skillRefs: ['novel-write/references/chapter-write.md'],
+        kbThemes: ['爽点与追读'],
+        readFiles: [state, contract, prose],
+      }
+    case 'reversal':
+      return {
+        skillId: 'novel-write',
+        skillRefs: ['novel-write/references/scene-routing.md'],
+        kbThemes: ['情绪与场景', '爽点与追读'],
+        readFiles: [state, contract, prose, `${root}/outline/volumes/（本卷纲锚点）`],
+      }
+    case 'preflight':
+      return {
+        skillId: 'novel-write',
+        skillRefs: ['novel-write/references/preflight.md'],
+        kbThemes: [],
+        readFiles: [state, contract, summaries, foreshadows, cast],
+      }
+    case 'batch-freeze':
+      return {
+        skillId: 'novel-write',
+        skillRefs: [
+          'novel-write/references/batch-freeze.md',
+          'novel-write/assets/templates/batch-freeze.yaml',
+        ],
+        kbThemes: ['节奏与结构', '爽点与追读'],
+        readFiles: [state, `${root}/outline/volumes/（本卷纲）`, `${root}/chapters/（该批章合同）`],
+      }
+    case 'continuation':
+      return {
+        skillId: 'novel-write',
+        skillRefs: [
+          'novel-write/references/continuation.md',
+          'novel-write/assets/templates/style-fingerprint.md',
+        ],
+        kbThemes: ['文风与去 AI 味', '情绪与场景'],
+        readFiles: [state, summaries, `${root}/chapters/`],
+      }
+    case 'review':
+      return {
+        skillId: 'novel-review',
+        skillRefs: ['novel-review/references/review-gates.md'],
+        kbThemes: ['文风与去 AI 味', '强约束', '题材与平台'],
+        readFiles: [prose, contract],
+      }
+    case 'polish':
+      return {
+        skillId: 'novel-review',
+        skillRefs: ['novel-review/references/polish-deslop.md'],
+        kbThemes: ['文风与去 AI 味'],
+        readFiles: [prose],
+      }
+    case 'commit':
+      return {
+        skillId: 'novel-review',
+        skillRefs: ['novel-review/references/continuity-commit.md'],
+        kbThemes: [],
+        readFiles: [prose, summaries, state],
+      }
+    case 'review-polish-commit':
+      return {
+        skillId: 'novel-review',
+        skillRefs: [
+          'novel-review/references/review-gates.md',
+          'novel-review/references/polish-deslop.md',
+          'novel-review/references/continuity-commit.md',
+        ],
+        kbThemes: ['文风与去 AI 味', '强约束', '题材与平台'],
+        readFiles: [prose, contract, state, summaries, foreshadows],
+      }
+    case 'batch-review':
+      return {
+        skillId: 'novel-review',
+        skillRefs: ['novel-review/references/review-gates.md', 'novel-write/references/preflight.md'],
+        kbThemes: ['文风与去 AI 味', '强约束'],
+        readFiles: [`${root}/chapters/（最近 1–5 章有正文未 PASS）`, `${root}/reviews/`],
+      }
+    default:
+      return { skillId: 'novel-write', skillRefs: [], kbThemes: [], readFiles: [state] }
+  }
+}
+
+export function formatLoadProtocol(protocol: NovelLoadProtocol): string {
+  const refs = protocol.skillRefs.length
+    ? ` 以及 ${protocol.skillRefs.join('、')}`
+    : ''
+  const lines = [
+    `【本轮技能】${protocol.skillId}（Composer 已勾选；先 read_skill）`,
+    '【加载顺序 — 未完成禁止 write/edit】',
+    `1. read_skill ${protocol.skillId}${refs}`,
+  ]
+  if (protocol.kbThemes.length) {
+    lines.push(`2. search_kb ${protocol.kbThemes.join('；')}`)
+  } else {
+    lines.push('2. search_kb：本阶段无需检索技法库')
+  }
+  lines.push('3. read_file 下列路径（按序；禁止整本 bible / 全卷纲）：')
+  if (protocol.readFiles.length) {
+    for (const file of protocol.readFiles) lines.push(`   - ${file}`)
+  } else {
+    lines.push('   - （无必读项目文件）')
+  }
+  return lines.join('\n')
+}
+
 export function buildConstraintFooter(
   pipeline: NovelBookPipeline,
   action: NovelStageAction,
   blockers: string[],
 ): string {
+  const skillId = novelActionSkillId(action)
   const lines = [
     '---',
     '【工作台约束 — 必须遵守】',
     `- 当前书阶段：${pipeline.phase}；请求动作：${action}`,
+    `- 本轮只准用技能 ${skillId}；未 read_skill 成功前禁止 write/edit。`,
     `- knowledge_gate：${pipeline.gates.knowledge} | asset_gate：${pipeline.gates.asset} | qc_gate：${pipeline.gates.qc}`,
   ]
   if (blockers.length) lines.push(`- 阻断项：${blockers.join('；')}`)
   lines.push('- 若门禁未 PASS，禁止写正文/Commit；用 ask_user 说明阻断项。')
   lines.push('- 完成后更新 novel-state.yaml 的 gates/blockers 字段。')
-  lines.push('- read_skill novel-write/references/preflight.md')
   lines.push('- Team：delegate_agent.goal 必须包含本消息任务正文原文，禁止改写。')
   return lines.join('\n')
 }
@@ -422,9 +693,22 @@ export function buildConstrainedPrefill(
   pipeline?: NovelBookPipeline,
   blockers?: string[],
 ): string {
+  const protocol = formatLoadProtocol(novelActionLoadProtocol(action, ctx))
   const body = buildNovelStagePrefill(action, ctx)
-  if (!pipeline) return body
-  return `${body}\n\n${buildConstraintFooter(pipeline, action, blockers ?? [])}`
+  const parts = [protocol, `【任务】\n${body}`]
+  if (pipeline) {
+    parts.push(buildConstraintFooter(pipeline, action, blockers ?? []))
+  } else {
+    parts.push(
+      [
+        '---',
+        '【工作台约束 — 必须遵守】',
+        `- 本轮只准用技能 ${novelActionSkillId(action)}；未 read_skill 成功前禁止 write/edit。`,
+        '- Team：delegate_agent.goal 必须包含本消息任务正文原文，禁止改写。',
+      ].join('\n'),
+    )
+  }
+  return parts.join('\n\n')
 }
 
 export const NOVEL_PIPELINE_STEPS: { id: NovelPipelinePhase; action?: NovelStageAction }[] = [
@@ -876,7 +1160,25 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         `接着写下一章（书：${root}/）。`,
         '先读 novel-state.yaml、近 3 章摘要、未回收伏笔与开放 continuity_issues；补/更新章合同后再写正文。',
         '审一轮，P0 不过不得定稿；Commit 落盘并更新 novel-state。不要只在对话里贴正文。',
-        '按 read_skill novel-write/references/chapter-write.md 与 novel-review/references/continuity-commit.md 执行。',
+        '按 read_skill novel-write/references/continuation.md 与 chapter-write.md 执行。',
+      ].join('\n')
+    case 'dialogue':
+      return [
+        `加强第 ${ch || 'N'} 章对话（${chPath}）。`,
+        '按合同 beats 写出口语化对白：人物声口可辨、推动冲突、少旁白解释。',
+        '落盘到该章正文，不要只在对话里贴台词。search_kb「情绪与场景」。',
+      ].join('\n')
+    case 'hook':
+      return [
+        `为第 ${ch || 'N'} 章设计/改写悬念钩子（${chPath}）。`,
+        '章末 hook 必须可执行（动作/信息差/倒计时），写入合同 hook 字段并落到正文。',
+        'search_kb「爽点与追读」选型，不要复述整张表。',
+      ].join('\n')
+    case 'reversal':
+      return [
+        `为第 ${ch || 'N'} 章加一处反转（${chPath}）。`,
+        '反转须服务合同 purpose，不推翻 Frozen_Canon；先改合同 forbidden/beats 再改正文。',
+        'search_kb「情绪与场景」「爽点与追读」。',
       ].join('\n')
     case 'review':
       return [
@@ -899,6 +1201,19 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         '追加 continuity/chapter_summaries.md 固定 5 字段块（事件 / 状态变化 / 伏笔 / 钩子 / 下章指向）。',
         '关闭已修复的 continuity_issues。每满 10 个已提交章写 continuity/phase-NN.md。',
         '按 read_skill novel-review/references/continuity-commit.md 执行。完成=工具证据，勿口头宣称。',
+      ].join('\n')
+    case 'review-polish-commit':
+      return [
+        ch > 0
+          ? `对第 ${ch} 章（${chPath}）串行执行：六透镜审稿 → 去 AI 味 → 连续性定稿。`
+          : `对当前章节串行执行：六透镜审稿 → 去 AI 味 → 连续性定稿（书：${root}/）。`,
+        '【串行协议 — 禁止跳步】',
+        '1. 按 review-gates.md 写 reviews/chNNN-review.md（### VERDICT 仅 PASS|FAIL）；更新 novel-state gates.qc 与 blockers。',
+        '2. 若 FAIL：只修 P0 blocking，短复审 blocking 清单；未 PASS 禁止进入步骤 3–4。',
+        '3. PASS 后按 polish-deslop.md 去 AI 味（P0→P1；不改情节 Canon）。',
+        '4. 按 continuity-commit.md 定稿：摘要 / table_* / memory / novel-state；关闭已修复 continuity_issues。',
+        '若 reviews/ 已有 PASS 且正文未变，可从步骤 3 开始并在 review 文件注明跳过理由。',
+        '完成=文件与工具证据，勿口头宣称。',
       ].join('\n')
     case 'batch-freeze':
       const bFrom = ctx.batchFrom && ctx.batchFrom > 0 ? ctx.batchFrom : 1

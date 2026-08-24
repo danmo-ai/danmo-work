@@ -14,7 +14,7 @@
 **按需：**
 
 5. 本章 `beats` / `state_deltas` 点名的 `canon/cast/*.md`（asset_gate）。未上场角色不读。
-6. `search_kb` 本阶段 **1–2** 个主题（knowledge_gate）。写钩子/接钩用「爽点与追读」。
+6. `search_kb` 本阶段 **1–2** 个主题（knowledge_gate）。写钩子/接钩用「爽点与追读」。**ch001–ch003** 加「节奏与结构」；写正文前 `read_skill` `opening-chapters.md`。
 
 **禁止本轮加载：** 整本 `book-bible.md`、全卷纲正文、全书 `canon/` 通读、已提交章全文（除非合同 `continuity_risks` 点名）。
 

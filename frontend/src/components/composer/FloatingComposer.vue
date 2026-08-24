@@ -531,6 +531,28 @@ watch(
   },
 )
 
+const pendingWorkbenchSkillIds = ref<string[]>([])
+
+function applyPendingWorkbenchSkills() {
+  const requested = pendingWorkbenchSkillIds.value
+  if (!requested.length) return
+  const allowed = new Set(availableSkills.value.map((s) => s.id))
+  const next = requested.filter((id) => allowed.has(id))
+  if (!next.length) return
+  selectedSkillIds.value = next
+}
+
+watch(
+  () => workspaceUi.composerSelectSkillToken,
+  () => {
+    const ids = workspaceUi.consumeComposerSelectSkills()
+    if (!ids.length) return
+    pendingWorkbenchSkillIds.value = ids
+    applyPendingWorkbenchSkills()
+    void nextTick(() => focusInput())
+  },
+)
+
 async function loadAvailableSkills() {
   const agentId = sessions.selectedAgentId
   if (!agentId) {
@@ -548,6 +570,7 @@ async function loadAvailableSkills() {
     availableSkills.value = list
     const allowed = new Set(list.map((s) => s.id))
     selectedSkillIds.value = selectedSkillIds.value.filter((id) => allowed.has(id))
+    applyPendingWorkbenchSkills()
   } catch {
     availableSkills.value = []
   } finally {

@@ -10,7 +10,6 @@ import {
   buildChapterEntries,
   buildChapterPhases,
   buildConstrainedPrefill,
-  buildNovelStagePrefill,
   canRunAction,
   chapterNumFromName,
   computeBookPipeline,
@@ -20,6 +19,7 @@ import {
   isNovelContractName,
   isNovelContractPath,
   mergeVolumeOutlineFiles,
+  novelActionSkillId,
   parseBookOutlineVolumeRows,
   parseVolumeUnitRows,
   novelBatchFreezePath,
@@ -42,6 +42,7 @@ import {
   parseNovelStateExtended,
   setupDocLabel,
   sortWorkbenchDocNodes,
+  volumeNumFromName,
   type BookOutlineVolumeRow,
   type NovelChapterEntry,
   type NovelChapterPhase,
@@ -194,10 +195,20 @@ function primaryActionLabel(action: NovelStageAction, chapter?: number): string 
       return t('novelWorkbench.actionWrite', { n: chapter ?? 'N' })
     case 'continue':
       return t('novelWorkbench.actionContinue')
+    case 'dialogue':
+      return t('novelWorkbench.actionDialogue')
+    case 'hook':
+      return t('novelWorkbench.actionHook')
+    case 'reversal':
+      return t('novelWorkbench.actionReversal')
     case 'review':
       return t('novelWorkbench.actionReview')
+    case 'polish':
+      return t('novelWorkbench.actionPolish')
     case 'commit':
       return t('novelWorkbench.actionCommit')
+    case 'review-polish-commit':
+      return t('novelWorkbench.actionReviewPolishCommit')
     default:
       return action
   }
@@ -209,6 +220,73 @@ function isActionAllowed(action: NovelStageAction, chapter?: number): boolean {
 }
 
 const nextVolume = computed(() => nextVolumeNumber(visibleVolumeFiles.value))
+
+const selectedVolumeNum = computed(() => {
+  if (treeSel.value.kind !== 'volume' || !treeSel.value.name) return nextVolume.value
+  return volumeNumFromName(treeSel.value.name) ?? nextVolume.value
+})
+
+const setupShowsGoldfinger = computed(() => {
+  if (treeSel.value.kind !== 'setup' || !treeSel.value.name) return false
+  const name = treeSel.value.name.toLowerCase()
+  return name === 'book-bible.md' || name === 'world.md' || name.includes('goldfinger')
+})
+
+const deskBatchFreezeAllowed = computed(() => {
+  if (!bookContext.value) return false
+  return canRunAction('batch-freeze', bookContext.value).allowed
+})
+
+interface DeskPrimary {
+  action: NovelStageAction
+  chapter?: number
+  label: string
+  allowed: boolean
+}
+
+const chapterDeskPrimary = computed((): DeskPrimary | null => {
+  if (treeSel.value.kind !== 'chapter' || treeSel.value.n == null || !bookContext.value) return null
+  const n = treeSel.value.n
+  const phase = bookContext.value.chapterPhases[n]
+
+  if (readingIsContract.value) {
+    if (phase === 'empty' || phase === 'contract_draft' || phase === 'contract_ready') {
+      return {
+        action: 'contract',
+        chapter: n,
+        label: t('novelWorkbench.actionAskContract'),
+        allowed: true,
+      }
+    }
+    return null
+  }
+
+  if (!readingIsProse.value) return null
+
+  const chapterAction = inferChapterNextAction(phase)
+  if (chapterAction) {
+    return {
+      action: chapterAction,
+      chapter: n,
+      label: primaryActionLabel(chapterAction, n),
+      allowed: isActionAllowed(chapterAction, n),
+    }
+  }
+
+  const pipe = pipeline.value
+  if (pipe?.primaryAction === 'continue' && phase === 'committed') {
+    const lastCh = bookContext.value.state.lastCommittedCh
+    if (n === lastCh) {
+      return {
+        action: 'continue',
+        chapter: pipe.primaryChapter,
+        label: primaryActionLabel('continue'),
+        allowed: true,
+      }
+    }
+  }
+  return null
+})
 
 const bookOutlineFile = computed(() =>
   outlineFiles.value.find((f) => isBookOutlineName(f.name)) ?? null,
@@ -637,15 +715,12 @@ function runAction(action: NovelStageAction, chapter?: number, chapterPath?: str
   const batchFrom = pipe?.frozenBatch?.from ?? 1
   const batchTo = pipe?.frozenBatch?.to ?? Math.max(8, (chapter ?? 0) + 7)
 
-  let text =
-    pipe && action !== 'init'
-      ? buildConstrainedPrefill(
-          action,
-          { bookId, chapter, chapterPath, volume, batchFrom, batchTo },
-          pipe,
-          ctx ? canRunAction(action, ctx, chapter).blockers : [],
-        )
-      : buildNovelStagePrefill(action, { bookId, chapter, chapterPath, volume, batchFrom, batchTo })
+  let text = buildConstrainedPrefill(
+    action,
+    { bookId, chapter, chapterPath, volume, batchFrom, batchTo },
+    pipe && action !== 'init' ? pipe : undefined,
+    ctx && action !== 'init' ? canRunAction(action, ctx, chapter).blockers : [],
+  )
 
   if (!canDelegate.value) {
     text = `${t('novelWorkbench.needTeamHint')}\n\n${text}`
@@ -653,27 +728,38 @@ function runAction(action: NovelStageAction, chapter?: number, chapterPath?: str
   } else if (hasNovelExpert.value) {
     workspaceUi.requestComposerSelectExperts(['novel'])
   }
+  workspaceUi.requestComposerSelectSkills([novelActionSkillId(action)])
   workspaceUi.prefillComposer(text)
 }
 
-function runPrimaryAction() {
-  const pipe = pipeline.value
-  if (!pipe?.primaryAction) return
-  runAction(pipe.primaryAction, pipe.primaryChapter)
+function runChapterDeskPrimary() {
+  const primary = chapterDeskPrimary.value
+  if (!primary?.allowed) return
+  const bookId = selectedBookId.value
+  if (!bookId) return
+  const chapter = primary.chapter
+  let chapterPath: string | undefined
+  if (chapter != null) {
+    const proseActions: NovelStageAction[] = [
+      'write',
+      'review',
+      'polish',
+      'commit',
+      'review-polish-commit',
+      'dialogue',
+      'hook',
+      'reversal',
+      'continue',
+    ]
+    if (proseActions.includes(primary.action) && primary.action !== 'continue') {
+      chapterPath = readPath.value || novelChapterFilePath(bookId, chapter)
+    }
+  }
+  runAction(primary.action, chapter, chapterPath)
 }
 
-function runChapterNextAction(chapter: number) {
-  const ctx = bookContext.value
-  if (!ctx) return
-  const phase = ctx.chapterPhases[chapter]
-  if (!phase) return
-  const action = inferChapterNextAction(phase)
-  if (!action) return
-  const chPath =
-    action === 'write' || action === 'review' || action === 'polish' || action === 'commit'
-      ? novelChapterFilePath(ctx.bookId, chapter)
-      : undefined
-  runAction(action, chapter, chPath)
+function runDeskVolume(vol?: number) {
+  runAction('volume', undefined, undefined, vol ?? selectedVolumeNum.value)
 }
 
 async function onRefresh() {
@@ -862,52 +948,68 @@ function escapeHtml(s: string) {
 
         <div class="novel-wb__preview">
           <div class="novel-wb__preview-bar">
-            <div>
+            <div class="novel-wb__preview-head">
               <div class="novel-wb__row-title">{{ deskCrumb }}</div>
               <div class="novel-wb__row-meta">{{ readTitle }}</div>
             </div>
-            <div class="novel-wb__preview-actions">
-              <button
-                v-if="treeSel.kind === 'book'"
-                type="button"
-                class="novel-wb__btn"
-                @click="runAction('outline')"
-              >
-                {{ t('novelWorkbench.actionOutline') }}
-              </button>
-              <button
-                v-else-if="treeSel.kind === 'volume'"
-                type="button"
-                class="novel-wb__btn"
-                @click="runAction('volume', undefined, undefined, nextVolume)"
-              >
-                {{ t('novelWorkbench.actionVolumeOutline', { n: nextVolume }) }}
-              </button>
-              <button
-                v-else-if="treeSel.kind === 'setup'"
-                type="button"
-                class="novel-wb__btn"
-                @click="runAction('assets')"
-              >
-                {{ t('novelWorkbench.actionAssets') }}
-              </button>
-              <button
-                v-else-if="treeSel.kind === 'chapter' && pipeline?.primaryAction"
-                type="button"
-                class="novel-wb__btn"
-                @click="runChapterNextAction(treeSel.n!)"
-              >
-                {{ primaryActionLabel(inferChapterNextAction(bookContext?.chapterPhases[treeSel.n!]!) || pipeline.primaryAction, treeSel.n) }}
-              </button>
-              <button
-                v-else-if="pipeline?.primaryAction"
-                type="button"
-                class="novel-wb__btn"
-                @click="runPrimaryAction"
-              >
-                {{ primaryActionLabel(pipeline.primaryAction, pipeline.primaryChapter) }}
-              </button>
-            </div>
+          </div>
+
+          <div v-if="treeSel.kind === 'book'" class="novel-wb__actions novel-wb__actions--desk">
+            <button type="button" class="novel-wb__btn" @click="runAction('outline')">
+              {{ bookOutlineFile ? t('novelWorkbench.actionReviseBookOutline') : t('novelWorkbench.actionOutline') }}
+            </button>
+            <button
+              type="button"
+              class="novel-wb__btn novel-wb__btn--ghost"
+              @click="runAction('volume', undefined, undefined, nextVolume)"
+            >
+              {{ t('novelWorkbench.actionVolumeOutline', { n: nextVolume }) }}
+            </button>
+            <button type="button" class="novel-wb__btn novel-wb__btn--ghost" @click="runAction('assets')">
+              {{ t('novelWorkbench.actionAssets') }}
+            </button>
+            <button
+              v-if="deskBatchFreezeAllowed"
+              type="button"
+              class="novel-wb__btn novel-wb__btn--ghost"
+              @click="runAction('batch-freeze')"
+            >
+              {{ t('novelWorkbench.actionBatchFreeze') }}
+            </button>
+          </div>
+
+          <div v-else-if="treeSel.kind === 'volume'" class="novel-wb__actions novel-wb__actions--desk">
+            <button type="button" class="novel-wb__btn" @click="runDeskVolume(selectedVolumeNum)">
+              {{ t('novelWorkbench.actionReviseVolumeOutline', { n: selectedVolumeNum }) }}
+            </button>
+            <button type="button" class="novel-wb__btn novel-wb__btn--ghost" @click="runAction('outline')">
+              {{ bookOutlineFile ? t('novelWorkbench.actionReviseBookOutline') : t('novelWorkbench.actionOutline') }}
+            </button>
+            <button
+              v-if="deskBatchFreezeAllowed"
+              type="button"
+              class="novel-wb__btn novel-wb__btn--ghost"
+              @click="runAction('batch-freeze')"
+            >
+              {{ t('novelWorkbench.actionBatchFreeze') }}
+            </button>
+          </div>
+
+          <div v-else-if="treeSel.kind === 'setup'" class="novel-wb__actions novel-wb__actions--desk">
+            <button type="button" class="novel-wb__btn" @click="runAction('assets')">
+              {{ t('novelWorkbench.actionAssets') }}
+            </button>
+            <button
+              v-if="setupShowsGoldfinger"
+              type="button"
+              class="novel-wb__btn novel-wb__btn--ghost"
+              @click="runAction('goldfinger')"
+            >
+              {{ t('novelWorkbench.actionGoldfinger') }}
+            </button>
+            <button type="button" class="novel-wb__btn novel-wb__btn--ghost" @click="runAction('outline')">
+              {{ bookOutlineFile ? t('novelWorkbench.actionReviseBookOutline') : t('novelWorkbench.actionOutline') }}
+            </button>
           </div>
 
           <div v-if="treeSel.kind === 'chapter'" class="novel-wb__tabs" role="tablist">
@@ -940,8 +1042,18 @@ function escapeHtml(s: string) {
           </div>
 
           <div v-if="treeSel.kind === 'chapter'" class="novel-wb__actions">
+            <button
+              v-if="chapterDeskPrimary"
+              type="button"
+              class="novel-wb__btn"
+              :disabled="!chapterDeskPrimary.allowed"
+              @click="runChapterDeskPrimary()"
+            >
+              {{ chapterDeskPrimary.label }}
+            </button>
             <template v-if="readingIsContract">
               <button
+                v-if="!chapterDeskPrimary"
                 type="button"
                 class="novel-wb__btn novel-wb__btn--ghost"
                 @click="runAction('contract', readingChapter || treeSel.n, readPath || undefined)"
@@ -958,8 +1070,31 @@ function escapeHtml(s: string) {
               >
                 {{ readingEntry?.prose ? t('novelWorkbench.actionAskRewrite') : t('novelWorkbench.actionAskWrite', { n: readingChapter }) }}
               </button>
+              <template v-if="readingEntry?.prose">
+                <button
+                  type="button"
+                  class="novel-wb__btn novel-wb__btn--ghost"
+                  @click="runAction('dialogue', readingChapter, readPath || undefined)"
+                >
+                  {{ t('novelWorkbench.actionDialogue') }}
+                </button>
+                <button
+                  type="button"
+                  class="novel-wb__btn novel-wb__btn--ghost"
+                  @click="runAction('hook', readingChapter, readPath || undefined)"
+                >
+                  {{ t('novelWorkbench.actionHook') }}
+                </button>
+                <button
+                  type="button"
+                  class="novel-wb__btn novel-wb__btn--ghost"
+                  @click="runAction('reversal', readingChapter, readPath || undefined)"
+                >
+                  {{ t('novelWorkbench.actionReversal') }}
+                </button>
+              </template>
               <button
-                v-if="readingEntry?.prose"
+                v-if="chapterDeskPrimary?.action !== 'review'"
                 type="button"
                 class="novel-wb__btn novel-wb__btn--ghost"
                 :disabled="!isActionAllowed('review', readingChapter)"
@@ -968,7 +1103,7 @@ function escapeHtml(s: string) {
                 {{ t('novelWorkbench.actionReview') }}
               </button>
               <button
-                v-if="readingEntry?.prose"
+                v-if="chapterDeskPrimary?.action !== 'polish'"
                 type="button"
                 class="novel-wb__btn novel-wb__btn--ghost"
                 :disabled="!isActionAllowed('polish', readingChapter)"
@@ -977,13 +1112,22 @@ function escapeHtml(s: string) {
                 {{ t('novelWorkbench.actionPolish') }}
               </button>
               <button
-                v-if="readingEntry?.prose"
+                v-if="chapterDeskPrimary?.action !== 'commit'"
                 type="button"
                 class="novel-wb__btn novel-wb__btn--ghost"
                 :disabled="!isActionAllowed('commit', readingChapter)"
                 @click="runAction('commit', readingChapter, readPath || undefined)"
               >
                 {{ t('novelWorkbench.actionCommit') }}
+              </button>
+              <button
+                v-if="readingEntry?.prose && chapterDeskPrimary?.action !== 'review-polish-commit'"
+                type="button"
+                class="novel-wb__btn novel-wb__btn--ghost"
+                :disabled="!isActionAllowed('review-polish-commit', readingChapter)"
+                @click="runAction('review-polish-commit', readingChapter, readPath || undefined)"
+              >
+                {{ t('novelWorkbench.actionReviewPolishCommit') }}
               </button>
             </template>
           </div>
@@ -1166,17 +1310,17 @@ function escapeHtml(s: string) {
 
 .novel-wb__preview-bar {
   flex-shrink: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px 8px;
+  padding: 10px 12px 6px;
 }
 
-.novel-wb__preview-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.novel-wb__preview-head {
+  min-width: 0;
+}
+
+.novel-wb__actions--desk {
+  padding-top: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dq-border-subtle, #000) 40%, transparent);
 }
 
 .novel-wb__reader--desk {

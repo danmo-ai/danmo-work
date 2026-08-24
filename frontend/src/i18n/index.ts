@@ -13,3 +13,12 @@ export const i18n = createI18n<[MessageSchema], 'zh-CN' | 'en'>({
     en,
   },
 })
+
+if (import.meta.hot) {
+  import.meta.hot.accept('./locales/zh-CN', (mod) => {
+    if (mod?.default) i18n.global.setLocaleMessage('zh-CN', mod.default)
+  })
+  import.meta.hot.accept('./locales/en', (mod) => {
+    if (mod?.default) i18n.global.setLocaleMessage('en', mod.default)
+  })
+}

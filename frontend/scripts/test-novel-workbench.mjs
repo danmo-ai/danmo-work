@@ -7,6 +7,7 @@ import {
   canRunAction,
   chapterNumFromName,
   computeBookPipeline,
+  formatLoadProtocol,
   inferChapterNextAction,
   inferChapterPhase,
   inferNovelBookNextStep,
@@ -25,6 +26,8 @@ import {
   parseVolumeUnitRows,
   mergeVolumeOutlineFiles,
   isVolumeOutlineName,
+  novelActionLoadProtocol,
+  novelActionSkillId,
   setupDocLabel,
   sortChapterNodes,
   volumeNumFromName,
@@ -127,8 +130,79 @@ assert.equal(reviewOk.allowed, true)
 const constrained = buildConstrainedPrefill('write', { bookId: 'star-inn', chapter: 2 }, pipe, [])
 assert.ok(constrained.includes('工作台约束'))
 assert.ok(constrained.includes('preflight.md'))
-assert.ok(constrained.includes('novel-write/'))
+assert.ok(constrained.includes('novel-write'))
+assert.ok(constrained.includes('【本轮技能】novel-write'))
+assert.ok(constrained.includes('【加载顺序'))
+assert.ok(constrained.includes('未 read_skill 成功前禁止 write/edit'))
+assert.ok(constrained.includes('search_kb 文风与去 AI 味'))
+assert.ok(constrained.includes('【任务】'))
 assert.equal(pipe.phase, 'review')
+
+assert.equal(novelActionSkillId('init'), 'novel-setup')
+assert.equal(novelActionSkillId('assets'), 'novel-setup')
+assert.equal(novelActionSkillId('goldfinger'), 'novel-setup')
+assert.equal(novelActionSkillId('outline'), 'novel-plan')
+assert.equal(novelActionSkillId('volume'), 'novel-plan')
+assert.equal(novelActionSkillId('write'), 'novel-write')
+assert.equal(novelActionSkillId('dialogue'), 'novel-write')
+assert.equal(novelActionSkillId('hook'), 'novel-write')
+assert.equal(novelActionSkillId('reversal'), 'novel-write')
+assert.equal(novelActionSkillId('review'), 'novel-review')
+assert.equal(novelActionSkillId('polish'), 'novel-review')
+assert.equal(novelActionSkillId('review-polish-commit'), 'novel-review')
+
+const comboProto = novelActionLoadProtocol('review-polish-commit', {
+  bookId: 'star-inn',
+  chapter: 4,
+  chapterPath: 'novel/star-inn/chapters/ch004.md',
+})
+assert.equal(comboProto.skillId, 'novel-review')
+assert.ok(comboProto.skillRefs.includes('novel-review/references/review-gates.md'))
+assert.ok(comboProto.skillRefs.includes('novel-review/references/polish-deslop.md'))
+assert.ok(comboProto.skillRefs.includes('novel-review/references/continuity-commit.md'))
+
+const comboPrefill = buildConstrainedPrefill('review-polish-commit', {
+  bookId: 'star-inn',
+  chapter: 4,
+  chapterPath: 'novel/star-inn/chapters/ch004.md',
+})
+assert.ok(comboPrefill.includes('六透镜审稿 → 去 AI 味 → 连续性定稿'))
+assert.ok(comboPrefill.includes('未 PASS 禁止进入步骤 3–4'))
+
+const comboAllowed = canRunAction('review-polish-commit', {
+  bookId: 'star-inn',
+  state: ext,
+  entries,
+  chapterPhases: { 4: 'drafted' },
+  castFileCount: 1,
+  hasBookOutline: true,
+  hasVolumeOutline: true,
+  hasBatchFreezeFile: true,
+  batchFreezeFrozen: true,
+}, 4)
+assert.equal(comboAllowed.allowed, true)
+
+const comboBlocked = canRunAction('review-polish-commit', {
+  bookId: 'star-inn',
+  state: ext,
+  entries,
+  chapterPhases: { 4: 'committed' },
+  castFileCount: 1,
+  hasBookOutline: true,
+  hasVolumeOutline: true,
+  hasBatchFreezeFile: true,
+  batchFreezeFrozen: true,
+}, 4)
+assert.ok(comboBlocked.blockers.includes('blocker.alreadyCommitted'))
+
+const writeProto = novelActionLoadProtocol('write', { bookId: 'star-inn', chapter: 2 })
+assert.equal(writeProto.skillId, 'novel-write')
+assert.ok(writeProto.skillRefs.includes('novel-write/references/preflight.md'))
+assert.ok(formatLoadProtocol(writeProto).includes('read_skill novel-write'))
+
+const initPrefill = buildConstrainedPrefill('init', {})
+assert.ok(initPrefill.includes('【本轮技能】novel-setup'))
+assert.ok(initPrefill.includes('未 read_skill 成功前禁止 write/edit'))
 
 const stages = [
   'init',
@@ -139,9 +213,13 @@ const stages = [
   'contract',
   'write',
   'continue',
+  'dialogue',
+  'hook',
+  'reversal',
   'review',
   'polish',
   'commit',
+  'review-polish-commit',
   'batch-freeze',
   'continuation',
   'batch-review',
@@ -180,6 +258,35 @@ assert.ok(assetsPrefill.includes('cast-card.md'))
 
 const outlinePrefill = buildNovelStagePrefill('outline', { bookId: 'star-inn' })
 assert.ok(outlinePrefill.includes('终局储备'))
+
+const dialoguePrefill = buildNovelStagePrefill('dialogue', {
+  bookId: 'star-inn',
+  chapter: 4,
+  chapterPath: 'novel/star-inn/chapters/ch004.md',
+})
+assert.ok(dialoguePrefill.includes('对话'))
+assert.ok(buildNovelStagePrefill('hook', { bookId: 'star-inn', chapter: 4 }).includes('悬念'))
+assert.ok(buildNovelStagePrefill('reversal', { bookId: 'star-inn', chapter: 4 }).includes('反转'))
+
+const dialogueProto = novelActionLoadProtocol('dialogue', { bookId: 'star-inn', chapter: 4 })
+assert.equal(dialogueProto.skillId, 'novel-write')
+assert.ok(dialogueProto.skillRefs.includes('novel-write/references/scene-routing.md'))
+assert.ok(dialogueProto.kbThemes.includes('情绪与场景'))
+
+const continueProto = novelActionLoadProtocol('continue', { bookId: 'star-inn', chapter: 4 })
+assert.ok(continueProto.skillRefs.includes('novel-write/references/continuation.md'))
+assert.ok(continueProto.skillRefs.includes('novel-write/references/chapter-write.md'))
+
+const hookProto = novelActionLoadProtocol('hook', { bookId: 'star-inn', chapter: 4 })
+assert.ok(hookProto.kbThemes.includes('爽点与追读'))
+assert.deepEqual(novelActionLoadProtocol('reversal', { bookId: 'star-inn', chapter: 4 }).kbThemes, [
+  '情绪与场景',
+  '爽点与追读',
+])
+assert.equal(novelActionSkillId('continue'), 'novel-write')
+assert.ok(novelActionLoadProtocol('polish', { bookId: 'star-inn', chapter: 4 }).skillRefs.includes(
+  'novel-review/references/polish-deslop.md',
+))
 
 assert.equal(chapterNumFromName('ch001.md'), 1)
 assert.equal(isNovelChapterPath('novel/b/chapters/ch003.md'), true)

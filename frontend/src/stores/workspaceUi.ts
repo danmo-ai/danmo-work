@@ -94,6 +94,9 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   /** One-shot expert ids to select in Composer (e.g. novel workbench actions). */
   const composerSelectExpertIds = ref<string[] | null>(null)
   const composerSelectExpertToken = ref(0)
+  /** One-shot skill ids to select in Composer (e.g. novel workbench actions). */
+  const composerSelectSkillIds = ref<string[] | null>(null)
+  const composerSelectSkillToken = ref(0)
 
   /** Session split-pane workbench host (Office-style left stream | right workbench). */
   const workbenchOpen = ref(false)
@@ -304,6 +307,19 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     return ids
   }
 
+  function requestComposerSelectSkills(ids: string[]) {
+    const cleaned = ids.map((id) => id.trim()).filter(Boolean)
+    if (!cleaned.length) return
+    composerSelectSkillIds.value = cleaned
+    composerSelectSkillToken.value++
+  }
+
+  function consumeComposerSelectSkills(): string[] {
+    const ids = composerSelectSkillIds.value ?? []
+    composerSelectSkillIds.value = null
+    return ids
+  }
+
   return {
     rightTab,
     changesCount,
@@ -318,6 +334,8 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     composerPrefillToken,
     composerSelectExpertIds,
     composerSelectExpertToken,
+    composerSelectSkillIds,
+    composerSelectSkillToken,
     workbenchOpen,
     activeWorkbenchId,
     leftRailCollapsed,
@@ -349,5 +367,7 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     consumeComposerPrefill,
     requestComposerSelectExperts,
     consumeComposerSelectExperts,
+    requestComposerSelectSkills,
+    consumeComposerSelectSkills,
   }
 })
