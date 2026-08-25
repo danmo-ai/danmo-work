@@ -102,6 +102,28 @@ runtime:
     max_steps_default: 200   # used when agent.steps is 0 / unset
     max_llm_failures: 3      # fail turn after N consecutive LLM Chat errors (independent of max_steps)
     llm_http_timeout_sec: 600  # per Chat HTTP timeout (seconds); raise for high-effort reasoning models
+  compaction:
+    enabled: true
+    # High water (real tokens): triggers in-turn compaction when the previous
+    # step's ACTUAL prompt usage plus the estimated size of messages appended
+    # since then exceeds max_tokens * trigger_ratio.
+    max_tokens: 128000
+    trigger_ratio: 0.85
+    # Low water: retained BYTE-SIZE ratio. After the trigger, dedup + tool
+    # result truncation run first, then oldest tool pairs are dropped until
+    # the remaining messages shrink to this fraction of the post-dedup/prune
+    # byte size (0.5 = drop half). The last keep_recent_tool_steps batches
+    # and the current user goal are never dropped.
+    low_water_ratio: 0.5
+    tool_truncate: 8192        # chars cap per tool result outside the recent window
+    keep_recent_tool_steps: 3  # latest tool-call batches kept full during prune/snip
+    # Session-level (between-turn) compaction: summarize history older than
+    # cut_tokens; trigger every turn_interval turns (sub_interval after the
+    # first checkpoint). Optional model override; empty = main model.
+    model: ""
+    cut_tokens: 16000
+    turn_interval: 6
+    sub_interval: 4
   tools:
     # Hard cap on a single local tool result (chars) before it enters the LLM
     # context / UI / turn log. Protects against oversized shell or MCP output.

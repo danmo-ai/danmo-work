@@ -109,9 +109,9 @@ type filePatch struct {
 	moveTo      string // relative rename target (begin-patch)
 	searchBased bool
 	oldData     []byte
-	oldText     string        // decoded/normalized original content (updates)
-	meta        textFileMeta  // decoded encoding/line ending (updates)
-	mode        os.FileMode   // original permission bits (updates)
+	oldText     string       // decoded/normalized original content (updates)
+	meta        textFileMeta // decoded encoding/line ending (updates)
+	mode        os.FileMode  // original permission bits (updates)
 }
 
 type pendingWrite struct {
@@ -271,6 +271,15 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 		}
 
 		newContent := joinPatchFileLines(newLines)
+		if !fp.isCreate && fp.moveTo == "" {
+			if diff := generateUnifiedDiff(fp.relPath, fp.oldText, newContent); diff == "" {
+				// The patch's net result is identical to the current file
+				// (e.g., -X +X or context-only hunks): report an explicit
+				// no-op instead of rewriting and claiming success.
+				results = append(results, fmt.Sprintf("No changes to %q — patch results in identical content", fp.relPath))
+				continue
+			}
+		}
 		finalPath := fp.path
 		finalRel := fp.relPath
 		if fp.moveTo != "" {

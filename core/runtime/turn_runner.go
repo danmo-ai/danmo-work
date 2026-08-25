@@ -24,9 +24,12 @@ const (
 	toolResultPruneMarker      = "\n\n[... tool result middle pruned ...]\n\n"
 	defaultMaxToolOutputChars  = 50000
 	turnTokenEstimateDivisor   = 4
-	doomPatternWindow          = 8
-	doomDescribeMaxLen         = 200
-	toolErrorHint              = "\n[Analyze the error above and try a different approach.]"
+	// defaultCompactionRetainRatio is the fraction of the current context's
+	// byte size kept after a pressure-compaction snip (drop the rest).
+	defaultCompactionRetainRatio = 0.5
+	doomPatternWindow            = 8
+	doomDescribeMaxLen           = 200
+	toolErrorHint                = "\n[Analyze the error above and try a different approach.]"
 )
 
 const maxStepsPrompt = `<system-reminder>
@@ -244,7 +247,7 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 		maxToolOutputChars:      defaultMaxToolOutputChars,
 		compactionMaxTokens:     128000,
 		compactionTriggerRatio:  0.85,
-		compactionLowWaterRatio: 0.70,
+		compactionLowWaterRatio: 0.50,
 		toolTruncateChars:       defaultToolTruncateChars,
 		keepRecentToolSteps:     defaultKeepRecentToolSteps,
 	}
@@ -328,6 +331,11 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 	var finalReport domain.Report
 	reportCaptured := false
 	maxPromptTokens := 0 // track actual max prompt tokens from LLM API
+	// lastActualTokens / estSentTokens feed the real usage back into the
+	// in-turn pressure gate: trigger when the last API prompt usage plus the
+	// estimated size of messages appended since then exceeds the high water.
+	lastActualTokens := 0
+	estSentTokens := 0
 	consecutiveLLMFailures := 0
 
 	for step := 1; step <= tctx.MaxSteps; step++ {
@@ -340,7 +348,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		}
 
 		if cfg.compactionEnabled && step > 1 {
-			messages = p.compactMessages(messages, cfg)
+			messages = p.compactMessages(messages, cfg, lastActualTokens, estSentTokens)
 		}
 
 		isLastStep := step == tctx.MaxSteps
@@ -349,6 +357,10 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 			messages = append(messages, Message{Role: RoleUser, Content: maxStepsPrompt})
 			p.logUserMessage(maxStepsPrompt)
 		}
+
+		// Snapshot the estimate of exactly what this step sends; paired with
+		// the actual usage reported below it forms the next gate's baseline.
+		estSentTokens = estimateTurnTokens(messages)
 
 		p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventStepStarted, domain.StepPayload{Step: step})
 		llmReq := port.LLMChatRequest{
@@ -398,6 +410,11 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		if resp.Usage != nil {
 			if resp.Usage.PromptTokens > maxPromptTokens {
 				maxPromptTokens = resp.Usage.PromptTokens
+			}
+			// messages is unchanged since this step's Chat call, so its usage
+			// pairs with estSentTokens recorded above for the next gate.
+			if resp.Usage.PromptTokens > 0 {
+				lastActualTokens = resp.Usage.PromptTokens
 			}
 			p.Stream.Publish(ctx, tctx.SessionID, tctx.TurnID, domain.EventLLMUsage, domain.LLMUsagePayload{
 				PromptTokens:        resp.Usage.PromptTokens,
@@ -1088,22 +1105,48 @@ func detectAlternatingLoop(patterns []string, threshold int) bool {
 	return altCount >= need
 }
 
-func (p *TurnRunner) compactMessages(messages []Message, cfg turnRunCfg) []Message {
+func (p *TurnRunner) compactMessages(messages []Message, cfg turnRunCfg, lastActualTokens, estSentTokens int) []Message {
 	if len(messages) <= 1 {
 		return messages
 	}
 	messages = p.enforceToolPairing(messages)
 	high := highWaterTokens(cfg)
-	if high <= 0 || estimateTurnTokens(messages) <= high {
+	if high <= 0 {
+		return messages
+	}
+	// Pressure signal: the previous step's ACTUAL prompt usage (exact) plus
+	// the estimated size of messages appended since that send. The estimate
+	// only covers one round of growth, so its error is bounded; when no
+	// successful send exists yet, fall back to the full estimate.
+	estDelta := estimateTurnTokens(messages) - estSentTokens
+	if estDelta < 0 {
+		estDelta = 0
+	}
+	underPressure := lastActualTokens+estDelta > high
+	if lastActualTokens <= 0 {
+		underPressure = estimateTurnTokens(messages) > high
+	}
+	if !underPressure {
 		// Below pressure: no dedup/prune/snip — keep the LLM prefix stable for KV cache.
 		return messages
 	}
-	// Pressure compaction: dedup → prune (skip recent tail) → snip to low water.
+	// Pressure compaction: dedup → prune (skip recent tail) → drop oldest
+	// tool pairs until the byte size shrinks to the configured retention
+	// ratio (compactionLowWaterRatio of the post-dedup/prune size).
 	protected := recentToolCallIDs(messages, cfg.keepRecentToolSteps)
 	messages = p.dedupToolResults(messages)
 	messages = pruneToolResults(messages, cfg.toolTruncateChars, protected)
-	if estimateTurnTokens(messages) > high {
-		messages = p.snipHead(messages, lowWaterTokens(cfg), cfg.keepRecentToolSteps)
+
+	retainRatio := cfg.compactionLowWaterRatio
+	if retainRatio <= 0 {
+		retainRatio = defaultCompactionRetainRatio
+	}
+	if retainRatio > 1 {
+		retainRatio = 1
+	}
+	budget := int(float64(messagesByteSize(messages)) * retainRatio)
+	if messagesByteSize(messages) > budget {
+		messages = p.snipHead(messages, budget, cfg.keepRecentToolSteps)
 	}
 	return messages
 }
@@ -1115,20 +1158,26 @@ func highWaterTokens(cfg turnRunCfg) int {
 	return 0
 }
 
-func lowWaterTokens(cfg turnRunCfg) int {
-	high := highWaterTokens(cfg)
-	if high <= 0 {
-		return 0
+// messageByteSize approximates the byte weight of a message for the
+// relative-size snip budget. The exact unit does not matter: both the budget
+// and the stop condition use the same measure, so the ratio is what counts.
+func messageByteSize(m Message) int {
+	n := len(m.Content) + len(m.ReasoningContent) + len(m.Name) + len(m.ToolCallID)
+	for _, tc := range m.ToolCalls {
+		n += len(tc.ID) + len(tc.Name)
+		if raw, err := json.Marshal(tc.Arguments); err == nil {
+			n += len(raw)
+		}
 	}
-	ratio := cfg.compactionLowWaterRatio
-	if ratio <= 0 {
-		ratio = 0.70
+	return n
+}
+
+func messagesByteSize(messages []Message) int {
+	total := 0
+	for _, m := range messages {
+		total += messageByteSize(m)
 	}
-	low := int(float64(cfg.compactionMaxTokens) * ratio)
-	if low <= 0 || low >= high {
-		return high
-	}
-	return low
+	return total
 }
 
 func (p *TurnRunner) dedupToolResults(messages []Message) []Message {
@@ -1385,7 +1434,7 @@ func (p *TurnRunner) snipHead(messages []Message, budget, keepRecentSteps int) [
 	}
 	result = snipRange(result, systemCount, end, budget, -1)
 
-	if estimateTurnTokens(result) <= budget {
+	if messagesByteSize(result) <= budget {
 		return result
 	}
 
@@ -1397,14 +1446,14 @@ func (p *TurnRunner) snipHead(messages []Message, budget, keepRecentSteps int) [
 	return snipRange(result, lastUserIdx+1, retainStart, budget, lastUserIdx)
 }
 
-// snipRange removes messages in [start, end) until budget is met or the range
-// is exhausted. goalIdx is the protected user goal index (adjusted as removals
-// shift indices); pass -1 when not applicable.
+// snipRange removes messages in [start, end) until the byte-size budget is met
+// or the range is exhausted. goalIdx is the protected user goal index (adjusted
+// as removals shift indices); pass -1 when not applicable.
 func snipRange(messages []Message, start, end, budget, goalIdx int) []Message {
 	result := messages
 	i := start
 	for i < end && i < len(result) {
-		if estimateTurnTokens(result) <= budget {
+		if messagesByteSize(result) <= budget {
 			break
 		}
 		if goalIdx >= 0 && i == goalIdx {

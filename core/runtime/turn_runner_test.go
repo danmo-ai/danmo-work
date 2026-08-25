@@ -634,7 +634,7 @@ func TestSnipHeadPreservesLastUserMessage(t *testing.T) {
 		{Role: RoleAssistant, Content: "old response 2"},
 		{Role: RoleUser, Content: "current goal — must survive"},
 	}
-	out := tr.snipHead(msgs, 10, 3) // budget=10 tokens, very small
+	out := tr.snipHead(msgs, 10, 3) // budget=10 bytes, very small
 
 	foundLastUser := false
 	for _, m := range out {
@@ -695,9 +695,87 @@ func TestCompactMessagesBelowPressureNoOp(t *testing.T) {
 	if estimateTurnTokens(msgs) > highWaterTokens(cfg) {
 		t.Fatal("fixture must stay below pressure")
 	}
-	out := tr.compactMessages(msgs, cfg)
+	out := tr.compactMessages(msgs, cfg, 0, 0)
 	if out[3].Content != long {
 		t.Fatalf("below pressure: tool result must stay full, got len=%d", len(out[3].Content))
+	}
+}
+
+func TestCompactMessagesTriggersOnLastActualPressure(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, nil, nil, nil)
+	long := strings.Repeat("x", defaultToolTruncateChars+500)
+	cfg := turnRunCfg{
+		compactionMaxTokens:     128000,
+		compactionTriggerRatio:  0.85,
+		compactionLowWaterRatio: 0.5,
+		toolTruncateChars:       defaultToolTruncateChars,
+		keepRecentToolSteps:     1,
+	}
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "goal"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "old", Name: "read_file"}}},
+		{Role: RoleTool, ToolCallID: "old", Name: "read_file", Content: long},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "new", Name: "read_file"}}},
+		{Role: RoleTool, ToolCallID: "new", Name: "read_file", Content: long},
+	}
+	if estimateTurnTokens(msgs) > highWaterTokens(cfg) {
+		t.Fatal("fixture must stay below estimate pressure")
+	}
+	// The previous step's ACTUAL API usage alone must trip the gate (the
+	// char-based estimate is blind to CJK-heavy contexts).
+	out := tr.compactMessages(msgs, cfg, highWaterTokens(cfg)+1, 0)
+	newFull := false
+	for _, m := range out {
+		if m.Role == RoleTool && m.ToolCallID == "new" && m.Content == long {
+			newFull = true
+		}
+		if m.Role == RoleTool && m.ToolCallID == "old" {
+			t.Fatalf("oldest tool pair should be dropped under lastActual pressure; out=%+v", out)
+		}
+	}
+	if !newFull {
+		t.Fatal("under lastActual pressure: recent tool result must stay full")
+	}
+}
+
+func TestCompactMessagesTriggersOnDelta(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, nil, nil, nil)
+	long := strings.Repeat("x", defaultToolTruncateChars+500)
+	cfg := turnRunCfg{
+		compactionMaxTokens:     10000,
+		compactionTriggerRatio:  0.42, // high water = 4200
+		compactionLowWaterRatio: 0.5,
+		toolTruncateChars:       defaultToolTruncateChars,
+	}
+	msgs := []Message{
+		{Role: RoleSystem, Content: "sys"},
+		{Role: RoleUser, Content: "goal"},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "new", Name: "read_file"}}},
+		{Role: RoleTool, ToolCallID: "new", Name: "read_file", Content: long},
+	}
+	high := highWaterTokens(cfg)
+	if estimateTurnTokens(msgs) > high {
+		t.Fatal("fixture must stay below estimate pressure")
+	}
+	// Neither the actual usage (4000) nor the estimate (<4200) crosses the
+	// high water alone; only the SUM — actual + appended-message estimate —
+	// must trip the gate.
+	out := tr.compactMessages(msgs, cfg, 4000, 1200)
+	if len(out) == len(msgs) {
+		t.Fatal("lastActual + estDelta above high water must trigger compaction")
+	}
+	// And the same input without the delta must stay a no-op.
+	again := tr.compactMessages(msgs, cfg, 4000, estimateTurnTokens(msgs))
+	if len(again) != len(msgs) {
+		t.Fatalf("lastActual alone below high water must not trigger; before=%d after=%d", len(msgs), len(again))
+	}
+}
+
+func TestMessageByteSizeCountsReasoning(t *testing.T) {
+	m := Message{Content: "ab", ReasoningContent: "cdef"}
+	if got := messageByteSize(m); got != 6 {
+		t.Fatalf("byte size must include content+reasoning, got %d", got)
 	}
 }
 
@@ -723,18 +801,18 @@ func TestCompactMessagesPrunesUnderPressure(t *testing.T) {
 	if estimateTurnTokens(msgs) <= highWaterTokens(cfg) {
 		t.Fatal("fixture must exceed pressure")
 	}
-	out := tr.compactMessages(msgs, cfg)
-	var oldPruned, newFull bool
+	out := tr.compactMessages(msgs, cfg, 0, 0)
+	oldGone, newFull := true, false
 	for _, m := range out {
 		if m.Role == RoleTool && m.ToolCallID == "old" {
-			oldPruned = strings.Contains(m.Content, toolResultPruneMarker)
+			oldGone = false
 		}
 		if m.Role == RoleTool && m.ToolCallID == "new" && m.Content == long {
 			newFull = true
 		}
 	}
-	if !oldPruned {
-		t.Fatal("under pressure: older tool result should be pruned")
+	if !oldGone {
+		t.Fatal("under pressure: oldest tool pair should be dropped to the byte budget")
 	}
 	if !newFull {
 		t.Fatal("under pressure: recent tool result should stay full")
@@ -795,11 +873,11 @@ func TestPruneToolResults_SkipsRecentSteps(t *testing.T) {
 
 func TestCompactMessagesSnipsToLowWaterAndDoesNotRetrigger(t *testing.T) {
 	tr := NewTurnRunner(nil, nil, nil, nil, nil)
-	pad := strings.Repeat("word ", 80) // ~100 tokens per message (chars/4)
+	pad := strings.Repeat("word ", 80)
 	cfg := turnRunCfg{
 		compactionMaxTokens:     400,
-		compactionTriggerRatio:  0.5, // high water = 200
-		compactionLowWaterRatio: 0.2, // low water = 80
+		compactionTriggerRatio:  0.5, // high water = 200 estimate tokens
+		compactionLowWaterRatio: 0.2, // retain 20% of post-dedup/prune bytes
 		toolTruncateChars:       20000,
 	}
 	msgs := []Message{
@@ -814,11 +892,10 @@ func TestCompactMessagesSnipsToLowWaterAndDoesNotRetrigger(t *testing.T) {
 	if estimateTurnTokens(msgs) <= highWaterTokens(cfg) {
 		t.Fatalf("fixture too small: tokens=%d high=%d", estimateTurnTokens(msgs), highWaterTokens(cfg))
 	}
-	out := tr.compactMessages(msgs, cfg)
-	got := estimateTurnTokens(out)
-	low := lowWaterTokens(cfg)
-	if got > low {
-		t.Fatalf("expected <= low water %d, got %d out=%+v", low, got, out)
+	budget := int(float64(messagesByteSize(msgs)) * cfg.compactionLowWaterRatio)
+	out := tr.compactMessages(msgs, cfg, 0, 0)
+	if got := messagesByteSize(out); got > budget {
+		t.Fatalf("expected snip to <= %d bytes, got %d out=%+v", budget, got, out)
 	}
 	foundGoal := false
 	for _, m := range out {
@@ -832,27 +909,9 @@ func TestCompactMessagesSnipsToLowWaterAndDoesNotRetrigger(t *testing.T) {
 
 	// Still under high water after a small append: do not snip again.
 	out2 := append(append([]Message(nil), out...), Message{Role: RoleAssistant, Content: "tiny"})
-	again := tr.compactMessages(out2, cfg)
+	again := tr.compactMessages(out2, cfg, 0, 0)
 	if len(again) != len(out2) {
 		t.Fatalf("second compact should be a no-op under high water; before=%d after=%d", len(out2), len(again))
-	}
-}
-
-func TestLowWaterTokensUsesRatioNotCutTokens(t *testing.T) {
-	cfg := turnRunCfg{
-		compactionMaxTokens:     1000,
-		compactionTriggerRatio:  0.85,
-		compactionLowWaterRatio: 0.70,
-	}
-	if got, want := highWaterTokens(cfg), 850; got != want {
-		t.Fatalf("high=%d want %d", got, want)
-	}
-	if got, want := lowWaterTokens(cfg), 700; got != want {
-		t.Fatalf("low=%d want %d", got, want)
-	}
-	cfg.compactionLowWaterRatio = 0.90 // >= trigger → no hysteresis
-	if got := lowWaterTokens(cfg); got != highWaterTokens(cfg) {
-		t.Fatalf("low >= high should collapse to high, got %d", got)
 	}
 }
 
@@ -871,7 +930,7 @@ func TestCompactMessagesStopsAtLastUserWhenTurnExceedsLowWater(t *testing.T) {
 		{Role: RoleUser, Content: "current goal " + pad},
 		{Role: RoleAssistant, Content: "this turn work " + pad},
 	}
-	out := tr.compactMessages(msgs, cfg)
+	out := tr.compactMessages(msgs, cfg, 0, 0)
 	foundGoal, foundWork := false, false
 	for _, m := range out {
 		if m.Role == RoleUser && strings.HasPrefix(m.Content, "current goal") {

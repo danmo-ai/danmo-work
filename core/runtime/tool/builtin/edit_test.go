@@ -18,10 +18,10 @@ func TestEditExactReplace(t *testing.T) {
 
 	h := &Edit{}
 	result, err := h.Execute(nil, map[string]any{
-		"path":          f,
-		"oldString":     "\"hello\"",
-		"newString":     "\"world\"",
-		"__work_dir":    dir,
+		"path":           f,
+		"oldString":      "\"hello\"",
+		"newString":      "\"world\"",
+		"__work_dir":     dir,
 		"__file_tracker": ft,
 	})
 	if err != nil {
@@ -47,11 +47,11 @@ func TestEditReplaceAll(t *testing.T) {
 
 	h := &Edit{}
 	result, err := h.Execute(nil, map[string]any{
-		"path":          f,
-		"oldString":     "foo",
-		"newString":     "baz",
-		"replaceAll":    true,
-		"__work_dir":    dir,
+		"path":           f,
+		"oldString":      "foo",
+		"newString":      "baz",
+		"replaceAll":     true,
+		"__work_dir":     dir,
 		"__file_tracker": ft,
 	})
 	if err != nil {
@@ -60,6 +60,43 @@ func TestEditReplaceAll(t *testing.T) {
 
 	if !strings.Contains(result.Content, "3 occurrence") {
 		t.Errorf("expected 3 replacements, got: %s", result.Content)
+	}
+}
+
+func TestEditNoopViaFuzzyMatch(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "test.txt")
+	content := "foo  bar\n"
+	os.WriteFile(f, []byte(content), 0644)
+
+	ft := setupTracker(dir)
+	ft.NoteRead(f)
+
+	before, _ := os.Stat(f)
+
+	h := &Edit{}
+	result, err := h.Execute(nil, map[string]any{
+		"path":           f,
+		"oldString":      "foo bar",  // single space: whitespace-fuzzy match
+		"newString":      "foo  bar", // equals the actual file text
+		"__work_dir":     dir,
+		"__file_tracker": ft,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result.Content, "No changes made") {
+		t.Errorf("expected no-op message, got: %q", result.Content)
+	}
+	if op, _ := result.Meta["op"].(string); op != "noop" {
+		t.Errorf("expected op=noop, got %q", op)
+	}
+	if changed, ok := result.Meta["changed"].(bool); !ok || changed {
+		t.Error("expected changed=false in meta")
+	}
+	after, _ := os.Stat(f)
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Error("no-op edit must not rewrite the file (mtime changed)")
 	}
 }
 
@@ -74,10 +111,10 @@ func TestEditFuzzyIndent(t *testing.T) {
 
 	h := &Edit{}
 	result, err := h.Execute(nil, map[string]any{
-		"path":          f,
-		"oldString":     "\tprintln(\"hello\")",
-		"newString":     "\tprintln(\"world\")",
-		"__work_dir":    dir,
+		"path":           f,
+		"oldString":      "\tprintln(\"hello\")",
+		"newString":      "\tprintln(\"world\")",
+		"__work_dir":     dir,
 		"__file_tracker": ft,
 	})
 	if err != nil {
@@ -100,10 +137,10 @@ func TestEditFuzzyWhitespace(t *testing.T) {
 
 	h := &Edit{}
 	result, err := h.Execute(nil, map[string]any{
-		"path":          f,
-		"oldString":     "foo bar",
-		"newString":     "baz qux",
-		"__work_dir":    dir,
+		"path":           f,
+		"oldString":      "foo bar",
+		"newString":      "baz qux",
+		"__work_dir":     dir,
 		"__file_tracker": ft,
 	})
 	if err != nil {
@@ -124,10 +161,10 @@ func TestEditRequiresReadFirst(t *testing.T) {
 
 	h := &Edit{}
 	_, err := h.Execute(nil, map[string]any{
-		"path":          f,
-		"oldString":     "hello",
-		"newString":     "goodbye",
-		"__work_dir":    dir,
+		"path":           f,
+		"oldString":      "hello",
+		"newString":      "goodbye",
+		"__work_dir":     dir,
 		"__file_tracker": ft,
 	})
 	if err == nil {
@@ -209,11 +246,11 @@ func TestEditMultipleExactMatches(t *testing.T) {
 
 	h := &Edit{}
 	_, err := h.Execute(nil, map[string]any{
-		"path":          f,
-		"oldString":     "foo",
-		"newString":     "bar",
-		"replaceAll":    false,
-		"__work_dir":    dir,
+		"path":           f,
+		"oldString":      "foo",
+		"newString":      "bar",
+		"replaceAll":     false,
+		"__work_dir":     dir,
 		"__file_tracker": ft,
 	})
 	if err == nil {

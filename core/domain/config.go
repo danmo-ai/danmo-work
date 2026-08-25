@@ -80,8 +80,11 @@ type ConfigCompactionSection struct {
 	Model        string  `json:"model" mapstructure:"model"`
 	MaxTokens    int     `json:"maxTokens" mapstructure:"max_tokens"`
 	TriggerRatio float64 `json:"triggerRatio" mapstructure:"trigger_ratio"`
-	// LowWaterRatio is the in-turn snipHead target as a fraction of MaxTokens.
-	// TriggerRatio is the high-water mark that starts clipping. Default 0.70.
+	// LowWaterRatio is the retained byte-size ratio of in-turn pressure
+	// compaction: after the high-water trigger, dedup/prune runs and then the
+	// oldest tool pairs are dropped until the remaining messages shrink to
+	// this fraction of the post-dedup/prune byte size (drop the rest).
+	// Default 0.50. TriggerRatio is the high-water mark that starts clipping.
 	// Separate from CutTokens, which is the session-compaction retain window.
 	LowWaterRatio float64 `json:"lowWaterRatio" mapstructure:"low_water_ratio"`
 	// CutTokens is how many recent estimated tokens session compaction keeps

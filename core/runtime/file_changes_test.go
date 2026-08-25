@@ -111,6 +111,14 @@ func TestFileChangeRecordsFromWriteAndPatchMeta(t *testing.T) {
 		t.Fatalf("directory write should be skipped: %+v", dirRecs)
 	}
 
+	// No-op write (identical content) ignored.
+	noopRecs := fileChangeRecordsFromResult("turn-1", "c3", "write", map[string]any{"path": "a.go"}, domain.ToolResult{
+		Meta: map[string]any{"path": "a.go", "op": "noop", "changed": false, "bytes_written": 0},
+	})
+	if len(noopRecs) != 0 {
+		t.Fatalf("no-op write should be skipped: %+v", noopRecs)
+	}
+
 	patchRecs := fileChangeRecordsFromResult("turn-2", "c3", "apply_patch", nil, domain.ToolResult{
 		Meta: map[string]any{
 			"file_changes": []map[string]any{

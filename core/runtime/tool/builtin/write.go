@@ -91,6 +91,31 @@ func (h *Write) Execute(_ context.Context, input map[string]any) (domain.ToolRes
 		}
 	}
 
+	op := "create"
+	diff := ""
+	if fileExists {
+		op = "update"
+		diff = generateUnifiedDiff(path, existingText, content)
+		if diff == "" {
+			// Identical content: do not rewrite (bumping mtime) and report an
+			// explicit no-op. A silent "Wrote file" success here is
+			// indistinguishable from a real write and drives identical-write
+			// loops.
+			noteReadFile(input, resolvedPath)
+			return domain.ToolResult{
+				Content: fmt.Sprintf("No changes written to %q — the file already contains identical content (%d bytes)", path, len([]byte(content))),
+				Meta: map[string]any{
+					"path":          path,
+					"op":            "noop",
+					"diff":          "",
+					"changed":       false,
+					"bytes_written": 0,
+					"overwrote":     true,
+				},
+			}, nil
+		}
+	}
+
 	dir := filepath.Dir(resolvedPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return domain.ToolResult{}, fmt.Errorf("cannot create directory %q: %w", dir, err)
@@ -110,11 +135,7 @@ func (h *Write) Execute(_ context.Context, input map[string]any) (domain.ToolRes
 	noteReadFile(input, resolvedPath)
 
 	msg := fmt.Sprintf("Wrote file %q (%d bytes)", path, len(payload))
-	op := "create"
-	diff := ""
 	if fileExists {
-		op = "update"
-		diff = generateUnifiedDiff(path, existingText, content)
 		msg += encNote + "\n" + diff
 	}
 

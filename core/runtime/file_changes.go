@@ -50,6 +50,11 @@ func fileChangeRecordsFromResult(turnID, callID, toolName string, args map[strin
 		return nil
 	}
 
+	// Skip no-op writes (identical content): nothing changed on disk.
+	if changed, ok := meta["changed"].(bool); ok && !changed {
+		return nil
+	}
+
 	path, _ := meta["path"].(string)
 	if path == "" {
 		path, _ = args["path"].(string)

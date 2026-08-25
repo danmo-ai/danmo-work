@@ -112,6 +112,27 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 		return domain.ToolResult{}, matchErr
 	}
 
+	diff := generateUnifiedDiff(relPath, content, replacement)
+	if diff == "" {
+		// Fuzzy matching can land on the file's actual text (oldStr != newStr
+		// but the replacement equals what's on disk): the edit is a no-op.
+		// Report it explicitly instead of rewriting and claiming success.
+		noteReadFile(input, resolvedPath)
+		return domain.ToolResult{
+			Content: fmt.Sprintf("No changes made to %q — the replacement text is identical to the current content", relPath),
+			Meta: map[string]any{
+				"path":          relPath,
+				"op":            "noop",
+				"diff":          "",
+				"changed":       false,
+				"replacements":  0,
+				"bytes_written": 0,
+				"encoding":      string(meta.Encoding),
+				"line_ending":   meta.LineEnding,
+			},
+		}, nil
+	}
+
 	if err := writeFilePreserving(resolvedPath, encodeTextFile(replacement, meta)); err != nil {
 		return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", resolvedPath, err)
 	}
@@ -119,7 +140,6 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 	// fail with "changed since last read" unless something else touched the file.
 	noteReadFile(input, resolvedPath)
 
-	diff := generateUnifiedDiff(relPath, content, replacement)
 	encNote := encodingNote(meta)
 	return domain.ToolResult{
 		Content: fmt.Sprintf("Edited file %q, replaced %d occurrence(s):%s\n%s", relPath, count, encNote, diff),

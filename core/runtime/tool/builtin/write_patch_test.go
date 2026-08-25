@@ -56,6 +56,48 @@ func TestWriteFileWithDiff(t *testing.T) {
 	}
 }
 
+func TestWriteIdenticalContentNoop(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "test.txt")
+	const content = "same content\n"
+
+	h := &Write{}
+	ft := setupTracker(dir)
+	if _, err := h.Execute(nil, map[string]any{
+		"path": f, "content": content, "__work_dir": dir, "__file_tracker": ft,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	before, statErr := os.Stat(f)
+	if statErr != nil {
+		t.Fatalf("stat: %v", statErr)
+	}
+
+	result, err := h.Execute(nil, map[string]any{
+		"path": f, "content": content, "__work_dir": dir, "__file_tracker": ft,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result.Content, "No changes written") {
+		t.Errorf("expected no-op message, got: %q", result.Content)
+	}
+	if op, _ := result.Meta["op"].(string); op != "noop" {
+		t.Errorf("expected op=noop, got %q", op)
+	}
+	if changed, ok := result.Meta["changed"].(bool); !ok || changed {
+		t.Error("expected changed=false in meta")
+	}
+	if diff, _ := result.Meta["diff"].(string); diff != "" {
+		t.Errorf("expected empty diff, got %q", diff)
+	}
+	after, _ := os.Stat(f)
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Error("no-op write must not rewrite the file (mtime changed)")
+	}
+}
+
 func TestWriteOverwriteRequiresRead(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "test.txt")
@@ -66,9 +108,9 @@ func TestWriteOverwriteRequiresRead(t *testing.T) {
 
 	h := &Write{}
 	_, err := h.Execute(nil, map[string]any{
-		"path":          f,
-		"content":       "new content\n",
-		"__work_dir":    dir,
+		"path":           f,
+		"content":        "new content\n",
+		"__work_dir":     dir,
 		"__file_tracker": ft,
 	})
 	if err == nil {
@@ -103,6 +145,34 @@ func TestApplyPatchFuzz(t *testing.T) {
 	saved, _ := os.ReadFile(f)
 	if !strings.Contains(string(saved), "line4 - replaced") {
 		t.Errorf("expected patched content, got: %q", string(saved))
+	}
+}
+
+func TestApplyPatchNoop(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "test.txt")
+	content := "a\nb\nc\n"
+	os.WriteFile(f, []byte(content), 0644)
+
+	before, _ := os.Stat(f)
+
+	h := &ApplyPatch{}
+	result, err := h.Execute(nil, map[string]any{
+		"patch":      "*** Begin Patch\n*** Update File: test.txt\n@@\n a\n-b\n+b\n c\n*** End Patch\n",
+		"__work_dir": dir,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result.Content, "No changes to") {
+		t.Errorf("expected no-op message, got: %q", result.Content)
+	}
+	if fc, ok := result.Meta["file_changes"].([]map[string]any); ok && len(fc) != 0 {
+		t.Errorf("expected no file_changes entries for no-op, got %v", fc)
+	}
+	after, _ := os.Stat(f)
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Error("no-op patch must not rewrite the file (mtime changed)")
 	}
 }
 

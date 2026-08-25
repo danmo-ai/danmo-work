@@ -95,7 +95,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("runtime.compaction.model", "")
 	v.SetDefault("runtime.compaction.max_tokens", 128000)
 	v.SetDefault("runtime.compaction.trigger_ratio", 0.85)
-	v.SetDefault("runtime.compaction.low_water_ratio", 0.70)
+	v.SetDefault("runtime.compaction.low_water_ratio", 0.50)
 	v.SetDefault("runtime.compaction.cut_tokens", 16000)
 	v.SetDefault("runtime.compaction.turn_interval", 6)
 	v.SetDefault("runtime.compaction.sub_interval", 4)
