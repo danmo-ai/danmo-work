@@ -37,7 +37,6 @@ type Config struct {
 	CompactionEnabled      bool
 	CompactionTurnInterval int
 	CompactionSubInterval  int
-	CompactionMaxTokens    int
 	CompactionCutTokens    int
 }
 
@@ -93,9 +92,6 @@ func New(cfg Config) *Core {
 	}
 	if cfg.CompactionSubInterval > 0 {
 		appCfg.Runtime.Compaction.SubInterval = cfg.CompactionSubInterval
-	}
-	if cfg.CompactionMaxTokens > 0 {
-		appCfg.Runtime.Compaction.MaxTokens = cfg.CompactionMaxTokens
 	}
 	if cfg.CompactionCutTokens > 0 {
 		appCfg.Runtime.Compaction.CutTokens = cfg.CompactionCutTokens

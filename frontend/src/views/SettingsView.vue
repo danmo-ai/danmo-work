@@ -243,7 +243,6 @@ const runtimeForm = ref({
   chapterMaxTokens: 512,
   vectorHybrid: false,
   compactionEnabled: true,
-  compactionMaxTokens: 128000,
   compactionTriggerRatio: 0.85,
   compactionLowWaterRatio: 0.70,
   compactionCutTokens: 16000,
@@ -1743,21 +1742,12 @@ onUnmounted(() => {
             <template v-if="runtimeForm.compactionEnabled">
               <div class="settings-form-row">
                 <div class="settings-field settings-field--half">
-                  <span class="settings-field__label">{{ $t('settings.compactionMaxTokens') }}</span>
-                  <div class="slider-row">
-                    <DqSlider v-model="runtimeForm.compactionMaxTokens" :min="16000" :max="256000" :step="1000" />
-                    <span class="slider-row__value">{{ runtimeForm.compactionMaxTokens }}</span>
-                  </div>
-                </div>
-                <div class="settings-field settings-field--half">
                   <span class="settings-field__label">{{ $t('settings.compactionTriggerRatio') }}</span>
                   <div class="slider-row">
                     <DqSlider v-model="runtimeForm.compactionTriggerRatio" :min="0.1" :max="1.0" :step="0.05" />
                     <span class="slider-row__value">{{ runtimeForm.compactionTriggerRatio }}</span>
                   </div>
                 </div>
-              </div>
-              <div class="settings-form-row">
                 <div class="settings-field settings-field--half">
                   <span class="settings-field__label">{{ $t('settings.compactionLowWaterRatio') }}</span>
                   <div class="slider-row">
@@ -1765,6 +1755,8 @@ onUnmounted(() => {
                     <span class="slider-row__value">{{ runtimeForm.compactionLowWaterRatio }}</span>
                   </div>
                 </div>
+              </div>
+              <div class="settings-form-row">
                 <div class="settings-field settings-field--half">
                   <span class="settings-field__label">{{ $t('settings.compactionCutTokens') }}</span>
                   <div class="slider-row">

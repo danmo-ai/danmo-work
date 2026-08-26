@@ -93,7 +93,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("runtime.retention.history_max_age_days", 0)
 	v.SetDefault("runtime.compaction.enabled", true)
 	v.SetDefault("runtime.compaction.model", "")
-	v.SetDefault("runtime.compaction.max_tokens", 128000)
 	v.SetDefault("runtime.compaction.trigger_ratio", 0.85)
 	v.SetDefault("runtime.compaction.low_water_ratio", 0.50)
 	v.SetDefault("runtime.compaction.cut_tokens", 16000)

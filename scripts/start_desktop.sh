@@ -19,7 +19,7 @@ echo "    Backend : http://127.0.0.1:${BACKEND_PORT}"
 echo "    Desktop : Tauri webview (Vite HMR on :${DQ_FRONTEND_PORT})"
 
 cd "$DQ_ROOT/frontend"
-if [[ ! -d node_modules ]]; then
+if [[ ! -d node_modules ]] || [[ package-lock.json -nt node_modules ]]; then
   npm install
 fi
 

@@ -43,7 +43,7 @@ func (s *testConfigStore) Save(_ context.Context, _ *domain.ConfigFile) error {
 
 var _ port.ConfigStore = (*testConfigStore)(nil)
 
-func testCompactionConfig(enabled bool, turnInterval, subInterval, maxTokens, cutTokens int) *testConfigStore {
+func testCompactionConfig(enabled bool, turnInterval, subInterval, cutTokens int) *testConfigStore {
 	return &testConfigStore{
 		cfg: &domain.ConfigFile{
 			Runtime: domain.ConfigRuntimeSection{
@@ -51,7 +51,6 @@ func testCompactionConfig(enabled bool, turnInterval, subInterval, maxTokens, cu
 					Enabled:      enabled,
 					TurnInterval: turnInterval,
 					SubInterval:  subInterval,
-					MaxTokens:    maxTokens,
 					CutTokens:    cutTokens,
 					TriggerRatio: 0.85,
 					ToolTruncate: 2000,
@@ -106,7 +105,7 @@ func TestCompactionShouldCompact(t *testing.T) {
 	stream := NewStreamEventManager(nil)
 
 	cpStore := newTestCheckpointStore(t)
-	store := testCompactionConfig(true, 3, 2, 128000, 16000)
+	store := testCompactionConfig(true, 3, 2, 16000)
 	mgr := NewCompactionManager(mock, stream, store, cpStore, nil)
 
 	if !mgr.ShouldCompact("session-1", 3, 0, 0, "") {
@@ -285,7 +284,7 @@ func TestCompactionCompactAndRecover(t *testing.T) {
 	stream := NewStreamEventManager(nil)
 	cpStore := newTestCheckpointStore(t)
 
-	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 128000, 50), cpStore, nil)
+	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 50), cpStore, nil)
 
 	messages := []Message{
 		{Role: RoleSystem, Content: "You are a helpful assistant"},
@@ -370,7 +369,7 @@ func TestCompactionPreservesTodos(t *testing.T) {
 	mock := llm.NewMock().AddText(`{"summary":"kept going"}`)
 	stream := NewStreamEventManager(nil)
 	cpStore := newTestCheckpointStore(t)
-	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 128000, 50), cpStore, nil)
+	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 50), cpStore, nil)
 
 	pad := string(make([]byte, 200))
 	messages := []Message{
@@ -410,7 +409,7 @@ func TestCompactionInheritsPrevTodos(t *testing.T) {
 		AddText(`{"summary":"second"}`)
 	stream := NewStreamEventManager(nil)
 	cpStore := newTestCheckpointStore(t)
-	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 128000, 50), cpStore, nil)
+	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 50), cpStore, nil)
 
 	pad := string(make([]byte, 200))
 	withTodo := []Message{
@@ -539,7 +538,7 @@ func TestCompactToRetainStoresSkip(t *testing.T) {
 	mock := llm.NewMock().AddText("handoff note")
 	stream := NewStreamEventManager(nil)
 	cpStore := newTestCheckpointStore(t)
-	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 128000, 50), cpStore, nil)
+	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 50), cpStore, nil)
 
 	old := []Message{{Role: RoleUser, Content: "old work " + strings.Repeat("o", 200)}}
 	ok := mgr.CompactToRetain(context.Background(), "s-skip", "turn-now", old, old, 3, "mock/test", "turn-big", 4, 999)

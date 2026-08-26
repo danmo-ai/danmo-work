@@ -32,7 +32,6 @@ export interface RuntimeForm {
   chapterMaxTokens: number
   vectorHybrid: boolean
   compactionEnabled: boolean
-  compactionMaxTokens: number
   compactionTriggerRatio: number
   compactionLowWaterRatio: number
   compactionCutTokens: number
@@ -74,7 +73,6 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     chapterMaxTokens: rt.knowledge.chapterMaxTokens ?? 512,
     vectorHybrid: rt.knowledge.vectorHybrid ?? false,
     compactionEnabled: rt.compaction?.enabled ?? true,
-    compactionMaxTokens: rt.compaction?.maxTokens ?? 128000,
     compactionTriggerRatio: rt.compaction?.triggerRatio ?? 0.85,
     compactionLowWaterRatio: rt.compaction?.lowWaterRatio ?? 0.70,
     compactionCutTokens: rt.compaction?.cutTokens ?? 16000,
@@ -205,7 +203,6 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
         compaction: {
           enabled: form.compactionEnabled,
           model: '',
-          maxTokens: form.compactionMaxTokens,
           triggerRatio: form.compactionTriggerRatio,
           lowWaterRatio: form.compactionLowWaterRatio,
           cutTokens: form.compactionCutTokens,

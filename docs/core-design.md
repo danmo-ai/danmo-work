@@ -567,11 +567,11 @@ Tool 刚执行完时已按 `runtime.tools.max_output_chars` 做硬上限（§6.3
 ```
 每 Step（step > 1，且 compaction.enabled）:
   1. 配对完整性: 过滤孤儿 tool_result（始终）
-  2. 低于高水位（MaxTokens * TriggerRatio）: 不裁剪（含去重；保持 LLM 前缀稳定以利 KV cache）
+  2. 低于高水位（(context_window − max_output) * TriggerRatio）: 不裁剪（含去重；保持 LLM 前缀稳定以利 KV cache）
   3. 超高水位时（Harness-style pressure compaction）:
      a. 去重: 同 tool+input → 保留最新，旧结果摘要
-     b. 渐进截断: 超大 tool result（超过 toolTruncate，默认 8192）→ head + marker + tail；最近 keepRecentToolSteps 批（默认 3）豁免
-     c. 仍超阈值 → 删除最旧 assistant+tool 对直到低水位；最近 keepRecentToolSteps 批豁免
+     b. 渐进截断: 超大 tool result（超过 toolTruncate，默认 8192）→ head + marker + tail；最近 keepRecentToolSteps 批（默认 3）豁免；`read_skill` / `ask_user` 全文保留
+     c. 仍超阈值 → 删除最旧 assistant+tool 对直到低水位；最近 keepRecentToolSteps 批豁免；`read_skill` / `ask_user` 对不删除（同批并列 tool 一并保留以免拆对）
 ```
 
 Compaction 仅修改内存中的 LLM messages；tool 执行时的完整输出仍落在 durable turn log。
@@ -581,7 +581,7 @@ Compaction 仅修改内存中的 LLM messages；tool 执行时的完整输出仍
 
 ```
 触发（afterTurn）:
-  - token > MaxTokens * TriggerRatio
+  - token > (context_window − max_output) * TriggerRatio
   - 或 Turn 数达到 TurnInterval / SubInterval
 
 切点: 逆序累计 token ≥ CutTokens，禁止切在 tool_result 内部
@@ -590,7 +590,7 @@ Compaction 仅修改内存中的 LLM messages；tool 执行时的完整输出仍
 事件: context.compacted
 ```
 
-配置见 `domain.ConfigCompactionSection`（enabled、maxTokens、triggerRatio、lowWaterRatio、cutTokens、turnInterval、subInterval、toolTruncate）。Turn 内裁剪用 triggerRatio / lowWaterRatio；Session 压缩保留窗口用 cutTokens。
+配置见 `domain.ConfigCompactionSection`（enabled、triggerRatio、lowWaterRatio、cutTokens、turnInterval、subInterval、toolTruncate）。高水位预算取自当前模型的 `context_window − max_output`（catalog / `llm.models`）；Turn 内裁剪用 triggerRatio / lowWaterRatio；Session 压缩保留窗口用 cutTokens。
 
 ### 10.3 记忆 vs 压缩 vs 知识库
 

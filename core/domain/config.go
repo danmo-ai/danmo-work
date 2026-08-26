@@ -76,16 +76,19 @@ type ConfigRetentionSection struct {
 }
 
 type ConfigCompactionSection struct {
-	Enabled      bool    `json:"enabled" mapstructure:"enabled"`
-	Model        string  `json:"model" mapstructure:"model"`
-	MaxTokens    int     `json:"maxTokens" mapstructure:"max_tokens"`
+	Enabled bool   `json:"enabled" mapstructure:"enabled"`
+	Model   string `json:"model" mapstructure:"model"`
+	// TriggerRatio is the high-water fraction of the model's usable context
+	// (context_window − max_output) that starts in-turn / session compaction.
+	// Default 0.85. Budget comes from the model catalog / llm.models entry —
+	// there is no separate compaction max_tokens override.
 	TriggerRatio float64 `json:"triggerRatio" mapstructure:"trigger_ratio"`
 	// LowWaterRatio is the retained byte-size ratio of in-turn pressure
 	// compaction: after the high-water trigger, dedup/prune runs and then the
 	// oldest tool pairs are dropped until the remaining messages shrink to
 	// this fraction of the post-dedup/prune byte size (drop the rest).
-	// Default 0.50. TriggerRatio is the high-water mark that starts clipping.
-	// Separate from CutTokens, which is the session-compaction retain window.
+	// Default 0.50. Separate from CutTokens, which is the session-compaction
+	// retain window.
 	LowWaterRatio float64 `json:"lowWaterRatio" mapstructure:"low_water_ratio"`
 	// CutTokens is how many recent estimated tokens session compaction keeps
 	// after summarizing older history. Default 16000.

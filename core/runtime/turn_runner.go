@@ -195,6 +195,7 @@ type TurnRunner struct {
 	ToolBindings        []domain.ToolBinding
 	Approval            approvalGate
 	ConfigStore         port.ConfigStore
+	ModelLimits         *ModelConfigRegistry
 	Log                 func(typ string, data map[string]any)
 	FileTracker         *tool.FileTracker
 	FileChanges         FileChangeAppender
@@ -224,7 +225,6 @@ type turnRunCfg struct {
 	maxLLMFailures          int
 	maxToolOutputChars      int
 	compactionEnabled       bool
-	compactionMaxTokens     int
 	compactionTriggerRatio  float64
 	compactionLowWaterRatio float64
 	toolTruncateChars       int
@@ -245,7 +245,6 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 		maxStepsDefault:         200,
 		maxLLMFailures:          3,
 		maxToolOutputChars:      defaultMaxToolOutputChars,
-		compactionMaxTokens:     128000,
 		compactionTriggerRatio:  0.85,
 		compactionLowWaterRatio: 0.50,
 		toolTruncateChars:       defaultToolTruncateChars,
@@ -275,8 +274,9 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 				cfg.maxToolOutputChars = rt.Tools.MaxOutputChars
 			}
 			cfg.compactionEnabled = rt.Compaction.Enabled
-			cfg.compactionMaxTokens = rt.Compaction.MaxTokens
-			cfg.compactionTriggerRatio = rt.Compaction.TriggerRatio
+			if rt.Compaction.TriggerRatio > 0 {
+				cfg.compactionTriggerRatio = rt.Compaction.TriggerRatio
+			}
 			if rt.Compaction.LowWaterRatio > 0 {
 				cfg.compactionLowWaterRatio = rt.Compaction.LowWaterRatio
 			}
@@ -285,6 +285,9 @@ func (p *TurnRunner) loadRunCfg(ctx context.Context) turnRunCfg {
 			}
 			if rt.Compaction.KeepRecentToolSteps > 0 {
 				cfg.keepRecentToolSteps = rt.Compaction.KeepRecentToolSteps
+			}
+			if p.ModelLimits != nil {
+				p.ModelLimits.SetModels(c.LLM.Models)
 			}
 		}
 	}
@@ -348,7 +351,7 @@ func (p *TurnRunner) Run(ctx context.Context, tctx TurnContext) (domain.Report, 
 		}
 
 		if cfg.compactionEnabled && step > 1 {
-			messages = p.compactMessages(messages, cfg, lastActualTokens, estSentTokens)
+			messages = p.compactMessages(messages, cfg, lastActualTokens, estSentTokens, tctx.Model)
 		}
 
 		isLastStep := step == tctx.MaxSteps
@@ -1105,12 +1108,12 @@ func detectAlternatingLoop(patterns []string, threshold int) bool {
 	return altCount >= need
 }
 
-func (p *TurnRunner) compactMessages(messages []Message, cfg turnRunCfg, lastActualTokens, estSentTokens int) []Message {
+func (p *TurnRunner) compactMessages(messages []Message, cfg turnRunCfg, lastActualTokens, estSentTokens int, model string) []Message {
 	if len(messages) <= 1 {
 		return messages
 	}
 	messages = p.enforceToolPairing(messages)
-	high := highWaterTokens(cfg)
+	high := p.highWaterTokens(cfg, model)
 	if high <= 0 {
 		return messages
 	}
@@ -1151,11 +1154,16 @@ func (p *TurnRunner) compactMessages(messages []Message, cfg turnRunCfg, lastAct
 	return messages
 }
 
-func highWaterTokens(cfg turnRunCfg) int {
-	if cfg.compactionMaxTokens > 0 {
-		return int(float64(cfg.compactionMaxTokens) * cfg.compactionTriggerRatio)
+// highWaterTokens is trigger_ratio × (model context_window − max_output).
+func (p *TurnRunner) highWaterTokens(cfg turnRunCfg, model string) int {
+	if cfg.compactionTriggerRatio <= 0 {
+		return 0
 	}
-	return 0
+	usable := usableContextTokens(p.ModelLimits, model)
+	if usable <= 0 {
+		return 0
+	}
+	return int(float64(usable) * cfg.compactionTriggerRatio)
 }
 
 // messageByteSize approximates the byte weight of a message for the
@@ -1240,6 +1248,26 @@ func recentToolCallIDs(messages []Message, keepSteps int) map[string]struct{} {
 	return protected
 }
 
+// pinnedCompactionTools stay full through prune and are never dropped by snipHead
+// (procedure + user decisions; same class of "must survive" as the current user goal).
+func isPinnedCompactionTool(name string) bool {
+	switch name {
+	case "read_skill", "ask_user":
+		return true
+	default:
+		return false
+	}
+}
+
+func assistantHasPinnedTools(m Message) bool {
+	for _, tc := range m.ToolCalls {
+		if isPinnedCompactionTool(tc.Name) {
+			return true
+		}
+	}
+	return false
+}
+
 func toolResultPruneHeadTail(threshold int) (head, tail int) {
 	markerLen := len(toolResultPruneMarker)
 	budget := threshold - markerLen
@@ -1292,6 +1320,9 @@ func pruneToolResults(messages []Message, threshold int, protected map[string]st
 	copy(result, messages)
 	for i := range result {
 		if result[i].Role != RoleTool {
+			continue
+		}
+		if isPinnedCompactionTool(result[i].Name) {
 			continue
 		}
 		if protected != nil {
@@ -1461,7 +1492,26 @@ func snipRange(messages []Message, start, end, budget, goalIdx int) []Message {
 			continue
 		}
 		m := result[i]
+		if m.Role == RoleTool && isPinnedCompactionTool(m.Name) {
+			i++
+			continue
+		}
 		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
+			if assistantHasPinnedTools(m) {
+				ids := make(map[string]bool, len(m.ToolCalls))
+				for _, tc := range m.ToolCalls {
+					ids[tc.ID] = true
+				}
+				i++
+				for i < end && i < len(result) {
+					if result[i].Role == RoleTool && ids[result[i].ToolCallID] {
+						i++
+						continue
+					}
+					break
+				}
+				continue
+			}
 			ids := make(map[string]bool)
 			for _, tc := range m.ToolCalls {
 				ids[tc.ID] = true

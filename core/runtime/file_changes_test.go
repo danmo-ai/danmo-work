@@ -144,7 +144,7 @@ func TestCompactionMergesFileChangesIncrementally(t *testing.T) {
 	artifacts := newArtifactTestStore(t)
 	cpStore := turnlog.NewCheckpointStore(artifacts.Checkpoints())
 	fcStore := turnlog.NewFileChangeStore(artifacts.FileChanges())
-	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 128000, 50), cpStore, nil)
+	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 50), cpStore, nil)
 	mgr.SetFileChangeJournal(fcStore)
 
 	sessionID := "s-fc"
@@ -215,7 +215,7 @@ func TestCompactionInheritsFileChangesWhenNoDelta(t *testing.T) {
 	artifacts := newArtifactTestStore(t)
 	cpStore := turnlog.NewCheckpointStore(artifacts.Checkpoints())
 	fcStore := turnlog.NewFileChangeStore(artifacts.FileChanges())
-	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 128000, 50), cpStore, nil)
+	mgr := NewCompactionManager(mock, stream, testCompactionConfig(true, 2, 2, 50), cpStore, nil)
 	mgr.SetFileChangeJournal(fcStore)
 
 	sessionID := "s-inherit-fc"

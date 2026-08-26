@@ -127,6 +127,7 @@ func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, pro
 
 	modelLimits := NewModelConfigRegistry()
 	modelLimits.LoadFromConfig(context.Background(), configStore)
+	turnRunner.ModelLimits = modelLimits
 
 	e := &Engine{
 		sessions:      sessions,
@@ -1195,6 +1196,7 @@ func (e *Engine) setupRegistry(s domain.Session, agent domain.Agent, planMode bo
 // cannot race on Log / Registry / SkillList of the shared template runner.
 func (e *Engine) spawnTurnRunner(turnID string, reg *tool.Registry, skills []domain.Skill, bindings []domain.ToolBinding) *TurnRunner {
 	r := NewTurnRunner(e.llm, e.stream, e.turnRunner.Perm, reg, e.configStore)
+	r.ModelLimits = e.modelLimits
 	r.Approval = e
 	r.SandboxStatus = e.sandboxStatus
 	r.EffectiveIsolation = e.effectiveIsolation

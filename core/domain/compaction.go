@@ -61,7 +61,6 @@ type CompactionFileChange struct {
 type CompactionConfig struct {
 	Enabled      bool    `json:"enabled"`
 	Model        string  `json:"model"`
-	MaxTokens    int     `json:"maxTokens"`
 	TriggerRatio float64 `json:"triggerRatio"`
 	CutTokens    int     `json:"cutTokens"`
 	TurnInterval int     `json:"turnInterval"`

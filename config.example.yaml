@@ -106,8 +106,8 @@ runtime:
     enabled: true
     # High water (real tokens): triggers in-turn compaction when the previous
     # step's ACTUAL prompt usage plus the estimated size of messages appended
-    # since then exceeds max_tokens * trigger_ratio.
-    max_tokens: 128000
+    # since then exceeds (model context_window − max_output) * trigger_ratio.
+    # Budget always comes from the active model's catalog / llm.models entry.
     trigger_ratio: 0.85
     # Low water: retained BYTE-SIZE ratio. After the trigger, dedup + tool
     # result truncation run first, then oldest tool pairs are dropped until

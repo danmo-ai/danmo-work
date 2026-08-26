@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	defaultMaxTokens     = 128000
 	defaultTriggerRatio  = 0.85
 	defaultCutTokens     = 16000
 	defaultTurnInterval  = 6
@@ -48,7 +47,6 @@ type CompactionCheckpointStore interface {
 type compactionCfg struct {
 	enabled      bool
 	model        string // runtime.compaction.model — summarize with this instead of the session model
-	maxTokens    int
 	triggerRatio float64
 	cutTokens    int
 	turnInterval int
@@ -87,7 +85,6 @@ func (m *CompactionManager) SetFileChangeJournal(journal FileChangeJournal) {
 
 func (m *CompactionManager) loadCfg(ctx context.Context) compactionCfg {
 	cfg := compactionCfg{
-		maxTokens:    0, // 0 means “use model context window”
 		triggerRatio: defaultTriggerRatio,
 		cutTokens:    defaultCutTokens,
 		turnInterval: defaultTurnInterval,
@@ -99,9 +96,6 @@ func (m *CompactionManager) loadCfg(ctx context.Context) compactionCfg {
 			rt := c.Runtime.Compaction
 			cfg.enabled = rt.Enabled
 			cfg.model = strings.TrimSpace(rt.Model)
-			if rt.MaxTokens > 0 {
-				cfg.maxTokens = rt.MaxTokens
-			}
 			if rt.TriggerRatio > 0 {
 				cfg.triggerRatio = rt.TriggerRatio
 			}
@@ -130,41 +124,16 @@ func (m *CompactionManager) ShouldCompact(sessionID string, turnCount int, token
 		return false
 	}
 
-	// Determine the effective context limit and actual token usage.
-	// Priority: actual API usage > char-based estimation.
-	contextLimit := cfg.maxTokens
+	// Prompt budget = model context_window − max_output (registry defaults apply).
 	actualTokens := tokenEstimate
-
-	// If we have actual prompt tokens from the LLM API, use them + model's real context window.
 	if maxPromptTokens > 0 {
 		actualTokens = maxPromptTokens
-		if modelLimit := m.modelLimits.ContextWindow(model); modelLimit > 0 {
-			// Reserve space for output tokens so we trigger before hitting the hard limit.
-			maxOutput := m.modelLimits.MaxOutputTokens(model)
-			usable := modelLimit - maxOutput
-			if usable > 0 {
-				// Use the smaller of config override and model-derived usable space.
-				if contextLimit == 0 || usable < contextLimit {
-					contextLimit = usable
-				}
-			}
-		}
 	}
+	contextLimit := usableContextTokens(m.modelLimits, model)
 
-	// Token-based trigger: actual usage exceeds triggerRatio of context limit.
+	// Token-based trigger: actual usage exceeds triggerRatio of usable context.
 	if contextLimit > 0 && actualTokens > int(float64(contextLimit)*cfg.triggerRatio) {
 		return true
-	}
-
-	// If no context limit is known, try model context window as fallback.
-	if contextLimit == 0 && model != "" {
-		if modelLimit := m.modelLimits.ContextWindow(model); modelLimit > 0 {
-			maxOutput := m.modelLimits.MaxOutputTokens(model)
-			usable := modelLimit - maxOutput
-			if usable > 0 && tokenEstimate > int(float64(usable)*cfg.triggerRatio) {
-				return true
-			}
-		}
 	}
 
 	// With real API usage and a known context limit, the token trigger above is

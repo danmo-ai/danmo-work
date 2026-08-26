@@ -274,7 +274,6 @@ export interface ConfigFile {
     compaction: {
       enabled: boolean
       model: string
-      maxTokens: number
       triggerRatio: number
       lowWaterRatio?: number
       cutTokens: number
@@ -439,7 +438,6 @@ export interface RuntimeConfigForm {
   chapterMaxTokens?: number
   vectorHybrid?: boolean
   compactionEnabled: boolean
-  compactionMaxTokens: number
   compactionTriggerRatio: number
   compactionLowWaterRatio: number
   compactionCutTokens: number
