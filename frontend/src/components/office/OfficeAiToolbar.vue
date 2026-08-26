@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   type OfficeEditScope,
+  type OfficeEngine,
   type OfficeKind,
 } from '@/utils/office-route'
 import {
@@ -17,6 +18,7 @@ type EditableOfficeKind = Exclude<OfficeKind, 'preview' | 'code' | 'diff'>
 const props = defineProps<{
   path: string
   kind: EditableOfficeKind
+  engine?: OfficeEngine
   getSelectionMarkdown: () => string
   getSelectionLines?: () => { startLine: number; endLine: number } | null
   getEditScope: () => OfficeEditScope
@@ -99,6 +101,7 @@ async function run(
       pageIndex: props.pageIndex,
       startLine: lineRange?.startLine,
       endLine: lineRange?.endLine,
+      engine: props.engine,
     })
 
     emit('attachOfficeEdit', att)

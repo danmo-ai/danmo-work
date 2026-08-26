@@ -1,6 +1,7 @@
 import {
   buildOfficeEditPrompt,
   type OfficeEditScope,
+  type OfficeEngine,
   type OfficeKind,
 } from '@/utils/office-route'
 
@@ -18,6 +19,7 @@ export interface OfficeEditAttachment {
   path: string
   officeKind: Exclude<OfficeKind, 'preview' | 'code' | 'diff'>
   scope: OfficeEditScope
+  engine?: OfficeEngine
   /** User annotation / instruction (editable on chip). */
   instruction: string
   selection: string
@@ -36,6 +38,7 @@ export function createOfficeEditAttachment(opts: {
   pageIndex?: number
   startLine?: number
   endLine?: number
+  engine?: OfficeEngine
 }): OfficeEditAttachment {
   return {
     id: createOfficeEditAttachmentId(),
@@ -44,6 +47,7 @@ export function createOfficeEditAttachment(opts: {
     path: opts.path,
     officeKind: opts.officeKind,
     scope: opts.scope,
+    engine: opts.engine,
     instruction: (opts.instruction || '').trim(),
     selection: opts.selection,
     pageIndex: opts.pageIndex,
@@ -112,6 +116,7 @@ export function serializeOfficeEditAttachment(att: OfficeEditAttachment): string
     scope: att.scope,
     startLine: att.startLine,
     endLine: att.endLine,
+    engine: att.engine,
     review: 'commit',
   })
 }

@@ -71,7 +71,7 @@ Beyond experts, the same library hosts **skills** (workflows — document-writin
 
 ### Document Stage
 
-Three panes — projects · agent stream · right panel (Plan / Files / Memory / Table Store / Git / Terminal / Trajectory) — around a central **Document Stage** whose toolbar follows the file kind (doc / slides / sheet / code / diff / preview). In **preview** mode you can click a DOM element, annotate it, and send exact HTML/CSS context to the Composer.
+Three panes — projects · agent stream · right panel (Plan / Files / Memory / Table Store / Git / Terminal / Trajectory) — around a central **Document Stage** routed by extension: `.md` / `.csv` use built-in editors; `.udoc.json` / `.uslides.json` / `.usheet.json` are editable Univer IR; `.docx` / `.pptx` / `.xlsx` are view-only until converted to IR. In **preview** mode you can click a DOM element, annotate it, and send exact HTML/CSS context to the Composer.
 
 Office files are co-edited as a normal agent turn with a review step:
 

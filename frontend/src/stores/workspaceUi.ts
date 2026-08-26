@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { OfficeKind, OfficeMode } from '@/utils/office-route'
+import type { OfficeEngine, OfficeKind, OfficeMode } from '@/utils/office-route'
 import { isWorkbenchId, type WorkbenchId } from '@/types/workbench'
 
 export type RightWorkspaceTab = 'plan' | 'files' | 'memory' | 'tables' | 'changes' | 'terminal' | 'trajectory'
@@ -12,6 +12,8 @@ export interface OfficeStageState {
   kind: OfficeKind
   path: string
   mode: OfficeMode
+  /** Persistence / editor engine (from routeOfficeFile). */
+  engine?: OfficeEngine
   /** Preview kind: project raw URL or proxied external URL. */
   url?: string
   /** Diff kind: staged (index) vs unstaged (working tree) patch. */

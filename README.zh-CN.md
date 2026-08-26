@@ -71,7 +71,7 @@ Composer 里 `@` 一下，或者干脆说一句「让文档专家写份报告」
 
 ### Document Stage
 
-三栏布局：项目 · Agent 执行流 · 右侧面板（计划 / 文件 / 记忆 / 表存储 / Git / 终端 / 轨迹），正中间是 **Document Stage**，工具栏跟着文件类型走（文档 / 幻灯片 / 表格 / 代码 / Diff / 预览）。**预览**模式下还能点选 DOM 元素做标注，发回 Composer，模型直接拿到精确的 HTML/CSS 上下文。
+三栏布局：项目 · Agent 执行流 · 右侧面板（计划 / 文件 / 记忆 / 表存储 / Git / 终端 / 轨迹），正中间是 **Document Stage**，按扩展名路由：`.md` / `.csv` 自研编辑；`.udoc.json` / `.uslides.json` / `.usheet.json` 为 Univer IR 可编辑；`.docx` / `.pptx` / `.xlsx` 只读，转为 IR 后可编。**预览**模式下还能点选 DOM 元素做标注，发回 Composer。
 
 改 Office 文件 = 一次普通 Agent 回合 + 一道审阅：
 

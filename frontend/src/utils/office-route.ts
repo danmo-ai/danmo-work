@@ -1,5 +1,16 @@
 export type OfficeKind = 'doc' | 'slides' | 'sheet' | 'preview' | 'code' | 'diff'
 export type OfficeMode = 'view' | 'edit' | 'present'
+/** Persistence / editor engine for the Stage surface. */
+export type OfficeEngine =
+  | 'md'
+  | 'csv'
+  | 'univer-sheet'
+  | 'univer-doc'
+  | 'univer-slides'
+  | 'ms-office'
+  | 'code'
+  | 'preview'
+  | 'diff'
 /** What the AI turn will target given current UI selection. */
 export type OfficeEditScope = 'selection' | 'document' | 'slide' | 'sheet'
 
@@ -7,21 +18,11 @@ export interface OfficeRoute {
   kind: OfficeKind
   path: string
   mode: OfficeMode
+  engine: OfficeEngine
   /** For preview kind: initial URL (project raw or proxied external). */
   url?: string
   /** For diff kind: show staged vs unstaged patch. */
   staged?: boolean
-}
-
-/**
- * Detect slides markdown via explicit Marp-style frontmatter (`type: slides`).
- * Do not treat bare `---` horizontal rules as slide breaks — research docs
- * commonly use them as section dividers and would false-positive as slides.
- * Filename / path hints (`*-slides.md`, `/slides/`, …) are handled in routeOfficeFile.
- */
-export function looksLikeSlidesMarkdown(content: string): boolean {
-  const trimmed = content.trimStart()
-  return /^---\r?\n[\s\S]*?\btype\s*:\s*slides\b/i.test(trimmed)
 }
 
 /** Common source / config extensions opened in the lightweight Code Surface. */
@@ -82,50 +83,85 @@ export function languageFromPath(path: string): string {
   }
 }
 
+export function isUniverSheetPath(path: string): boolean {
+  return path.replace(/\\/g, '/').toLowerCase().endsWith('.usheet.json')
+}
+
+export function isUniverDocPath(path: string): boolean {
+  return path.replace(/\\/g, '/').toLowerCase().endsWith('.udoc.json')
+}
+
+export function isUniverSlidesPath(path: string): boolean {
+  return path.replace(/\\/g, '/').toLowerCase().endsWith('.uslides.json')
+}
+
+/** Legacy danmo sheet — no longer a SoT; migrate to .usheet.json on open. */
+export function isLegacyDanmoSheetPath(path: string): boolean {
+  return path.replace(/\\/g, '/').toLowerCase().endsWith('.danmo-sheet.json')
+}
+
+export function isMsOfficePath(path: string): boolean {
+  const lower = path.replace(/\\/g, '/').toLowerCase()
+  return lower.endsWith('.docx') || lower.endsWith('.xlsx') || lower.endsWith('.pptx')
+}
+
 /** Route a project-relative file path into a Stage kind. Always returns a route. */
-export function routeOfficeFile(path: string, contentHint?: string): OfficeRoute {
+export function routeOfficeFile(path: string, _contentHint?: string): OfficeRoute {
   const lower = path.replace(/\\/g, '/').toLowerCase()
   const base = lower.split('/').pop() || lower
 
-  if (base.endsWith('.csv') || base.endsWith('.danmo-sheet.json')) {
-    return { kind: 'sheet', path, mode: 'edit' }
+  if (base.endsWith('.usheet.json')) {
+    return { kind: 'sheet', path, mode: 'edit', engine: 'univer-sheet' }
+  }
+  if (base.endsWith('.udoc.json')) {
+    return { kind: 'doc', path, mode: 'edit', engine: 'univer-doc' }
+  }
+  if (base.endsWith('.uslides.json')) {
+    return { kind: 'slides', path, mode: 'edit', engine: 'univer-slides' }
   }
 
+  // Legacy danmo-sheet: open as sheet view; Stage migrates to .usheet.json.
+  if (base.endsWith('.danmo-sheet.json')) {
+    return { kind: 'sheet', path, mode: 'view', engine: 'univer-sheet' }
+  }
+
+  if (base.endsWith('.csv')) {
+    return { kind: 'sheet', path, mode: 'edit', engine: 'csv' }
+  }
+
+  if (base.endsWith('.xlsx')) {
+    return { kind: 'sheet', path, mode: 'view', engine: 'ms-office' }
+  }
+  if (base.endsWith('.docx')) {
+    return { kind: 'doc', path, mode: 'view', engine: 'ms-office' }
+  }
+  if (base.endsWith('.pptx')) {
+    return { kind: 'slides', path, mode: 'view', engine: 'ms-office' }
+  }
+
+  // Legacy playable HTML decks: preview only (no MD slides SoT).
   if (base.endsWith('-slides.html') || (/(?:^|\/)slides?\//.test(lower) && base.endsWith('.html'))) {
-    return { kind: 'slides', path, mode: 'present' }
+    return { kind: 'preview', path, mode: 'view', engine: 'preview' }
   }
 
   if (base.endsWith('.html') || base.endsWith('.htm')) {
-    // Playable decks often mention keyboard presentation; default preview for generic HTML.
-    if (contentHint && /playable-slides|data-slide|slide-deck|class=["']slide/i.test(contentHint)) {
-      return { kind: 'slides', path, mode: 'present' }
-    }
-    // Generic HTML stays preview (annotate/iframe); not Code Surface.
-    return { kind: 'preview', path, mode: 'view' }
+    return { kind: 'preview', path, mode: 'view', engine: 'preview' }
   }
 
-  // SVG (and other images): visual preview via <img>, not XML source in Code Surface.
   if (IMAGE_EXT_RE.test(base)) {
-    return { kind: 'preview', path, mode: 'view' }
+    return { kind: 'preview', path, mode: 'view', engine: 'preview' }
   }
 
+  // Markdown is always a document — never slides.
   if (base.endsWith('.md') || base.endsWith('.markdown')) {
-    if (contentHint && looksLikeSlidesMarkdown(contentHint)) {
-      return { kind: 'slides', path, mode: 'edit' }
-    }
-    // Filename hints without reading content.
-    if (/-slides\.md$|\/slides\/|\/deck\//i.test(lower) || base.startsWith('slides.')) {
-      return { kind: 'slides', path, mode: 'edit' }
-    }
-    // Docs open in view (preview) by default; user switches to edit when needed.
-    return { kind: 'doc', path, mode: 'view' }
+    return { kind: 'doc', path, mode: 'view', engine: 'md' }
   }
 
   if (isCodeFilePath(path)) {
-    return { kind: 'code', path, mode: 'view' }
+    return { kind: 'code', path, mode: 'view', engine: 'code' }
   }
 
-  return { kind: 'preview', path, mode: 'view' }
+  return { kind: 'preview', path, mode: 'view', engine: 'preview' }
 }
 
 /** Short human ask for Composer — skills already teach tools / min-diff rules. */
@@ -171,6 +207,8 @@ export function buildOfficeEditPrompt(opts: {
   endLine?: number
   /** commit = write SoT (default); propose = prefer minimal patch for human review */
   review?: 'commit' | 'propose'
+  /** When set, agents must not write MS OOXML in place. */
+  engine?: OfficeEngine
 }): string {
   const lines = [
     '[office-edit]',
@@ -178,6 +216,7 @@ export function buildOfficeEditPrompt(opts: {
     `path: ${opts.path}`,
     `kind: ${opts.kind}`,
   ]
+  if (opts.engine) lines.push(`engine: ${opts.engine}`)
   if (opts.scope) lines.push(`scope: ${opts.scope}`)
   if (opts.pageIndex != null) lines.push(`page: ${opts.pageIndex}`)
   if (

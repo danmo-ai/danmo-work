@@ -7,8 +7,11 @@ import { useSessionsStore } from '@/stores/sessions'
 import { useStageAiReviewStore } from '@/stores/stageAiReview'
 import { fetchAiReviewStatus, revertAiReviewFile } from '@/api/aiReview'
 import DocSurface from '@/components/office/DocSurface.vue'
-import SlidesSurface from '@/components/office/SlidesSurface.vue'
+import UniverSlidesSurface from '@/components/office/UniverSlidesSurface.vue'
 import SheetSurface from '@/components/office/SheetSurface.vue'
+import UniverSheetSurface from '@/components/office/UniverSheetSurface.vue'
+import UniverDocSurface from '@/components/office/UniverDocSurface.vue'
+import MsOfficePreviewSurface from '@/components/office/MsOfficePreviewSurface.vue'
 import PreviewSurface from '@/components/office/PreviewSurface.vue'
 import CodeSurface from '@/components/office/CodeSurface.vue'
 import DiffSurface from '@/components/office/DiffSurface.vue'
@@ -16,7 +19,6 @@ import OfficeAiToolbar from '@/components/office/OfficeAiToolbar.vue'
 import { confirm, toast } from '@/utils/feedback'
 import type { OfficeEditScope } from '@/utils/office-route'
 import { exportMarkdownPdf } from '@/utils/md-export-pdf'
-import { siblingSlidesMarkdownPath } from '@/utils/slides-render'
 import type { ElementAttachment } from '@/types/element-attachment'
 import type { CodeSelectionAttachment } from '@/types/code-attachment'
 import {
@@ -44,9 +46,9 @@ const { pending: pendingAiReview, afterTurn: aiReviewAfterTurn } = storeToRefs(a
 const lastFinishedTurnId = ref<string | null>(null)
 const bannerBusy = ref(false)
 
-const docRef = ref<InstanceType<typeof DocSurface> | null>(null)
-const slidesRef = ref<InstanceType<typeof SlidesSurface> | null>(null)
-const sheetRef = ref<InstanceType<typeof SheetSurface> | null>(null)
+const docRef = ref<InstanceType<typeof DocSurface> | InstanceType<typeof UniverDocSurface> | null>(null)
+const slidesRef = ref<InstanceType<typeof UniverSlidesSurface> | null>(null)
+const sheetRef = ref<InstanceType<typeof SheetSurface> | InstanceType<typeof UniverSheetSurface> | null>(null)
 const codeRef = ref<InstanceType<typeof CodeSurface> | null>(null)
 const aiToolbarRef = ref<InstanceType<typeof OfficeAiToolbar> | null>(null)
 const dirty = ref(false)
@@ -63,15 +65,21 @@ const turnRunning = computed(() => {
 const isPreview = computed(() => stage.value?.kind === 'preview')
 const isDiff = computed(() => stage.value?.kind === 'diff')
 const isCodeKind = computed(() => stage.value?.kind === 'code')
-/** Office AI toolbar kinds (not code/diff). */
+const stageEngine = computed(() => stage.value?.engine)
+const isMsOffice = computed(() => stageEngine.value === 'ms-office')
+/** Office AI toolbar kinds (not code/diff/ms-office). */
 const editableKind = computed(() => {
+  if (isMsOffice.value) return null
   const k = stage.value?.kind
   if (k === 'doc' || k === 'slides' || k === 'sheet') return k
   return null
 })
 const isEditableKind = computed(() => editableKind.value != null)
 /** Kinds that support view/edit chrome + save. */
-const canEditSave = computed(() => isEditableKind.value || isCodeKind.value)
+const canEditSave = computed(() => {
+  if (isMsOffice.value) return false
+  return isEditableKind.value || isCodeKind.value
+})
 
 const activeSurface = computed(() => {
   if (!stage.value) return null
@@ -126,6 +134,7 @@ async function onDocAiEdit(payload: {
     instruction: payload.instruction,
     startLine: payload.startLine,
     endLine: payload.endLine,
+    engine: stage.value.engine,
   })
   emit('attachOfficeEdit', att)
   toast.success(t('office.officeAttached'))
@@ -207,35 +216,11 @@ function close() {
 
 async function setMode(mode: 'view' | 'edit' | 'present') {
   if (!stage.value) return
-
-  // Slides Present: programmatically sync md → sibling html (no AI turn).
-  if (mode === 'present' && stage.value.kind === 'slides') {
-    if (/\.md$|\.markdown$/i.test(stage.value.path)) {
-      const saved = await ensureSaved()
-      if (!saved) return
-      await slidesRef.value?.presentFromMarkdown?.()
-      return
-    }
-    workspaceUi.setStageMode('present')
+  if (isMsOffice.value && mode === 'edit') {
+    toast.warning(t('office.msConvertBeforeEdit'))
     return
   }
-
-  // From playable HTML back to Markdown source for edit/view.
-  if (
-    (mode === 'edit' || mode === 'view') &&
-    stage.value.kind === 'slides' &&
-    /\.html?$/i.test(stage.value.path)
-  ) {
-    const mdPath = siblingSlidesMarkdownPath(stage.value.path)
-    workspaceUi.setStagePath(mdPath, mode)
-    return
-  }
-
   workspaceUi.setStageMode(mode)
-}
-
-function setKind(kind: 'doc' | 'slides' | 'sheet') {
-  workspaceUi.setStageKind(kind)
 }
 
 function onPreviewUrlChange(_display: string, loadUrl: string) {
@@ -288,6 +273,7 @@ function viewAiDiff() {
     kind: 'diff',
     path: p.path,
     mode: 'view',
+    engine: 'diff',
     diffSource: 'ai',
     sessionId: p.sessionId,
     turnId: p.turnId,
@@ -350,28 +336,12 @@ defineExpose({ save })
             {{ t('office.edit') }}
           </button>
           <button
-            v-if="stage.kind === 'slides'"
+            v-if="stage.kind === 'slides' && stageEngine === 'univer-slides'"
             class="document-stage__chip"
             :class="{ 'is-active': stage.mode === 'present' }"
             @click="setMode('present')"
           >
             {{ t('office.present') }}
-          </button>
-        </div>
-        <div v-if="stage.path.match(/\.md$/i) && !isPreview && !isDiff" class="document-stage__modes">
-          <button
-            class="document-stage__chip"
-            :class="{ 'is-active': stage.kind === 'doc' }"
-            @click="setKind('doc')"
-          >
-            Doc
-          </button>
-          <button
-            class="document-stage__chip"
-            :class="{ 'is-active': stage.kind === 'slides' }"
-            @click="setKind('slides')"
-          >
-            Slides
           </button>
         </div>
         <button
@@ -424,6 +394,7 @@ defineExpose({ save })
         ref="aiToolbarRef"
         :path="stage.path"
         :kind="editableKind"
+        :engine="stageEngine"
         :page-index="editableKind === 'slides' ? pageIndex : undefined"
         :get-selection-markdown="getSelectionMarkdown"
         :get-selection-lines="getSelectionLines"
@@ -435,7 +406,7 @@ defineExpose({ save })
     </div>
 
     <DocSurface
-      v-if="stage.kind === 'doc'"
+      v-if="stage.kind === 'doc' && stageEngine === 'md'"
       ref="docRef"
       :project-id="projectId"
       :path="stage.path"
@@ -446,8 +417,19 @@ defineExpose({ save })
       @scope="editScope = $event"
       @ai-edit="onDocAiEdit"
     />
-    <SlidesSurface
-      v-else-if="stage.kind === 'slides'"
+    <UniverDocSurface
+      v-else-if="stage.kind === 'doc' && stageEngine === 'univer-doc'"
+      ref="docRef"
+      :project-id="projectId"
+      :path="stage.path"
+      :mode="stage.mode"
+      :reload-token="stageReloadToken"
+      :turn-running="turnRunning"
+      @dirty="dirty = $event"
+      @scope="editScope = $event"
+    />
+    <UniverSlidesSurface
+      v-else-if="stage.kind === 'slides' && stageEngine === 'univer-slides'"
       ref="slidesRef"
       :project-id="projectId"
       :path="stage.path"
@@ -458,7 +440,7 @@ defineExpose({ save })
       @update-page-index="pageIndex = $event"
     />
     <SheetSurface
-      v-else-if="stage.kind === 'sheet'"
+      v-else-if="stage.kind === 'sheet' && stageEngine === 'csv'"
       ref="sheetRef"
       :project-id="projectId"
       :path="stage.path"
@@ -466,6 +448,23 @@ defineExpose({ save })
       :reload-token="stageReloadToken"
       :turn-running="turnRunning"
       @dirty="dirty = $event"
+    />
+    <UniverSheetSurface
+      v-else-if="stage.kind === 'sheet' && stageEngine === 'univer-sheet'"
+      ref="sheetRef"
+      :project-id="projectId"
+      :path="stage.path"
+      :mode="stage.mode"
+      :reload-token="stageReloadToken"
+      :turn-running="turnRunning"
+      @dirty="dirty = $event"
+    />
+    <MsOfficePreviewSurface
+      v-else-if="stageEngine === 'ms-office'"
+      :project-id="projectId"
+      :path="stage.path"
+      :mode="stage.mode"
+      :reload-token="stageReloadToken"
     />
     <CodeSurface
       v-else-if="stage.kind === 'code'"

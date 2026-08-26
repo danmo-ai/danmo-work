@@ -685,14 +685,21 @@ Agent 自动化浏览器（Settings / `web_fetch` 渲染 + 内置 `browser` 专�
 
 Files 树点击 → `routeOfficeFile`（`frontend/src/utils/office-route.ts`）：
 
-| Kind | 真相源（SoT） | Surface | 默认模式 |
-|------|---------------|---------|----------|
-| `doc` | GFM `.md` | TipTap（编辑会话 MD ↔ HTML） | edit |
-| `slides` | Markdown SoT（Marp 兼容子集：`type: slides` + `---` 分页）；`*-slides.html` 为 Stage **程序**派生物 | 编辑 Markdown；Present 时脏检查同步 HTML | edit 或 present |
-| `sheet` | `.csv` / `.danmo-sheet.json` | 网格编辑 | edit |
-| `code` | 常见源码 / 配置文本 | CodeMirror 6（语法高亮 + 行号 + 读写）；选区可批注到 Composer（含行号） | view |
-| `diff` | `git diff` / 未跟踪合成 patch | DiffSurface（unified）；可「打开文件」 | view |
-| `preview` | 通用 `.html`、图片、外链等 | iframe / 图片预览；URL 栏 + Design mode | view |
+| Kind | engine | 真相源（SoT） | Surface | 默认模式 |
+|------|--------|---------------|---------|----------|
+| `doc` | `md` | GFM `.md` | TipTap | view（可切 edit） |
+| `doc` | `univer-doc` | `.udoc.json`（`IDocumentData` 信封） | Univer Docs | edit |
+| `doc` | `ms-office` | `.docx` | 只读预览；转 `.udoc.json` 后可编 | **view** |
+| `slides` | `univer-slides` | `.uslides.json`（`ISlideData` 信封） | Univer Slides Stage | edit |
+| `slides` | `ms-office` | `.pptx` | 只读预览；转 `.uslides.json` 后可编 | **view** |
+| `sheet` | `csv` | `.csv` | 自研网格 | edit |
+| `sheet` | `univer-sheet` | `.usheet.json`（`IWorkbookData` 信封） | Univer Sheets | edit |
+| `sheet` | `ms-office` | `.xlsx` | 只读预览；转 `.usheet.json` 后可编 | **view** |
+| `code` | `code` | 常见源码 / 配置文本 | CodeMirror 6 | view |
+| `diff` | `diff` | `git diff` / AI snapshot | DiffSurface | view |
+| `preview` | `preview` | `.html`、图片、外链等 | iframe / 图片预览 | view |
+
+**已移除：** Marp / `*-slides.md` 幻灯片 SoT；`.danmo-sheet.json`（打开时一次性迁到 `.usheet.json`）。
 
 布局：`stage` 时 Stream | Stage | 右侧；`immersive`（Present / 沉浸）时仅 Stage。默认打开文件不隐藏 Stream。
 
@@ -703,7 +710,7 @@ Changes 面板点击变更文件 → 打开 `diff` Stage（`GET /projects/:id/gi
 ```
 Stage 工具栏（润色 / 修改 / …）
   → 若 dirty：先 auto-save（失败则确认）——避免 Agent 读到旧盘、reload 冲掉未保存编辑
-  → buildOfficeEditPrompt → [office-edit] 块（action / path / kind / scope / selection / review）
+  → buildOfficeEditPrompt → [office-edit] 块（action / path / kind / engine / scope / selection / review）
   → POST /sessions/:id/turns（可选 snapshotPaths）
   → **pre-turn snapshot**（office-edit path + Stage 路径）
   → Document Agent + document-writing / playable-slides / sheet-writing skills
@@ -718,6 +725,8 @@ Stage 工具栏（润色 / 修改 / …）
 | `slide` | 当前幻灯片页 |
 | `sheet` | 整表或表格选区（`range: A1:B3`） |
 
+`engine: ms-office` 禁止写回 OOXML；须先「转为 Univer IR」。
+
 保存 API：`PUT /api/v1/projects/:id/files/content`。
 
 **人机审阅（AI Diff）**：回合前快照存于 `sessions/<sid>/snapshots/<turnId>/`；`GET .../ai-review/diff` 对比快照与当前盘；Revert 写回快照；Diff Stage 支持按 hunk 接受。
@@ -726,7 +735,7 @@ Stage 工具栏（润色 / 修改 / …）
 
 ### 13.3 非目标（本阶段）
 
-OOXML 作 SoT / OfficeCLI 导出、独立 Office AI 端点、Yjs 协同、LSP / IDE 壳、完整 Git 客户端（commit/push/conflict UI）。
+不以 OOXML 为可编辑 SoT（仅只读 + 转 IR）；Univer Pro 依赖；`.univer` SQLite 多 Unit 容器；Yjs 协同；LSP / IDE 壳；完整 Git 客户端（commit/push/conflict UI）；继续维护 Marp / `.danmo-sheet.json`。
 
 ---
 
