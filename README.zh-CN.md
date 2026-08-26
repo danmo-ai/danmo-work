@@ -13,7 +13,7 @@
 - **Turn Log 就是状态。** 每次工具调用写入 SQLite（`history.db`）。进程崩了能恢复、回合能回放、改工具结果、隔几天接着跑——JSONL 仅作导出。
 - **入口随你挑。** Web · 桌面（Tauri）· CLI · TUI · 飞书 / QQ / 微信 / 企微——同一套引擎，工具永远跑在你自己的机器上。
 
-[![产品截图轮播 — 多 Agent Plan、Trajectory、Document Stage、预览标注、专家、技能库、沙箱、IM](docs/screenshots/carousel.gif)](docs/screenshots/carousel.html?lang=zh)
+[![产品截图轮播 — 多 Agent Plan、Trajectory、File Stage、网页标注、专家、技能库、沙箱、IM](docs/screenshots/carousel.gif)](docs/screenshots/carousel.html?lang=zh)
 
 [交互轮播（带说明）](docs/screenshots/carousel.html?lang=zh) · [架构演示](docs/demo/product-tour.html?lang=zh) · [Office 协作演示](docs/demo/office-coedit-tour.html?lang=zh&tour=1)
 
@@ -26,7 +26,7 @@
 | | |
 |--|--|
 | **多 Agent 团队** | **Team** 主专家按需委派内置专家——文档、实现、调研、评审、GitHub、网文……各自在独立 sub-turn 里干活，主链上下文保持精简 |
-| **Document Stage + AI Diff** | 文档 / 幻灯片 / 表格 / 代码 / Diff / 预览同台——回合前快照 → 审阅 hunk → 保留 / 回滚 / 接受；Markdown 永远是真相源 |
+| **File Stage + AI Diff** | 文档 / 幻灯片 / 表格 / 源码 / 网页 / 媒体 / Diff 同台——`routeProjectFile` 路由；回合前快照 → 审阅 hunk → 保留 / 回滚 / 接受 |
 | **随时向你请示** | `ask_user` 带选项、带表单；危险 Shell 或外部 MCP 执行前走审批门禁——桌面与 IM 同一套流程 |
 | **计划会跟着变** | 计划就是 `todowrite`：边做边更新、验证后才打勾；话题跑偏了就地重写，不会写一次就落灰 |
 | **记忆、表与知识库** | `memory_*` 按 user / project / agent 三级作用域；无 schema 的 `table_*` 流水在 `store.db`；Markdown 知识库按章节 FTS 检索 |
@@ -53,7 +53,7 @@
 | 专家 | 职责 |
 |------|------|
 | **Team**（主） | 默认可协作；适合跨文件、多步骤任务 |
-| **Document** | 报告、幻灯片、表格（Document Stage 的 Markdown 源） |
+| **Document** | 报告、幻灯片、表格（File Stage 表面） |
 | **Comms** | 邮件、消息、通知的润色 |
 | **Implementer** | 按规格改代码（TDD / debugging 技能） |
 | **Explorer** | 只读摸清代码库 |
@@ -69,9 +69,9 @@ Composer 里 `@` 一下，或者干脆说一句「让文档专家写份报告」
 
 专家之外，同一个库里还装着**技能**（工作流：document-writing、playable-slides、TDD、deep-research……）和**连接器**（MCP 集成）。可以从市场装，可以按 Agent 绑，也可以把技能丢进 `~/.danmo-work/skills/` 或 `~/.agents/skills/`。
 
-### Document Stage
+### File Stage
 
-三栏布局：项目 · Agent 执行流 · 右侧面板（计划 / 文件 / 记忆 / 表存储 / Git / 终端 / 轨迹），正中间是 **Document Stage**，工具栏跟着文件类型走（文档 / 幻灯片 / 表格 / 代码 / Diff / 预览）。**预览**模式下还能点选 DOM 元素做标注，发回 Composer，模型直接拿到精确的 HTML/CSS 上下文。
+三栏布局：项目 · Agent 执行流 · 右侧面板（计划 / 文件 / 记忆 / 表存储 / Git / 终端 / 轨迹），正中间是 **File Stage**，由 `routeProjectFile` 按文件路由：`.md` / `.csv` 自研编辑；`.udoc.json` / `.uslides.json` / `.usheet.json` 为 Univer IR 可编辑；`.docx` / `.pptx` / `.xlsx` 只读，转为 IR 后可编；源码进 CodeMirror；HTML / 图片分别为 **web** / **media**。网页上还能点选 DOM 元素做标注，发回 Composer。
 
 改 Office 文件 = 一次普通 Agent 回合 + 一道审阅：
 
@@ -151,7 +151,7 @@ mkdir -p ~/.danmo-work && cp config.example.yaml ~/.danmo-work/config.yaml
 
 | 文档 | 说明 |
 |------|------|
-| [docs/core-design.md](docs/core-design.md) | Agent 架构、工具系统、通道、Document Stage |
+| [docs/core-design.md](docs/core-design.md) | Agent 架构、工具系统、通道、File Stage |
 | [docs/experts.md](docs/experts.md) | 专家使用说明与内置清单 |
 | [docs/remote/README.md](docs/remote/README.md) | Remote Hub 配对与隧道协议 |
 | [docs/screenshots/README.md](docs/screenshots/README.md) | 产品截图轮播（README 头图） |

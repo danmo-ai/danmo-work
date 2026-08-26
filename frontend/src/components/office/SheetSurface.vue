@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
-import type { OfficeEditScope } from '@/utils/office-route'
+import type { FileEditScope } from '@/utils/file-route'
 
 interface SheetTab {
   name: string
@@ -38,7 +38,6 @@ const selectedCell = ref<{ r: number; c: number } | null>(null)
 /** Inclusive selection range (anchor → focus). When null, falls back to whole sheet for AI. */
 const selectionRange = ref<{ r0: number; c0: number; r1: number; c1: number } | null>(null)
 
-const isJson = () => props.path.toLowerCase().endsWith('.danmo-sheet.json')
 const readonly = computed(() => props.mode === 'view' || !!props.turnRunning)
 
 const activeSheet = computed(() => sheets.value[sheetIndex.value] || sheets.value[0])
@@ -183,22 +182,9 @@ async function load(opts?: { resetScroll?: boolean }) {
     const fc = await fetchJSON<{ content: string }>(
       `/projects/${props.projectId}/files/content?path=${encodeURIComponent(props.path)}`,
     )
-    if (isJson()) {
-      const data = JSON.parse(fc.content || '{"sheets":[{"name":"Sheet1","rows":[[""]]}]}') as {
-        sheets?: Array<{ name?: string; rows?: string[][]; colWidths?: number[] }>
-      }
-      const parsed = (data.sheets?.length ? data.sheets : [{ name: 'Sheet1', rows: [['']] }]).map((s, i) => ({
-        name: s.name || `Sheet${i + 1}`,
-        rows: s.rows?.length ? s.rows : [['']],
-        colWidths: s.colWidths,
-      }))
-      sheets.value = parsed
-      sheetIndex.value = Math.min(sheetIndex.value, parsed.length - 1)
-    } else {
-      const table = parseCsv(fc.content || '')
-      sheets.value = [{ name: 'Sheet1', rows: table }]
-      sheetIndex.value = 0
-    }
+    const table = parseCsv(fc.content || '')
+    sheets.value = [{ name: 'Sheet1', rows: table }]
+    sheetIndex.value = 0
     dirty.value = false
     emit('dirty', false)
     selectedCell.value = null
@@ -218,19 +204,7 @@ async function save(opts?: { quiet?: boolean }) {
   if (!props.projectId) return
   saving.value = true
   try {
-    const content = isJson()
-      ? JSON.stringify(
-          {
-            sheets: sheets.value.map((s) => ({
-              name: s.name,
-              rows: s.rows,
-              colWidths: s.colWidths,
-            })),
-          },
-          null,
-          2,
-        ) + '\n'
-      : toCsv(rows.value)
+    const content = toCsv(rows.value)
     await fetchJSON(`/projects/${props.projectId}/files/content`, {
       method: 'PUT',
       body: JSON.stringify({ path: props.path, content }),
@@ -310,20 +284,7 @@ function onColResize(c: number, e: MouseEvent) {
   window.addEventListener('mouseup', onUp)
 }
 
-function addSheet() {
-  if (!isJson() || readonly.value) return
-  const name = `Sheet${sheets.value.length + 1}`
-  sheets.value = [...sheets.value, { name, rows: [['']], colWidths: [120] }]
-  sheetIndex.value = sheets.value.length - 1
-  markDirty()
-}
-
-function selectSheet(i: number) {
-  sheetIndex.value = i
-  selectedCell.value = null
-}
-
-function getEditScope(): OfficeEditScope {
+function getEditScope(): FileEditScope {
   return 'sheet'
 }
 
@@ -401,25 +362,9 @@ defineExpose({ save, getSelectionMarkdown, getEditScope, dirty, saving, loading 
         >
           {{ t('office.fillDown') }}
         </button>
-        <button v-if="isJson()" class="sheet-surface__btn" :disabled="readonly" @click="addSheet">
-          + {{ t('office.sheetTab') }}
-        </button>
         <span v-if="selectionRange" class="sheet-surface__range">
           {{ a1(selectionRange.r0, selectionRange.c0) }}:{{ a1(selectionRange.r1, selectionRange.c1) }}
         </span>
-      </div>
-
-      <div v-if="isJson() && sheets.length > 1" class="sheet-surface__tabs">
-        <button
-          v-for="(s, i) in sheets"
-          :key="i"
-          type="button"
-          class="sheet-surface__tab"
-          :class="{ 'is-active': i === sheetIndex }"
-          @click="selectSheet(i)"
-        >
-          {{ s.name }}
-        </button>
       </div>
 
       <div ref="gridRef" class="sheet-surface__grid-wrap">

@@ -2,9 +2,10 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  type OfficeEditScope,
-  type OfficeKind,
-} from '@/utils/office-route'
+  type EditableFileKind,
+  type FileEditScope,
+  type FileEngine,
+} from '@/utils/file-route'
 import {
   createOfficeEditAttachment,
   type OfficeEditAttachment,
@@ -12,16 +13,15 @@ import {
 } from '@/types/office-edit-attachment'
 import { toast } from '@/utils/feedback'
 
-type EditableOfficeKind = Exclude<OfficeKind, 'preview' | 'code' | 'diff'>
-
 const props = defineProps<{
   path: string
-  kind: EditableOfficeKind
+  kind: EditableFileKind
+  engine?: FileEngine
   getSelectionMarkdown: () => string
   getSelectionLines?: () => { startLine: number; endLine: number } | null
-  getEditScope: () => OfficeEditScope
+  getEditScope: () => FileEditScope
   ensureSaved: () => Promise<boolean>
-  scope: OfficeEditScope
+  scope: FileEditScope
   pageIndex?: number
   disabled?: boolean
 }>()
@@ -46,7 +46,7 @@ async function run(
   opts?: {
     instruction?: string
     selection?: string
-    scope?: OfficeEditScope
+    scope?: FileEditScope
     startLine?: number
     endLine?: number
   },
@@ -99,6 +99,7 @@ async function run(
       pageIndex: props.pageIndex,
       startLine: lineRange?.startLine,
       endLine: lineRange?.endLine,
+      engine: props.engine,
     })
 
     emit('attachOfficeEdit', att)

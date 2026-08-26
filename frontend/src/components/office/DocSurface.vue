@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
 import { useI18n } from 'vue-i18n'
-import type { OfficeEditScope } from '@/utils/office-route'
+import type { FileEditScope } from '@/utils/file-route'
 import MarkdownRichEditor from '@/components/office/MarkdownRichEditor.vue'
 
 const props = defineProps<{
@@ -17,7 +17,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   dirty: [value: boolean]
   saved: []
-  scope: [value: OfficeEditScope]
+  scope: [value: FileEditScope]
   aiEdit: [
     payload: {
       action: 'polish' | 'continue' | 'modify'
@@ -105,7 +105,7 @@ function hasTextSelection(): boolean {
   return !(editorRef.value?.isSelectionEmpty() ?? true)
 }
 
-function getEditScope(): OfficeEditScope {
+function getEditScope(): FileEditScope {
   return hasTextSelection() ? 'selection' : 'document'
 }
 

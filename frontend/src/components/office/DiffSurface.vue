@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '@/api/client'
 import { applyAiReviewHunks, fetchAiReviewDiff, revertAiReviewFile } from '@/api/aiReview'
 import { toast } from '@/utils/feedback'
-import { routeOfficeFile } from '@/utils/office-route'
+import { routeProjectFile } from '@/utils/file-route'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import { useStageAiReviewStore } from '@/stores/stageAiReview'
 import { apiBaseUrl } from '@/utils/desktop'
@@ -93,8 +93,8 @@ function openFile() {
     toast.warning(t('office.diffFileMissing'))
     return
   }
-  const routed = routeOfficeFile(props.path)
-  if (routed.kind === 'preview') {
+  const routed = routeProjectFile(props.path)
+  if (routed.kind === 'web' || routed.kind === 'media') {
     const url = `${apiBaseUrl()}/api/v1/projects/${props.projectId}/raw/${encodeURIComponent(props.path)}`
     workspaceUi.openStage({ ...routed, url })
     return

@@ -19,16 +19,8 @@ export default defineConfig({
     __ROUTER_BASE__: JSON.stringify(isTauriBuild ? '/' : '/app/'),
     __TAURI_BUILD__: JSON.stringify(isTauriBuild),
   },
-  resolve: {
-    alias: {
-      '@': resolve(__dirname, 'src'),
-      // html2pdf.js → html2canvas; stock html2canvas rejects CSS color()/oklch.
-      html2canvas: 'html2canvas-pro',
-    },
-    dedupe: ['vue'],
-  },
   optimizeDeps: {
-    // Linked file: packages — exclude so Vite loads fresh dist (avoids stale Dq* exports).
+    // Linked file — packages: exclude so Vite loads fresh dist (avoids stale Dq* exports).
     include: [
       'reka-ui',
       'codemirror',
@@ -37,8 +29,21 @@ export default defineConfig({
       '@codemirror/state',
       'html2canvas-pro',
       'html2pdf.js',
+      'react',
+      'react-dom',
+      'rxjs',
+      'xlsx',
+      'jszip',
     ],
     exclude: ['@danqing/dq-tokens', '@danqing/dq-ui', '@danqing/dq-shell'],
+  },
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src'),
+      // html2pdf.js → html2canvas; stock html2canvas rejects CSS color()/oklch.
+      html2canvas: 'html2canvas-pro',
+    },
+    dedupe: ['vue', 'react', 'react-dom'],
   },
   server: {
     port: Number(process.env.DQ_FRONTEND_PORT || 5801),

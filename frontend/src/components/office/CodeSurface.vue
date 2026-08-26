@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
-import { languageFromPath } from '@/utils/office-route'
+import { languageFromPath } from '@/utils/file-route'
 import {
   createCodeSelectionAttachment,
   selectionLineRange,

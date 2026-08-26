@@ -195,7 +195,7 @@ Danmo-Work/
 │   │   └── config/
 │   ├── store/              # SQLite + turnlog
 │   └── paths/              # 用户数据目录
-├── frontend/               # Vue 3 + Vite（含 Document Stage / office surfaces）
+├── frontend/               # Vue 3 + Vite（含 File Stage / file-route surfaces）
 ├── desktop/                # Tauri 薄壳
 ├── scripts/
 ├── docs/
@@ -675,24 +675,34 @@ Zone C — Scratch:  当前 Turn user/tool + 调用末尾 ephemeral user（turn-
 
 ---
 
-## 13. Document Stage（统一画布）
+## 13. File Stage（统一画布）
 
-中间画布为唯一内容视图 **Document Stage**：按文件类型切换 toolbar + surface（文档 / 幻灯片 / 表格 / 源码 / 差异 / 预览）。AI 改稿（doc/slides/sheet）走**普通 session turn**，不另开 `/office/ai`。右侧不再有独立 Browser tab。
+中间画布为唯一内容视图 **File Stage**：按**文件路由**切换 toolbar + surface（文档 / 幻灯片 / 表格 / 源码 / 网页 / 媒体 / 差异）。AI 改稿（doc/slides/sheet）走**普通 session turn**，不另开 `/office/ai`。右侧不再有独立 Browser tab。
 
 Agent 自动化浏览器（Settings / `web_fetch` 渲染 + 内置 `browser` 专家的 sticky `browser_*`；CDP attach 或本地 launch）与此 UI 无关，保持独立。
 
-### 13.1 路由与格式
+### 13.1 文件路由与格式
 
-Files 树点击 → `routeOfficeFile`（`frontend/src/utils/office-route.ts`）：
+Files 树点击 → `routeProjectFile`（`frontend/src/utils/file-route.ts`）：
 
-| Kind | 真相源（SoT） | Surface | 默认模式 |
-|------|---------------|---------|----------|
-| `doc` | GFM `.md` | TipTap（编辑会话 MD ↔ HTML） | edit |
-| `slides` | Markdown SoT（Marp 兼容子集：`type: slides` + `---` 分页）；`*-slides.html` 为 Stage **程序**派生物 | 编辑 Markdown；Present 时脏检查同步 HTML | edit 或 present |
-| `sheet` | `.csv` / `.danmo-sheet.json` | 网格编辑 | edit |
-| `code` | 常见源码 / 配置文本 | CodeMirror 6（语法高亮 + 行号 + 读写）；选区可批注到 Composer（含行号） | view |
-| `diff` | `git diff` / 未跟踪合成 patch | DiffSurface（unified）；可「打开文件」 | view |
-| `preview` | 通用 `.html`、图片、外链等 | iframe / 图片预览；URL 栏 + Design mode | view |
+| Kind | engine | 真相源（SoT） | Surface | 默认模式 |
+|------|--------|---------------|---------|----------|
+| `doc` | `md` | GFM `.md` | TipTap | view（可切 edit） |
+| `doc` | `univer-doc` | `.udoc.json`（`IDocumentData` 信封） | Univer Docs | edit |
+| `doc` | `ms-office` | `.docx` | 只读预览；转 `.udoc.json` 后可编 | **view** |
+| `slides` | `univer-slides` | `.uslides.json`（`ISlideData` 信封） | Univer Slides | edit |
+| `slides` | `ms-office` | `.pptx` | 只读预览；转 `.uslides.json` 后可编 | **view** |
+| `sheet` | `csv` | `.csv` | 自研网格 | edit |
+| `sheet` | `univer-sheet` | `.usheet.json`（`IWorkbookData` 信封） | Univer Sheets | edit |
+| `sheet` | `ms-office` | `.xlsx` | 只读预览；转 `.usheet.json` 后可编 | **view** |
+| `code` | `codemirror` | 常见源码 / 配置文本 | CodeMirror 6 | view |
+| `web` | `iframe` | `.html` / 外链 | WebSurface（iframe + 标注） | view |
+| `media` | `image` | 图片等 | WebSurface（img） | view |
+| `diff` | `diff` | `git diff` / AI snapshot | DiffSurface | view |
+
+**名词：** `FileKind`（表面族）· `FileEngine`（持久化/编辑后端）· `FileMode`（view/edit/present）· `FileRoute`（`routeProjectFile` 返回值）。源码与网页是一等路由，与 Office IR 同级。
+
+**已移除：** Marp / `*-slides.md` 幻灯片 SoT；`.danmo-sheet.json`（打开时一次性迁到 `.usheet.json`）；旧 kind `preview`（拆为 `web` + `media`）。
 
 布局：`stage` 时 Stream | Stage | 右侧；`immersive`（Present / 沉浸）时仅 Stage。默认打开文件不隐藏 Stream。
 
@@ -703,7 +713,7 @@ Changes 面板点击变更文件 → 打开 `diff` Stage（`GET /projects/:id/gi
 ```
 Stage 工具栏（润色 / 修改 / …）
   → 若 dirty：先 auto-save（失败则确认）——避免 Agent 读到旧盘、reload 冲掉未保存编辑
-  → buildOfficeEditPrompt → [office-edit] 块（action / path / kind / scope / selection / review）
+  → buildOfficeEditPrompt → [office-edit] 块（action / path / kind / engine / scope / selection / review）
   → POST /sessions/:id/turns（可选 snapshotPaths）
   → **pre-turn snapshot**（office-edit path + Stage 路径）
   → Document Agent + document-writing / playable-slides / sheet-writing skills
@@ -718,6 +728,8 @@ Stage 工具栏（润色 / 修改 / …）
 | `slide` | 当前幻灯片页 |
 | `sheet` | 整表或表格选区（`range: A1:B3`） |
 
+`engine: ms-office` 禁止写回 OOXML；须先「转为 Univer IR」。
+
 保存 API：`PUT /api/v1/projects/:id/files/content`。
 
 **人机审阅（AI Diff）**：回合前快照存于 `sessions/<sid>/snapshots/<turnId>/`；`GET .../ai-review/diff` 对比快照与当前盘；Revert 写回快照；Diff Stage 支持按 hunk 接受。
@@ -726,13 +738,13 @@ Stage 工具栏（润色 / 修改 / …）
 
 ### 13.3 非目标（本阶段）
 
-OOXML 作 SoT / OfficeCLI 导出、独立 Office AI 端点、Yjs 协同、LSP / IDE 壳、完整 Git 客户端（commit/push/conflict UI）。
+不以 OOXML 为可编辑 SoT（仅只读 + 转 IR）；Univer Pro 依赖；`.univer` SQLite 多 Unit 容器；Yjs 协同；LSP / IDE 壳；完整 Git 客户端（commit/push/conflict UI）；继续维护 Marp / `.danmo-sheet.json`。
 
 ---
 
 ## 14. 产品形态与价值
 
-工作台：侧栏 · Stream · 右侧 Tab（计划 / 文件 / **记忆** / 变更 / 终端）· 中心 **Document Stage**（按 kind 换 toolbar）。记忆 Tab 展示当前可见作用域下的持久记忆条目。IM 通道是同一 Agent Loop 的远端输入面。
+工作台：侧栏 · Stream · 右侧 Tab（计划 / 文件 / **记忆** / 变更 / 终端）· 中心 **File Stage**（按 kind 换 toolbar）。记忆 Tab 展示当前可见作用域下的持久记忆条目。IM 通道是同一 Agent Loop 的远端输入面。
 
 | 层级 | 价值 |
 |------|------|
@@ -765,7 +777,7 @@ OOXML 作 SoT / OfficeCLI 导出、独立 Office AI 端点、Yjs 协同、LSP / 
 | 分层架构 | Ports & Adapters | service → port ← runtime / store |
 | 显式 Memory Tool | Cursor / Claude Memory | `memory_update` / `memory_read` + 三级作用域 |
 | IM 出站长连接 | 飞书 / 企微 / QQ Bot | ChannelEndpoint + Capabilities 降级 |
-| 文档 SoT = Markdown | 常见 MD-first 编辑器 | Document Stage；AI 走 session turn |
+| 文档 SoT = Markdown | 常见 MD-first 编辑器 | File Stage；AI 走 session turn |
 
 ---
 
@@ -784,8 +796,8 @@ OOXML 作 SoT / OfficeCLI 导出、独立 Office AI 端点、Yjs 协同、LSP / 
 | **人机关系** | 人下指令，机器执行 | 人进入思维流，共同迭代 |
 | **调试** | 外部干预，改代码重跑 | 原生能力，改数据 / 审批继续 |
 | **信任** | 预设规则限制 | 完全透明，随时纠正 |
-| **入口** | 多为单一 Chat / IDE | Web · 桌面 · CLI · TUI · IM 通道 · Document Stage |
+| **入口** | 多为单一 Chat / IDE | Web · 桌面 · CLI · TUI · IM 通道 · File Stage |
 
 ---
 
-*架构版本：v2.2（Session / Turn / Tool + Memory + ChannelEndpoint + Document Stage + tool-output hard cap）*
+*架构版本：v2.3（Session / Turn / Tool + Memory + ChannelEndpoint + File Stage / file-route + tool-output hard cap）*

@@ -53,7 +53,7 @@ When the user message starts with `[office-edit]` and `kind: doc`:
 
 ## When not to use
 
-- Slide decks → `playable-slides`
+- Slide decks → `playable-slides` (`.uslides.json` Univer IR)
 - Emails / chat polish → Comms agent persona
 - Source code / config → Implementer
 

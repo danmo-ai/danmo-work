@@ -303,25 +303,25 @@ defineExpose({
 </script>
 
 <template>
-  <div class="preview-surface">
-    <p v-if="selectingElement" class="preview-surface__hint">{{ drawingRegion ? t('sessions.designModeHintDraw') : t('sessions.designModeHint') }}</p>
-    <div class="preview-surface__bar">
+  <div class="web-surface">
+    <p v-if="selectingElement" class="web-surface__hint">{{ drawingRegion ? t('sessions.designModeHintDraw') : t('sessions.designModeHint') }}</p>
+    <div class="web-surface__bar">
       <input
         v-model="urlInput"
-        class="preview-surface__input"
+        class="web-surface__input"
         :placeholder="t('office.previewUrlPlaceholder')"
         @keydown.enter="navigate"
       />
-      <button class="preview-surface__btn" :title="t('office.previewRefresh')" @click="refresh">
+      <button class="web-surface__btn" :title="t('office.previewRefresh')" @click="refresh">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
       </button>
-      <button class="preview-surface__btn" :title="t('office.previewGo')" @click="navigate">
+      <button class="web-surface__btn" :title="t('office.previewGo')" @click="navigate">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="9 18 15 12 9 6"/>
         </svg>
       </button>
       <button
-        class="preview-surface__btn"
+        class="web-surface__btn"
         :class="{ 'is-active': selectingElement && !drawingRegion }"
         :title="selectingElement && !drawingRegion ? t('sessions.designModeOn') : t('sessions.designModeOff')"
         @click="selectingElement && !drawingRegion ? stopElementSelect() : startElementSelect()"
@@ -329,7 +329,7 @@ defineExpose({
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
       </button>
       <button
-        class="preview-surface__btn"
+        class="web-surface__btn"
         :class="{ 'is-active': drawingRegion }"
         :title="t('sessions.designModeDraw')"
         @click="drawingRegion ? stopElementSelect() : startDrawRegion()"
@@ -337,27 +337,27 @@ defineExpose({
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
       </button>
       <button
-        class="preview-surface__btn preview-surface__btn--console"
+        class="web-surface__btn web-surface__btn--console"
         :title="t('sessions.designModeConsole')"
         @click="requestConsoleDump"
       >
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-        <span v-if="consoleCount" class="preview-surface__badge">{{ consoleCount > 9 ? '9+' : consoleCount }}</span>
+        <span v-if="consoleCount" class="web-surface__badge">{{ consoleCount > 9 ? '9+' : consoleCount }}</span>
       </button>
-      <button class="preview-surface__btn" :title="t('office.previewClear')" @click="clearPreview">
+      <button class="web-surface__btn" :title="t('office.previewClear')" @click="clearPreview">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-    <div class="preview-surface__stage">
+    <div class="web-surface__stage">
       <div
         v-if="mdHtml"
-        class="preview-surface__md dq-prose"
+        class="web-surface__md dq-prose"
         v-html="mdHtml"
       />
       <img
         v-else-if="isImagePath && loadUrl"
         :key="`${loadUrl}:${refreshKey}`"
-        class="preview-surface__img"
+        class="web-surface__img"
         :src="loadUrl"
         :alt="path || urlInput"
       />
@@ -365,7 +365,7 @@ defineExpose({
         v-else
         ref="frameRef"
         :key="`${loadUrl || 'empty'}:${refreshKey}`"
-        class="preview-surface__frame"
+        class="web-surface__frame"
         :src="loadUrl || 'about:blank'"
         @load="onFrameLoad"
       />
@@ -381,7 +381,7 @@ defineExpose({
 </template>
 
 <style scoped>
-.preview-surface {
+.web-surface {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -390,7 +390,7 @@ defineExpose({
   background: var(--dq-bg-base);
   color: var(--dq-label-primary);
 }
-.preview-surface__hint {
+.web-surface__hint {
   margin: 0;
   padding: 6px 12px;
   font-size: var(--dq-font-size-body);
@@ -398,7 +398,7 @@ defineExpose({
   background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--dq-accent) 20%, transparent);
 }
-.preview-surface__bar {
+.web-surface__bar {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -407,7 +407,7 @@ defineExpose({
   border-bottom: 1px solid var(--dq-separator-light);
   background: color-mix(in srgb, var(--dq-bg-elevated) 45%, transparent);
 }
-.preview-surface__input {
+.web-surface__input {
   flex: 1;
   height: 28px;
   padding: 0 10px;
@@ -419,14 +419,14 @@ defineExpose({
   outline: none;
   font-family: var(--dq-font-mono, ui-monospace, monospace);
 }
-.preview-surface__input::placeholder {
+.web-surface__input::placeholder {
   color: var(--dq-label-quaternary);
 }
-.preview-surface__input:focus {
+.web-surface__input:focus {
   border-color: var(--dq-accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 12%, transparent);
 }
-.preview-surface__btn {
+.web-surface__btn {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -439,18 +439,18 @@ defineExpose({
   color: var(--dq-label-secondary);
   cursor: pointer;
 }
-.preview-surface__btn:hover {
+.web-surface__btn:hover {
   background: var(--dq-accent);
   color: var(--dq-on-accent);
 }
-.preview-surface__btn.is-active {
+.web-surface__btn.is-active {
   background: var(--dq-accent);
   color: var(--dq-on-accent);
 }
-.preview-surface__btn--console {
+.web-surface__btn--console {
   position: relative;
 }
-.preview-surface__badge {
+.web-surface__badge {
   position: absolute;
   top: -4px;
   right: -4px;
@@ -464,14 +464,14 @@ defineExpose({
   line-height: 14px;
   text-align: center;
 }
-.preview-surface__stage {
+.web-surface__stage {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
   background: var(--dq-bg-base);
 }
-.preview-surface__frame {
+.web-surface__frame {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -480,7 +480,7 @@ defineExpose({
   display: block;
   background: var(--dq-bg-base);
 }
-.preview-surface__img {
+.web-surface__img {
   position: absolute;
   inset: 0;
   max-width: 100%;
@@ -488,7 +488,7 @@ defineExpose({
   margin: auto;
   object-fit: contain;
 }
-.preview-surface__md {
+.web-surface__md {
   position: absolute;
   inset: 0;
   overflow-y: auto;

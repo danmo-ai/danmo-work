@@ -119,7 +119,7 @@ const actions = computed<PaletteAction[]>(() => [
     keywords: ['preview', 'browser', 'url', t('commandPalette.kwPreview'), t('commandPalette.kwBrowser')],
     run: () => {
       if (!sessions.selectedProjectId) return
-      workspaceUi.openStage({ kind: 'preview', path: '', mode: 'view', url: '' })
+      workspaceUi.openStage({ kind: 'web', path: '', mode: 'view', engine: 'iframe', url: '' })
       if (router.currentRoute.value.name !== 'sessions') {
         router.push({
           name: 'sessions',

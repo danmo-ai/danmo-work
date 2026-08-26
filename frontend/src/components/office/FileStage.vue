@@ -7,16 +7,18 @@ import { useSessionsStore } from '@/stores/sessions'
 import { useStageAiReviewStore } from '@/stores/stageAiReview'
 import { fetchAiReviewStatus, revertAiReviewFile } from '@/api/aiReview'
 import DocSurface from '@/components/office/DocSurface.vue'
-import SlidesSurface from '@/components/office/SlidesSurface.vue'
+import UniverSlidesSurface from '@/components/office/UniverSlidesSurface.vue'
 import SheetSurface from '@/components/office/SheetSurface.vue'
-import PreviewSurface from '@/components/office/PreviewSurface.vue'
+import UniverSheetSurface from '@/components/office/UniverSheetSurface.vue'
+import UniverDocSurface from '@/components/office/UniverDocSurface.vue'
+import MsOfficePreviewSurface from '@/components/office/MsOfficePreviewSurface.vue'
+import WebSurface from '@/components/office/WebSurface.vue'
 import CodeSurface from '@/components/office/CodeSurface.vue'
 import DiffSurface from '@/components/office/DiffSurface.vue'
 import OfficeAiToolbar from '@/components/office/OfficeAiToolbar.vue'
 import { confirm, toast } from '@/utils/feedback'
-import type { OfficeEditScope } from '@/utils/office-route'
+import type { FileEditScope } from '@/utils/file-route'
 import { exportMarkdownPdf } from '@/utils/md-export-pdf'
-import { siblingSlidesMarkdownPath } from '@/utils/slides-render'
 import type { ElementAttachment } from '@/types/element-attachment'
 import type { CodeSelectionAttachment } from '@/types/code-attachment'
 import {
@@ -44,14 +46,14 @@ const { pending: pendingAiReview, afterTurn: aiReviewAfterTurn } = storeToRefs(a
 const lastFinishedTurnId = ref<string | null>(null)
 const bannerBusy = ref(false)
 
-const docRef = ref<InstanceType<typeof DocSurface> | null>(null)
-const slidesRef = ref<InstanceType<typeof SlidesSurface> | null>(null)
-const sheetRef = ref<InstanceType<typeof SheetSurface> | null>(null)
+const docRef = ref<InstanceType<typeof DocSurface> | InstanceType<typeof UniverDocSurface> | null>(null)
+const slidesRef = ref<InstanceType<typeof UniverSlidesSurface> | null>(null)
+const sheetRef = ref<InstanceType<typeof SheetSurface> | InstanceType<typeof UniverSheetSurface> | null>(null)
 const codeRef = ref<InstanceType<typeof CodeSurface> | null>(null)
 const aiToolbarRef = ref<InstanceType<typeof OfficeAiToolbar> | null>(null)
 const dirty = ref(false)
 const pageIndex = ref(0)
-const editScope = ref<OfficeEditScope>('document')
+const editScope = ref<FileEditScope>('document')
 
 const turnRunning = computed(() => {
   const id = sessions.runningTurnId
@@ -60,18 +62,23 @@ const turnRunning = computed(() => {
   return turn?.status === 'running'
 })
 
-const isPreview = computed(() => stage.value?.kind === 'preview')
 const isDiff = computed(() => stage.value?.kind === 'diff')
 const isCodeKind = computed(() => stage.value?.kind === 'code')
-/** Office AI toolbar kinds (not code/diff). */
+const stageEngine = computed(() => stage.value?.engine)
+const isMsOffice = computed(() => stageEngine.value === 'ms-office')
+/** Office AI toolbar kinds (not code/diff/ms-office). */
 const editableKind = computed(() => {
+  if (isMsOffice.value) return null
   const k = stage.value?.kind
   if (k === 'doc' || k === 'slides' || k === 'sheet') return k
   return null
 })
 const isEditableKind = computed(() => editableKind.value != null)
 /** Kinds that support view/edit chrome + save. */
-const canEditSave = computed(() => isEditableKind.value || isCodeKind.value)
+const canEditSave = computed(() => {
+  if (isMsOffice.value) return false
+  return isEditableKind.value || isCodeKind.value
+})
 
 const activeSurface = computed(() => {
   if (!stage.value) return null
@@ -84,7 +91,7 @@ const activeSurface = computed(() => {
 
 const chromeLabel = computed(() => {
   if (!stage.value) return ''
-  if (stage.value.kind === 'preview') {
+  if (stage.value.kind === 'web' || stage.value.kind === 'media') {
     return stage.value.path || stage.value.url || ''
   }
   return stage.value.path
@@ -102,7 +109,7 @@ function getSelectionLines(): { startLine: number; endLine: number } | null {
   return surface?.getSelectionLines?.() ?? null
 }
 
-function getEditScope(): OfficeEditScope {
+function getEditScope(): FileEditScope {
   return editScope.value
 }
 
@@ -126,6 +133,7 @@ async function onDocAiEdit(payload: {
     instruction: payload.instruction,
     startLine: payload.startLine,
     endLine: payload.endLine,
+    engine: stage.value.engine,
   })
   emit('attachOfficeEdit', att)
   toast.success(t('office.officeAttached'))
@@ -196,7 +204,7 @@ watch(
     if (kind === 'slides') editScope.value = 'slide'
     else if (kind === 'sheet') editScope.value = 'sheet'
     else editScope.value = 'document'
-    if (kind === 'preview' || kind === 'diff') dirty.value = false
+    if (kind === 'web' || kind === 'media' || kind === 'diff') dirty.value = false
   },
   { immediate: true },
 )
@@ -207,35 +215,11 @@ function close() {
 
 async function setMode(mode: 'view' | 'edit' | 'present') {
   if (!stage.value) return
-
-  // Slides Present: programmatically sync md → sibling html (no AI turn).
-  if (mode === 'present' && stage.value.kind === 'slides') {
-    if (/\.md$|\.markdown$/i.test(stage.value.path)) {
-      const saved = await ensureSaved()
-      if (!saved) return
-      await slidesRef.value?.presentFromMarkdown?.()
-      return
-    }
-    workspaceUi.setStageMode('present')
+  if (isMsOffice.value && mode === 'edit') {
+    toast.warning(t('office.msConvertBeforeEdit'))
     return
   }
-
-  // From playable HTML back to Markdown source for edit/view.
-  if (
-    (mode === 'edit' || mode === 'view') &&
-    stage.value.kind === 'slides' &&
-    /\.html?$/i.test(stage.value.path)
-  ) {
-    const mdPath = siblingSlidesMarkdownPath(stage.value.path)
-    workspaceUi.setStagePath(mdPath, mode)
-    return
-  }
-
   workspaceUi.setStageMode(mode)
-}
-
-function setKind(kind: 'doc' | 'slides' | 'sheet') {
-  workspaceUi.setStageKind(kind)
 }
 
 function onPreviewUrlChange(_display: string, loadUrl: string) {
@@ -248,7 +232,7 @@ watch(turnRunning, async (running, was) => {
   if (aiReviewAfterTurn.value === 'off') return
   const path = stage.value?.path
   const sid = sessions.currentSessionId
-  if (!path || !sid || stage.value?.kind === 'diff' || stage.value?.kind === 'preview') return
+  if (!path || !sid || stage.value?.kind === 'diff' || stage.value?.kind === 'web' || stage.value?.kind === 'media') return
   // Prefer the turn that just finished (was running).
   const finished =
     sessions.turns.find((x) => x.status !== 'running' && x.id === lastFinishedTurnId.value) ||
@@ -288,6 +272,7 @@ function viewAiDiff() {
     kind: 'diff',
     path: p.path,
     mode: 'view',
+    engine: 'diff',
     diffSource: 'ai',
     sessionId: p.sessionId,
     turnId: p.turnId,
@@ -325,58 +310,42 @@ defineExpose({ save })
 </script>
 
 <template>
-  <section v-if="stage" class="document-stage" :class="{ 'is-immersive': layoutMode === 'immersive' }">
-    <header class="document-stage__chrome">
-      <div class="document-stage__meta">
-        <span class="document-stage__badge">{{ stage.kind }}</span>
-        <span class="document-stage__path" :title="chromeLabel">{{ chromeLabel }}</span>
-        <span v-if="dirty && canEditSave" class="document-stage__dirty">●</span>
-        <span v-if="turnRunning && isEditableKind" class="document-stage__running">{{ t('office.aiRunning') }}</span>
+  <section v-if="stage" class="file-stage" :class="{ 'is-immersive': layoutMode === 'immersive' }">
+    <header class="file-stage__chrome">
+      <div class="file-stage__meta">
+        <span class="file-stage__badge">{{ stage.kind }}</span>
+        <span class="file-stage__path" :title="chromeLabel">{{ chromeLabel }}</span>
+        <span v-if="dirty && canEditSave" class="file-stage__dirty">●</span>
+        <span v-if="turnRunning && isEditableKind" class="file-stage__running">{{ t('office.aiRunning') }}</span>
       </div>
-      <div class="document-stage__actions">
-        <div v-if="canEditSave" class="document-stage__modes">
+      <div class="file-stage__actions">
+        <div v-if="canEditSave" class="file-stage__modes">
           <button
-            class="document-stage__chip"
+            class="file-stage__chip"
             :class="{ 'is-active': stage.mode === 'view' }"
             @click="setMode('view')"
           >
             {{ t('office.view') }}
           </button>
           <button
-            class="document-stage__chip"
+            class="file-stage__chip"
             :class="{ 'is-active': stage.mode === 'edit' }"
             @click="setMode('edit')"
           >
             {{ t('office.edit') }}
           </button>
           <button
-            v-if="stage.kind === 'slides'"
-            class="document-stage__chip"
+            v-if="stage.kind === 'slides' && stageEngine === 'univer-slides'"
+            class="file-stage__chip"
             :class="{ 'is-active': stage.mode === 'present' }"
             @click="setMode('present')"
           >
             {{ t('office.present') }}
           </button>
         </div>
-        <div v-if="stage.path.match(/\.md$/i) && !isPreview && !isDiff" class="document-stage__modes">
-          <button
-            class="document-stage__chip"
-            :class="{ 'is-active': stage.kind === 'doc' }"
-            @click="setKind('doc')"
-          >
-            Doc
-          </button>
-          <button
-            class="document-stage__chip"
-            :class="{ 'is-active': stage.kind === 'slides' }"
-            @click="setKind('slides')"
-          >
-            Slides
-          </button>
-        </div>
         <button
           v-if="canEditSave"
-          class="document-stage__btn"
+          class="file-stage__btn"
           :disabled="!dirty || turnRunning"
           @click="() => save()"
         >
@@ -384,32 +353,32 @@ defineExpose({ save })
         </button>
         <button
           v-if="stage.kind === 'doc'"
-          class="document-stage__btn"
+          class="file-stage__btn"
           :disabled="exportingPdf || turnRunning"
           @click="exportPdf"
         >
           {{ t('office.exportPdf') }}
         </button>
         <button
-          class="document-stage__btn"
+          class="file-stage__btn"
           @click="workspaceUi.layoutMode = layoutMode === 'immersive' ? 'stage' : 'immersive'"
         >
           {{ layoutMode === 'immersive' ? t('office.exitImmersive') : t('office.immersive') }}
         </button>
-        <button class="document-stage__btn" @click="close">{{ t('office.close') }}</button>
+        <button class="file-stage__btn" @click="close">{{ t('office.close') }}</button>
       </div>
     </header>
 
-    <div v-if="showAiBanner" class="document-stage__ai-banner" role="status">
-      <span class="document-stage__ai-banner-text">{{ t('office.aiReviewBanner') }}</span>
-      <span class="document-stage__ai-banner-actions">
-        <button type="button" class="document-stage__btn" @click="viewAiDiff">{{ t('office.aiReviewViewDiff') }}</button>
-        <button type="button" class="document-stage__btn" :disabled="bannerBusy" @click="keepAiChange">
+    <div v-if="showAiBanner" class="file-stage__ai-banner" role="status">
+      <span class="file-stage__ai-banner-text">{{ t('office.aiReviewBanner') }}</span>
+      <span class="file-stage__ai-banner-actions">
+        <button type="button" class="file-stage__btn" @click="viewAiDiff">{{ t('office.aiReviewViewDiff') }}</button>
+        <button type="button" class="file-stage__btn" :disabled="bannerBusy" @click="keepAiChange">
           {{ t('office.aiReviewKeep') }}
         </button>
         <button
           type="button"
-          class="document-stage__btn"
+          class="file-stage__btn"
           :disabled="bannerBusy || !pendingAiReview?.canRevert"
           @click="revertAiChange"
         >
@@ -419,11 +388,12 @@ defineExpose({ save })
     </div>
 
     <!-- Slides/Sheet: attach polish/modify chips to Composer (doc uses selection bubble). -->
-    <div v-if="editableKind && editableKind !== 'doc' && stage.mode === 'edit'" class="document-stage__ai">
+    <div v-if="editableKind && editableKind !== 'doc' && stage.mode === 'edit'" class="file-stage__ai">
       <OfficeAiToolbar
         ref="aiToolbarRef"
         :path="stage.path"
         :kind="editableKind"
+        :engine="stageEngine"
         :page-index="editableKind === 'slides' ? pageIndex : undefined"
         :get-selection-markdown="getSelectionMarkdown"
         :get-selection-lines="getSelectionLines"
@@ -435,7 +405,7 @@ defineExpose({ save })
     </div>
 
     <DocSurface
-      v-if="stage.kind === 'doc'"
+      v-if="stage.kind === 'doc' && stageEngine === 'md'"
       ref="docRef"
       :project-id="projectId"
       :path="stage.path"
@@ -446,8 +416,19 @@ defineExpose({ save })
       @scope="editScope = $event"
       @ai-edit="onDocAiEdit"
     />
-    <SlidesSurface
-      v-else-if="stage.kind === 'slides'"
+    <UniverDocSurface
+      v-else-if="stage.kind === 'doc' && stageEngine === 'univer-doc'"
+      ref="docRef"
+      :project-id="projectId"
+      :path="stage.path"
+      :mode="stage.mode"
+      :reload-token="stageReloadToken"
+      :turn-running="turnRunning"
+      @dirty="dirty = $event"
+      @scope="editScope = $event"
+    />
+    <UniverSlidesSurface
+      v-else-if="stage.kind === 'slides' && stageEngine === 'univer-slides'"
       ref="slidesRef"
       :project-id="projectId"
       :path="stage.path"
@@ -458,7 +439,7 @@ defineExpose({ save })
       @update-page-index="pageIndex = $event"
     />
     <SheetSurface
-      v-else-if="stage.kind === 'sheet'"
+      v-else-if="stage.kind === 'sheet' && stageEngine === 'csv'"
       ref="sheetRef"
       :project-id="projectId"
       :path="stage.path"
@@ -466,6 +447,23 @@ defineExpose({ save })
       :reload-token="stageReloadToken"
       :turn-running="turnRunning"
       @dirty="dirty = $event"
+    />
+    <UniverSheetSurface
+      v-else-if="stage.kind === 'sheet' && stageEngine === 'univer-sheet'"
+      ref="sheetRef"
+      :project-id="projectId"
+      :path="stage.path"
+      :mode="stage.mode"
+      :reload-token="stageReloadToken"
+      :turn-running="turnRunning"
+      @dirty="dirty = $event"
+    />
+    <MsOfficePreviewSurface
+      v-else-if="stageEngine === 'ms-office'"
+      :project-id="projectId"
+      :path="stage.path"
+      :mode="stage.mode"
+      :reload-token="stageReloadToken"
     />
     <CodeSurface
       v-else-if="stage.kind === 'code'"
@@ -488,8 +486,8 @@ defineExpose({ save })
       :session-id="stage.sessionId"
       :turn-id="stage.turnId"
     />
-    <PreviewSurface
-      v-else-if="stage.kind === 'preview'"
+    <WebSurface
+      v-else-if="stage.kind === 'web' || stage.kind === 'media'"
       :project-id="projectId"
       :path="stage.path"
       :url="stage.url"
@@ -502,7 +500,7 @@ defineExpose({ save })
 </template>
 
 <style scoped>
-.document-stage {
+.file-stage {
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -513,10 +511,10 @@ defineExpose({ save })
   border-left: 1px solid var(--dq-separator-light);
   border-right: 1px solid var(--dq-separator-light);
 }
-.document-stage.is-immersive {
+.file-stage.is-immersive {
   border: 0;
 }
-.document-stage__ai-banner {
+.file-stage__ai-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -527,16 +525,16 @@ defineExpose({ save })
   background: color-mix(in srgb, var(--dq-accent) 12%, var(--dq-bg-elevated));
   font-size: var(--dq-font-size-caption);
 }
-.document-stage__ai-banner-text {
+.file-stage__ai-banner-text {
   color: var(--dq-label-primary);
   font-weight: 550;
 }
-.document-stage__ai-banner-actions {
+.file-stage__ai-banner-actions {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
 }
-.document-stage__chrome {
+.file-stage__chrome {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -546,13 +544,13 @@ defineExpose({ save })
   background: color-mix(in srgb, var(--dq-bg-elevated) 55%, transparent);
   flex-wrap: wrap;
 }
-.document-stage__meta {
+.file-stage__meta {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
-.document-stage__badge {
+.file-stage__badge {
   font-size: var(--dq-font-size-caption);
   font-weight: 600;
   text-transform: uppercase;
@@ -563,35 +561,35 @@ defineExpose({ save })
   color: var(--dq-accent);
   flex-shrink: 0;
 }
-.document-stage__path {
+.file-stage__path {
   font-size: var(--dq-font-size-caption);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--dq-label-tertiary);
 }
-.document-stage__dirty {
+.file-stage__dirty {
   color: var(--dq-system-orange);
   font-size: var(--dq-font-size-caption);
 }
-.document-stage__running {
+.file-stage__running {
   font-size: var(--dq-font-size-caption);
   color: var(--dq-accent);
 }
-.document-stage__actions {
+.file-stage__actions {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
 }
-.document-stage__modes {
+.file-stage__modes {
   display: flex;
   gap: 2px;
   background: var(--dq-fill-tertiary);
   border-radius: 6px;
   padding: 2px;
 }
-.document-stage__chip {
+.file-stage__chip {
   border: 0;
   background: transparent;
   height: 26px;
@@ -601,15 +599,15 @@ defineExpose({ save })
   color: var(--dq-label-secondary);
   cursor: pointer;
 }
-.document-stage__chip:hover {
+.file-stage__chip:hover {
   color: var(--dq-label-primary);
 }
-.document-stage__chip.is-active {
+.file-stage__chip.is-active {
   background: var(--dq-bg-elevated);
   color: var(--dq-label-primary);
   box-shadow: 0 1px 2px color-mix(in srgb, var(--dq-mask) 12%, transparent);
 }
-.document-stage__btn {
+.file-stage__btn {
   height: 28px;
   padding: 0 10px;
   border: 1px solid var(--dq-border);
@@ -619,13 +617,13 @@ defineExpose({ save })
   font-size: var(--dq-font-size-caption);
   cursor: pointer;
 }
-.document-stage__btn:hover:not(:disabled) {
+.file-stage__btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--dq-label-primary) 8%, var(--dq-fill-tertiary));
 }
-.document-stage__btn:disabled {
+.file-stage__btn:disabled {
   opacity: 0.5;
 }
-.document-stage__ai {
+.file-stage__ai {
   padding: 6px 10px;
   border-bottom: 1px solid var(--dq-separator-light);
   background: color-mix(in srgb, var(--dq-bg-elevated) 35%, transparent);

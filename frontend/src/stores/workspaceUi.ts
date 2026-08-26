@@ -1,18 +1,23 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { OfficeKind, OfficeMode } from '@/utils/office-route'
+import type { FileEngine, FileKind, FileMode } from '@/utils/file-route'
 import { isWorkbenchId, type WorkbenchId } from '@/types/workbench'
+
+export type { FileEngine, FileKind, FileMode }
 
 export type RightWorkspaceTab = 'plan' | 'files' | 'memory' | 'tables' | 'changes' | 'terminal' | 'trajectory'
 export type LayoutMode = 'chat' | 'stage' | 'immersive'
 
 const ACTIVE_WORKBENCH_KEY = 'app-active-workbench'
 
-export interface OfficeStageState {
-  kind: OfficeKind
+/** Central Stage canvas state — opened via routeProjectFile / openStage. */
+export interface FileStageState {
+  kind: FileKind
   path: string
-  mode: OfficeMode
-  /** Preview kind: project raw URL or proxied external URL. */
+  mode: FileMode
+  /** Persistence / editor engine (from routeProjectFile). */
+  engine?: FileEngine
+  /** Web kind: project raw URL or proxied external URL. */
   url?: string
   /** Diff kind: staged (index) vs unstaged (working tree) patch. */
   staged?: boolean
@@ -83,7 +88,7 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   const pendingApprovals = ref(0)
   const paletteOpen = ref(false)
   const layoutMode = ref<LayoutMode>('chat')
-  const stage = ref<OfficeStageState | null>(null)
+  const stage = ref<FileStageState | null>(null)
   /** Bumped when Stage should reload file from disk (e.g. after AI turn). */
   const stageReloadToken = ref(0)
   /** Bumped when the Files tree should reload (e.g. after composer upload). */
@@ -183,7 +188,7 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     rightDrawerOpenBeforeStage.value = null
   }
 
-  function openStage(next: OfficeStageState) {
+  function openStage(next: FileStageState) {
     workbenchOpen.value = false
     stage.value = { ...next }
     layoutMode.value = next.mode === 'present' ? 'immersive' : 'stage'
@@ -236,19 +241,19 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     openWorkbench(id ?? activeWorkbenchId.value)
   }
 
-  function setStageMode(mode: OfficeMode) {
+  function setStageMode(mode: FileMode) {
     if (!stage.value) return
     stage.value = { ...stage.value, mode }
     layoutMode.value = mode === 'present' ? 'immersive' : 'stage'
   }
 
-  function setStageKind(kind: OfficeKind) {
+  function setStageKind(kind: FileKind) {
     if (!stage.value) return
     stage.value = { ...stage.value, kind }
   }
 
   /** Replace Stage path (and optional mode), e.g. md → sibling html for Present. */
-  function setStagePath(path: string, mode?: OfficeMode) {
+  function setStagePath(path: string, mode?: FileMode) {
     if (!stage.value) return
     const nextMode = mode ?? stage.value.mode
     stage.value = { ...stage.value, path, mode: nextMode }
