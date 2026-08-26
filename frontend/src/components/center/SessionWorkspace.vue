@@ -21,7 +21,7 @@ import PermissionAskBlock from '@/components/center/PermissionAskBlock.vue'
 import AskUserBlock, { type AskUserFormField } from '@/components/center/AskUserBlock.vue'
 import { countFoldableProcessEvents, filterCollapsedTimelineEvents, groupConsecutiveToolCards, hasFoldableProcess, useTurnCollapse, type StreamTurn, type ToolCard, type UserImageAttachment } from '@/composables/useStreamTurns'
 import RightWorkspacePanel from '@/components/center/RightWorkspacePanel.vue'
-import DocumentStage from '@/components/office/DocumentStage.vue'
+import FileStage from '@/components/office/FileStage.vue'
 import WorkbenchHost from '@/components/workbench/WorkbenchHost.vue'
 import {
   DqDrawer,
@@ -44,7 +44,7 @@ import type { CodeSelectionAttachment } from '@/types/code-attachment'
 import type { OfficeEditAttachment } from '@/types/office-edit-attachment'
 import { fetchJSON } from '@/api/client'
 import { formatTokenCount, useSessionContextUsage } from '@/composables/useSessionContextUsage'
-import { routeOfficeFile } from '@/utils/office-route'
+import { routeProjectFile } from '@/utils/file-route'
 
 import type { StreamEvent, TurnLog } from '@/types/mission'
 
@@ -137,8 +137,8 @@ async function openFileInOffice(filePath: string) {
   } catch {
     /* routing can proceed without hint */
   }
-  const routed = routeOfficeFile(filePath, contentHint)
-  if (routed.kind === 'preview') {
+  const routed = routeProjectFile(filePath, contentHint)
+  if (routed.kind === 'web' || routed.kind === 'media') {
     const url = `${apiBaseUrl()}/api/v1/projects/${sessions.selectedProjectId}/raw/${encodeURIComponent(filePath)}`
     workspaceUi.openStage({ ...routed, url })
     return
@@ -1962,7 +1962,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 
       </div>
 
-      <DocumentStage
+      <FileStage
         v-if="stage && sessions.selectedProjectId"
         class="session-workspace__stage"
         :project-id="sessions.selectedProjectId"

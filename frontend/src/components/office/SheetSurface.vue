@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
-import type { OfficeEditScope } from '@/utils/office-route'
+import type { FileEditScope } from '@/utils/file-route'
 
 interface SheetTab {
   name: string
@@ -284,7 +284,7 @@ function onColResize(c: number, e: MouseEvent) {
   window.addEventListener('mouseup', onUp)
 }
 
-function getEditScope(): OfficeEditScope {
+function getEditScope(): FileEditScope {
   return 'sheet'
 }
 

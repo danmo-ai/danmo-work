@@ -1,9 +1,9 @@
 import {
   buildOfficeEditPrompt,
-  type OfficeEditScope,
-  type OfficeEngine,
-  type OfficeKind,
-} from '@/utils/office-route'
+  type EditableFileKind,
+  type FileEditScope,
+  type FileEngine,
+} from '@/utils/file-route'
 
 function createOfficeEditAttachmentId(): string {
   return `office_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
@@ -17,9 +17,9 @@ export interface OfficeEditAttachment {
   kind: 'office-edit'
   action: OfficeEditAction
   path: string
-  officeKind: Exclude<OfficeKind, 'preview' | 'code' | 'diff'>
-  scope: OfficeEditScope
-  engine?: OfficeEngine
+  officeKind: EditableFileKind
+  scope: FileEditScope
+  engine?: FileEngine
   /** User annotation / instruction (editable on chip). */
   instruction: string
   selection: string
@@ -32,13 +32,13 @@ export function createOfficeEditAttachment(opts: {
   action: OfficeEditAction
   path: string
   officeKind: OfficeEditAttachment['officeKind']
-  scope: OfficeEditScope
+  scope: FileEditScope
   selection: string
   instruction?: string
   pageIndex?: number
   startLine?: number
   endLine?: number
-  engine?: OfficeEngine
+  engine?: FileEngine
 }): OfficeEditAttachment {
   return {
     id: createOfficeEditAttachmentId(),

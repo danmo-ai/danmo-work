@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '@/api/client'
 import { apiBaseUrl } from '@/utils/desktop'
 import { toast } from '@/utils/feedback'
-import { routeOfficeFile } from '@/utils/office-route'
+import { routeProjectFile } from '@/utils/file-route'
 import { siblingUniverIrPath, stringifyUniverFile } from '@/utils/univer-ir'
 import {
   docxArrayBufferToDocumentData,
@@ -74,7 +74,7 @@ async function convertToIr() {
       body: JSON.stringify({ path: dest, content }),
     })
     toast.success(t('office.convertedToUniverIr'))
-    workspaceUi.openStage({ ...routeOfficeFile(dest) })
+    workspaceUi.openStage({ ...routeProjectFile(dest) })
     workspaceUi.requestFilesReload()
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('office.convertFailed'))

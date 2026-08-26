@@ -5,7 +5,7 @@ import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
 import { parseUniverFile, stringifyUniverFile } from '@/utils/univer-ir'
 import { emptyDocumentData } from '@/utils/univer-snapshots'
-import type { OfficeEditScope } from '@/utils/office-route'
+import type { FileEditScope } from '@/utils/file-route'
 
 const props = defineProps<{
   projectId: string
@@ -18,7 +18,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   dirty: [value: boolean]
   saved: []
-  scope: [scope: OfficeEditScope]
+  scope: [scope: FileEditScope]
 }>()
 
 const { t } = useI18n()
@@ -129,7 +129,7 @@ function markDirty() {
   emit('dirty', true)
 }
 
-function getEditScope(): OfficeEditScope {
+function getEditScope(): FileEditScope {
   return 'document'
 }
 

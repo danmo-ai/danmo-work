@@ -5,11 +5,11 @@ import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
 import { parseUniverFile, stringifyUniverFile } from '@/utils/univer-ir'
 import { emptyWorkbookData, migrateDanmoSheetJson } from '@/utils/univer-workbook'
-import { isLegacyDanmoSheetPath } from '@/utils/office-route'
+import { isLegacyDanmoSheetPath } from '@/utils/file-route'
 import { siblingUniverIrPath } from '@/utils/univer-ir'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
-import { routeOfficeFile } from '@/utils/office-route'
-import type { OfficeEditScope } from '@/utils/office-route'
+import { routeProjectFile } from '@/utils/file-route'
+import type { FileEditScope } from '@/utils/file-route'
 
 const props = defineProps<{
   projectId: string
@@ -113,7 +113,7 @@ async function migrateLegacyIfNeeded(): Promise<string | null> {
       body: JSON.stringify({ path: dest, content: stringifyUniverFile('univer-sheet', snapshot) }),
     })
     toast.success(t('office.migratedToUniverIr'))
-    const routed = routeOfficeFile(dest)
+    const routed = routeProjectFile(dest)
     workspaceUi.openStage({ ...routed })
     return dest
   } catch (e) {
@@ -176,7 +176,7 @@ function markDirty() {
   emit('dirty', true)
 }
 
-function getEditScope(): OfficeEditScope {
+function getEditScope(): FileEditScope {
   return 'sheet'
 }
 

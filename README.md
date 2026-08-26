@@ -26,7 +26,7 @@
 | | |
 |--|--|
 | **Multi-agent teams** | **Team** lead delegates built-in specialists — Document, Implementer, Researcher, Reviewer, GitHub, Novel Writing… — each in an isolated sub-turn; main context stays lean |
-| **Document Stage + AI Diff** | Docs, slides, sheets, code, diff, and preview on one canvas — pre-turn snapshot → review hunks → keep / revert / accept; Markdown stays the source of truth |
+| **File Stage + AI Diff** | Docs, slides, sheets, code, web, media, and diff on one canvas — routed by `routeProjectFile`; pre-turn snapshot → review hunks → keep / revert / accept |
 | **Humans in the loop** | `ask_user` with options and forms; approval gates before risky shell or external MCP — same flow in desktop and IM chats |
 | **Plans that stay alive** | `todowrite` is the plan: status updates as work proceeds, items marked done only after verification, rewritten when scope drifts |
 | **Memory, tables & knowledge** | `memory_*` across user / project / agent scopes; schema-free `table_*` rows in `store.db`; Markdown knowledge bases with chapter-level FTS |
@@ -53,7 +53,7 @@ The lead agent runs the session; specialists do focused work on demand, each in 
 | Agent | Role |
 |-------|------|
 | **Team** (lead) | Multi-agent by default; collaboration toggle |
-| **Document** | Reports, slides, sheets (Markdown source for Document Stage) |
+| **Document** | Reports, slides, sheets (File Stage surfaces) |
 | **Comms** | Polishes messages, emails, notifications |
 | **Implementer** | Code changes from specs (TDD / debugging skills) |
 | **Explorer** | Read-only codebase exploration |
@@ -69,9 +69,9 @@ Summon a specialist with `@` in the Composer, or just ask in plain language ("de
 
 Beyond experts, the same library hosts **skills** (workflows — document-writing, playable-slides, TDD, deep-research…) and **connectors** (MCP integrations). Install from the market, bind per agent, or drop skills into `~/.danmo-work/skills/` or `~/.agents/skills/`.
 
-### Document Stage
+### File Stage
 
-Three panes — projects · agent stream · right panel (Plan / Files / Memory / Table Store / Git / Terminal / Trajectory) — around a central **Document Stage** routed by extension: `.md` / `.csv` use built-in editors; `.udoc.json` / `.uslides.json` / `.usheet.json` are editable Univer IR; `.docx` / `.pptx` / `.xlsx` are view-only until converted to IR. In **preview** mode you can click a DOM element, annotate it, and send exact HTML/CSS context to the Composer.
+Three panes — projects · agent stream · right panel (Plan / Files / Memory / Table Store / Git / Terminal / Trajectory) — around a central **File Stage** routed by `routeProjectFile`: `.md` / `.csv` use built-in editors; `.udoc.json` / `.uslides.json` / `.usheet.json` are editable Univer IR; `.docx` / `.pptx` / `.xlsx` are view-only until converted to IR; source code opens in CodeMirror; HTML / images open as **web** / **media**. On a web page you can click a DOM element, annotate it, and send exact HTML/CSS context to the Composer.
 
 Office files are co-edited as a normal agent turn with a review step:
 
@@ -152,7 +152,7 @@ Build, pack, test, env vars, and CI: [`AGENTS.md`](AGENTS.md). Architecture: [`d
 
 | Doc | Description |
 |-----|-------------|
-| [docs/core-design.md](docs/core-design.md) | Agent architecture, tool system, channels, Document Stage |
+| [docs/core-design.md](docs/core-design.md) | Agent architecture, tool system, channels, File Stage |
 | [docs/experts.md](docs/experts.md) | Expert usage and the built-in roster |
 | [docs/remote/README.md](docs/remote/README.md) | Remote Hub pairing and tunnel protocol |
 | [docs/screenshots/README.md](docs/screenshots/README.md) | Screenshot carousel (README hero) |

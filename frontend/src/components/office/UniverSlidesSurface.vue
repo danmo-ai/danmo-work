@@ -5,7 +5,7 @@ import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
 import { parseUniverFile, stringifyUniverFile } from '@/utils/univer-ir'
 import { emptySlideData, pagesToSlideData } from '@/utils/univer-snapshots'
-import type { OfficeEditScope } from '@/utils/office-route'
+import type { FileEditScope } from '@/utils/file-route'
 
 interface SlidePageView {
   id: string
@@ -148,7 +148,7 @@ function removePage() {
   markDirty()
 }
 
-function getEditScope(): OfficeEditScope {
+function getEditScope(): FileEditScope {
   return 'slide'
 }
 
