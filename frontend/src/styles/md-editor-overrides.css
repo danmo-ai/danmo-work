@@ -1,0 +1,32 @@
+/* md-editor-v3 ships macOS traffic-light chrome on fenced code blocks
+   (red/yellow/green dots + window-like title bar). Strip the decoration;
+   keep language label, copy, fold, and multi-tab labels. */
+
+.md-editor-preview .md-editor-code .md-editor-code-flag > span {
+  display: none !important;
+}
+
+.md-editor-preview .md-editor-code .md-editor-code-flag:not(:has(.md-editor-codetab-label)) {
+  display: none !important;
+}
+
+.md-editor-preview .md-editor-code .md-editor-code-head {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.md-editor-preview .md-editor-code .md-editor-code-head:has(.md-editor-codetab-label) {
+  justify-content: space-between;
+}
+
+.md-editor-preview .md-editor-code .md-editor-code-action {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.md-editor-preview .md-editor-code .md-editor-code-lang {
+  margin-inline-end: auto !important;
+}
