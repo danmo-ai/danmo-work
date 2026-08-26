@@ -43,6 +43,7 @@ export function textToDocumentData(text: string, title = 'Document'): Record<str
   }
 }
 
+/** PageElementType.TEXT = 2, PageType.SLIDE = 0 — keep numeric to avoid importing slides in convert tests. */
 function slidePage(id: string, title: string, bodyText: string, zIndex: number) {
   const titleId = `${id}_title`
   const bodyId = `${id}_body`
@@ -52,7 +53,7 @@ function slidePage(id: string, title: string, bodyText: string, zIndex: number) 
     zIndex,
     title,
     description: '',
-    pageBackgroundFill: { rgb: 'FFFFFF' },
+    pageBackgroundFill: { rgb: 'rgb(255,255,255)' },
     pageElements: {
       [titleId]: {
         id: titleId,
@@ -63,8 +64,13 @@ function slidePage(id: string, title: string, bodyText: string, zIndex: number) 
         height: 80,
         title: 'title',
         description: '',
-        type: 0,
-        richText: { text: title, left: 60, top: 80, width: 840, height: 80 },
+        type: 2,
+        richText: {
+          text: title,
+          fs: 36,
+          cl: { rgb: 'rgb(30,30,30)' },
+          bl: 1,
+        },
       },
       [bodyId]: {
         id: bodyId,
@@ -75,8 +81,12 @@ function slidePage(id: string, title: string, bodyText: string, zIndex: number) 
         height: 360,
         title: 'body',
         description: '',
-        type: 0,
-        richText: { text: bodyText, left: 60, top: 200, width: 840, height: 360 },
+        type: 2,
+        richText: {
+          text: bodyText,
+          fs: 18,
+          cl: { rgb: 'rgb(50,50,50)' },
+        },
       },
     },
   }
