@@ -27,9 +27,6 @@ export interface FileStageState {
   turnId?: string
 }
 
-/** @deprecated Use FileStageState */
-export type OfficeStageState = FileStageState
-
 const LEFT_RAIL_COLLAPSED_KEY = 'app-left-collapsed'
 const RIGHT_DRAWER_OPEN_KEY = 'app-right-drawer-open'
 /** Legacy docked-panel key — migrated once into drawer-open semantics. */

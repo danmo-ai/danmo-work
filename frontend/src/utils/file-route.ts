@@ -193,9 +193,6 @@ export function routeProjectFile(path: string, _contentHint?: string): FileRoute
   return { kind: 'web', path, mode: 'view', engine: 'iframe' }
 }
 
-/** @deprecated Use routeProjectFile — kept for call-site migration. */
-export const routeOfficeFile = routeProjectFile
-
 function fileEditAsk(
   action: 'polish' | 'modify' | 'continue' | 'slide-page' | 'sheet',
   scope: FileEditScope | undefined,
@@ -273,15 +270,3 @@ export function buildOfficeEditPrompt(opts: {
   }
   return lines.join('\n')
 }
-
-/* —— Deprecated aliases (Office* → File*) —— */
-/** @deprecated Use FileKind */
-export type OfficeKind = FileKind
-/** @deprecated Use FileMode */
-export type OfficeMode = FileMode
-/** @deprecated Use FileEngine */
-export type OfficeEngine = FileEngine
-/** @deprecated Use FileEditScope */
-export type OfficeEditScope = FileEditScope
-/** @deprecated Use FileRoute */
-export type OfficeRoute = FileRoute
