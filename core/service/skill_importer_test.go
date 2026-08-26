@@ -64,7 +64,7 @@ func TestParseSkillMDDescriptionContainsFence(t *testing.T) {
 	content := `---
 name: playable-slides
 source: builtin
-description: "Marp Markdown (` + "`---`"+ ` page breaks) for slides"
+description: "Marp Markdown (` + "`---`" + ` page breaks) for slides"
 ---
 
 # Playable Slides
@@ -84,6 +84,28 @@ description: "Marp Markdown (` + "`---`"+ ` page breaks) for slides"
 	}
 	if sk.Body != "# Playable Slides" {
 		t.Fatalf("body = %q", sk.Body)
+	}
+}
+
+func TestImportAllNestedSkillID(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "team", "planner")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	md := "---\nname: planner\ndescription: d\n---\n\nBody\n"
+	if err := os.WriteFile(filepath.Join(nested, "SKILL.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	skills, _, err := NewSkillImporter().ImportAll(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(skills) != 1 || skills[0].ID != "team/planner" {
+		t.Fatalf("got %+v", skills)
+	}
+	if skills[0].Metadata[SkillMetaRealPath] != nested {
+		t.Fatalf("real_path=%q", skills[0].Metadata[SkillMetaRealPath])
 	}
 }
 

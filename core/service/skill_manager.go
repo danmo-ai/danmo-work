@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,43 +99,61 @@ func (m *SkillManager) PluginSkillDirs() []string {
 	return append([]string{}, m.pluginSkillDirs...)
 }
 
-// globalDirs returns all global skill roots (read), low → high priority.
-func (m *SkillManager) globalDirs() []string {
-	return []string{
-		paths.AgentsSkillDir(),
-		m.globalDir,
-	}
-}
-
 func (m *SkillManager) List(ctx context.Context) ([]domain.Skill, error) {
-	m.mu.RLock()
-	dirs := append([]string{}, m.pluginSkillDirs...)
-	m.mu.RUnlock()
-	dirs = append(dirs, m.globalDir)
-	skills, _ := ScanSkillDirs(dirs)
+	_ = ctx
+	skills, _ := ScanSkillDirs(m.listScanDirs())
 	return skills, nil
 }
 
-func (m *SkillManager) Get(ctx context.Context, id string) (*domain.Skill, error) {
+func (m *SkillManager) listScanDirs() []string {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-	for _, dir := range m.globalDirs() {
-		skillDir := filepath.Join(dir, id)
-		mdPath := filepath.Join(skillDir, "SKILL.md")
-		data, err := os.ReadFile(mdPath)
-		if err != nil {
-			continue
-		}
-		return parseSkillMarkdown(string(data), skillDir)
+	plugins := append([]string{}, m.pluginSkillDirs...)
+	m.mu.RUnlock()
+	plugins = append(plugins, paths.PluginSkillDirs(m.dataDir)...)
+	var dirs []string
+	dirs = append(dirs, m.homeSkillDirs()...)
+	dirs = append(dirs, plugins...)
+	return dirs
+}
+
+func (m *SkillManager) homeSkillDirs() []string {
+	return paths.HomeSkillDirs(m.dataDir)
+}
+
+// Scan returns Home + plugin + project skills with project → plugin → Home priority.
+func (m *SkillManager) Scan(projectDir string) []domain.Skill {
+	m.mu.RLock()
+	plugins := append([]string{}, m.pluginSkillDirs...)
+	m.mu.RUnlock()
+	return ScanAllSkills(m.dataDir, projectDir, plugins...)
+}
+
+func (m *SkillManager) Get(ctx context.Context, id string) (*domain.Skill, error) {
+	return m.Lookup(ctx, id, "")
+}
+
+// Lookup finds a skill by relative ID, searching project → plugin → Home.
+func (m *SkillManager) Lookup(ctx context.Context, id, projectDir string) (*domain.Skill, error) {
+	_ = ctx
+	id = strings.Trim(strings.ReplaceAll(id, "\\", "/"), "/")
+	if id == "" || strings.Contains(id, "..") {
+		return nil, fmt.Errorf("skill %q not found", id)
 	}
-	for _, dir := range m.pluginSkillDirs {
-		skillDir := filepath.Join(dir, id)
-		mdPath := filepath.Join(skillDir, "SKILL.md")
-		data, err := os.ReadFile(mdPath)
+	m.mu.RLock()
+	plugins := append([]string{}, m.pluginSkillDirs...)
+	m.mu.RUnlock()
+	plugins = append(plugins, paths.PluginSkillDirs(m.dataDir)...)
+	roots := paths.SkillLookupRoots(m.homeSkillDirs(), plugins, paths.ProjectSkillDirs(projectDir))
+	for _, root := range roots {
+		skillDir := paths.JoinSkillID(root, id)
+		if !paths.HasSKILLMD(skillDir) {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(skillDir, "SKILL.md"))
 		if err != nil {
 			continue
 		}
-		return parseSkillMarkdown(string(data), skillDir)
+		return parseSkillMarkdown(string(data), skillDir, id)
 	}
 	return nil, fmt.Errorf("skill %q not found", id)
 }
@@ -148,7 +165,10 @@ func (m *SkillManager) Upsert(ctx context.Context, s domain.Skill) error {
 	if s.ID == "" {
 		return fmt.Errorf("skill id or name is required")
 	}
-	dir := filepath.Join(m.globalDir, s.ID)
+	dir := paths.JoinSkillID(m.globalDir, s.ID)
+	if dir == "" {
+		return fmt.Errorf("invalid skill id")
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -169,7 +189,7 @@ func (m *SkillManager) Delete(ctx context.Context, id string) error {
 	if s.Source == "builtin" {
 		return fmt.Errorf("cannot delete builtin skill %q", id)
 	}
-	return os.RemoveAll(filepath.Join(m.globalDir, id))
+	return os.RemoveAll(paths.JoinSkillID(m.globalDir, id))
 }
 
 func (m *SkillManager) skillDir(ctx context.Context, skillID string) (string, error) {
@@ -180,7 +200,7 @@ func (m *SkillManager) skillDir(ctx context.Context, skillID string) (string, er
 	if strings.TrimSpace(sk.Dir) != "" {
 		return sk.Dir, nil
 	}
-	return filepath.Join(m.globalDir, skillID), nil
+	return paths.JoinSkillID(m.globalDir, skillID), nil
 }
 
 func (m *SkillManager) Files(ctx context.Context, skillID string) ([]domain.SkillFile, error) {
@@ -232,7 +252,7 @@ func (m *SkillManager) UpsertFile(ctx context.Context, f domain.SkillFile) error
 	if err == nil && (sk.Source == "builtin" || sk.Builtin) {
 		return fmt.Errorf("cannot modify builtin skill %q", f.SkillID)
 	}
-	skillDir := filepath.Join(m.globalDir, f.SkillID)
+	skillDir := paths.JoinSkillID(m.globalDir, f.SkillID)
 	if err == nil && strings.TrimSpace(sk.Dir) != "" {
 		skillDir = sk.Dir
 	}
@@ -267,7 +287,7 @@ func (m *SkillManager) DeleteFiles(ctx context.Context, skillID string) error {
 	if err == nil && (sk.Source == "builtin" || sk.Builtin) {
 		return fmt.Errorf("cannot modify builtin skill %q", skillID)
 	}
-	dir := filepath.Join(m.globalDir, skillID)
+	dir := paths.JoinSkillID(m.globalDir, skillID)
 	if err == nil && strings.TrimSpace(sk.Dir) != "" {
 		dir = sk.Dir
 	}
@@ -293,36 +313,14 @@ func (m *SkillManager) SetFileTemplateLoader(fn func(id string) ([]domain.SkillF
 
 // LoadSkillsFromFS reads all skill directories from the given path.
 func LoadSkillsFromFS(dir string) ([]domain.Skill, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	var result []domain.Skill
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		skillDir := filepath.Join(dir, entry.Name())
-		mdPath := filepath.Join(skillDir, "SKILL.md")
-		data, err := os.ReadFile(mdPath)
-		if err != nil {
-			continue
-		}
-		skill, err := parseSkillMarkdown(string(data), skillDir)
-		if err != nil {
-			log.Printf("[skills] parse %s: %v", mdPath, err)
-			continue
-		}
-		result = append(result, *skill)
-	}
-	return result, nil
+	skills, _ := ScanSkillDirs([]string{dir})
+	return skills, nil
 }
 
-func parseSkillMarkdown(content, skillDir string) (*domain.Skill, error) {
-	id := filepath.Base(skillDir)
+func parseSkillMarkdown(content, skillDir, id string) (*domain.Skill, error) {
+	if id == "" {
+		id = filepath.Base(skillDir)
+	}
 	lines := strings.Split(strings.TrimPrefix(content, "\ufeff"), "\n")
 	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
 		return nil, fmt.Errorf("skill %q: missing YAML frontmatter", id)
@@ -352,12 +350,14 @@ func parseSkillMarkdown(content, skillDir string) (*domain.Skill, error) {
 			if source == "" {
 				source = "builtin"
 			}
-			return &domain.Skill{
+			sk := &domain.Skill{
 				ID: id, Name: name, Description: fm.Description, Source: source, Builtin: source == "builtin",
 				License: fm.License, Compatibility: fm.Compatibility,
 				Metadata: fm.Metadata, AllowedTools: fm.AllowedTools,
 				Body: body, Dir: skillDir,
-			}, nil
+			}
+			attachSkillRealPath(sk, skillDir)
+			return sk, nil
 		}
 		fmTextLines = append(fmTextLines, lines[i])
 	}

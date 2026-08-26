@@ -39,17 +39,16 @@ func listSkills(h *SkillHandler) gin.HandlerFunc {
 		}
 
 		if projectDir != "" {
-			projectSkills := service.ScanAllSkills(h.DataDir, projectDir)
+			skills = h.Skills.Scan(projectDir)
 			projRoots := paths.ProjectSkillDirs(projectDir)
-			for i := range projectSkills {
+			for i := range skills {
 				for _, root := range projRoots {
-					if paths.PathUnderRoot(projectSkills[i].Dir, root) {
-						projectSkills[i].ProjectID = projectID
+					if paths.PathUnderRoot(skills[i].Dir, root) {
+						skills[i].ProjectID = projectID
 						break
 					}
 				}
 			}
-			skills = service.MergeSkillsByID(skills, projectSkills)
 		}
 
 		for i := range skills {

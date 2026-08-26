@@ -387,16 +387,17 @@ Agent 可用能力按三层合成；Skill 与连接器共用同一 Ambient 开�
 
 #### 自定义技能目录（Ambient，New Turn 扫描）
 
-每个 New Turn 在构建 system prompt 前实时扫描磁盘技能目录（**不写 SQLite**），与 Agent 已绑定的 DB 技能内存合并后注入 `<available_skills>`——**仅 Ambient 开启时**扫描磁盘。
+每个 New Turn 在构建 system prompt 前实时扫描磁盘技能目录（**不写 SQLite**），按 **项目 → 插件 → Home** 去重后注入 `<available_skills>`（仅 Skill ID + 描述）——**仅 Ambient 开启时**扫描磁盘。
 
-| 路径 | 范围 |
+技能 ID = 相对扫描根目录的路径：`{root}/{id}/SKILL.md`（支持嵌套，如 `team/planner`）。扫描时在 frontmatter `metadata.real_path` 写入技能目录绝对路径，便于排查；不回写磁盘。
+
+| 路径 | 层级 |
 |------|------|
-| `~/.agents/skills/` | 用户 |
-| `~/.danmo-work/skills/` | 用户 |
-| `<projectRoot>/.agents/skills/` | 项目（`WorkDir`） |
-| `<projectRoot>/.danmo-work/skills/` | 项目（`WorkDir`） |
+| `<projectRoot>/.agents/skills/`、`<projectRoot>/.danmo-work/skills/` | 项目（最高） |
+| `$WORK_HOME/plugins/*/skills/` | 插件 |
+| `~/.agents/skills/`、`$WORK_HOME/skills/`、`$WORK_HOME/data/skills/` | Home（最低） |
 
-同名 ID 覆盖顺序（后者赢）：绑定 DB → `~/.agents` → `~/.danmo-work` → 项目 `.agents` → 项目 `.danmo-work`。目录缺失或坏 `SKILL.md` 跳过。Skills 管理页仍只显示 DB（内置 / 手建 / 市场）。
+同名 ID 保留优先级高的副本。`read_skill` 按 ID（及可选 `project_id`）同样按项目 → 插件 → Home 查找。Skills 管理页仍展示扫描结果（`dir` 为占位路径，真实路径见 `metadata.real_path`）。
 
 市场源（`market.sources`）除官方 git catalog（dq-market）外，可启用 `kind: techleads`（Tech Leads Club 精选目录，默认开启）与 `kind: clawhub`（ClawHub 公共注册表，默认关闭）。安装写入 SQLite 技能库，与 Ambient 磁盘扫描无关。
 
@@ -570,8 +571,8 @@ Tool 刚执行完时已按 `runtime.tools.max_output_chars` 做硬上限（§6.3
   2. 低于高水位（(context_window − max_output) * TriggerRatio）: 不裁剪（含去重；保持 LLM 前缀稳定以利 KV cache）
   3. 超高水位时（Harness-style pressure compaction）:
      a. 去重: 同 tool+input → 保留最新，旧结果摘要
-     b. 渐进截断: 超大 tool result（超过 toolTruncate，默认 8192）→ head + marker + tail；最近 keepRecentToolSteps 批（默认 3）豁免；`read_skill` / `ask_user` 全文保留
-     c. 仍超阈值 → 删除最旧 assistant+tool 对直到低水位；最近 keepRecentToolSteps 批豁免；`read_skill` / `ask_user` 对不删除（同批并列 tool 一并保留以免拆对）
+     b. 渐进截断: 超大 tool result（超过 toolTruncate，默认 8192）→ head + marker + tail；最近 keepRecentToolSteps 批（默认 3）豁免；`ask_user` 全文保留（含去重豁免）；`read_skill` 原文丢弃，改为占位提示（需要时再 `read_skill` 同一 path）
+     c. 仍超阈值 → 删除最旧 assistant+tool 对直到低水位；最近 keepRecentToolSteps 批豁免；`ask_user` 对不删除（同批并列 tool 一并保留以免拆对）
 ```
 
 Compaction 仅修改内存中的 LLM messages；tool 执行时的完整输出仍落在 durable turn log。

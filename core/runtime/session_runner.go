@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"danmo-work/core/domain"
-	"danmo-work/core/paths"
 	"danmo-work/core/port"
 	"danmo-work/core/runtime/permission"
 	"danmo-work/core/runtime/tool"
@@ -1180,7 +1179,7 @@ func (e *Engine) setupRegistry(s domain.Session, agent domain.Agent, planMode bo
 	skills := e.resolveAgentSkills(agent, workDir)
 
 	if e.readSkill != nil {
-		e.readSkill.SetRoots(e.dataDir, workDir)
+		e.configureReadSkill(e.readSkill, workDir)
 	}
 
 	var reg *tool.Registry
@@ -1190,6 +1189,19 @@ func (e *Engine) setupRegistry(s domain.Session, agent domain.Agent, planMode bo
 		reg = e.buildWorkerRegistry(agent, planMode)
 	}
 	return reg, skills
+}
+
+func (e *Engine) configureReadSkill(rs *builtin.ReadSkill, workDir string) {
+	if rs == nil {
+		return
+	}
+	rs.SetRoots(e.dataDir, workDir)
+	rs.SetProjectLookup(func(projectID string) string {
+		if e.projects == nil || projectID == "" {
+			return ""
+		}
+		return e.projects.ResolveDir(context.Background(), projectID, e.dataDir)
+	})
 }
 
 // spawnTurnRunner builds an isolated runner for one turn so concurrent sessions
@@ -1235,24 +1247,12 @@ func (e *Engine) delegatableAgents(agent domain.Agent) []domain.Agent {
 	return result
 }
 
-func homeDir() string {
-	h, _ := os.UserHomeDir()
-	return h
-}
-
 func (e *Engine) resolveAgentSkills(agent domain.Agent, workDir string) []domain.Skill {
-	allSkills := service.ScanAllSkills(e.dataDir, workDir)
 	var pluginDirs []string
 	if e.skills != nil {
-		if listed, err := e.skills.List(context.Background()); err == nil {
-			allSkills = service.MergeSkillsByID(listed, allSkills)
-		}
 		pluginDirs = e.skills.PluginSkillDirs()
 	}
-	pluginDirs = append(pluginDirs, paths.PluginSkillDirs(e.dataDir)...)
-	for i := range allSkills {
-		allSkills[i].PromptPath = builtin.SkillPathForPromptWithPlugins(allSkills[i].Dir, e.dataDir, homeDir()+"/.agents", workDir, pluginDirs)
-	}
+	allSkills := service.ScanAllSkills(e.dataDir, workDir, pluginDirs...)
 
 	if agent.Mode == domain.AgentModeSubagent {
 		return service.BoundSkills(allSkills, agent)
@@ -1601,7 +1601,7 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent, planMode bool) *tool.Regi
 				childReg = e.buildWorkerRegistry(workerAgent, planMode)
 			}
 			rs := &builtin.ReadSkill{}
-			rs.SetRoots(e.dataDir, workDir)
+			e.configureReadSkill(rs, workDir)
 			childReg.Register(rs)
 			childRunner := e.spawnTurnRunner(childTurnID, childReg, skills, workerAgent.Tools)
 

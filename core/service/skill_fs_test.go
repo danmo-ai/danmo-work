@@ -96,6 +96,66 @@ func TestMergeSkillsByID(t *testing.T) {
 	}
 }
 
+func TestScanSkillDirsNestedIDAndRealPath(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "team", "planner")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	md := "---\nname: planner\ndescription: nested\n---\n\nbody\n"
+	if err := os.WriteFile(filepath.Join(nested, "SKILL.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	skills, _ := ScanSkillDirs([]string{root})
+	if len(skills) != 1 {
+		t.Fatalf("skills=%d %+v", len(skills), skills)
+	}
+	if skills[0].ID != "team/planner" {
+		t.Fatalf("id=%q", skills[0].ID)
+	}
+	if skills[0].Dir != nested {
+		t.Fatalf("Dir=%q want %q", skills[0].Dir, nested)
+	}
+	if skills[0].Metadata[SkillMetaRealPath] != nested {
+		t.Fatalf("real_path=%q", skills[0].Metadata[SkillMetaRealPath])
+	}
+}
+
+func TestScanAllSkillsPriorityProjectPluginHome(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", filepath.Join(root, "user"))
+	dataDir := filepath.Join(root, "data")
+	homeSkill := filepath.Join(dataDir, "skills")
+	pluginSkill := filepath.Join(root, "plugins", "ext", "skills")
+	proj := filepath.Join(root, "proj")
+	projSkill := filepath.Join(proj, ".danmo-work", "skills")
+	writeSkill(t, homeSkill, "demo", "from-home")
+	writeSkill(t, pluginSkill, "demo", "from-plugin")
+	writeSkill(t, projSkill, "demo", "from-project")
+	writeSkill(t, pluginSkill, "plug-only", "only-plugin")
+
+	withoutProj := ScanAllSkills(dataDir, "", pluginSkill)
+	byID := map[string]string{}
+	for _, sk := range withoutProj {
+		byID[sk.ID] = sk.Body
+	}
+	if byID["demo"] != "from-plugin" {
+		t.Fatalf("plugin should beat home: %q", byID["demo"])
+	}
+	if byID["plug-only"] != "only-plugin" {
+		t.Fatalf("plug-only=%q", byID["plug-only"])
+	}
+
+	withProj := ScanAllSkills(dataDir, proj, pluginSkill)
+	byID = map[string]string{}
+	for _, sk := range withProj {
+		byID[sk.ID] = sk.Body
+	}
+	if byID["demo"] != "from-project" {
+		t.Fatalf("project should beat plugin: %q", byID["demo"])
+	}
+}
+
 func TestBoundSkills(t *testing.T) {
 	all := []domain.Skill{{ID: "a"}, {ID: "b"}, {ID: "c"}}
 	got := BoundSkills(all, domain.Agent{SkillIDs: []string{"b", "x", "a"}})

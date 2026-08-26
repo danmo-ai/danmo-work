@@ -159,6 +159,68 @@ func GlobalSkillDirs() []string {
 	}
 }
 
+// HomeSkillDirs returns Home-tier skill roots, low → high priority:
+// ~/.agents/skills, $WORK_HOME/skills, {dataDir}/skills (deduped).
+func HomeSkillDirs(dataDir string) []string {
+	seen := make(map[string]struct{}, 3)
+	var out []string
+	add := func(d string) {
+		d = filepath.Clean(d)
+		if d == "" || d == "." {
+			return
+		}
+		if _, ok := seen[d]; ok {
+			return
+		}
+		seen[d] = struct{}{}
+		out = append(out, d)
+	}
+	add(AgentsSkillDir())
+	add(filepath.Join(WorkHomeFromDataDir(dataDir), "skills"))
+	if dataDir != "" {
+		add(filepath.Join(dataDir, "skills"))
+	}
+	return out
+}
+
+// JoinSkillID joins a scan root with a relative skill id (slash-separated).
+// Returns empty when id is empty or contains "..".
+func JoinSkillID(root, id string) string {
+	id = strings.Trim(filepath.ToSlash(id), "/")
+	if root == "" || id == "" || strings.Contains(id, "..") {
+		return ""
+	}
+	parts := strings.Split(id, "/")
+	return filepath.Join(append([]string{root}, parts...)...)
+}
+
+// HasSKILLMD reports whether dir contains a SKILL.md file.
+func HasSKILLMD(dir string) bool {
+	if dir == "" {
+		return false
+	}
+	st, err := os.Stat(filepath.Join(dir, "SKILL.md"))
+	return err == nil && !st.IsDir()
+}
+
+// SkillLookupRoots returns skill scan roots in lookup order (first match wins):
+// project (high) → plugin → Home (low). Within each tier, later entries win.
+func SkillLookupRoots(home, plugin, project []string) []string {
+	var out []string
+	appendRev := func(dirs []string) {
+		for i := len(dirs) - 1; i >= 0; i-- {
+			d := strings.TrimSpace(dirs[i])
+			if d != "" {
+				out = append(out, d)
+			}
+		}
+	}
+	appendRev(project)
+	appendRev(plugin)
+	appendRev(home)
+	return out
+}
+
 // GlobalSkillRoots returns global skill root dirs using the configured dataDir as danmo-work home.
 func GlobalSkillRoots(dataDir string) []string {
 	return []string{

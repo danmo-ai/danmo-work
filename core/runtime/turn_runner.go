@@ -22,6 +22,8 @@ const (
 	defaultToolTruncateChars   = 8192
 	defaultKeepRecentToolSteps = 3
 	toolResultPruneMarker      = "\n\n[... tool result middle pruned ...]\n\n"
+	readSkillPruneMarker       = "[read_skill result truncated by context compaction"
+	readSkillPrunePlaceholder  = "[read_skill result truncated by context compaction — original text omitted. Call read_skill again with the same path if you still need it.]"
 	defaultMaxToolOutputChars  = 50000
 	turnTokenEstimateDivisor   = 4
 	// defaultCompactionRetainRatio is the fraction of the current context's
@@ -713,7 +715,9 @@ func (p *TurnRunner) executeToolSlot(ctx context.Context, cfg turnRunCfg, slot *
 		slot.done = true
 		return nil
 	}
-	result.Content = limitToolOutput(result.Content, cfg.maxToolOutputChars)
+	if slot.call.Name != "ask_user" {
+		result.Content = limitToolOutput(result.Content, cfg.maxToolOutputChars)
+	}
 	slot.result = result
 	slot.content = result.Content
 	slot.done = true
@@ -1213,12 +1217,17 @@ func (p *TurnRunner) dedupToolResults(messages []Message) []Message {
 		return messages
 	}
 
+	names := toolCallNamesByID(messages)
 	result := make([]Message, len(messages))
 	copy(result, messages)
 	for i := range result {
-		if result[i].Role == RoleTool && dupIDs[result[i].ToolCallID] {
-			result[i].Content = fmt.Sprintf("[dedup] %s: 重复调用，同输入，参见最新结果", result[i].Name)
+		if result[i].Role != RoleTool || !dupIDs[result[i].ToolCallID] {
+			continue
 		}
+		if isPinnedCompactionTool(compactionToolName(result, i, names)) {
+			continue
+		}
+		result[i].Content = fmt.Sprintf("[dedup] %s: 重复调用，同输入，参见最新结果", result[i].Name)
 	}
 	return result
 }
@@ -1248,20 +1257,52 @@ func recentToolCallIDs(messages []Message, keepSteps int) map[string]struct{} {
 	return protected
 }
 
-// pinnedCompactionTools stay full through prune and are never dropped by snipHead
-// (procedure + user decisions; same class of "must survive" as the current user goal).
+// pinnedCompactionTools stay full through prune/dedup and are never dropped by
+// snipHead. User answers cannot be recovered by re-running the tool.
 func isPinnedCompactionTool(name string) bool {
-	switch name {
-	case "read_skill", "ask_user":
-		return true
-	default:
-		return false
-	}
+	return name == "ask_user"
 }
 
-func assistantHasPinnedTools(m Message) bool {
+func toolCallNamesByID(messages []Message) map[string]string {
+	names := make(map[string]string)
+	for _, m := range messages {
+		if m.Role == RoleAssistant {
+			for _, tc := range m.ToolCalls {
+				if tc.ID != "" && tc.Name != "" {
+					names[tc.ID] = tc.Name
+				}
+			}
+		}
+		if m.Role == RoleTool && m.ToolCallID != "" && m.Name != "" {
+			if _, ok := names[m.ToolCallID]; !ok {
+				names[m.ToolCallID] = m.Name
+			}
+		}
+	}
+	return names
+}
+
+func compactionToolName(messages []Message, idx int, names map[string]string) string {
+	if idx < 0 || idx >= len(messages) {
+		return ""
+	}
+	m := messages[idx]
+	if m.Name != "" {
+		return m.Name
+	}
+	if names != nil {
+		return names[m.ToolCallID]
+	}
+	return ""
+}
+
+func assistantHasPinnedTools(m Message, names map[string]string) bool {
 	for _, tc := range m.ToolCalls {
-		if isPinnedCompactionTool(tc.Name) {
+		name := tc.Name
+		if name == "" && names != nil {
+			name = names[tc.ID]
+		}
+		if isPinnedCompactionTool(name) {
 			return true
 		}
 	}
@@ -1283,7 +1324,20 @@ func toolResultPruneHeadTail(threshold int) (head, tail int) {
 }
 
 func isToolResultPruned(content string) bool {
-	return strings.Contains(content, toolResultPruneMarker)
+	return strings.Contains(content, toolResultPruneMarker) || isReadSkillPruned(content)
+}
+
+func isReadSkillPruned(content string) bool {
+	return strings.HasPrefix(content, readSkillPruneMarker)
+}
+
+// stubReadSkillResult replaces skill body with a re-read hint. No original text
+// is kept — the LLM can call read_skill again with the same path.
+func stubReadSkillResult(content string) string {
+	if isReadSkillPruned(content) {
+		return content
+	}
+	return readSkillPrunePlaceholder
 }
 
 // pruneToolResultContent rewrites one over-budget tool result to head+marker+tail.
@@ -1312,17 +1366,25 @@ func pruneToolResultContent(content string, threshold int) string {
 }
 
 // pruneToolResults rewrites over-budget tool results outside the protected window.
+// ask_user is never truncated. read_skill is replaced with a re-read placeholder
+// (original skill text is dropped) even when under the char threshold.
 func pruneToolResults(messages []Message, threshold int, protected map[string]struct{}) []Message {
 	if threshold <= 0 {
 		threshold = defaultToolTruncateChars
 	}
+	names := toolCallNamesByID(messages)
 	result := make([]Message, len(messages))
 	copy(result, messages)
 	for i := range result {
 		if result[i].Role != RoleTool {
 			continue
 		}
-		if isPinnedCompactionTool(result[i].Name) {
+		name := compactionToolName(result, i, names)
+		if isPinnedCompactionTool(name) {
+			continue
+		}
+		if name == "read_skill" {
+			result[i].Content = stubReadSkillResult(result[i].Content)
 			continue
 		}
 		if protected != nil {
@@ -1481,6 +1543,7 @@ func (p *TurnRunner) snipHead(messages []Message, budget, keepRecentSteps int) [
 // or the range is exhausted. goalIdx is the protected user goal index (adjusted
 // as removals shift indices); pass -1 when not applicable.
 func snipRange(messages []Message, start, end, budget, goalIdx int) []Message {
+	names := toolCallNamesByID(messages)
 	result := messages
 	i := start
 	for i < end && i < len(result) {
@@ -1492,12 +1555,12 @@ func snipRange(messages []Message, start, end, budget, goalIdx int) []Message {
 			continue
 		}
 		m := result[i]
-		if m.Role == RoleTool && isPinnedCompactionTool(m.Name) {
+		if m.Role == RoleTool && isPinnedCompactionTool(compactionToolName(result, i, names)) {
 			i++
 			continue
 		}
 		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
-			if assistantHasPinnedTools(m) {
+			if assistantHasPinnedTools(m, names) {
 				ids := make(map[string]bool, len(m.ToolCalls))
 				for _, tc := range m.ToolCalls {
 					ids[tc.ID] = true

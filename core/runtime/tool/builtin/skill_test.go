@@ -97,6 +97,130 @@ func TestReadSkillSchema(t *testing.T) {
 	}
 }
 
+func TestReadSkillByID(t *testing.T) {
+	root := t.TempDir()
+	dataDir := filepath.Join(root, "data")
+	skillDir := filepath.Join(root, "plugins", "novel", "skills", "novel-review")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	md := "---\nname: novel-review\n---\n\nreview-body"
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	refDir := filepath.Join(skillDir, "references")
+	if err := os.MkdirAll(refDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(refDir, "gates.md"), []byte("gate-body"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &ReadSkill{dataDir: dataDir}
+	got, err := h.Execute(context.Background(), map[string]any{"id": "novel-review"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Content != "review-body" {
+		t.Fatalf("body=%q", got.Content)
+	}
+	got, err = h.Execute(context.Background(), map[string]any{"path": "novel-review/references/gates.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Content != "gate-body" {
+		t.Fatalf("ref=%q", got.Content)
+	}
+}
+
+func TestReadSkillNestedID(t *testing.T) {
+	root := t.TempDir()
+	dataDir := filepath.Join(root, "data")
+	skillDir := filepath.Join(dataDir, "skills", "team", "planner")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	md := "---\nname: planner\n---\n\nnested-body"
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := &ReadSkill{dataDir: dataDir}
+	got, err := h.Execute(context.Background(), map[string]any{"id": "team/planner"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Content != "nested-body" {
+		t.Fatalf("body=%q", got.Content)
+	}
+}
+
+func TestReadSkillProjectIDOverridesHome(t *testing.T) {
+	root := t.TempDir()
+	dataDir := filepath.Join(root, "data")
+	homeDir := filepath.Join(dataDir, "skills", "demo")
+	proj := filepath.Join(root, "proj")
+	projDir := filepath.Join(proj, ".danmo-work", "skills", "demo")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(projDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(dir, body string) {
+		t.Helper()
+		md := "---\nname: demo\n---\n\n" + body
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(md), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(homeDir, "home-body")
+	write(projDir, "proj-body")
+
+	h := &ReadSkill{dataDir: dataDir}
+	h.SetProjectLookup(func(id string) string {
+		if id == "proj-1" {
+			return proj
+		}
+		return ""
+	})
+	got, err := h.Execute(context.Background(), map[string]any{"id": "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Content != "home-body" {
+		t.Fatalf("without project_id want home, got %q", got.Content)
+	}
+	got, err = h.Execute(context.Background(), map[string]any{"id": "demo", "project_id": "proj-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Content != "proj-body" {
+		t.Fatalf("with project_id want project, got %q", got.Content)
+	}
+}
+
+func TestReadSkillMisexpandedPluginPath(t *testing.T) {
+	root := t.TempDir()
+	dataDir := filepath.Join(root, "data")
+	skillDir := filepath.Join(root, "plugins", "novel", "skills", "novel-review")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	md := "---\nname: novel-review\n---\n\nreview-body"
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := &ReadSkill{dataDir: dataDir}
+	wrong := filepath.Join(root, "data", "proj-x", "files", "plugins", "novel", "skills", "novel-review")
+	got, err := h.Execute(context.Background(), map[string]any{"path": wrong})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Content != "review-body" {
+		t.Fatalf("body=%q", got.Content)
+	}
+}
+
 func TestSkillPathForPrompt(t *testing.T) {
 	tests := []struct {
 		skillDir, dataDir, agentsHome, projectDir, want string

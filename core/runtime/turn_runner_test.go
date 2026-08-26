@@ -612,6 +612,23 @@ func TestExecuteToolSlotRecoversPanic(t *testing.T) {
 	}
 }
 
+func TestExecuteToolSlotDoesNotCapAskUser(t *testing.T) {
+	p := NewTurnRunner(nil, NewStreamEventManager(nil), nil, tool.NewRegistry(), nil)
+	long := strings.Repeat("y", 500)
+	slot := &toolCallSlot{
+		call:    port.ChatToolCall{ID: "c1", Name: "ask_user"},
+		handler: &mockToolHandler{name: "ask_user", content: long},
+		args:    map[string]any{"question": "ok?"},
+		exec:    true,
+	}
+	if err := p.executeToolSlot(context.Background(), turnRunCfg{maxToolOutputChars: 10}, slot); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if slot.content != long {
+		t.Fatalf("ask_user must not be ingest-capped, got len=%d", len(slot.content))
+	}
+}
+
 func TestTurnEstimateMessageTokensCountsImageParts(t *testing.T) {
 	plain := turnEstimateMessageTokens(Message{Role: RoleUser, Content: "hi"})
 	withImage := turnEstimateMessageTokens(Message{
@@ -887,19 +904,26 @@ func TestPruneToolResults_SkipsRecentSteps(t *testing.T) {
 	}
 }
 
-func TestPruneToolResults_PreservesReadSkillAndAskUser(t *testing.T) {
+func TestPruneToolResults_AskUserKeptReadSkillStubbed(t *testing.T) {
 	long := strings.Repeat("x", defaultToolTruncateChars+100)
+	skillBody := "# Skill\n" + strings.Repeat("procedure ", 40)
 	msgs := []Message{
 		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "sk", Name: "read_skill"}}},
-		{Role: RoleTool, ToolCallID: "sk", Name: "read_skill", Content: long},
+		{Role: RoleTool, ToolCallID: "sk", Name: "read_skill", Content: skillBody},
 		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "ask", Name: "ask_user"}}},
 		{Role: RoleTool, ToolCallID: "ask", Name: "ask_user", Content: "2. 全面重做"},
 		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "rf", Name: "read_file"}}},
 		{Role: RoleTool, ToolCallID: "rf", Name: "read_file", Content: long},
 	}
 	out := pruneToolResults(msgs, defaultToolTruncateChars, nil)
-	if out[1].Content != long {
-		t.Fatal("read_skill must not be pruned")
+	if out[1].Content != readSkillPrunePlaceholder {
+		t.Fatalf("read_skill should be stubbed, got %q", out[1].Content)
+	}
+	if strings.Contains(out[1].Content, skillBody) || strings.Contains(out[1].Content, "procedure") {
+		t.Fatal("read_skill stub must not keep original text")
+	}
+	if !strings.Contains(out[1].Content, "read_skill") {
+		t.Fatal("stub should tell the model to call read_skill again")
 	}
 	if out[3].Content != "2. 全面重做" {
 		t.Fatal("ask_user must not be pruned")
@@ -909,7 +933,69 @@ func TestPruneToolResults_PreservesReadSkillAndAskUser(t *testing.T) {
 	}
 }
 
-func TestSnipHeadPreservesReadSkillAndAskUser(t *testing.T) {
+func TestPruneToolResults_ReadSkillStubsEvenIfRecent(t *testing.T) {
+	skillBody := "# Skill\n" + strings.Repeat("keep-me ", 30)
+	msgs := []Message{
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "sk", Name: "read_skill"}}},
+		{Role: RoleTool, ToolCallID: "sk", Name: "read_skill", Content: skillBody},
+	}
+	protected := recentToolCallIDs(msgs, 1)
+	out := pruneToolResults(msgs, defaultToolTruncateChars, protected)
+	if out[1].Content != readSkillPrunePlaceholder {
+		t.Fatalf("recent read_skill should still be stubbed, got %q", out[1].Content)
+	}
+	if strings.Contains(out[1].Content, "keep-me") {
+		t.Fatal("read_skill stub must not keep original text")
+	}
+}
+
+func TestPruneToolResults_LongAskUserKept(t *testing.T) {
+	long := strings.Repeat("x", defaultToolTruncateChars+100)
+	msgs := []Message{
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "ask", Name: "ask_user"}}},
+		{Role: RoleTool, ToolCallID: "ask", Content: long},
+	}
+	out := pruneToolResults(msgs, defaultToolTruncateChars, nil)
+	if out[1].Content != long {
+		t.Fatal("ask_user must stay full even when tool-result Name is empty")
+	}
+}
+
+func TestPruneToolResults_ReadSkillStubIdempotent(t *testing.T) {
+	skillBody := "# Skill\n" + strings.Repeat("x", 200)
+	msgs := []Message{
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "sk", Name: "read_skill"}}},
+		{Role: RoleTool, ToolCallID: "sk", Name: "read_skill", Content: skillBody},
+	}
+	once := pruneToolResults(msgs, defaultToolTruncateChars, nil)
+	twice := pruneToolResults(once, defaultToolTruncateChars, nil)
+	if once[1].Content != readSkillPrunePlaceholder {
+		t.Fatalf("first prune: %q", once[1].Content)
+	}
+	if twice[1].Content != once[1].Content {
+		t.Fatalf("stub should be idempotent: %q vs %q", once[1].Content, twice[1].Content)
+	}
+}
+
+func TestDedupToolResults_SkipsAskUser(t *testing.T) {
+	tr := NewTurnRunner(nil, nil, nil, nil, nil)
+	first := "1. keep going"
+	msgs := []Message{
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "a1", Name: "ask_user", Arguments: map[string]any{"question": "next?"}}}},
+		{Role: RoleTool, ToolCallID: "a1", Name: "ask_user", Content: first},
+		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "a2", Name: "ask_user", Arguments: map[string]any{"question": "next?"}}}},
+		{Role: RoleTool, ToolCallID: "a2", Name: "ask_user", Content: "2. stop"},
+	}
+	out := tr.dedupToolResults(msgs)
+	if out[1].Content != first {
+		t.Fatalf("older ask_user answer must not be deduped, got %q", out[1].Content)
+	}
+	if out[3].Content != "2. stop" {
+		t.Fatalf("latest ask_user answer changed: %q", out[3].Content)
+	}
+}
+
+func TestSnipHeadPreservesAskUserNotReadSkill(t *testing.T) {
 	tr := NewTurnRunner(nil, nil, nil, nil, nil)
 	pad := strings.Repeat("word ", 80)
 	skillBody := "# Novel Review\n" + pad
@@ -932,7 +1018,7 @@ func TestSnipHeadPreservesReadSkillAndAskUser(t *testing.T) {
 	out := tr.snipHead(msgs, 10, 1)
 	foundSkill, foundAsk, foundSibling, foundOld := false, false, false, false
 	for _, m := range out {
-		if m.Role == RoleTool && m.ToolCallID == "sk" && m.Content == skillBody {
+		if m.Role == RoleTool && m.ToolCallID == "sk" {
 			foundSkill = true
 		}
 		if m.Role == RoleTool && m.ToolCallID == "ask" && m.Content == "2. 全面重做" {
@@ -945,14 +1031,11 @@ func TestSnipHeadPreservesReadSkillAndAskUser(t *testing.T) {
 			foundOld = true
 		}
 	}
-	if !foundSkill {
-		t.Fatal("read_skill pair must survive snipHead")
+	if foundSkill || foundSibling {
+		t.Fatal("read_skill pairs should be snippable; original skill text must not be pinned")
 	}
 	if !foundAsk {
 		t.Fatal("ask_user pair must survive snipHead")
-	}
-	if !foundSibling {
-		t.Fatal("tools batched with read_skill must stay to keep pairing")
 	}
 	if foundOld {
 		t.Fatal("unpinned old grep should still be snipped")

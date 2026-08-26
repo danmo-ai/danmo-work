@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 
 	"danmo-work/core/domain"
 	"danmo-work/core/paths"
@@ -19,52 +17,19 @@ type AvailableSkill struct {
 	Source string `json:"source"`
 }
 
-// ScanAllSkills loads all skills from global + project directories.
-// Project skills override global skills by ID (directory name).
-// Dir is set to the absolute filesystem path.
-func ScanAllSkills(dataDir, projectDir string) []domain.Skill {
+// ScanAllSkills loads skills from Home, plugin, then project directories.
+// ID is the path relative to each scan root ({xxx/xxx}/SKILL.md). Same ID keeps
+// the higher-priority copy: project → plugin → Home.
+func ScanAllSkills(dataDir, projectDir string, pluginDirs ...string) []domain.Skill {
+	if len(pluginDirs) == 0 {
+		pluginDirs = paths.PluginSkillDirs(dataDir)
+	}
 	var dirs []string
-	dirs = append(dirs, paths.AgentsSkillDir())
-	dirs = append(dirs, filepath.Join(dataDir, "skills"))
-	if projectDir != "" {
-		dirs = append(dirs, paths.ProjectSkillDirs(projectDir)...)
-	}
-
-	byID := make(map[string]domain.Skill)
-	var order []string
-
-	for _, dir := range dirs {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-			id := entry.Name()
-			skillDir := filepath.Join(dir, id)
-			mdPath := filepath.Join(skillDir, "SKILL.md")
-			data, err := os.ReadFile(mdPath)
-			if err != nil {
-				continue
-			}
-			sk, err := parseSkillMarkdown(string(data), skillDir)
-			if err != nil {
-				continue
-			}
-			if _, exists := byID[id]; !exists {
-				order = append(order, id)
-			}
-			byID[id] = *sk
-		}
-	}
-
-	out := make([]domain.Skill, 0, len(order))
-	for _, id := range order {
-		out = append(out, byID[id])
-	}
-	return out
+	dirs = append(dirs, paths.HomeSkillDirs(dataDir)...)
+	dirs = append(dirs, pluginDirs...)
+	dirs = append(dirs, paths.ProjectSkillDirs(projectDir)...)
+	skills, _ := ScanSkillDirs(dirs)
+	return skills
 }
 
 func ScanSkillDirs(dirs []string) ([]domain.Skill, map[string][]domain.SkillFile) {
@@ -84,7 +49,9 @@ func ScanSkillDirs(dirs []string) ([]domain.Skill, map[string][]domain.SkillFile
 			if _, exists := byID[sk.ID]; !exists {
 				order = append(order, sk.ID)
 			}
-			sk.Dir = filepath.Join(dir, sk.ID)
+			if sk.Dir == "" {
+				sk.Dir = paths.JoinSkillID(dir, sk.ID)
+			}
 			byID[sk.ID] = sk
 			dirByID[sk.ID] = dir
 			if sf, ok := filesForDir[sk.ID]; ok {
@@ -165,10 +132,13 @@ func OrphanSkills(all []domain.Skill, agent domain.Agent) []domain.Skill {
 
 func ListAvailableSkillsForAgent(ctx context.Context, skills *SkillManager, agent domain.Agent, workDir string) ([]AvailableSkill, error) {
 	_ = ctx
-	all := ScanAllSkills(skills.DataDir(), workDir)
-	if pluginSkills, err := skills.List(ctx); err == nil {
-		all = MergeSkillsByID(pluginSkills, all)
+	var pluginDirs []string
+	var dataDir string
+	if skills != nil {
+		pluginDirs = skills.PluginSkillDirs()
+		dataDir = skills.DataDir()
 	}
+	all := ScanAllSkills(dataDir, workDir, pluginDirs...)
 
 	bound := BoundSkills(all, agent)
 	boundIDs := make(map[string]struct{}, len(bound))

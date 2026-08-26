@@ -7,7 +7,7 @@ import (
 	"danmo-work/core/domain"
 )
 
-func TestBuildSkillMetadataIncludesCategory(t *testing.T) {
+func TestBuildSkillMetadataIDAndDescription(t *testing.T) {
 	out := buildSkillMetadata([]domain.Skill{
 		{
 			ID:          "writing-plans",
@@ -17,55 +17,38 @@ func TestBuildSkillMetadataIncludesCategory(t *testing.T) {
 		},
 		{
 			ID:          "brainstorming",
-			Name:        "brainstorming",
 			Description: "Clarify requirements before building",
-			Metadata:    map[string]string{"category": "work"},
 		},
 		{
 			ID:          "skill-creator",
-			Name:        "skill-creator",
 			Description: "Create new skills",
-			Metadata:    map[string]string{"category": "general"},
 			SystemHint:  "use for skill authoring",
-		},
-		{
-			ID:          "legacy",
-			Name:        "legacy",
-			Description: "No category",
 		},
 		{
 			ID:          "tlc__pr-review",
 			Name:        "PR Review",
 			Description: "Review pull requests",
+			PromptPath:  "{work_home}/plugins/x/skills/tlc__pr-review",
 		},
 	})
 
-	if !strings.Contains(out, "<category>coding</category>") {
-		t.Fatalf("missing coding category:\n%s", out)
+	if !strings.Contains(out, "<id>writing-plans</id>") {
+		t.Fatalf("missing id:\n%s", out)
 	}
-	if !strings.Contains(out, "<category>work</category>") {
-		t.Fatalf("missing work category:\n%s", out)
+	if !strings.Contains(out, "<id>tlc__pr-review</id>") {
+		t.Fatalf("path placeholders must not replace skill id:\n%s", out)
 	}
-	if !strings.Contains(out, "<category>general</category>") {
-		t.Fatalf("missing general category:\n%s", out)
+	if strings.Contains(out, "{work_home}") {
+		t.Fatalf("prompt must not inject filesystem placeholders:\n%s", out)
 	}
-	if !strings.Contains(out, "<path>legacy</path>\n    <description>") {
-		t.Fatalf("legacy skill should omit category:\n%s", out)
+	if strings.Contains(out, "<path>") || strings.Contains(out, "<name>") || strings.Contains(out, "<category>") || strings.Contains(out, "<hint>") {
+		t.Fatalf("prompt should only inject id and description:\n%s", out)
 	}
-	if !strings.Contains(out, "<hint>use for skill authoring</hint>") {
-		t.Fatalf("missing system hint:\n%s", out)
+	if !strings.Contains(out, "<description>Review pull requests</description>") {
+		t.Fatalf("missing description:\n%s", out)
 	}
-	if !strings.Contains(out, "<path>tlc__pr-review</path>") {
-		t.Fatalf("path must use skill id:\n%s", out)
-	}
-	if !strings.Contains(out, "<name>PR Review</name>") {
-		t.Fatalf("display name should appear when distinct from id:\n%s", out)
-	}
-	if strings.Contains(out, "<name>legacy</name>") {
-		t.Fatalf("name omitted when equal to id:\n%s", out)
-	}
-	if !strings.Contains(out, `read_skill(path="<path>")`) {
-		t.Fatalf("comment should refer to <path> id:\n%s", out)
+	if !strings.Contains(out, `read_skill(id="<id>")`) {
+		t.Fatalf("comment should refer to skill id:\n%s", out)
 	}
 }
 
@@ -155,9 +138,9 @@ func TestBuildSkillMetadataSortsByID(t *testing.T) {
 		{ID: "alpha", Description: "a"},
 		{ID: "mu", Description: "m"},
 	})
-	alpha := strings.Index(out, "<path>alpha</path>")
-	mu := strings.Index(out, "<path>mu</path>")
-	zeta := strings.Index(out, "<path>zeta</path>")
+	alpha := strings.Index(out, "<id>alpha</id>")
+	mu := strings.Index(out, "<id>mu</id>")
+	zeta := strings.Index(out, "<id>zeta</id>")
 	if alpha < 0 || mu < 0 || zeta < 0 || !(alpha < mu && mu < zeta) {
 		t.Fatalf("skills should be sorted by id, got:\n%s", out)
 	}

@@ -307,7 +307,7 @@ func skillPromptSortKey(sk domain.Skill) string {
 	if sk.ID != "" {
 		return sk.ID
 	}
-	return sk.PromptPath
+	return sk.Name
 }
 
 func buildSkillMetadata(skills []domain.Skill) string {
@@ -320,25 +320,14 @@ func buildSkillMetadata(skills []domain.Skill) string {
 	})
 	var b strings.Builder
 	b.WriteString("<available_skills>\n")
-	b.WriteString("  <!-- Use read_skill with the skill id from <path>: read_skill(path=\"<path>\") -->\n")
-	b.WriteString("  <!-- Resource files: read_skill(path=\"<path>/references/file.md\") — never bare references/… -->\n")
+	b.WriteString("  <!-- read_skill(id=\"<id>\") or path=\"<id>/references/file.md\"; optional project_id -->\n")
 	for _, sk := range skills {
+		if sk.ID == "" {
+			continue
+		}
 		fmt.Fprintf(&b, "  <skill>\n")
-		path := sk.PromptPath
-		if path == "" {
-			path = sk.ID
-		}
-		fmt.Fprintf(&b, "    <path>%s</path>\n", escapeXML(path))
-		if sk.Name != "" && sk.Name != sk.ID {
-			fmt.Fprintf(&b, "    <name>%s</name>\n", escapeXML(sk.Name))
-		}
-		if cat := skillCategory(sk); cat != "" {
-			fmt.Fprintf(&b, "    <category>%s</category>\n", escapeXML(cat))
-		}
+		fmt.Fprintf(&b, "    <id>%s</id>\n", escapeXML(sk.ID))
 		fmt.Fprintf(&b, "    <description>%s</description>\n", escapeXML(sk.Description))
-		if sk.SystemHint != "" {
-			fmt.Fprintf(&b, "    <hint>%s</hint>\n", escapeXML(sk.SystemHint))
-		}
 		fmt.Fprintf(&b, "  </skill>\n")
 	}
 	b.WriteString("</available_skills>")
@@ -395,14 +384,6 @@ func skillToolSchemas(skills []domain.Skill, toolBindings []domain.ToolBinding) 
 		})
 	}
 	return schemas
-}
-
-// skillCategory returns metadata.category when set (general | coding | work).
-func skillCategory(sk domain.Skill) string {
-	if sk.Metadata == nil {
-		return ""
-	}
-	return strings.TrimSpace(sk.Metadata["category"])
 }
 
 func escapeXML(s string) string {

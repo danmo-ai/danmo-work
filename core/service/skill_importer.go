@@ -28,6 +28,30 @@ func NewSkillImporter() *SkillImporter {
 	return &SkillImporter{}
 }
 
+const SkillMetaRealPath = "real_path"
+
+func attachSkillRealPath(sk *domain.Skill, dir string) {
+	if sk == nil {
+		return
+	}
+	sk.Dir = dir
+	if sk.Metadata == nil {
+		sk.Metadata = make(map[string]string)
+	}
+	sk.Metadata[SkillMetaRealPath] = dir
+}
+
+func skipSkillWalkDir(root, path, name string) bool {
+	if path == root {
+		return false
+	}
+	switch name {
+	case "references", "scripts", "assets", "node_modules", ".git":
+		return true
+	}
+	return strings.HasPrefix(name, ".")
+}
+
 func (i *SkillImporter) Import(dirPath string) (*domain.Skill, []domain.SkillFile, error) {
 	skillMD, err := os.ReadFile(filepath.Join(dirPath, "SKILL.md"))
 	if err != nil {
@@ -42,6 +66,7 @@ func (i *SkillImporter) Import(dirPath string) (*domain.Skill, []domain.SkillFil
 		return nil, nil, fmt.Errorf("invalid SKILL.md: missing or empty name in frontmatter")
 	}
 	skill.SourcePath = dirPath
+	attachSkillRealPath(skill, dirPath)
 	// Prefix bare resource refs with skill meta id so read_skill paths match.
 	skill.Body = NormalizeSkillBodyRefs(skill.Body, skill.ID)
 
@@ -90,32 +115,52 @@ func (i *SkillImporter) Import(dirPath string) (*domain.Skill, []domain.SkillFil
 }
 
 func (i *SkillImporter) ImportAll(skillsDir string) ([]domain.Skill, []domain.SkillFile, error) {
-	entries, err := os.ReadDir(skillsDir)
-	if err != nil {
+	if _, err := os.Stat(skillsDir); err != nil {
 		return nil, nil, err
 	}
 
 	var skills []domain.Skill
 	var allFiles []domain.SkillFile
 
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+	err := filepath.WalkDir(skillsDir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
 		}
-		skillPath := filepath.Join(skillsDir, entry.Name())
-		if _, err := os.Stat(filepath.Join(skillPath, "SKILL.md")); err != nil {
-			continue
+		if d.IsDir() {
+			if skipSkillWalkDir(skillsDir, path, d.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
 		}
-		skill, files, err := i.Import(skillPath)
-		if err != nil {
-			continue
+		if d.Name() != "SKILL.md" {
+			return nil
 		}
-		// Directory name is the stable skill id (Agentskills layout).
-		skill.ID = entry.Name()
+		skillDir := filepath.Dir(path)
+		rel, err := filepath.Rel(skillsDir, skillDir)
+		if err != nil || rel == "." {
+			return nil
+		}
+		id := filepath.ToSlash(rel)
+		if id == "" || strings.Contains(id, "..") {
+			return nil
+		}
+		skill, files, err := i.Import(skillDir)
+		if err != nil || skill == nil {
+			return nil
+		}
+		skill.ID = id
+		attachSkillRealPath(skill, skillDir)
+		for j := range files {
+			files[j].SkillID = id
+			files[j].ID = id + ":" + files[j].Path
+		}
 		skills = append(skills, *skill)
 		allFiles = append(allFiles, files...)
+		return nil
+	})
+	if err != nil {
+		return skills, allFiles, err
 	}
-
 	return skills, allFiles, nil
 }
 
@@ -244,6 +289,9 @@ func (i *SkillImporter) ToSkillMD(s domain.Skill) string {
 	if len(s.Metadata) > 0 {
 		b.WriteString("metadata:\n")
 		for k, v := range s.Metadata {
+			if k == SkillMetaRealPath {
+				continue
+			}
 			b.WriteString("  " + k + ": " + v + "\n")
 		}
 	}
