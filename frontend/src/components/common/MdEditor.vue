@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { MdEditor as MdEditorV3, type ExposeParam, type Themes } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
+import '@/styles/md-editor-overrides.css'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useThemeStore, THEME_OPTIONS } from '@/stores/theme'
