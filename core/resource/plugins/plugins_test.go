@@ -120,6 +120,37 @@ func TestNovelPluginPacksSkillAndCraftKB(t *testing.T) {
 	}
 }
 
+func TestDocumentPluginPacksOfficeIRKnowledge(t *testing.T) {
+	meta, err := fs.ReadFile(FS, "document/ai.danmo.work/knowledge/_meta.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(meta), `"id": "kb-office-ir"`) {
+		t.Fatalf("document KB meta missing stable id: %s", meta)
+	}
+	for _, p := range []string{
+		"document/ai.danmo.work/knowledge/01-format-matrix.md",
+		"document/ai.danmo.work/knowledge/02-slides-ir.md",
+		"document/ai.danmo.work/knowledge/03-sheet-ir.md",
+		"document/ai.danmo.work/knowledge/04-doc-ir.md",
+	} {
+		if _, err := fs.ReadFile(FS, p); err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
+	}
+	doc, err := fs.ReadFile(FS, "document/ai.danmo.work/experts/document.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(doc)
+	if !strings.Contains(s, "kb-office-ir") {
+		t.Fatal("document expert must bind kb-office-ir")
+	}
+	if !strings.Contains(s, "search_kb") {
+		t.Fatal("document expert must expose search_kb for IR KB")
+	}
+}
+
 func TestBrowserAndComputerPluginsPackSkills(t *testing.T) {
 	if _, err := fs.ReadFile(FS, "browser/skills/browser/SKILL.md"); err != nil {
 		t.Fatal(err)

@@ -1,0 +1,5 @@
+{
+  "id": "kb-office-ir",
+  "name": "Office IR 与 Stage 格式",
+  "description": "Danmo File Stage 文件路由与 Univer IR：Markdown vs `.udoc.json` / `.uslides.json` / `.usheet.json` / CSV；用 read_file+edit/write 改盘，禁止靠联网学 Univer schema"
+}

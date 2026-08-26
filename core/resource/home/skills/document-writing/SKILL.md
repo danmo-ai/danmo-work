@@ -1,12 +1,12 @@
 ---
 name: document-writing
 source: builtin
-description: Structure and produce long-form workplace documents (reports, RFCs, specs, explainers) as Markdown and optional single-file HTML. Use when writing or converting substantial documents — not for code files or slide decks.
+description: "Long-form workplace docs as GFM `.md` (default). Not for slide decks or spreadsheets — those are Univer IR / CSV. Edit with write/edit/apply_patch; do not invent parallel JSON docs unless path is already `.udoc.json`."
 license: MIT
-compatibility: Requires write, edit, read_file
+compatibility: Requires write, edit, apply_patch, read_file
 metadata:
   author: danmo-work
-  version: "1.0"
+  version: "2.0"
   category: work
   adapted_from: "https://github.com/alirezarezvani/claude-skills/tree/main/markdown-html/skills/md-document"
   upstream_license: MIT
@@ -15,33 +15,44 @@ metadata:
 # Document Writing
 
 > Adapted from alirezarezvani/claude-skills `md-document` (© Alireza Rezvani / contributors, MIT).
-> Rewritten for Danmo Work (no upstream design-system/scripts required); not a verbatim copy.
+> Rewritten for Danmo Work; not a verbatim copy.
 
-Produce clear long-form documents. Prefer Markdown as the source of truth; optionally emit a self-contained HTML reader.
+## Format matrix (read first)
 
-## Workflow
+| Artifact | Extension | Skill |
+|----------|-----------|--------|
+| Report / RFC / explainer / notes | **`.md`** (GFM) | **this skill** |
+| Optional shareable reader | `.html` (read-only export; `.md` stays SoT) | this skill |
+| Rich Univer document (from Stage / `.docx` convert) | `.udoc.json` | edit existing path only — see `references/format-matrix.md` |
+| Slide deck | `.uslides.json` | `playable-slides` — **never** `*-slides.md` |
+| Table | `.csv` or `.usheet.json` | `sheet-writing` |
 
-1. **Purpose** — skim, decide, or deep-read? Audience and success criteria.
-2. **Outline** — H1 title + H2 sections before drafting body prose.
-3. **Draft Markdown** — headings hierarchy, short paragraphs, tables where they clarify, fenced code with language tags, callouts as blockquotes when useful.
-4. **Self-edit** — remove filler; check consistency of terms; no TBD left behind.
-5. **Optional HTML export** — if the user wants a shareable **read-only** page, write one `.html` file with:
-   - inlined CSS
-   - sticky or top TOC from H2+
-   - readable typography
-   - no framework runtime (vanilla HTML/CSS/JS only)
-   - HTML is **not** the edit source; keep `.md` as the source of truth
-6. **Deliver paths** — report written file paths and note they open in **Doc Stage** (Files → click the `.md`).
+**Default for new prose is always `.md`.** Do not create `.udoc.json` / `.uslides.json` / `.usheet.json` from this skill unless the user path already is that IR file (office-edit) or they explicitly demand Univer doc IR.
+
+## Hard rules
+
+1. Edit with **`read_file` + `edit` / `apply_patch` / `write`** only.
+2. Do **not** `web_search` Univer to invent a document JSON format for a Markdown task.
+3. Do **not** deliver a slide deck as Markdown “for Stage”.
+
+## Workflow (new `.md`)
+
+1. Purpose + audience.
+2. Outline H1 + H2.
+3. Draft GFM Markdown.
+4. Self-edit; no TBD.
+5. Optional one-file HTML export (inlined CSS; HTML is not SoT).
+6. Deliver paths (Files → Doc Stage opens `.md`).
 
 ## [office-edit] turns
 
-When the user message starts with `[office-edit]` and `kind: doc`:
+When `[office-edit]` and `kind: doc`:
 
-1. `read_file` the given `path` (GFM Markdown).
-2. Apply `action` / `instruction` to the `selection` (or full doc if selection is the whole file).
-3. Prefer `edit` for local replacements; `write` only when replacing the whole file is clearer.
-4. Do **not** rewrite as HTML or invent a parallel JSON doc format.
-5. SUMMARY: describe what changed (sections / headings).
+1. `read_file` `path`.
+2. If path ends with `.md` / `.markdown`: patch Markdown text.
+3. If path ends with `.udoc.json`: patch Univer `IDocumentData` inside the Danmo envelope (`danmo.format = "univer-doc"`). Prefer changing `snapshot.body.dataStream` + paragraph indices carefully, or full `write` of a coherent snapshot. Do **not** convert the file to `.md` unless asked.
+4. If path is `.docx` / `engine: ms-office`: do not write OOXML; ask to convert to `.udoc.json` first (or stop with blocker).
+5. SUMMARY: sections / headings (or IR fields) changed.
 
 ## Structure defaults
 
@@ -53,17 +64,18 @@ When the user message starts with `[office-edit]` and `kind: doc`:
 
 ## When not to use
 
-- Slide decks → `playable-slides` (`.uslides.json` Univer IR)
-- Emails / chat polish → Comms agent persona
-- Source code / config → Implementer
+- Slides → `playable-slides`
+- Tables → `sheet-writing`
+- Code / config → Implementer
+- Email polish → Comms tone still OK here, but keep as message text unless asked for a file
 
 ## Anti-patterns
 
 - Walls of unsectioned text
-- Card-heavy / dashboard-like noise in a prose doc
-- HTML that depends on a local build step or heavy frameworks
-- Claiming “done” without the actual file written
+- Marp / `type: slides` Markdown
+- Claiming done without writing the file
+- Web-learning IR schemas instead of tools + references / KB
 
 ## Stop condition
 
-Deliver Markdown (and HTML if requested) with a one-line summary of audience + purpose. Stop; do not invent next documents unless asked.
+Deliver Markdown (and HTML if requested) with a one-line audience + purpose note. Stop.
