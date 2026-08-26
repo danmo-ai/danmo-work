@@ -690,7 +690,7 @@ Files 树点击 → `routeProjectFile`（`frontend/src/utils/file-route.ts`）�
 | `doc` | `md` | GFM `.md` | TipTap | view（可切 edit） |
 | `doc` | `univer-doc` | `.udoc.json`（`IDocumentData` 信封） | Univer Docs | edit |
 | `doc` | `ms-office` | `.docx` | 只读预览；转 `.udoc.json` 后可编 | **view** |
-| `slides` | `univer-slides` | `.uslides.json`（`ISlideData` 信封） | Univer Slides | edit |
+| `slides` | `univer-slides` | `.uslides.json`（`ISlideData` 信封） | Univer Slides（`@univerjs/slides` + `slides-ui`，非自研占位） | edit |
 | `slides` | `ms-office` | `.pptx` | 只读预览；转 `.uslides.json` 后可编 | **view** |
 | `sheet` | `csv` | `.csv` | 自研网格 | edit |
 | `sheet` | `univer-sheet` | `.usheet.json`（`IWorkbookData` 信封） | Univer Sheets | edit |
