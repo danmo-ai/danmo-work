@@ -53,7 +53,7 @@
 | 专家 | 职责 |
 |------|------|
 | **Team**（主） | 默认可协作；适合跨文件、多步骤任务 |
-| **Document** | 报告、幻灯片、表格（File Stage 表面） |
+| **Document** | 职场写作交付：报告默认 Markdown；幻灯片/表格走绑定技能；含邮件/消息润色（原 Comms） |
 | **Comms** | 邮件、消息、通知的润色 |
 | **Implementer** | 按规格改代码（TDD / debugging 技能） |
 | **Explorer** | 只读摸清代码库 |

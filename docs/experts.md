@@ -76,7 +76,7 @@ delegate_agent(agent_id="<id>", goal="...")
 | 调研/自动化 | `researcher` | Researcher | 专家（技能用 home：deep-research） |
 | 调研/自动化 | `browser` | Browser | 专家 + skill + `browser_*` |
 | 调研/自动化 | `computer` | Computer | 专家 + `computer-use` + `computer` |
-| 职场写作 | `document` | Document | 专家（含原 Comms：邮件/消息/通知；技能用 home） |
+| 职场写作 | `document` | Document | 职场**写作交付**（报告默认 `.md`；幻灯片/表格走绑定技能；含原 Comms）。专家提示词只做路由与禁令；写法/IR 细节在 home 技能与 `kb-office-ir` |
 | 职场写作 | `data` | Data | 专家 |
 | 创作 | `novel` | Novel Writing | 专家 + `novel-setup` / `novel-plan` / `novel-write` / `novel-review` + KB `kb-novel-craft` |
 | 创作 | `danmo-make` | Danmo Make | 专家 + skill + bound MCP |
