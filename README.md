@@ -53,7 +53,7 @@ The lead agent runs the session; specialists do focused work on demand, each in 
 | Agent | Role |
 |-------|------|
 | **Team** (lead) | Multi-agent by default; collaboration toggle |
-| **Document** | Reports, slides, sheets (File Stage surfaces) |
+| **Document** | Workplace writing deliverables: reports default to Markdown; slides/sheets via bound skills; message polish (ex-Comms) |
 | **Comms** | Polishes messages, emails, notifications |
 | **Implementer** | Code changes from specs (TDD / debugging skills) |
 | **Explorer** | Read-only codebase exploration |
