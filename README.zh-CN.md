@@ -13,7 +13,7 @@
 - **Turn Log 就是状态。** 每次工具调用写入 SQLite（`history.db`）。进程崩了能恢复、回合能回放、改工具结果、隔几天接着跑——JSONL 仅作导出。
 - **入口随你挑。** Web · 桌面（Tauri）· CLI · TUI · 飞书 / QQ / 微信 / 企微——同一套引擎，工具永远跑在你自己的机器上。
 
-[![产品截图轮播 — 多 Agent Plan、Trajectory、Document Stage、预览标注、专家、技能库、沙箱、IM](docs/screenshots/carousel.gif)](docs/screenshots/carousel.html?lang=zh)
+[![产品截图轮播 — 多 Agent Plan、Trajectory、File Stage、网页标注、专家、技能库、沙箱、IM](docs/screenshots/carousel.gif)](docs/screenshots/carousel.html?lang=zh)
 
 [交互轮播（带说明）](docs/screenshots/carousel.html?lang=zh) · [架构演示](docs/demo/product-tour.html?lang=zh) · [Office 协作演示](docs/demo/office-coedit-tour.html?lang=zh&tour=1)
 
@@ -151,7 +151,7 @@ mkdir -p ~/.danmo-work && cp config.example.yaml ~/.danmo-work/config.yaml
 
 | 文档 | 说明 |
 |------|------|
-| [docs/core-design.md](docs/core-design.md) | Agent 架构、工具系统、通道、Document Stage |
+| [docs/core-design.md](docs/core-design.md) | Agent 架构、工具系统、通道、File Stage |
 | [docs/experts.md](docs/experts.md) | 专家使用说明与内置清单 |
 | [docs/remote/README.md](docs/remote/README.md) | Remote Hub 配对与隧道协议 |
 | [docs/screenshots/README.md](docs/screenshots/README.md) | 产品截图轮播（README 头图） |
