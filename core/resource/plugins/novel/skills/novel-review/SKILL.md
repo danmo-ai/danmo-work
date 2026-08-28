@@ -3,16 +3,16 @@ name: novel-review
 source: builtin
 description: Review, deslop, and Continuity Commit for drafted chapters. Use when 审稿, 去AI味, batch review, or committing continuity. Not for opening a book or writing first drafts.
 license: MIT
-compatibility: Requires write, edit, read_file, grep; Core table_*, memory_*, search_kb; ask_user
+compatibility: Requires write, edit, read_file, grep, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "2.0"
+  version: "2.1"
   category: creative-writing
 ---
 
 # Novel Review（审改定稿）
 
-One review round → fix P0 → Commit. `qc_gate` FAIL blocks「定稿」.
+One review round → gate script precommit → fix P0 → Commit (gate script postcommit). `qc_gate` FAIL blocks「定稿」.
 
 ## When to load
 
@@ -26,7 +26,7 @@ One review round → fix P0 → Commit. `qc_gate` FAIL blocks「定稿」.
 | 去 AI 味 | `novel-review/references/polish-deslop.md` | 文风与去 AI 味 |
 | Commit | `novel-review/references/continuity-commit.md` | 世界观与金手指（若涉及） |
 
-Write reviews under `reviews/`. Commit updates chapter file + `table_*` + `memory_*` + `novel-state.yaml` (`stage: writing` or `review`). Template: `foreshadow-tracker.md`.
+Write reviews under `reviews/`. Commit updates chapter file + `table_*` + `memory_*` + `novel-state.yaml` + `continuity/public-lore.md` + `tracking.md`. Template: `foreshadow-tracker.md`.
 
 ## Stop
 

@@ -6,7 +6,7 @@ Suggested collections (names are conventions — be consistent within a book):
 
 ## `characters`
 
-`id`, `book_id`, `name`, `status` (`candidate|canon`), `role`, `desire`, `wound`, `traits`, `knowledge_boundary`, `location`, `notes`, `updated_ch`
+`id`, `book_id`, `name`, `status` (`candidate|canon`), `role`, `desire`, `wound`, `traits`, `visual_anchor`, `voice_anchor`, `behavior_anchor`, `knowledge_boundary`, `location`, `notes`, `updated_ch`
 
 ## `locations`
 

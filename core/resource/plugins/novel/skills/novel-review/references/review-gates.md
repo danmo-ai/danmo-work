@@ -6,13 +6,14 @@
 - Do not fake or skip review.  
 - Fail only the failed step: if review finds P0, fix those; do not silently rewrite unrelated chapters.  
 - Writers own fixes; review diagnoses.
+- Run gate script `--action precommit` (`novel-setup/references/gate.md`) **before** writing VERDICT PASS. Script FAIL → `qc_gate` FAIL even if the prose feels fine.
 
 ## Six lenses
 
 | Lens | Blocking if… |
 |------|----------------|
 | Structure / purpose | Chapter misses `purpose` or `beats` |
-| Character / OOC | Breaks desire/wound or knowledge boundary |
+| Character / OOC | Breaks desire/wound, knowledge boundary, or 三锚点 |
 | World / lore | Contradicts Canon rules without change request |
 | Tension / pacing | Dead air with no intentional蓄势; or hook missing |
 | Voice / style | Wrong POV or severe style break |
@@ -56,11 +57,18 @@ PASS | FAIL
 ### SCORES
 | 维度 | 分 | 证据引用 |
 |------|-----|----------|
-| ... | /10 | "..." |
+| 钩子力度 | /10 | "..." |
+| 逻辑可回溯 | /10 | "..." |
+| 人物活感 | /10 | "..." |
+| 语言质地 | /10 | "..." |
+| 反转锋利度 | /10 | "..." |
+| 余味延展 | /10 | "..." |
 
 ### QUOTE_GROUNDS
 - "..." — lens — note
 ```
+
+六维评分（对齐 KB 人设 / 爽点 / 文风）：钩子力度、逻辑可回溯、人物活感（含三锚点）、语言质地（含去 AI 味）、反转锋利度、余味延展。任一项 ≤4 且该透镜 blocking → VERDICT FAIL。Gate 脚本 precommit FAIL → 不得写 PASS。
 
 `### VERDICT` 仅 `PASS` 或 `FAIL`（工作台解析用）。
 
@@ -68,6 +76,7 @@ Also `table_upsert` any `continuity_issues` with `status=open` for blocking item
 
 ## qc_gate
 
+- Gate 脚本 precommit FAIL → FAIL（先修脚本 BLOCKING，再 LLM 复检）.  
 - FAIL → fix → short re-check of blocking list only → then Commit path.  
 - PASS → proceed to polish (optional) or `continuity-commit.md`.
 - 更新 `novel-state.yaml` `gates.qc` 与 `blockers`。

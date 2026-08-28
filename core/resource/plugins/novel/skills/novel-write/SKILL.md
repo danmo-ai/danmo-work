@@ -3,10 +3,10 @@ name: novel-write
 source: builtin
 description: Chapter loop for a planned novel. Use for 章合同, batch freeze, drafting or continuing chapters, preflight, scene routing, and Frozen_Canon continuation. Not for book-level outline or final review/Commit.
 license: MIT
-compatibility: Requires write, edit, read_file, grep, glob; Core table_*, memory_*, search_kb; ask_user
+compatibility: Requires write, edit, read_file, grep, glob, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "2.0"
+  version: "2.1"
   category: creative-writing
 ---
 
@@ -34,9 +34,11 @@ Templates: `chapter-contract.yaml`, `batch-freeze.yaml`, `style-fingerprint.md`.
 ## Hard stops
 
 - No prose without an accepted contract and loaded `canon/cast` (`asset_gate`).
+- Gate script preflight FAIL → no prose. See `novel-setup/references/gate.md`.
 - Frozen_Canon unconfirmed → no prose (`continuation.md` CP1–CP3).
 - Batch write >1 chapter without freeze → `ask_user` or `batch-freeze.md`.
 - `candidate` stays out of prose.
+- Do not load `canon/author-lore.md` while drafting.
 
 ## Stop
 

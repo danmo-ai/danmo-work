@@ -4,7 +4,7 @@
 
 ## CP1 — 反向解析（DNA）
 
-1. 扫描已有正文、大纲、`canon/`、`continuity/`、`reviews/`（若有）。
+1. 扫描已有正文、大纲、`canon/`（**跳过 `author-lore.md` 直到 Frozen_Canon 确认**）、`continuity/`（含 public-lore / tracking）、`reviews/`（若有）。
 2. `write` `canon/style-fingerprint.md`（模板 `style-fingerprint.md`）：句式、禁语、POV、对话占比、章末习惯。
 3. 提取作品 DNA：读者承诺、主冲突、金手指边界、活跃伏笔、人物状态快照。
 4. `novel-state.yaml` 设 `continuation_mode: true`；`stage: writing`（尚无正文则 `setup`）。禁止自造 `continuation` 阶段。
@@ -15,7 +15,7 @@
 
 ## CP3 — Frozen_Canon 确认
 
-1. `write` `continuity/frozen-canon.md`：不可改动的设定、已发生事实、文风指纹引用。
+1. `write` `continuity/frozen-canon.md`：不可改动的设定、已发生事实、文风指纹引用。从 `public-lore.md` + 已 Commit 正文提取；author-lore 只用于核对「未解锁底牌不得写入 Frozen 公开层」。
 2. **未经 `ask_user` 确认 Frozen_Canon → 禁止进入批次冻结与正文**。
 3. 确认后 `memory_update` project checkpoint。
 

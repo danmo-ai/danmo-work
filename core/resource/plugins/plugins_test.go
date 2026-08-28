@@ -2,6 +2,9 @@ package plugins
 
 import (
 	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -94,8 +97,14 @@ func TestNovelPluginPacksSkillAndCraftKB(t *testing.T) {
 		"novel/skills/novel-setup/assets/templates/cast-card.md",
 		"novel/skills/novel-setup/assets/templates/glossary.md",
 		"novel/skills/novel-setup/assets/templates/goldfinger-card.md",
+		"novel/skills/novel-setup/assets/templates/author-lore.md",
+		"novel/skills/novel-setup/assets/templates/public-lore.md",
+		"novel/skills/novel-setup/assets/templates/tracking.md",
 		"novel/skills/novel-write/assets/templates/chapter-contract.yaml",
 		"novel/skills/novel-plan/assets/templates/volume-outline.md",
+		"novel/ai.danmo.work/knowledge/09-lore-tracks.md",
+		"novel/skills/novel-setup/scripts/novel_gate.py",
+		"novel/skills/novel-setup/references/gate.md",
 	} {
 		if _, err := fs.ReadFile(FS, p); err != nil {
 			t.Fatalf("%s: %v", p, err)
@@ -107,6 +116,26 @@ func TestNovelPluginPacksSkillAndCraftKB(t *testing.T) {
 	}
 	if !strings.Contains(string(contract), "unit_id:") {
 		t.Fatal("chapter-contract.yaml must require unit_id")
+	}
+	cast, err := fs.ReadFile(FS, "novel/skills/novel-setup/assets/templates/cast-card.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(cast), "视觉") || !strings.Contains(string(cast), "语言") || !strings.Contains(string(cast), "行为") {
+		t.Fatal("cast-card.md must include 三锚点")
+	}
+	expert, err := fs.ReadFile(FS, "novel/ai.danmo.work/experts/novel.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(expert), "tool_id: novel_gate") {
+		t.Fatal("novel expert must not bind a Go novel_gate tool")
+	}
+	if !strings.Contains(string(expert), "novel_gate.py") {
+		t.Fatal("novel expert must invoke novel-setup/scripts/novel_gate.py")
+	}
+	if !strings.Contains(string(expert), "exec_shell") {
+		t.Fatal("novel expert must bind exec_shell for the gate script")
 	}
 	if _, err := fs.Stat(FS, "novel/skills/novel-plan/assets/templates/goldfinger-card.md"); err == nil {
 		t.Fatal("goldfinger-card.md belongs under novel-setup, not novel-plan")
@@ -201,6 +230,28 @@ func TestBuiltinPluginCategories(t *testing.T) {
 	}
 }
 
+func TestNovelGatePythonScript(t *testing.T) {
+	py, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not found")
+	}
+	dir := t.TempDir()
+	for _, name := range []string{"novel_gate.py", "novel_gate_test.py"} {
+		data, err := fs.ReadFile(FS, "novel/skills/novel-setup/scripts/"+name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd := exec.Command(py, "-m", "unittest", "novel_gate_test")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("python unittest: %v\n%s", err, out)
+	}
+}
 
 func TestBuiltinContentHashStable(t *testing.T) {
 	a, err := BuiltinContentHash()

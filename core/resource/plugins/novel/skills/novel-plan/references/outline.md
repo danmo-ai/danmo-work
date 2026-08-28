@@ -14,7 +14,7 @@
 
 - Plot branches / what-if docs **must not** mutate Canon until the user picks one.
 - Use the templates: `assets/templates/book-outline.md`, `assets/templates/volume-outline.md` — fixed sections, no free-form reinvention.
-- `search_kb` 节奏与结构（五步锁卷 / 八节点 / 节点法）before locking volume shape (knowledge_gate). 终局台阶与透支两问另查「强约束」。
+- `search_kb` 节奏与结构（五步锁卷 / 八节点 / 节点法）before locking volume shape (knowledge_gate). 终局台阶与透支两问另查「强约束」；细节只写 `canon/author-lore.md`，总纲抄解锁卷。
 - After user OK on volume outline, update `novel-state.yaml` and `memory_update` project checkpoint.
 - Do not batch-write chapters until asset_gate: core cast + world skeleton are `canon`.
 - **Next stage:** `novel-write` 章合同；批量写正文前再走 `novel-write/references/batch-freeze.md`。单章可经用户确认 bypass 冻结，仍须该章合同 `accepted`。

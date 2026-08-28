@@ -13,8 +13,10 @@ After review PASS (and optional polish), before starting the next chapter.
 3. Relationship deltas  
 4. World/rule deltas (or change requests)  
 5. Foreshadow table `FS-xx`: planted / advanced / paid off  
-6. Knowledge-state (who knows what) if relevant  
+6. Knowledge-state (who knows what) if relevant — **public-lore kinds only**  
 7. Resource / 金手指 uses  
+8. Refresh `continuity/public-lore.md` (new shown_fact / inference from this chapter only)  
+9. Refresh `continuity/tracking.md` (cursor, cast snapshot, open loops)  
 
 ## Tool actions
 
@@ -33,8 +35,9 @@ After review PASS (and optional polish), before starting the next chapter.
 
    Update `continuity/foreshadow-tracker.md` / `decision-log.md` as needed.  
 4. `memory_update` agent: `last_committed_ch`, rolling summary pointer; project if promise changed.  
-5. Update `novel-state.yaml` next chapter / stage.  
-6. Close fixed `continuity_issues`.
+5. Update `novel-state.yaml` next chapter / stage / `last_committed_ch`.  
+6. Close fixed `continuity_issues`.  
+7. Gate 脚本 `--action postcommit --chapter N`（`novel-setup/references/gate.md`）. FAIL → do not claim Commit; fix BLOCKING.
 
 ## Phase compression
 
@@ -42,4 +45,4 @@ Every **10** committed chapters: write `continuity/phase-NN.md` synthesizing the
 
 ## Resume
 
-On cold start: `read_file` novel-state → `memory_read` → `table_query` open foreshadows → continue from next contract.
+On cold start: gate script `--action doctor` → `read_file` novel-state → `memory_read` → `table_query` open foreshadows → `continuity/tracking.md` → continue from next contract.

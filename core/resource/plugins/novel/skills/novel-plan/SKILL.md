@@ -6,7 +6,7 @@ license: MIT
 compatibility: Requires write, edit, read_file, glob; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "2.0"
+  version: "2.1"
   category: creative-writing
 ---
 
@@ -26,7 +26,7 @@ Lock canon and outlines. **No chapter contracts, no chapter bodies.** New entiti
 | 人设 / 世界观 | `canon/world.md` + `cast-card.md` | 人设与群像, 世界观与金手指 |
 | 金手指 | `novel-setup/assets/templates/goldfinger-card.md` | 世界观与金手指 |
 
-Templates: `novel-plan/assets/templates/*`（总纲/卷纲）+ `novel-setup/assets/templates/`（world / cast-card / goldfinger-card）. After user OK on a volume, set `novel-state.yaml` `stage: outline`.
+Templates: `novel-plan/assets/templates/*`（总纲/卷纲）+ `novel-setup/assets/templates/`（world / cast-card / goldfinger-card / author-lore）. After user OK on a volume, set `novel-state.yaml` `stage: outline`. 终局细节写入 `canon/author-lore.md`，总纲只保留解锁卷号。
 
 ## Stop
 
