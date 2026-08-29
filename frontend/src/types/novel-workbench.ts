@@ -1148,160 +1148,121 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
   const root = `novel/${bookId}`
   const vol = ctx.volume && ctx.volume > 0 ? ctx.volume : 0
   const volPad = vol > 0 ? String(vol).padStart(2, '0') : 'NN'
+  // Keep intent + paths only. Field lists / section inventories live in skill
+  // refs from novelActionLoadProtocol — do not restate them here.
 
   switch (action) {
     case 'init':
       return [
-        '开一本新书并立项：',
-        '- 先用 ask_user 澄清题材、读者承诺、篇幅/平台、禁忌（一次一问即可）。',
-        '- 创建 novel/<book-id>/ 标准英文树：novel-state.yaml、book-bible.md（含终局储备三行）、canon/world.md、canon/glossary.md、canon/cast/、outline/(+volumes/)、chapters/、continuity/、reviews/（可选 extras/、_archive/）。',
-        '- 人物卡用 cast-card.md；世界四层用 world.md。',
-        '- 角色先 status=candidate，经我确认后再变 canon；确认前不要写正文。',
-        '- 落盘后更新 novel-state（stage=init 或 outline）。',
-        '- 按 read_skill novel-setup/references/init.md 与 project-layout.md 执行。',
+        '开一本新书并立项。',
+        '用 ask_user 澄清题材、读者承诺、篇幅/平台、禁忌（一次一问即可）。',
+        `落盘标准树到 novel/<book-id>/（布局见加载协议中的 project-layout）。`,
+        '新角色先 candidate，经确认后再 canon；确认前不要写正文。',
       ].join('\n')
     case 'outline':
       return [
         `书目录：${root}/`,
-        '基于现有 book-bible / canon 产出总纲与卷纲（不写章节正文）：',
-        `- 总纲 ${root}/outline/book_outline.md（模板 book-outline.md：一句话故事 / 读者承诺 / 分卷结构表 / 主线伏笔 / 结局方向 / 终局储备——与圣经同一张表）。`,
-        `- 卷纲 ${root}/outline/volumes/vNN.md（模板 volume-outline.md：卷目标 / 冲突与起终 / 终局边界 / 节奏锚点 / 剧情单元卡 / 情绪人物弧 / 反转 / 伏笔）。`,
-        '卷纲写到「一段章」的剧情单元卡为止（节拍+功能+主角目标+因果+阻碍+关键选择+形态+禁提前+下钩）。不要写每章任务/爽点/钩子文案。',
-        '每卷卷纲写完停下来等我确认。',
-        '按 read_skill novel-plan/references/outline.md 执行。',
+        `产出总纲 ${root}/outline/book_outline.md 与卷纲 ${root}/outline/volumes/vNN.md（不写章节正文）。`,
+        '卷纲止于剧情单元卡；单章任务/爽点/钩子只进章合同。每卷写完等我确认。',
       ].join('\n')
     case 'volume':
       return [
-        `为本书写第 ${vol || 'N'} 卷卷纲（书目录：${root}/）。`,
-        `唯一落盘：${root}/outline/volumes/v${volPad}.md（模板 volume-outline.md，先 read_skill novel-plan/assets/templates/volume-outline.md）。`,
-        '先读 outline/book_outline.md 与 canon/ 相关设定、continuity/ 未回收伏笔，保持与前后卷衔接。',
-        '内容：卷目标 / 核心冲突与对立升级 / 起终状态 / 终局边界 / 节奏锚点 / 剧情单元卡（一段章：单元节拍章功能分配、单元功能、主角局部目标、因果入口、核心阻碍、关键选择、主爽点形态、兑现归属、禁止提前释放、下一单元钩子、终局边界）/ 情绪与人物弧 / 反转 / 伏笔。',
-        '卷纲写到剧情单元卡为止，不写章合同、不写正文。每章任务/爽点/钩子只进章合同，须填 unit_id 指回某个单元；节拍须覆盖该单元章范围。',
-        '写完停下来等我确认，再进入章合同阶段。',
-        '按 read_skill novel-plan/references/outline.md 执行。',
+        `为第 ${vol || 'N'} 卷写卷纲。`,
+        `唯一落盘：${root}/outline/volumes/v${volPad}.md`,
+        '先读总纲、相关 canon、未回收伏笔；与前后卷衔接。',
+        '止于剧情单元卡（含节拍覆盖章范围）；不写章合同/正文。写完等我确认。',
       ].join('\n')
     case 'assets':
       return [
         `书目录：${root}/`,
-        '整理/补全人物卡与世界观资产：写入 canon/ 与 table_*（characters、locations 等，带 book_id）。',
-        '世界用模板 novel-setup/assets/templates/world.md（规则/势力/日常/禁忌四层）→ canon/world.md。',
-        '人物用模板 novel-setup/assets/templates/cast-card.md → canon/cast/。名词表用 glossary.md。',
-        '新实体先 status=candidate，经 ask_user 确认后再变 canon；确认前不要写正文。',
-        '按 read_skill novel-setup/references/init.md + table-schema.md 执行。',
+        '整理/补全人物卡与世界观：写入 canon/ 与 table_*（带 book_id）。',
+        '新实体先 candidate，经确认后再 canon；确认前不要写正文。',
       ].join('\n')
     case 'goldfinger':
       return [
         `书目录：${root}/`,
-        '设计或修订金手指：约束、代价、成长曲线、与读者承诺一致；写入 canon/ 或 table_* resources，并用模板 goldfinger-card。',
-        '先 candidate，经 ask_user 确认后再 canon；不要在未确认时改已定稿正文。',
-        '按 read_skill novel-setup/assets/templates/goldfinger-card.md 与 KB「世界观与金手指」执行。',
+        '设计或修订金手指，写入 canon/ 或 table_* resources。',
+        '先 candidate，经确认后再 canon；未确认时不要改已定稿正文。',
       ].join('\n')
     case 'contract':
       return [
         `为第 ${ch || 'N'} 章写章合同（尚不写正文）。`,
-        '先读本卷纲：定位本章所属剧情单元卡与最近锚点；按单元节拍确定本章角色（建立期待/尝试/加压/决断/兑现/余波），填写 unit_id（vNN-U#，如 v04-U2），再下推 purpose / beats / pleasure_point / forbidden。unit_id 空、节拍未覆盖本章或对不上则先补卷纲，不要空造合同。',
-        `唯一落盘：${root}/chapters/ch${chPad}-contract.yaml（YAML；模板 chapter-contract.yaml）。`,
-        `可选 table_upsert chapter_contracts 作索引（book_id=${bookId}，unit_id 与 file 指向该 yaml），不能代替文件。`,
-        '含：unit_id、purpose、beats / forbidden、pleasure_point、state_deltas、伏笔、hook(type+out)、word_target、连续性风险；status=proposed。',
-        '里程碑章或本批首章需 ask_user 接受后再进入写作。',
-        '按 read_skill novel-write/references/chapter-contract.md 执行。',
+        `落盘：${root}/chapters/ch${chPad}-contract.yaml`,
+        '从本卷纲所属单元卡按节拍下推；必填 unit_id（vNN-U#）。对不上或节拍未覆盖本章 → 先补卷纲，勿空造合同。',
+        '里程碑章或本批首章需 ask_user 接受后再写正文。',
       ].join('\n')
     case 'write':
       return [
         `写第 ${ch || 'N'} 章正文到 ${chPath}。`,
         '前提：该章合同已 accepted（否则先补合同）。',
-        '流程：preflight → knowledge/asset 门 → scene-routing（若 beats 有场景标签）→ 按合同草稿 → 不要跳过审稿与 Commit。',
-        'P0 审稿不过不得定稿；不要只在对话里贴正文。',
-        '按 read_skill novel-write/references/preflight.md 与 chapter-write.md 执行。',
+        '按合同草稿落盘；P0 审稿不过不得定稿；不要只在对话里贴正文。',
       ].join('\n')
     case 'continue':
       return [
         `接着写下一章（书：${root}/）。`,
-        '先读 novel-state.yaml、近 3 章摘要、未回收伏笔与开放 continuity_issues；补/更新章合同后再写正文。',
-        '审一轮，P0 不过不得定稿；Commit 落盘并更新 novel-state。不要只在对话里贴正文。',
-        '按 read_skill novel-write/references/continuation.md 与 chapter-write.md 执行。',
+        '补/更新章合同后再写正文；审一轮，P0 不过不得定稿；Commit 落盘。不要只在对话里贴正文。',
       ].join('\n')
     case 'dialogue':
       return [
         `加强第 ${ch || 'N'} 章对话（${chPath}）。`,
-        '按合同 beats 写出口语化对白：人物声口可辨、推动冲突、少旁白解释。',
-        '落盘到该章正文，不要只在对话里贴台词。search_kb「情绪与场景」。',
+        '按合同 beats 写出可辨声口、推动冲突的对白；落盘到该章正文。',
       ].join('\n')
     case 'hook':
       return [
         `为第 ${ch || 'N'} 章设计/改写悬念钩子（${chPath}）。`,
-        '章末 hook 必须可执行（动作/信息差/倒计时），写入合同 hook 字段并落到正文。',
-        'search_kb「爽点与追读」选型，不要复述整张表。',
+        '章末 hook 须可执行；写入合同并落到正文。',
       ].join('\n')
     case 'reversal':
       return [
         `为第 ${ch || 'N'} 章加一处反转（${chPath}）。`,
-        '反转须服务合同 purpose，不推翻 Frozen_Canon；先改合同 forbidden/beats 再改正文。',
-        'search_kb「情绪与场景」「爽点与追读」。',
+        '须服务合同 purpose，不推翻 Frozen_Canon；先改合同再改正文。',
       ].join('\n')
     case 'review':
       return [
-        `审阅 ${chPath}：按六透镜 + ReaderPull + StrongConstraints + 去 AI 味 P0/P1 出审查报告，写入 ${root}/reviews/，`,
-        'blocking 记入 continuity_issues；SCORES 段按 qc_profile 加权。',
-        'qc_gate FAIL 不得宣称定稿。按 read_skill novel-review/references/review-gates.md 执行。',
+        `审阅 ${chPath}，审查报告写入 ${root}/reviews/。`,
+        'qc_gate FAIL 不得宣称定稿。',
       ].join('\n')
     case 'polish':
       return [
-        `对 ${chPath} 做去 AI 味润色（deslop）：先 knowledge_gate（去 AI 味 / 文风），再 edit 落盘。`,
-        '先清 P0 再 P1；不要改情节 Canon；需要改情节则回到审稿/章合同。',
-        '按 read_skill novel-review/references/polish-deslop.md 执行。',
+        `对 ${chPath} 做去 AI 味润色并落盘。`,
+        '先清 P0 再 P1；不改情节 Canon；需改情节则回到审稿/章合同。',
       ].join('\n')
     case 'commit':
       return [
         ch > 0
           ? `对第 ${ch} 章（${chPath}）做 Continuity Commit。`
           : `对当前进度做 Continuity Commit（书：${root}/）。`,
-        '更新：章节定稿文件、table_*（timeline / foreshadows / characters / contracts）、memory、novel-state。',
-        '追加 continuity/chapter_summaries.md 固定 5 字段块（事件 / 状态变化 / 伏笔 / 钩子 / 下章指向）。',
-        '关闭已修复的 continuity_issues。每满 10 个已提交章写 continuity/phase-NN.md。',
-        '按 read_skill novel-review/references/continuity-commit.md 执行。完成=工具证据，勿口头宣称。',
+        '更新定稿文件、摘要、table_*、memory、novel-state；关闭已修复 continuity_issues。完成=工具证据。',
       ].join('\n')
     case 'review-polish-commit':
       return [
         ch > 0
-          ? `对第 ${ch} 章（${chPath}）串行执行：六透镜审稿 → 去 AI 味 → 连续性定稿。`
-          : `对当前章节串行执行：六透镜审稿 → 去 AI 味 → 连续性定稿（书：${root}/）。`,
-        '【串行协议 — 禁止跳步】',
-        '1. 按 review-gates.md 写 reviews/chNNN-review.md（### VERDICT 仅 PASS|FAIL）；更新 novel-state gates.qc 与 blockers。',
-        '2. 若 FAIL：只修 P0 blocking，短复审 blocking 清单；未 PASS 禁止进入步骤 3–4。',
-        '3. PASS 后按 polish-deslop.md 去 AI 味（P0→P1；不改情节 Canon）。',
-        '4. 按 continuity-commit.md 定稿：摘要 / table_* / memory / novel-state；关闭已修复 continuity_issues。',
-        '若 reviews/ 已有 PASS 且正文未变，可从步骤 3 开始并在 review 文件注明跳过理由。',
-        '完成=文件与工具证据，勿口头宣称。',
+          ? `对第 ${ch} 章（${chPath}）串行：审稿 → 去 AI 味 → Continuity Commit。`
+          : `对当前章节串行：审稿 → 去 AI 味 → Continuity Commit（书：${root}/）。`,
+        '未 PASS 禁止润色与定稿。若 reviews/ 已有 PASS 且正文未变，可从润色起并注明跳过理由。完成=工具证据。',
       ].join('\n')
     case 'batch-freeze':
       const bFrom = ctx.batchFrom && ctx.batchFrom > 0 ? ctx.batchFrom : 1
       const bTo = ctx.batchTo && ctx.batchTo > 0 ? ctx.batchTo : 8
       return [
         `批次冻结（书：${root}/，第 ${bFrom}–${bTo} 章）。`,
-        `为该批写或确认章合同（chapters/chNNN-contract.yaml，status=accepted）；每章 unit_id 必须指向本卷一个剧情单元；连续 3 章 pleasure_point 为空必须重排。`,
-        `落盘 continuity/batch-freeze.yaml（模板 batch-freeze.yaml）只记范围与状态，不要重复 purpose/爽点/钩子。硬逻辑审核后 status=frozen。`,
-        '冻结前禁止批量写正文。用户确认后更新 novel-state frozen_batch 与 artifacts.batch_freeze。',
-        '按 read_skill novel-write/references/batch-freeze.md 执行。',
+        '该批章合同须 accepted，且每章 unit_id 指向本卷剧情单元。',
+        `落盘 ${root}/continuity/batch-freeze.yaml（只记范围与状态）。冻结前禁止批量写正文；确认后更新 novel-state。`,
       ].join('\n')
     case 'continuation':
       return [
-        `续写/接手本书（${root}/）：CP1 反向解析 → style-fingerprint.md → CP2 卡点诊断 → CP3 Frozen_Canon。`,
-        'Frozen_Canon 未确认禁止写正文；首次续写 500–1000 字试写待确认。',
-        '按 read_skill novel-write/references/continuation.md 执行。',
+        `续写/接手本书（${root}/）。`,
+        'Frozen_Canon 未确认禁止写正文；首次续写短试写待确认。',
       ].join('\n')
     case 'batch-review':
       return [
         `批量审稿（书：${root}/）：最近 1–5 章有正文但未 PASS 的章节。`,
         '每章独立 review 文件；更新 gates.qc 与 blockers。',
-        '按 read_skill novel-review/references/review-gates.md 与 novel-write/references/preflight.md 执行。',
       ].join('\n')
     case 'preflight':
       return [
-        `写前预检（书：${root}/）：必读 state、本章合同、近 3 章摘要、开放伏笔/债务；按需读上场人物卡。禁止整本 bible / 全卷纲。`,
-        '写 continuity/preflight-log.md 一行回执。',
-        '更新 novel-state gates/blockers。阻断则停止并 ask_user。',
-        '按 read_skill novel-write/references/preflight.md 执行。',
+        `写前预检（书：${root}/）。`,
+        '按加载协议读必读文件；写 continuity/preflight-log.md 一行回执；更新 gates/blockers。阻断则停止并 ask_user。',
       ].join('\n')
     default:
       return ''

@@ -166,8 +166,12 @@ const comboPrefill = buildConstrainedPrefill('review-polish-commit', {
   chapter: 4,
   chapterPath: 'novel/star-inn/chapters/ch004.md',
 })
-assert.ok(comboPrefill.includes('六透镜审稿 → 去 AI 味 → 连续性定稿'))
-assert.ok(comboPrefill.includes('未 PASS 禁止进入步骤 3–4'))
+assert.ok(comboPrefill.includes('审稿 → 去 AI 味 → Continuity Commit'))
+assert.ok(comboPrefill.includes('未 PASS 禁止润色与定稿'))
+assert.ok(comboPrefill.includes('novel-review/references/review-gates.md'))
+assert.ok(comboPrefill.includes('novel-review/references/polish-deslop.md'))
+assert.ok(!comboPrefill.includes('【串行协议'))
+assert.ok(!comboPrefill.includes('六透镜'))
 
 const comboAllowed = canRunAction('review-polish-commit', {
   bookId: 'star-inn',
@@ -234,30 +238,39 @@ for (const action of stages) {
   assert.ok(text.trim().length > 0, action)
   assert.ok(!text.includes('章纲'), `${action} must not say 章纲`)
   assert.ok(!text.includes('细纲'), `${action} must not say 细纲`)
+  // Task body must not restate skill/template field inventories.
+  assert.ok(!text.includes('按 read_skill'), `${action} must not duplicate read_skill (load protocol owns that)`)
+  assert.ok(!text.includes('search_kb'), `${action} must not duplicate search_kb (load protocol owns that)`)
 }
 
-const freezePrefill = buildNovelStagePrefill('batch-freeze', {
+const freezePrefill = buildConstrainedPrefill('batch-freeze', {
   bookId: 'star-inn',
   batchFrom: 1,
   batchTo: 8,
 })
 assert.ok(freezePrefill.includes('novel-write/references/batch-freeze.md'))
-assert.ok(freezePrefill.includes('章合同'))
 assert.ok(freezePrefill.includes('unit_id'))
+assert.ok(freezePrefill.includes('batch-freeze.yaml'))
 
 const contractPrefill = buildNovelStagePrefill('contract', { bookId: 'star-inn', chapter: 4 })
 assert.ok(contractPrefill.includes('unit_id'))
 assert.ok(contractPrefill.includes('vNN-U#'))
+assert.ok(contractPrefill.includes('ch004-contract.yaml'))
+assert.ok(!contractPrefill.includes('pleasure_point'))
 
-const goldPrefill = buildNovelStagePrefill('goldfinger', { bookId: 'star-inn' })
+const goldPrefill = buildConstrainedPrefill('goldfinger', { bookId: 'star-inn' })
 assert.ok(goldPrefill.includes('novel-setup/assets/templates/goldfinger-card.md'))
+assert.ok(goldPrefill.includes('世界观与金手指'))
 
-const assetsPrefill = buildNovelStagePrefill('assets', { bookId: 'star-inn' })
+const assetsPrefill = buildConstrainedPrefill('assets', { bookId: 'star-inn' })
 assert.ok(assetsPrefill.includes('world.md'))
 assert.ok(assetsPrefill.includes('cast-card.md'))
 
-const outlinePrefill = buildNovelStagePrefill('outline', { bookId: 'star-inn' })
-assert.ok(outlinePrefill.includes('终局储备'))
+const outlinePrefill = buildConstrainedPrefill('outline', { bookId: 'star-inn' })
+assert.ok(outlinePrefill.includes('book_outline.md'))
+assert.ok(outlinePrefill.includes('volume-outline.md'))
+assert.ok(!buildNovelStagePrefill('outline', { bookId: 'star-inn' }).includes('终局储备'))
+assert.ok(!buildNovelStagePrefill('volume', { bookId: 'star-inn', volume: 1 }).includes('主爽点形态'))
 
 const dialoguePrefill = buildNovelStagePrefill('dialogue', {
   bookId: 'star-inn',
