@@ -65,7 +65,7 @@ function chapterNodePath(bookId: string, node: NovelFileNode): string {
   return `${novelChaptersDir(bookId)}/${node.name}`
 }
 
-type View = 'shelf' | 'book' | 'read'
+type View = 'shelf' | 'book'
 
 const { t } = useI18n()
 const sessions = useSessionsStore()
@@ -677,7 +677,7 @@ function openChapterDoc(kind: 'contract' | 'prose') {
   readPath.value = novelChapterFilePath(bookId, ch)
   readTitle.value = `ch${String(ch).padStart(3, '0')}.md`
   readContent.value = ''
-  view.value = 'read'
+  view.value = 'book'
 }
 
 function openChapterFromList(chapter: number, kind: 'contract' | 'prose') {
