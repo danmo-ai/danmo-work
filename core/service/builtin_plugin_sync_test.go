@@ -35,6 +35,10 @@ func TestSyncBuiltinPluginsMaterializesPacks(t *testing.T) {
 			t.Fatalf("missing %s: %v", pluginJSON, err)
 		}
 	}
+	gateScript := filepath.Join(root, "plugins", "novel", "skills", "novel-setup", "scripts", "novel_gate.py")
+	if _, err := os.Stat(gateScript); err != nil {
+		t.Fatalf("novel_gate.py should sync like other skill resources: %v", err)
+	}
 	if _, err := os.Stat(leftover); err == nil {
 		t.Fatal("migrated github.md leftover was not cleaned")
 	}

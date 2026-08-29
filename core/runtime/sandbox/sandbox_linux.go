@@ -129,6 +129,9 @@ func (bwrapBackend) Run(ctx context.Context, opts port.SandboxRunOptions, cfg do
 	} else {
 		args = append(args, "--bind", workdir, workdir)
 	}
+	if home := workHomePath(); home != "" && home != workdir {
+		args = append(args, "--ro-bind-try", home, home)
+	}
 	if !networkAllowed(cfg, opts) {
 		args = append(args, "--unshare-net")
 	}

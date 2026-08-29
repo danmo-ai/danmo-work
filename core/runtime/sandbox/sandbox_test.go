@@ -144,6 +144,37 @@ func TestAllowlistEmptyFailsClosed(t *testing.T) {
 	}
 }
 
+func TestRunInjectsWorkHome(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("WORK_HOME", root)
+	m := New(domain.ConfigSandboxSection{
+		Enabled: true,
+		Mode:    domain.SandboxModeWorkspaceWrite,
+		Network: domain.SandboxNetworkAllow,
+		Backend: "host-weak",
+	})
+	defer m.Close()
+	cmd := "printenv WORK_HOME"
+	if runtime.GOOS == "windows" {
+		cmd = "echo %WORK_HOME%"
+	}
+	out, err := m.Run(context.Background(), port.SandboxRunOptions{
+		Command: cmd,
+		WorkDir: t.TempDir(),
+		Timeout: 10 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("run: %v out=%q", err, out)
+	}
+	home, err := filepath.Abs(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), home) {
+		t.Fatalf("WORK_HOME not injected: out=%q want %q", out, home)
+	}
+}
+
 func TestWorkspaceWriteAllowsTempFile(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("path quoting differs on windows")

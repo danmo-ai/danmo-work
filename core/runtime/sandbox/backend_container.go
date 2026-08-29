@@ -16,8 +16,8 @@ import (
 
 const (
 	defaultContainerImage = "localhost/danmo-work-env:bundled"
-	// containerPref v2: workspace bind uses host abs path (not /workspace).
-	containerPref = "danmo-wp-"
+	// containerPref v3: workspace + read-only $WORK_HOME at the same host paths.
+	containerPref = "danmo-wp3-"
 	// containerGitCredDir is the in-container path for the git credential bind.
 	containerGitCredDir = "/root/.danmo-git-cred"
 	// containerGitCredFile is the in-container path of the derived credentials file.
@@ -162,6 +162,7 @@ func (b *containerBackend) Run(ctx context.Context, opts port.SandboxRunOptions,
 		Engine:       b.runtime.Name(),
 		ForContainer: true,
 	})
+	proxyEnv = ensureWorkHomeEnv(proxyEnv)
 	out, err := b.runtime.Exec(execCtx, name, mount, opts.Command, proxyEnv)
 	if err != nil && isFatalEngineErr(err) {
 		b.mu.Lock()
@@ -254,7 +255,11 @@ func (b *containerBackend) ensureProjectContainer(ctx context.Context, opts port
 		Engine:       b.runtime.Name(),
 		ForContainer: true,
 	})
+	env = ensureWorkHomeEnv(env)
 	var binds []container.Bind
+	if bind, ok := workHomeBind(workDir); ok {
+		binds = append(binds, bind)
+	}
 	b.mu.Lock()
 	credProvider := b.credProvider
 	b.mu.Unlock()

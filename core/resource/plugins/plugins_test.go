@@ -137,6 +137,16 @@ func TestNovelPluginPacksSkillAndCraftKB(t *testing.T) {
 	if !strings.Contains(string(expert), "exec_shell") {
 		t.Fatal("novel expert must bind exec_shell for the gate script")
 	}
+	gateDoc, err := fs.ReadFile(FS, "novel/skills/novel-setup/references/gate.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(gateDoc), "${WORK_HOME}/plugins/novel/skills/novel-setup/scripts/novel_gate.py") {
+		t.Fatal("gate.md must run the plugin script via ${WORK_HOME}")
+	}
+	if strings.Contains(string(gateDoc), "python3 \"$HOME") {
+		t.Fatal("gate.md must not exec $HOME (wrong inside containers)")
+	}
 	if _, err := fs.Stat(FS, "novel/skills/novel-plan/assets/templates/goldfinger-card.md"); err == nil {
 		t.Fatal("goldfinger-card.md belongs under novel-setup, not novel-plan")
 	}

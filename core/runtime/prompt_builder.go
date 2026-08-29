@@ -297,7 +297,7 @@ func buildRuntimeEnvironment(st domain.SandboxStatus, envSt domain.EnvironmentSt
 			b.WriteString("Image: " + envSt.Image + "\n")
 		}
 		b.WriteString("Preinstalled: " + domain.EnvImagePreinstalled + "\n")
-		b.WriteString("Note: exec_shell runs inside the per-project container; the project directory is bind-mounted at the same absolute path as the host.\n")
+		b.WriteString("Note: exec_shell runs inside the per-project container. The project directory and $WORK_HOME (plugin packs, read-only) are bind-mounted at the same absolute host paths. WORK_HOME is set.\n")
 	}
 	b.WriteString("</runtime-environment>")
 	return b.String()

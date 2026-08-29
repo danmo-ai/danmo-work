@@ -2,25 +2,25 @@
 
 Deterministic layout / contract / deslop checks. **Not a Go builtin.** Run with `exec_shell` only.
 
-## Script
+Same pack as the other `novel-setup` resources. After plugin sync:
 
-`novel-setup/scripts/novel_gate.py` (Python 3 stdlib). After plugin sync:
+`${WORK_HOME}/plugins/novel/skills/novel-setup/scripts/novel_gate.py`
 
-`${WORK_HOME:-$HOME/.danmo-work}/plugins/novel/skills/novel-setup/scripts/novel_gate.py`
+`read_skill` path=`novel-setup/scripts/novel_gate.py` works the same as `novel-setup/references/gate.md`. `glob` on the book project will not see the pack — use `${WORK_HOME}` (injected in every `exec_shell`, including containers). Do not use `$HOME/.danmo-work` — container `$HOME` is not the host home.
 
 ## Command (cwd = project root)
 
 ```bash
-python3 "${WORK_HOME:-$HOME/.danmo-work}/plugins/novel/skills/novel-setup/scripts/novel_gate.py" \
+python3 "${WORK_HOME}/plugins/novel/skills/novel-setup/scripts/novel_gate.py" \
   --workdir . --book-id <slug> --action doctor
 
-python3 "${WORK_HOME:-$HOME/.danmo-work}/plugins/novel/skills/novel-setup/scripts/novel_gate.py" \
+python3 "${WORK_HOME}/plugins/novel/skills/novel-setup/scripts/novel_gate.py" \
   --workdir . --book-id <slug> --action preflight --chapter N
 
-python3 "${WORK_HOME:-$HOME/.danmo-work}/plugins/novel/skills/novel-setup/scripts/novel_gate.py" \
+python3 "${WORK_HOME}/plugins/novel/skills/novel-setup/scripts/novel_gate.py" \
   --workdir . --book-id <slug> --action precommit --chapter N
 
-python3 "${WORK_HOME:-$HOME/.danmo-work}/plugins/novel/skills/novel-setup/scripts/novel_gate.py" \
+python3 "${WORK_HOME}/plugins/novel/skills/novel-setup/scripts/novel_gate.py" \
   --workdir . --book-id <slug> --action postcommit --chapter N
 ```
 

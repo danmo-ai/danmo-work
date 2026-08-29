@@ -269,6 +269,7 @@ func (m *Manager) Run(ctx context.Context, opts port.SandboxRunOptions) ([]byte,
 	if opts.Env == nil {
 		opts.Env = filterEnv(os.Environ())
 	}
+	opts.Env = ensureWorkHomeEnv(opts.Env)
 
 	m.mu.RLock()
 	cfg := m.cfg
