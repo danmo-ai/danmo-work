@@ -44,7 +44,7 @@ Author-imported briefs may live at the **project files root** (sibling of `novel
 - **Prose truth:** `chapters/*.md` after Commit (never `*-contract.yaml`).
 - **Chapter contract truth:** `chapters/chNNN-contract.yaml` only (YAML). See `chapter-contract.md`.
 - **Canon truth:** `canon/*` + `table_*` rows with matching `book_id`. Prefer tables for queryable fields; Markdown for long lore.
-- **Outline truth:** book/volume plans under `outline/` only. Volume outlines stop at **剧情单元**（一段章：功能/主角目标/因果/形态/禁提前/下钩）+ 锚点/弧/反转/终局边界. Per-chapter planning is **章合同** only (`unit_id` 回指单元).
+- **Outline truth:** book/volume plans under `outline/` only. Volume outlines stop at **剧情单元卡**（一段章：节拍/功能/主角目标/因果/阻碍/关键选择/形态/禁提前/下钩）+ 锚点/弧/反转/终局边界. Per-chapter planning is **章合同** only (`unit_id` 回指单元).
 - **Continuity truth:** open loops / rulings / rolling summaries under `continuity/` (+ matching `table_*` when queryable).
 - **Lore tracks:** `canon/author-lore.md` (author-only) vs `continuity/public-lore.md` (reader-known, from Commit) vs `continuity/tracking.md` (current serial state). Do not fork a second Chinese 设定 tree.
 - **Proposals / what-if:** stay in `outline/` or `canon/proposals.md` until user confirms → then promote to Canon + tables.

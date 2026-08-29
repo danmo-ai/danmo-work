@@ -9,7 +9,7 @@
 **必读（上限：这些文件本身，禁止扩读）：**
 
 1. `novel-state.yaml` — stage、`frozen_batch`、`gates`、`blockers`、`qc_profile`。
-2. 本章 `chapters/chNNN-contract.yaml`（写正文时须 `accepted` 或用户明示豁免；`unit_id` 非空且能在本卷纲剧情单元表对上）。
+2. 本章 `chapters/chNNN-contract.yaml`（写正文时须 `accepted` 或用户明示豁免；`unit_id` 非空且能在本卷纲剧情单元卡对上）。
 3. `continuity/public-lore.md` — 读者已知事实（不要读 `canon/author-lore.md`）。
 4. `continuity/tracking.md` + `continuity/chapter_summaries.md` **近 3 章**尾部（不要整本摘要）。
 5. `table_query` 开放 `foreshadows`、`continuity_issues`、`reader_debts`（若有）。

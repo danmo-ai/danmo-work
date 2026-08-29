@@ -835,7 +835,7 @@ export function parseBookOutlineVolumeRows(md: string): BookOutlineVolumeRow[] {
   return rows
 }
 
-/** Parse 剧情单元, or a legacy chapter-index table, from a volume outline. */
+/** Parse 剧情单元 cards, or a legacy unit/chapter-index table, from a volume outline. */
 export function parseChapterRange(s: string): { from: number; to: number } | null {
   const m = s.match(/ch?\s*(\d+)\s*[-–~至到]\s*ch?\s*(\d+)/i) || s.match(/(\d+)\s*[-–~至到]\s*(\d+)/)
   if (!m) return null
@@ -845,7 +845,66 @@ export function parseChapterRange(s: string): { from: number; to: number } | nul
   return { from: Math.min(from, to), to: Math.max(from, to) }
 }
 
+function stripMdInline(s: string): string {
+  return s.replace(/^`+|`+$/g, '').trim()
+}
+
+/** Prefer unit cards (`### 剧情单元` / `- 单元ID：`); fall back to markdown tables. */
 export function parseVolumeUnitRows(md: string): VolumeUnitRow[] {
+  const cards = parseVolumeUnitCards(md)
+  if (cards.length) return cards
+  return parseVolumeUnitTable(md)
+}
+
+function parseVolumeUnitCards(md: string): VolumeUnitRow[] {
+  const rows: VolumeUnitRow[] = []
+  let cur: VolumeUnitRow | null = null
+  const flush = () => {
+    if (cur && (cur.id || cur.range || cur.purpose)) {
+      if (!cur.id && cur.range) cur.id = cur.range
+      rows.push(cur)
+    }
+    cur = null
+  }
+
+  for (const raw of md.split(/\r?\n/)) {
+    const line = raw.trim()
+    const heading = line.match(/^#{2,4}\s*剧情单元\s*(.+)?$/i)
+    if (heading) {
+      flush()
+      const rest = (heading[1] || '').trim()
+      cur = { id: rest || '', range: '', purpose: '' }
+      continue
+    }
+    const idLine = line.match(/^[-*]\s*单元ID[：:]\s*(.+)$/i)
+    if (idLine) {
+      if (!cur) cur = { id: '', range: '', purpose: '' }
+      cur.id = stripMdInline(idLine[1])
+      continue
+    }
+    if (!cur) continue
+    const rangeLine = line.match(/^[-*]\s*章范围[：:]\s*(.+)$/i)
+    if (rangeLine) {
+      cur.range = stripMdInline(rangeLine[1])
+      continue
+    }
+    const purposeLine = line.match(/^[-*]\s*单元功能[（(][^）)]*[）)]?[：:]\s*(.+)$/i)
+      || line.match(/^[-*]\s*单元功能[：:]\s*(.+)$/i)
+    if (purposeLine) {
+      cur.purpose = stripMdInline(purposeLine[1])
+      continue
+    }
+    // Next major section ends the unit block list.
+    if (/^##\s+/.test(line) && !/^##\s*剧情单元/i.test(line)) {
+      flush()
+      break
+    }
+  }
+  flush()
+  return rows.filter((r) => Boolean(r.id || r.range))
+}
+
+function parseVolumeUnitTable(md: string): VolumeUnitRow[] {
   const rows: VolumeUnitRow[] = []
   let mode: 'unit' | 'legacy' | null = null
   for (const line of md.split(/\r?\n/)) {
@@ -1106,8 +1165,8 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         `书目录：${root}/`,
         '基于现有 book-bible / canon 产出总纲与卷纲（不写章节正文）：',
         `- 总纲 ${root}/outline/book_outline.md（模板 book-outline.md：一句话故事 / 读者承诺 / 分卷结构表 / 主线伏笔 / 结局方向 / 终局储备——与圣经同一张表）。`,
-        `- 卷纲 ${root}/outline/volumes/vNN.md（模板 volume-outline.md：卷目标 / 冲突与起终 / 终局边界 / 节奏锚点 / 剧情单元 / 情绪人物弧 / 反转 / 伏笔）。`,
-        '卷纲写到「一段章」的剧情单元为止（功能+主角目标+因果+形态+禁提前+下钩）。不要写每章任务/爽点/钩子。',
+        `- 卷纲 ${root}/outline/volumes/vNN.md（模板 volume-outline.md：卷目标 / 冲突与起终 / 终局边界 / 节奏锚点 / 剧情单元卡 / 情绪人物弧 / 反转 / 伏笔）。`,
+        '卷纲写到「一段章」的剧情单元卡为止（节拍+功能+主角目标+因果+阻碍+关键选择+形态+禁提前+下钩）。不要写每章任务/爽点/钩子文案。',
         '每卷卷纲写完停下来等我确认。',
         '按 read_skill novel-plan/references/outline.md 执行。',
       ].join('\n')
@@ -1116,8 +1175,8 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         `为本书写第 ${vol || 'N'} 卷卷纲（书目录：${root}/）。`,
         `唯一落盘：${root}/outline/volumes/v${volPad}.md（模板 volume-outline.md，先 read_skill novel-plan/assets/templates/volume-outline.md）。`,
         '先读 outline/book_outline.md 与 canon/ 相关设定、continuity/ 未回收伏笔，保持与前后卷衔接。',
-        '内容：卷目标 / 核心冲突与对立升级 / 起终状态 / 终局边界 / 节奏锚点 / 剧情单元表（一段章：功能、主角目标、因果、主爽点形态、禁止提前释放、下一单元钩子）/ 情绪与人物弧 / 反转 / 伏笔。',
-        '卷纲写到剧情单元为止，不写章合同、不写正文。每章任务/爽点/钩子只进章合同，须填 unit_id 指回某个单元。',
+        '内容：卷目标 / 核心冲突与对立升级 / 起终状态 / 终局边界 / 节奏锚点 / 剧情单元卡（一段章：单元节拍章功能分配、单元功能、主角局部目标、因果入口、核心阻碍、关键选择、主爽点形态、兑现归属、禁止提前释放、下一单元钩子、终局边界）/ 情绪与人物弧 / 反转 / 伏笔。',
+        '卷纲写到剧情单元卡为止，不写章合同、不写正文。每章任务/爽点/钩子只进章合同，须填 unit_id 指回某个单元；节拍须覆盖该单元章范围。',
         '写完停下来等我确认，再进入章合同阶段。',
         '按 read_skill novel-plan/references/outline.md 执行。',
       ].join('\n')
@@ -1140,7 +1199,7 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
     case 'contract':
       return [
         `为第 ${ch || 'N'} 章写章合同（尚不写正文）。`,
-        '先读本卷纲：定位本章所属剧情单元与最近锚点，填写 unit_id（vNN-U#，如 v04-U2），再下推 purpose / beats / pleasure_point / forbidden。unit_id 空或对不上则先补卷纲，不要空造合同。',
+        '先读本卷纲：定位本章所属剧情单元卡与最近锚点；按单元节拍确定本章角色（建立期待/尝试/加压/决断/兑现/余波），填写 unit_id（vNN-U#，如 v04-U2），再下推 purpose / beats / pleasure_point / forbidden。unit_id 空、节拍未覆盖本章或对不上则先补卷纲，不要空造合同。',
         `唯一落盘：${root}/chapters/ch${chPad}-contract.yaml（YAML；模板 chapter-contract.yaml）。`,
         `可选 table_upsert chapter_contracts 作索引（book_id=${bookId}，unit_id 与 file 指向该 yaml），不能代替文件。`,
         '含：unit_id、purpose、beats / forbidden、pleasure_point、state_deltas、伏笔、hook(type+out)、word_target、连续性风险；status=proposed。',

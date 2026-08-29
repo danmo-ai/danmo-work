@@ -14,9 +14,16 @@ Official name: **章合同** / chapter contract. Do not introduce other product 
 
 `table_upsert` into `chapter_contracts` is an **index/mirror** (queryable status), not a substitute for the YAML file. Always write the file first; table row should point at that path (e.g. `file: chapters/ch001-contract.yaml`).
 
-Book/volume planning stays in `outline/` (`outline.md`) and **stops at 剧情单元（一段章）**. Per-chapter planning is **only** 章合同 under `chapters/`. Do not copy `purpose` / `pleasure_point` / `hook` into 卷纲 or `batch-freeze.yaml`.
+Book/volume planning stays in `outline/` (`outline.md`) and **stops at 剧情单元卡（一段章）**. Per-chapter planning is **only** 章合同 under `chapters/`. Do not copy `purpose` / `pleasure_point` / `hook` into 卷纲 or `batch-freeze.yaml`.
 
-写合同前先读本卷纲：定位本章所属单元 + 最近锚点，填 `unit_id`（`vNN-U#`，如 `v04-U2`），再下推 `purpose` / `beats` / `pleasure_point` / `forbidden`（禁提前进 forbidden）。卷纲只有目标句、没有单元表，或 `unit_id` 对不上任一单元 → 退回 `novel-plan` 补卷纲，不要空造合同。
+写合同前先读本卷纲：定位本章所属 **单元卡** + 最近锚点，填 `unit_id`（`vNN-U#`，如 `v04-U2`）。按卡上 **单元节拍** 确定本章角色（建立期待/尝试/加压/决断/兑现/余波），再下推：
+- 单元功能 + 本章节拍角色 → `purpose` / `beats` 序
+- 主爽点形态 + 兑现归属 → `pleasure_point` / `micro_payoff`
+- 禁止提前释放 + 终局边界 → `forbidden` / `constraint_checks`
+- 主角局部目标 / 关键选择 / 核心阻碍 → `beats` / `state_deltas` 动机与冲突面
+- 段末「下一单元钩子」只定 `hook.type` 方向；`hook.out` 在合同写具体事件
+
+卷纲只有目标句、没有单元卡，节拍未覆盖本章，或 `unit_id` 对不上 → 退回 `novel-plan` 补卷纲，不要空造合同。
 
 A batch of contracts: **连续 3 章 `pleasure_point` 为空必须重排** before freeze or draft.
 
@@ -29,8 +36,8 @@ Copy `assets/templates/chapter-contract.yaml`. Keep it lean — fill only what t
 | `chapter` / `title_working` | Identity |
 | `unit_id` | Required. Volume unit id, `vNN-U#`. Empty or mismatch → stop, back to `novel-plan`. |
 | `scene` | One line: `pov \| time \| location` |
-| `purpose` | One-sentence chapter job |
-| `beats` | 3–5 beats that must land, in order |
+| `purpose` | One-sentence chapter job (from unit 功能 + 本章节拍角色) |
+| `beats` | 3–5 beats that must land, in order (guided by unit 节拍 + 阻碍/关键选择) |
 | `forbidden` | Ban list / spoilers to avoid |
 | `pleasure_point` | 本章爽点（网文必填：读者爽在哪） |
 | `emotion_line` | One-line curve, e.g. `压抑→爆发→留钩` |
@@ -46,8 +53,8 @@ Copy `assets/templates/chapter-contract.yaml`. Keep it lean — fill only what t
 
 ## Process
 
-1. Read the volume outline unit covering this chapter; if missing, stop and send back to `novel-plan`.
-2. Set `unit_id` to that row (`vNN-U#`). Copy 功能 → `purpose`, 主爽点形态 → `pleasure_point`, 禁止提前释放 → `forbidden`, 本段主角目标 into `beats` / `state_deltas` as needed.
+1. Read the volume outline **unit card** covering this chapter (节拍 + 功能 + 阻碍…); if missing or beats don't cover this chapter, stop and send back to `novel-plan`.
+2. Set `unit_id` to that card (`vNN-U#`). Locate this chapter's role in 单元节拍. Push down: 单元功能+节拍角色 → `purpose`/`beats`; 主爽点形态+兑现归属 → `pleasure_point`/`micro_payoff`; 禁止提前释放 → `forbidden`; 主角局部目标/关键选择 into `beats`/`state_deltas` as needed.
 3. Draft contract at `chapters/chNNN-contract.yaml` (YAML template).
 4. `table_upsert` `chapter_contracts` with matching `book_id` / `chapter` / `unit_id` / `status` / `file`.
 5. `ask_user` to accept if this is a milestone chapter or first chapter of a batch.

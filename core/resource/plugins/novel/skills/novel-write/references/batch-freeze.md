@@ -17,8 +17,8 @@
 
 ## 流程
 
-1. 读当前卷纲 `outline/volumes/vNN.md`（剧情单元 + 节奏锚点 + 反转）+ `continuity/foreshadow-tracker.md`。无单元表则先补卷纲。
-2. 为 `from`–`to` 写或补齐章合同（`chapter-contract.md`）；每章 `unit_id` 必须指向本卷一个单元。
+1. 读当前卷纲 `outline/volumes/vNN.md`（剧情单元卡 + 节奏锚点 + 反转）+ `continuity/foreshadow-tracker.md`。无单元卡则先补卷纲。
+2. 为 `from`–`to` 写或补齐章合同（`chapter-contract.md`）；每章 `unit_id` 必须指向本卷一个单元，且按该卡节拍定位本章角色。
 3. **连续 3 章 `pleasure_point` 为空必须重排**后再冻结。任一章 `unit_id` 空或对不上 → 先补卷纲。
 4. **硬逻辑审核**（时间、空间、人物、规则、资源、伏笔）— 硬矛盾必须关闭。
 5. `ask_user` 裁决 → 写入 `frozen_chapters` 列表，`status: frozen`。

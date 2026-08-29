@@ -28,9 +28,24 @@ blockers: []
     "novel/demo/canon/author-lore.md": "# author lore\n终局: 宿敌真身 v5\n",
     "novel/demo/canon/cast/.gitkeep": "",
     "novel/demo/outline/volumes/v01.md": """# Volume
-| 单元 | 章范围 | 功能 | 本段主角目标 | 由上一单元如何导致 | 主爽点形态 | 禁止提前释放 | 下一单元钩子 |
-|------|--------|------|--------------|--------------------|----------|--------------|--------------|
-| U1 | ch1-ch5 | 开局 | 活下来 | — | 打脸 | 宿敌真身 | 失踪信 |
+### 剧情单元 U1
+- 单元ID：`v01-U1`
+- 章范围：ch1-ch5
+- 单元节拍（章功能分配）：
+  - ch1 建立期待：开局羞辱
+  - ch2-ch3 尝试：反证身份
+  - ch4 决断：当众打脸
+  - ch5 兑现：留下失踪信
+- 单元功能（本段必须完成）：开局立冲突
+- 主角局部目标：活下来并反证身份
+- 因果入口：开卷切口
+- 核心阻碍：当众羞辱
+- 关键选择：是否公开反证
+- 主爽点形态：打脸
+- 兑现归属：主角声望可见回升
+- 禁止提前释放：宿敌真身
+- 下一单元钩子：失踪信
+- 终局边界：宿敌真身
 """,
     "novel/demo/continuity/public-lore.md": "# public lore\n- shown_fact: 主角在城东客栈醒来\n",
     "novel/demo/continuity/tracking.md": "# tracking\nlast: ch000\n",

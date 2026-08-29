@@ -326,6 +326,31 @@ assert.equal(
   parseVolumeUnitRows(`| 单元 | 章范围 | 功能（本段必须完成） | 本段主角目标 | 由上一单元如何导致 | 主爽点形态 | 禁止提前释放 | 下一单元钩子 |\n| U2 | ch009-ch016 | 宗门大比 | 保住名额 | 夺权余波 | 战力 | 金手指上限 | 师尊现身 |\n`)[0].purpose,
   '宗门大比',
 )
+const unitCards = parseVolumeUnitRows(`## 剧情单元
+
+### 剧情单元 U1
+
+- 单元ID：\`v01-U1\`
+- 章范围：ch1-ch5
+- 单元节拍（章功能分配）：
+  - ch1 建立期待：开局
+- 单元功能（本段必须完成）：开局立冲突
+- 主角局部目标：活下来
+
+### 剧情单元 U2
+
+- 单元ID：\`v01-U2\`
+- 章范围：ch6-ch10
+- 单元功能（本段必须完成）：宗门大比
+
+## 情绪与人物弧
+`)
+assert.equal(unitCards.length, 2)
+assert.equal(unitCards[0].id, 'v01-U1')
+assert.equal(unitCards[0].range, 'ch1-ch5')
+assert.equal(unitCards[0].purpose, '开局立冲突')
+assert.equal(unitCards[1].id, 'v01-U2')
+assert.equal(unitCards[1].purpose, '宗门大比')
 assert.deepEqual(parseChapterRange('ch001-ch008'), { from: 1, to: 8 })
 assert.equal(setupDocLabel('book-bible.md'), 'bible')
 assert.equal(setupDocLabel('reveal-schedule.md'), 'reveal')
