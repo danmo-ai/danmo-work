@@ -133,14 +133,15 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 		}, nil
 	}
 
-	if err := writeFilePreserving(resolvedPath, encodeTextFile(replacement, meta)); err != nil {
+	outMeta := writeEncodingMeta(meta)
+	if err := writeFilePreserving(resolvedPath, encodeTextFile(replacement, outMeta)); err != nil {
 		return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", resolvedPath, err)
 	}
 	// Own write updates the snapshot so a later edit in this turn does not
 	// fail with "changed since last read" unless something else touched the file.
 	noteReadFile(input, resolvedPath)
 
-	encNote := encodingNote(meta)
+	encNote := conversionNote(meta, outMeta)
 	return domain.ToolResult{
 		Content: fmt.Sprintf("Edited file %q, replaced %d occurrence(s):%s\n%s", relPath, count, encNote, diff),
 		Meta: map[string]any{
@@ -149,8 +150,8 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 			"diff":          diff,
 			"replacements":  count,
 			"bytes_written": len(replacement),
-			"encoding":      string(meta.Encoding),
-			"line_ending":   meta.LineEnding,
+			"encoding":      string(outMeta.Encoding),
+			"line_ending":   outMeta.LineEnding,
 		},
 	}, nil
 }

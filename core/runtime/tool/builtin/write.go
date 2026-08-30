@@ -124,8 +124,9 @@ func (h *Write) Execute(_ context.Context, input map[string]any) (domain.ToolRes
 	payload := []byte(content)
 	encNote := ""
 	if encPreserved {
-		payload = encodeTextFile(content, existingMeta)
-		encNote = encodingNote(existingMeta)
+		outMeta := writeEncodingMeta(existingMeta)
+		payload = encodeTextFile(content, outMeta)
+		encNote = conversionNote(existingMeta, outMeta)
 	}
 	if err := writeFilePreserving(resolvedPath, payload); err != nil {
 		return domain.ToolResult{}, fmt.Errorf("cannot write file %q: %w", resolvedPath, err)

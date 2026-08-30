@@ -30,7 +30,8 @@ var (
 	bomUTF16BE = []byte{0xFE, 0xFF}
 )
 
-// textFileMeta records how a file was decoded so writes can preserve it.
+// textFileMeta records how a file was decoded. Writes always persist as
+// UTF-8 (see writeEncodingMeta); line endings may still be preserved.
 type textFileMeta struct {
 	Encoding   TextEncoding
 	LineEnding string // "\n", "\r\n", or "\r"
@@ -121,8 +122,9 @@ func normalizeLineEndings(s string, meta *textFileMeta) string {
 	return s
 }
 
-// encodeTextFile converts normalized UTF-8 text back into the original
-// encoding, BOM, and line endings recorded in meta.
+// encodeTextFile converts normalized UTF-8 text back into the encoding,
+// BOM, and line endings recorded in meta. Agent write/edit/patch paths
+// should call writeEncodingMeta first so on-disk files become UTF-8.
 func encodeTextFile(text string, meta textFileMeta) []byte {
 	if meta.LineEnding != "\n" {
 		text = strings.ReplaceAll(text, "\n", meta.LineEnding)
@@ -144,6 +146,17 @@ func encodeTextFile(text string, meta textFileMeta) []byte {
 	return []byte(text)
 }
 
+// writeEncodingMeta returns the meta used when agent tools persist text.
+// Always UTF-8 (no BOM). Keeps the detected line ending so CRLF files do
+// not churn endings on every edit.
+func writeEncodingMeta(detected textFileMeta) textFileMeta {
+	le := detected.LineEnding
+	if le == "" {
+		le = "\n"
+	}
+	return textFileMeta{Encoding: EncUTF8, LineEnding: le}
+}
+
 // encodingNote returns a short human note appended to tool output when the
 // file uses a non-plain-UTF-8 encoding (and was preserved).
 func encodingNote(meta textFileMeta) string {
@@ -151,6 +164,18 @@ func encodingNote(meta textFileMeta) string {
 		return ""
 	}
 	return fmt.Sprintf(" (encoding: %s, line ending: %s)", meta.Encoding, meta.LineEnding)
+}
+
+// conversionNote explains UTF-8 normalization when the on-disk encoding changed.
+func conversionNote(before, after textFileMeta) string {
+	if before.Encoding == after.Encoding {
+		return encodingNote(after)
+	}
+	le := after.LineEnding
+	if le == "" {
+		le = "\n"
+	}
+	return fmt.Sprintf(" (converted %s → utf-8, line ending: %q)", before.Encoding, le)
 }
 
 func encodeUTF16(text string, littleEndian bool) []byte {

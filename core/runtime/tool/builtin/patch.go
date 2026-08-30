@@ -295,7 +295,7 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 		if fp.isCreate {
 			payload = []byte(newContent)
 		} else {
-			payload = encodeTextFile(newContent, fp.meta)
+			payload = encodeTextFile(newContent, writeEncodingMeta(fp.meta))
 		}
 		prevAtFinal := fp.oldData
 		if fp.moveTo != "" && finalPath != fp.path {

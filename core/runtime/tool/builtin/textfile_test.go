@@ -130,7 +130,7 @@ func TestEncodingNoteEmptyForPlainUTF8(t *testing.T) {
 	}
 }
 
-func TestEditPreservesGBKAndCRLF(t *testing.T) {
+func TestEditConvertsGBKToUTF8KeepsCRLF(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "notes.txt")
 	orig := gbkBytes("第一行\r\n第二行\r\n第三行\r\n")
@@ -142,23 +142,58 @@ func TestEditPreservesGBKAndCRLF(t *testing.T) {
 	ft.NoteRead(f)
 
 	h := &Edit{}
-	if _, err := h.Execute(nil, map[string]any{
+	result, err := h.Execute(nil, map[string]any{
 		"path":           f,
 		"oldString":      "第二行",
 		"newString":      "改过的行",
 		"__work_dir":     dir,
 		"__file_tracker": ft,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
+	if !strings.Contains(result.Content, "converted gb18030 → utf-8") {
+		t.Fatalf("expected conversion note, got: %q", result.Content)
+	}
 
-	want := gbkBytes("第一行\r\n改过的行\r\n第三行\r\n")
+	want := []byte("第一行\r\n改过的行\r\n第三行\r\n") // UTF-8 + CRLF
 	got, err := os.ReadFile(f)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(got) != string(want) {
-		t.Fatalf("encoding/line endings not preserved:\nwant: %v\ngot:  %v", want, got)
+		t.Fatalf("expected UTF-8 with CRLF preserved:\nwant: %v\ngot:  %v", want, got)
+	}
+}
+
+func TestWriteConvertsGBKToUTF8(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(f, gbkBytes("旧内容\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ft := setupTracker(dir)
+	ft.NoteRead(f)
+
+	h := &Write{}
+	result, err := h.Execute(nil, map[string]any{
+		"path":           "notes.txt",
+		"content":        "新内容\n",
+		"__work_dir":     dir,
+		"__file_tracker": ft,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.Content, "converted gb18030 → utf-8") {
+		t.Fatalf("expected conversion note, got: %q", result.Content)
+	}
+	got, err := os.ReadFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "新内容\n" {
+		t.Fatalf("expected UTF-8 write, got %v", got)
 	}
 }
 
