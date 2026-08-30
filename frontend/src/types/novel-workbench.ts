@@ -663,7 +663,10 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
     case 'polish':
       return {
         skillId: 'novel-review',
-        skillRefs: ['novel-review/references/polish-deslop.md'],
+        skillRefs: [
+          'novel-review/references/polish-deslop.md',
+          'novel-setup/references/gate.md',
+        ],
         kbThemes: ['文风与去 AI 味'],
         readFiles: [prose],
       }
@@ -681,6 +684,7 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
           'novel-review/references/review-gates.md',
           'novel-review/references/polish-deslop.md',
           'novel-review/references/continuity-commit.md',
+          'novel-setup/references/gate.md',
         ],
         kbThemes: ['文风与去 AI 味'],
         readFiles: [prose, contract, state, ledger],
@@ -1288,7 +1292,8 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
     case 'polish':
       return [
         `对 ${chPath} 做去 AI 味润色并落盘。`,
-        '先清 P0 再 P1；不改情节 Canon；需改情节则回到审稿/章合同。',
+        '先 exec_shell gate --action scan-deslop --chapter N，按 HITS 行号 edit；再清 P1。',
+        '改完再扫一遍（或 precommit）；exit 0 才可宣称去 AI 味。不改情节 Canon；需改情节则回到审稿/章合同。',
       ].join('\n')
     case 'commit':
       return [
@@ -1302,7 +1307,7 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         ch > 0
           ? `对第 ${ch} 章（${chPath}）串行：审稿 → 去 AI 味 → Continuity Commit。`
           : `对当前章节串行：审稿 → 去 AI 味 → Continuity Commit（书：${root}/）。`,
-        '未 PASS 禁止润色与定稿。若 reviews/ 已有 PASS 且正文未变，可从润色起并注明跳过理由。完成=工具证据。',
+        '未 PASS 禁止润色与定稿。润色段先 scan-deslop 再按行号改。若 reviews/ 已有 PASS 且正文未变，可从润色起并注明跳过理由。完成=工具证据。',
       ].join('\n')
     case 'batch-freeze':
       const bFrom = ctx.batchFrom && ctx.batchFrom > 0 ? ctx.batchFrom : 1

@@ -162,6 +162,7 @@ assert.equal(comboProto.skillId, 'novel-review')
 assert.ok(comboProto.skillRefs.includes('novel-review/references/review-gates.md'))
 assert.ok(comboProto.skillRefs.includes('novel-review/references/polish-deslop.md'))
 assert.ok(comboProto.skillRefs.includes('novel-review/references/continuity-commit.md'))
+assert.ok(comboProto.skillRefs.includes('novel-setup/references/gate.md'))
 
 const comboPrefill = buildConstrainedPrefill('review-polish-commit', {
   bookId: 'star-inn',
@@ -170,6 +171,7 @@ const comboPrefill = buildConstrainedPrefill('review-polish-commit', {
 })
 assert.ok(comboPrefill.includes('审稿 → 去 AI 味 → Continuity Commit'))
 assert.ok(comboPrefill.includes('未 PASS 禁止润色与定稿'))
+assert.ok(comboPrefill.includes('scan-deslop'))
 assert.ok(comboPrefill.includes('novel-review/references/review-gates.md'))
 assert.ok(comboPrefill.includes('novel-review/references/polish-deslop.md'))
 assert.ok(!comboPrefill.includes('【串行协议'))
@@ -311,6 +313,16 @@ assert.equal(novelActionSkillId('continue'), 'novel-write')
 assert.ok(novelActionLoadProtocol('polish', { bookId: 'star-inn', chapter: 4 }).skillRefs.includes(
   'novel-review/references/polish-deslop.md',
 ))
+assert.ok(novelActionLoadProtocol('polish', { bookId: 'star-inn', chapter: 4 }).skillRefs.includes(
+  'novel-setup/references/gate.md',
+))
+const polishPrefill = buildConstrainedPrefill('polish', {
+  bookId: 'star-inn',
+  chapter: 4,
+  chapterPath: 'novel/star-inn/chapters/ch004.md',
+})
+assert.ok(polishPrefill.includes('scan-deslop'))
+assert.ok(polishPrefill.includes('行号'))
 
 assert.equal(chapterNumFromName('ch001.md'), 1)
 assert.equal(isNovelChapterPath('novel/b/chapters/ch003.md'), true)

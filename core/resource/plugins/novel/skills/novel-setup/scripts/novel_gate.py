@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Deterministic novel write-gate. Stdlib only. Invoked by novel skills via exec_shell.
 
-python3 novel_gate.py --action doctor|preflight|precommit|postcommit \\
-  --workdir PROJECT [--book-id SLUG] [--chapter N] [--json]
+python3 novel_gate.py --action doctor|preflight|precommit|postcommit|scan-deslop \\
+  --workdir PROJECT [--book-id SLUG] [--chapter N] [--from A --to B] [--json]
 Exit 0 PASS, 1 FAIL, 2 usage/error.
 """
 from __future__ import annotations
@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 HOOK_TYPES = {
@@ -283,11 +284,105 @@ def rune_count(s: str) -> int:
     return sum(1 for r in s if r not in " \n\t\r")
 
 
+@dataclass(frozen=True)
+class DeslopHit:
+    kind: str  # toxic | level1 | soup
+    line: int
+    col: int
+    match: str
+    rule: str
+
+
+def offset_to_line_col(text: str, offset: int) -> tuple[int, int]:
+    before = text[: max(0, offset)]
+    line = before.count("\n") + 1
+    last_nl = before.rfind("\n")
+    col = offset - last_nl if last_nl >= 0 else offset + 1
+    return line, col
+
+
+def _excerpt(line: str, col: int, width: int = 40) -> str:
+    s = line.strip()
+    if len(s) <= width:
+        return s
+    start = max(0, col - 1 - width // 3)
+    chunk = s[start : start + width]
+    return ("…" if start > 0 else "") + chunk + ("…" if start + width < len(s) else "")
+
+
+def iter_deslop_hits(prose: str) -> list[DeslopHit]:
+    """Locate P0 deslop hits with 1-based line/col (same rules as precommit)."""
+    hits: list[DeslopHit] = []
+    lines = prose.splitlines()
+    for i, line in enumerate(lines, start=1):
+        for pat in TOXIC:
+            for m in pat.finditer(line):
+                hits.append(DeslopHit("toxic", i, m.start() + 1, m.group(0), pat.pattern))
+        for w in LEVEL_ONE:
+            start = 0
+            while True:
+                j = line.find(w, start)
+                if j < 0:
+                    break
+                hits.append(DeslopHit("level1", i, j + 1, w, w))
+                start = j + len(w)
+
+    tail = last_runes(prose, 200)
+    tail_start = len(prose) - len(tail)
+    for x in SOUP_ENDINGS:
+        rel = prose.find(x, tail_start)
+        if rel < 0:
+            continue
+        line, col = offset_to_line_col(prose, rel)
+        hits.append(DeslopHit("soup", line, col, x, x))
+    return hits
+
+
 def scan_deslop(prose: str) -> tuple[list[str], int, bool]:
-    toxic = [p.pattern for p in TOXIC if p.search(prose)]
-    n1 = sum(prose.count(w) for w in LEVEL_ONE)
-    soup = any(x in last_runes(prose, 200) for x in SOUP_ENDINGS)
+    hits = iter_deslop_hits(prose)
+    toxic = list(dict.fromkeys(h.rule for h in hits if h.kind == "toxic"))
+    n1 = sum(1 for h in hits if h.kind == "level1")
+    soup = any(h.kind == "soup" for h in hits)
     return toxic, n1, soup
+
+
+def format_hit_line(rel: str, hit: DeslopHit, prose_line: str = "") -> str:
+    kind_label = {"toxic": "毒句式", "level1": "一级词", "soup": "鸡汤尾"}.get(hit.kind, hit.kind)
+    excerpt = _excerpt(prose_line, hit.col) if prose_line else hit.match
+    return f"{rel}:L{hit.line}: {kind_label}「{hit.match}」 | {excerpt}"
+
+
+def format_deslop_locs(rel: str, hits: list[DeslopHit], limit: int = 5) -> str:
+    if not hits:
+        return ""
+    return ", ".join(f"{rel}:L{h.line}" for h in hits[:limit])
+
+
+def apply_deslop_to_report(prose_rel: str, prose: str, r: Report, hint_limit: int = 5) -> list[DeslopHit]:
+    hits = iter_deslop_hits(prose)
+    toxic = [h for h in hits if h.kind == "toxic"]
+    level1 = [h for h in hits if h.kind == "level1"]
+    soup = [h for h in hits if h.kind == "soup"]
+    if toxic:
+        uniq = list(dict.fromkeys(h.rule for h in toxic))
+        locs = format_deslop_locs(prose_rel, toxic, hint_limit)
+        r.blocking("deslop", f"P0 毒句式 ×{len(uniq)} in {prose_rel}" + (f" @ {locs}" if locs else ""))
+    if len(level1) >= 3:
+        locs = format_deslop_locs(prose_rel, level1, hint_limit)
+        r.blocking(
+            "deslop",
+            f"一级词 dense ({len(level1)} hits) in {prose_rel}" + (f" @ {locs}" if locs else ""),
+        )
+    elif level1:
+        locs = format_deslop_locs(prose_rel, level1, hint_limit)
+        r.advisory(
+            "deslop",
+            f"一级词 ×{len(level1)} (blocking at ≥3)" + (f" @ {locs}" if locs else ""),
+        )
+    if soup:
+        locs = format_deslop_locs(prose_rel, soup, hint_limit)
+        r.blocking("deslop", "chicken-soup ending (P0)" + (f" @ {locs}" if locs else ""))
+    return hits
 
 
 def count_open_foreshadows(tracker: str) -> int:
@@ -502,15 +597,7 @@ def check_precommit(book_root: Path, st: dict, ch: int, r: Report) -> None:
     status = str(c.get("status") or "").strip()
     if status not in ("drafted", "accepted", "reviewed"):
         r.advisory("contract", f"{rel} status={status} expected drafted before review")
-    toxic, n1, soup = scan_deslop(prose)
-    if toxic:
-        r.blocking("deslop", f"P0 毒句式 ×{len(toxic)} in {prose_rel}")
-    if n1 >= 3:
-        r.blocking("deslop", f"一级词 dense ({n1} hits) in {prose_rel}")
-    elif n1 > 0:
-        r.advisory("deslop", f"一级词 ×{n1} (blocking at ≥3)")
-    if soup:
-        r.blocking("deslop", "chicken-soup ending (P0)")
+    apply_deslop_to_report(prose_rel, prose, r)
     _, hout = hook_of(c)
     if hout and hout not in prose and rune_count(hout) >= 8:
         r.advisory("hook", "hook.out not found verbatim in prose — confirm the event landed")
@@ -548,38 +635,98 @@ def check_postcommit(book_root: Path, st: dict, ch: int, r: Report) -> None:
             "Commit must refresh continuity/ledger.md (or legacy public-lore + tracking)",
         )
 
-def run(workdir: str, book_id: str, action: str, chapter: int) -> Report:
+def check_scan_deslop(book_root: Path, chapters: list[int], r: Report) -> list[str]:
+    """Printable HIT lines; findings go on Report (same P0 thresholds as precommit)."""
+    out: list[str] = []
+    for ch in chapters:
+        prose_rel = chapter_rel(ch)
+        if not file_exists(book_root, prose_rel):
+            r.blocking("prose", f"{prose_rel} missing")
+            continue
+        prose = read_text(book_root, prose_rel)
+        hits = apply_deslop_to_report(prose_rel, prose, r)
+        lines = prose.splitlines()
+        for h in hits:
+            pline = lines[h.line - 1] if 0 < h.line <= len(lines) else ""
+            out.append(format_hit_line(prose_rel, h, pline))
+    return out
+
+
+def resolve_scan_chapters(chapter: int, from_ch: int, to_ch: int) -> list[int]:
+    if chapter > 0:
+        return [chapter]
+    if from_ch > 0 and to_ch > 0:
+        if to_ch < from_ch:
+            raise ValueError(f"--to {to_ch} < --from {from_ch}")
+        return list(range(from_ch, to_ch + 1))
+    raise ValueError("scan-deslop requires --chapter N or --from A --to B")
+
+
+def run_with_hits(
+    workdir: str,
+    book_id: str,
+    action: str,
+    chapter: int,
+    from_ch: int = 0,
+    to_ch: int = 0,
+) -> tuple[Report, list[str]]:
     action = (action or "").strip().lower()
-    if action not in {"preflight", "precommit", "postcommit", "doctor"}:
-        raise ValueError(f"unknown action {action!r} (preflight|precommit|postcommit|doctor)")
+    if action not in {"preflight", "precommit", "postcommit", "doctor", "scan-deslop"}:
+        raise ValueError(
+            f"unknown action {action!r} (preflight|precommit|postcommit|doctor|scan-deslop)"
+        )
     root, st = resolve_book(workdir, book_id)
     bid = str(st.get("book_id") or root.name)
-    r = Report(action, bid, root, chapter)
-    if action == "doctor":
-        check_doctor(root, st, r)
+    hit_lines: list[str] = []
+    if action == "scan-deslop":
+        chapters = resolve_scan_chapters(chapter, from_ch, to_ch)
+        r = Report(action, bid, root, chapters[0] if len(chapters) == 1 else 0)
+        hit_lines = check_scan_deslop(root, chapters, r)
     else:
-        if chapter <= 0:
-            raise ValueError(f"chapter is required for {action}")
-        if action == "preflight":
-            check_preflight(root, st, chapter, r)
-        elif action == "precommit":
-            check_precommit(root, st, chapter, r)
+        r = Report(action, bid, root, chapter)
+        if action == "doctor":
+            check_doctor(root, st, r)
         else:
-            check_postcommit(root, st, chapter, r)
+            if chapter <= 0:
+                raise ValueError(f"chapter is required for {action}")
+            if action == "preflight":
+                check_preflight(root, st, chapter, r)
+            elif action == "precommit":
+                check_precommit(root, st, chapter, r)
+            else:
+                check_postcommit(root, st, chapter, r)
     r.finalize()
-    return r
+    return r, hit_lines
+
+
+def run(workdir: str, book_id: str, action: str, chapter: int) -> Report:
+    rep, _ = run_with_hits(workdir, book_id, action, chapter)
+    return rep
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Novel write-gate / doctor (skill script)")
-    p.add_argument("--action", default="doctor", help="preflight | precommit | postcommit | doctor")
+    p = argparse.ArgumentParser(description="Novel write-gate / doctor / deslop scan (skill script)")
+    p.add_argument(
+        "--action",
+        default="doctor",
+        help="preflight | precommit | postcommit | doctor | scan-deslop",
+    )
     p.add_argument("--workdir", default=".", help="project root or book root")
     p.add_argument("--book-id", default="", help="slug under novel/<book-id>/")
     p.add_argument("--chapter", type=int, default=0)
+    p.add_argument("--from", dest="from_ch", type=int, default=0, help="scan-deslop range start")
+    p.add_argument("--to", dest="to_ch", type=int, default=0, help="scan-deslop range end")
     p.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
     try:
-        rep = run(os.path.abspath(args.workdir), args.book_id, args.action, args.chapter)
+        rep, hit_lines = run_with_hits(
+            os.path.abspath(args.workdir),
+            args.book_id,
+            args.action,
+            args.chapter,
+            args.from_ch,
+            args.to_ch,
+        )
     except ValueError as e:
         print(e, file=sys.stderr)
         return 2
@@ -590,9 +737,20 @@ def main(argv: list[str] | None = None) -> int:
         print(e, file=sys.stderr)
         return 2
     if args.json:
-        json.dump(rep.as_dict(), sys.stdout, ensure_ascii=False, indent=2)
+        payload = rep.as_dict()
+        if (args.action or "").strip().lower() == "scan-deslop":
+            payload["hits"] = hit_lines
+        json.dump(payload, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")
     else:
+        if (args.action or "").strip().lower() == "scan-deslop":
+            sys.stdout.write("### HITS\n")
+            if hit_lines:
+                for line in hit_lines:
+                    sys.stdout.write(line + "\n")
+            else:
+                sys.stdout.write("None.\n")
+            sys.stdout.write("\n")
         sys.stdout.write(rep.format())
     return 0 if rep.verdict == "PASS" else 1
 

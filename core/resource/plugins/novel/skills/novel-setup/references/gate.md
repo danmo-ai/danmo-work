@@ -22,7 +22,17 @@ python3 "${WORK_HOME}/plugins/novel/skills/novel-setup/scripts/novel_gate.py" \
 
 python3 "${WORK_HOME}/plugins/novel/skills/novel-setup/scripts/novel_gate.py" \
   --workdir . --book-id <slug> --action postcommit --chapter N
+
+python3 "${WORK_HOME}/plugins/novel/skills/novel-setup/scripts/novel_gate.py" \
+  --workdir . --book-id <slug> --action scan-deslop --chapter N
+
+python3 "${WORK_HOME}/plugins/novel/skills/novel-setup/scripts/novel_gate.py" \
+  --workdir . --book-id <slug> --action scan-deslop --from A --to B
 ```
+
+`scan-deslop` prints `### HITS` lines as `chapters/chNNN.md:L42: 一级词「仿佛」 | …excerpt…`, then the usual `### VERDICT`. Same P0 thresholds as precommit (toxic ≥1 / level-one ≥3 / soup ending). Use before/after polish edits; do not invent a second deslop script.
+
+`doctor` also flags chapter contracts whose `status` is nested (not root-level) — short tip to `contract-rewrite` Track A / `contract-schema-rules` (no field encyclopedia in the script).
 
 If the book root is the workdir (it contains `novel-state.yaml`), omit `--book-id`.
 

@@ -134,6 +134,45 @@ class GateTests(unittest.TestCase):
         rep = ng.run(str(self.root), "demo", "precommit", 1)
         self.assertEqual(rep.verdict, "FAIL", rep.format())
         self.assertTrue(any(f["check"] == "deslop" and f["severity"] == "blocking" for f in rep.findings), rep.format())
+        self.assertTrue(
+            any("ch001.md:L" in f["message"] for f in rep.findings if f["check"] == "deslop"),
+            rep.format(),
+        )
+
+    def test_scan_deslop_line_hits(self):
+        p = self.root / "novel/demo/chapters/ch001.md"
+        p.write_text(
+            "开头干净。\n"
+            "他目光深邃，不禁点头。\n"
+            "这不是失败，而是命运的安排。\n"
+            "或许，这只是个开始……\n",
+            encoding="utf-8",
+        )
+        rep, hits = ng.run_with_hits(str(self.root), "demo", "scan-deslop", 1)
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        blob = "\n".join(hits)
+        self.assertIn("chapters/ch001.md:L2:", blob)
+        self.assertIn("目光深邃", blob)
+        self.assertIn("chapters/ch001.md:L3:", blob)
+        self.assertIn("毒句式", blob)
+        self.assertTrue(any("鸡汤尾" in h or "或许" in h for h in hits), hits)
+        rc = ng.main(
+            ["--workdir", str(self.root), "--book-id", "demo", "--action", "scan-deslop", "--chapter", "1"]
+        )
+        self.assertEqual(rc, 1)
+
+    def test_scan_deslop_range_and_clean(self):
+        (self.root / "novel/demo/chapters/ch001.md").write_text("客栈里有人笑他。他亮出腰牌。\n", encoding="utf-8")
+        (self.root / "novel/demo/chapters/ch002-contract.yaml").write_text(
+            (self.root / "novel/demo/chapters/ch001-contract.yaml").read_text(encoding="utf-8").replace(
+                "chapter: 1", "chapter: 2"
+            ),
+            encoding="utf-8",
+        )
+        (self.root / "novel/demo/chapters/ch002.md").write_text("门外有人递来一封失踪信。\n", encoding="utf-8")
+        rep, hits = ng.run_with_hits(str(self.root), "demo", "scan-deslop", 0, from_ch=1, to_ch=2)
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertEqual(hits, [])
 
     def test_postcommit(self):
         rep = ng.run(str(self.root), "demo", "postcommit", 1)
