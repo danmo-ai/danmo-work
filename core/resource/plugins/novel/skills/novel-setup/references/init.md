@@ -15,19 +15,18 @@ Optional: platform tone (番茄/起点等) as **preference**, not hard rules.
 
 If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding the defaults from KB 题材与平台（章字数 2000–3500、断章必钩、3–5 章一爽点、黄金三章闭环）so later stages inherit them without re-searching.
 
-## Steps
+## Steps（少交互）
 
-1. `read_skill` → `project-layout.md`, `table-schema.md`, templates.  
-2. `search_kb` 题材与平台 + 人设与群像（knowledge_gate）.  
+1. `read_skill` → `project-layout.md`（按需再开 `table-schema.md` / templates）.  
+2. `search_kb` **一次**：题材与平台（knowledge_gate）；人设主题按需再查.  
 3. Create the **standard English tree** under `novel/<book-id>/`:  
-   `canon/` (+ `cast/`), `outline/` (+ `volumes/`), `chapters/`, `continuity/`, `reviews/`  
-   (optional later: `extras/`, `_archive/`).  
-4. `write` `book-bible.md`（含终局储备三行，未定可写「待定」+ 卷号占位）and `novel-state.yaml` (stage=`init`, status fields).  
-5. Seed `canon/world.md` + `canon/glossary.md` + `canon/author-lore.md` from templates。人物卡用 `cast-card.md`，先 `candidate`。金手指用 `goldfinger-card.md` → `canon/goldfinger.md` 或主角卡。  
-6. Seed `continuity/public-lore.md` + `continuity/tracking.md`（可空表，不可缺文件）。  
-7. Seed tables with `book_id` (characters may start as `candidate`).  
-8. `memory_update` project: promise, genre, taboos, 终局储备卷号（不要把 author-lore 细节写入 memory）; user: language/style prefs if stated.  
-9. Gate 脚本 `--action doctor` once (`novel-setup/references/gate.md`); fix blocking layout holes. Stop for human confirmation before mass outlining if bible is still thin.
+   `canon/` (+ `cast/`), `outline/` (+ `volumes/`), `chapters/`, `continuity/`, `reviews/`.  
+4. `write` `book-bible.md`（含终局储备表）and `novel-state.yaml` (stage=`init`).  
+5. Seed `canon/world.md` + `canon/author-lore.md` from templates。人物卡用 `cast-card.md`，先 `candidate`。金手指默认写入主角卡（不必单建 `goldfinger.md`）。术语稀少时写在 `world.md`，**不必**建 `glossary.md`.  
+6. Seed `continuity/ledger.md`（可空表，不可缺文件）.  
+7. Optional: seed tables with `book_id`（文件权威；table 镜像可选）.  
+8. `memory_update` project: promise, genre, taboos, 终局储备卷号（不要把 author-lore 细节写入 memory）.  
+9. Gate 脚本 `--action doctor` once; fix blocking layout holes. Stop for human confirmation before mass outlining if bible is still thin.
 
 ## Done when
 
@@ -35,6 +34,9 @@ If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding
 - `novel-state.yaml` points at next action  
 - Bible has framing + promise + 终局储备表（可待定，不可缺表）  
 - `canon/world.md` 四层骨架已落盘  
-- `canon/author-lore.md` + `continuity/public-lore.md` + `continuity/tracking.md` 已落盘  
-- Tables seeded (even if empty cast with schema understood)  
+- `canon/author-lore.md` + `continuity/ledger.md` 已落盘  
 - Gate 脚本 doctor 无 blocking layout holes
+
+## Legacy migrate
+
+If cold-start finds `public-lore.md` / `tracking.md` / `chapter_summaries.md` without `ledger.md`, merge into `continuity/ledger.md` then move old files to `_archive/`.

@@ -6,7 +6,7 @@
 2. `exec_shell` gate script `--action preflight --chapter N`（`novel-setup/references/gate.md`）— FAIL 则停止。
 3. Read `novel-state.yaml` — confirm next chapter index.  
 4. **knowledge_gate:** `search_kb` 文风与去 AI 味；写章末钩子或章首接钩前再 `search_kb` 爽点与追读（不要复述选型表）。**ch001–ch003** → `read_skill` `opening-chapters.md` + `search_kb` 节奏与结构（黄金三章 + 章内节奏）。
-5. **asset_gate:** `table_query` characters/locations/foreshadows involved; all on-page major cast should be `canon` (or user-approved exception). Load `continuity/public-lore.md` + `continuity/tracking.md`. Do **not** read `canon/author-lore.md`.
+5. **asset_gate:** on-page major cast should be `canon` (or user-approved exception). Load `continuity/ledger.md` (tail). Do **not** read `canon/author-lore.md`. Table queries optional.
 6. Load accepted contract from `novel/<book-id>/chapters/chNNN-contract.yaml` (`status=accepted` or user waiver; `unit_id` must match a volume 剧情单元).  
 7. `memory_read` prefs + recent summaries (last 3–5 chapters).  
 8. 若 beats 含场景标签 → `read_skill` `scene-routing.md`（含 `scene:establish` / `scene:transition` → KB 场景沉浸）。

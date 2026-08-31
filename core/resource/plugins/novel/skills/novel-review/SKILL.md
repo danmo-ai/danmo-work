@@ -6,28 +6,30 @@ license: MIT
 compatibility: Requires write, edit, read_file, grep, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "2.1"
+  version: "2.2"
   category: creative-writing
 ---
 
-# Novel Review（审改定稿）
+# Novel Review（审稿 · 润色 · Commit）
 
 One review round → gate script precommit → fix P0 → Commit (gate script postcommit). `qc_gate` FAIL blocks「定稿」.
+
+**Pipeline steps 7–8/8：润色审稿 → 一致性 Commit.** 用户可自行切换旗舰模型；本技能不换模型。
 
 ## When to load
 
 审稿 / 检查 / 去 AI 味 / 润色 / Continuity Commit / 批量审稿.
 
-## Do
+## Do（少交互）
 
-| Intent | Load | search_kb |
-|--------|------|-----------|
-| 审稿 / 批量审 | `novel-review/references/review-gates.md` | 文风与去 AI 味, 强约束, 题材与平台 |
-| 去 AI 味 | `novel-review/references/polish-deslop.md` | 文风与去 AI 味 |
-| Commit | `novel-review/references/continuity-commit.md` | 世界观与金手指（若涉及） |
+| Intent | Load | search_kb（≤1） |
+|--------|------|-----------------|
+| 审稿 / 批量审 | `novel-review/references/review-gates.md` | 文风与去 AI 味 |
+| 去 AI 味 | `polish-deslop.md` | 文风与去 AI 味 |
+| Commit | `continuity-commit.md` | — |
 
-Write reviews under `reviews/`. Commit updates chapter file + `table_*` + `memory_*` + `novel-state.yaml` + `continuity/public-lore.md` + `tracking.md`. Template: `foreshadow-tracker.md`.
+Write reviews under `reviews/`: **PASS → 短 stub**；**FAIL → 全文六镜**. Commit：**一次** `apply_patch` 更新 `continuity/ledger.md` + contract status + `novel-state.yaml`. Table upserts optional.
 
 ## Stop
 
-Report files and table keys. Completion = tool evidence. Do not start the next book.
+Report files. Completion = tool evidence. Do not start the next book.

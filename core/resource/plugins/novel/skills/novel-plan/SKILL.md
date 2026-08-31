@@ -6,27 +6,31 @@ license: MIT
 compatibility: Requires write, edit, read_file, glob; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "2.1"
+  version: "2.2"
   category: creative-writing
 ---
 
-# Novel Plan（设定与大纲）
+# Novel Plan（设定 · 总纲 · 卷纲）
 
 Lock canon and outlines. **No chapter contracts, no chapter bodies.** New entities stay `candidate` until `ask_user`.
 
+**Pipeline steps 2–4/8：设定 → 总纲 → 卷纲.** 用户可自行切换推理模型；本技能不换模型。
+
 ## When to load
 
-人设 / 世界观 / 金手指 / 总纲 / 卷纲.
+人设 / 世界观 / 金手指 / 总纲 / 卷纲 / 补设定.
 
-## Do
+## Do（少交互）
 
-| Intent | Load | search_kb |
-|--------|------|-----------|
-| 总纲 / 卷纲 | `novel-plan/references/outline.md` | 节奏与结构, 爽点与追读, 题材与平台, 强约束 |
-| 人设 / 世界观 | `canon/world.md` + `cast-card.md` | 人设与群像, 世界观与金手指 |
-| 金手指 | `novel-setup/assets/templates/goldfinger-card.md` | 世界观与金手指 |
+| Intent | Load | search_kb（≤1） |
+|--------|------|-----------------|
+| 总纲 / 卷纲 | `novel-plan/references/outline.md` | 节奏与结构 |
+| 人设 / 世界观 | templates `world.md` + `cast-card.md` | 人设与群像 |
+| 金手指 | `cast-card.md` / goldfinger 段 | 世界观与金手指 |
 
-Templates: `novel-plan/assets/templates/*`（总纲/卷纲）+ `novel-setup/assets/templates/`（world / cast-card / goldfinger-card / author-lore）. After user OK on a volume, set `novel-state.yaml` `stage: outline`. 终局细节写入 `canon/author-lore.md`，总纲只保留解锁卷号。
+Templates: `novel-plan/assets/templates/*` + `novel-setup/assets/templates/`. After user OK on a volume, set `novel-state.yaml` `stage: outline` and refresh `artifacts`. 终局细节写入 `canon/author-lore.md`；**终局储备 unlock 表只在 `book-bible.md`**，总纲不复制。
+
+Table upserts for cast/world are **optional** mirrors — files are authoritative.
 
 ## Stop
 

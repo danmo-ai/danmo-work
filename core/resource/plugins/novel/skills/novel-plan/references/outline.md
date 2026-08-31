@@ -2,7 +2,7 @@
 
 ## Hierarchy
 
-1. **总纲** — 一句话故事, 读者承诺, 分卷结构表, 主线伏笔, 结局方向, **终局储备**（与圣经同一张表）
+1. **总纲** — 一句话故事, 读者承诺, 分卷结构表, 主线伏笔, 结局方向（终局储备 unlock **只在** `book-bible.md`，总纲链过去即可）
 2. **卷纲** — 卷目标, 冲突与起终, 终局边界, 节奏锚点, **剧情单元卡（一段章）**, 情绪/人物弧, 反转, 伏笔
 3. **章合同** — 下一技能 `novel-write`（`chapter-contract.md`）；YAML under `chapters/`；必填 `unit_id`
 
@@ -14,15 +14,14 @@
 
 - Plot branches / what-if docs **must not** mutate Canon until the user picks one.
 - Use the templates: `assets/templates/book-outline.md`, `assets/templates/volume-outline.md` — fixed sections, no free-form reinvention.
-- `search_kb` 节奏与结构（五步锁卷 / 八节点 / 节点法）before locking volume shape (knowledge_gate). 终局台阶与透支两问另查「强约束」；细节只写 `canon/author-lore.md`，总纲抄解锁卷。
-- After user OK on volume outline, update `novel-state.yaml` and `memory_update` project checkpoint.
+- `search_kb` **至多一次**「节奏与结构」before locking volume shape. 终局细节只写 `canon/author-lore.md`；unlock 卷号只维护在圣经。
+- After user OK on volume outline, update `novel-state.yaml` (`stage: outline`, artifacts).
 - Do not batch-write chapters until asset_gate: core cast + world skeleton are `canon`.
-- **Next stage:** `novel-write` 章合同；批量写正文前再走 `novel-write/references/batch-freeze.md`。单章可经用户确认 bypass 冻结，仍须该章合同 `accepted`。
-- Per-chapter planning belongs in **章合同** (`chapters/chNNN-contract.yaml`) only. Never under `outline/`.
-- Write outline files only under `outline/` (use `outline/volumes/` for per-volume briefs).
+- **Next stage:** `novel-write` 章合同；批量写正文前再走 `batch-freeze.md`（只更新 `novel-state.frozen_batch`）。
+- Per-chapter planning belongs in **章合同** only. Never under `outline/`.
 
 ## Outputs
 
-- `novel/<book-id>/outline/book_outline.md` — from `book-outline.md` template（含与圣经一致的终局储备）
-- `outline/volumes/vXX.md` — from `volume-outline.md` template（单元卡含节拍 / 禁提前 / 下钩；合同 `unit_id` = `vXX-U#`）
-- 章合同：交给 `novel-write`（从所属剧情单元卡下推，文件 + 可选 `table_upsert` 索引）
+- `novel/<book-id>/outline/book_outline.md` — 结构/卷地图（不复制终局储备表）
+- `outline/volumes/vXX.md` — 单元卡；合同 `unit_id` = `vXX-U#`
+- 章合同：交给 `novel-write`（文件权威；table 镜像可选）

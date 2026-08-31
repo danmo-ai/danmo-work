@@ -20,6 +20,7 @@ import {
   isNovelContractPath,
   mergeVolumeOutlineFiles,
   novelActionSkillId,
+  NOVEL_PIPELINE_STEPS,
   parseBookOutlineVolumeRows,
   parseVolumeUnitRows,
   novelBatchFreezePath,
@@ -48,6 +49,7 @@ import {
   type NovelChapterPhase,
   type NovelExtendedState,
   type NovelFileNode,
+  type NovelPipelineStepId,
   type NovelStageAction,
   type NovelStateSummary,
   type VolumeUnitRow,
@@ -135,7 +137,7 @@ const bookContext = computed(() => {
     castFileCount: castFiles.value.length,
     hasBookOutline: Boolean(bookOutlineFile.value),
     hasVolumeOutline: visibleVolumeFiles.value.length > 0,
-    hasBatchFreezeFile: continuityFiles.value.some((f) => f.name === 'batch-freeze.yaml'),
+    hasBatchFreezeFile: false,
     batchFreezeFrozen: batchFreezeFrozen.value,
   }
 })
@@ -165,17 +167,35 @@ function blockerText(key: string): string {
   return key
 }
 
-function stepperLabel(id: string): string {
+function stepperLabel(id: NovelPipelineStepId | string): string {
   const map: Record<string, string> = {
     init: 'stepperInit',
     setup: 'stepperSetup',
-    outline: 'stepperOutline',
-    writing: 'stepperWriting',
+    outline: 'stepperBookOutline',
+    volume: 'stepperVolume',
+    contract: 'stepperContract',
+    write: 'stepperWriting',
     review: 'stepperReview',
+    commit: 'stepperCommit',
     idle: 'stepperWriting',
   }
   return t(`novelWorkbench.${map[id] ?? 'stepperWriting'}`)
 }
+
+function gateLabel(status: string): string {
+  switch (status) {
+    case 'pass':
+      return t('novelWorkbench.gatePass')
+    case 'fail':
+      return t('novelWorkbench.gateFail')
+    case 'skipped':
+      return t('novelWorkbench.gateSkipped')
+    default:
+      return t('novelWorkbench.gateUnknown')
+  }
+}
+
+const pipelineSteps = NOVEL_PIPELINE_STEPS
 
 function primaryActionLabel(action: NovelStageAction, chapter?: number): string {
   switch (action) {
@@ -201,6 +221,8 @@ function primaryActionLabel(action: NovelStageAction, chapter?: number): string 
       return t('novelWorkbench.actionHook')
     case 'reversal':
       return t('novelWorkbench.actionReversal')
+    case 'volume':
+      return t('novelWorkbench.actionVolumeOutline', { n: chapter && chapter > 0 ? chapter : 'N' })
     case 'review':
       return t('novelWorkbench.actionReview')
     case 'polish':
@@ -243,6 +265,17 @@ interface DeskPrimary {
   label: string
   allowed: boolean
 }
+
+const deskPrimaryFromPipeline = computed((): DeskPrimary | null => {
+  const pipe = pipeline.value
+  if (!pipe?.primaryAction || treeSel.value.kind === 'chapter') return null
+  return {
+    action: pipe.primaryAction,
+    chapter: pipe.primaryChapter,
+    label: primaryActionLabel(pipe.primaryAction, pipe.primaryChapter),
+    allowed: isActionAllowed(pipe.primaryAction, pipe.primaryChapter),
+  }
+})
 
 const chapterDeskPrimary = computed((): DeskPrimary | null => {
   if (treeSel.value.kind !== 'chapter' || treeSel.value.n == null || !bookContext.value) return null
@@ -464,12 +497,17 @@ async function loadState(bookId: string): Promise<NovelStateSummary | null> {
   }
 }
 
-async function loadBatchFreezeStatus(bookId: string) {
+async function loadBatchFreezeStatus(_bookId: string) {
+  // Freeze lives in novel-state; legacy batch-freeze.yaml is optional soft-read
+  if (extendedState.value?.batchFreezeArtifact === 'frozen') {
+    batchFreezeFrozen.value = true
+    return
+  }
   try {
-    const raw = await readFile(novelBatchFreezePath(bookId))
+    const raw = await readFile(novelBatchFreezePath(_bookId))
     batchFreezeFrozen.value = parseBatchFreezeYaml(raw).status === 'frozen'
   } catch {
-    batchFreezeFrozen.value = extendedState.value?.batchFreezeArtifact === 'frozen'
+    batchFreezeFrozen.value = Boolean(extendedState.value?.frozenBatch?.from)
   }
 }
 
@@ -855,6 +893,56 @@ function escapeHtml(s: string) {
     </template>
 
     <template v-else-if="view === 'book' && selectedBookId">
+      <div v-if="pipeline" class="novel-wb__rail">
+        <div class="novel-wb__stepper novel-wb__stepper--rail" role="list">
+          <button
+            v-for="s in pipelineSteps"
+            :key="s.id"
+            type="button"
+            role="listitem"
+            class="novel-wb__step"
+            :class="{
+              'novel-wb__step--current': pipeline.step === s.id,
+              'novel-wb__step--done':
+                pipelineSteps.findIndex((x) => x.id === pipeline.step) >
+                pipelineSteps.findIndex((x) => x.id === s.id),
+            }"
+            :disabled="!s.action"
+            @click="s.action && runAction(s.action, pipeline.primaryChapter, undefined, s.id === 'volume' ? nextVolume : undefined)"
+          >
+            {{ stepperLabel(s.id) }}
+          </button>
+        </div>
+        <div class="novel-wb__rail-meta">
+          <div class="novel-wb__gates" :aria-label="t('novelWorkbench.gatePanel')">
+            <span
+              class="novel-wb__gate"
+              :class="'novel-wb__gate--' + pipeline.gates.knowledge"
+              :title="t('novelWorkbench.gateKnowledge')"
+            >{{ t('novelWorkbench.gateKnowledge') }} · {{ gateLabel(pipeline.gates.knowledge) }}</span>
+            <span
+              class="novel-wb__gate"
+              :class="'novel-wb__gate--' + pipeline.gates.asset"
+              :title="t('novelWorkbench.gateAsset')"
+            >{{ t('novelWorkbench.gateAsset') }} · {{ gateLabel(pipeline.gates.asset) }}</span>
+            <span
+              class="novel-wb__gate"
+              :class="'novel-wb__gate--' + pipeline.gates.qc"
+              :title="t('novelWorkbench.gateQc')"
+            >{{ t('novelWorkbench.gateQc') }} · {{ gateLabel(pipeline.gates.qc) }}</span>
+          </div>
+          <button
+            v-if="deskPrimaryFromPipeline"
+            type="button"
+            class="novel-wb__btn novel-wb__btn--cta"
+            :disabled="!deskPrimaryFromPipeline.allowed"
+            @click="runAction(deskPrimaryFromPipeline.action, deskPrimaryFromPipeline.chapter, undefined, deskPrimaryFromPipeline.action === 'volume' ? nextVolume : undefined)"
+          >
+            {{ t('novelWorkbench.primaryCta') }} · {{ deskPrimaryFromPipeline.label }}
+          </button>
+        </div>
+        <p class="novel-wb__model-tip">{{ t('novelWorkbench.modelTip') }}</p>
+      </div>
       <div class="novel-wb__book">
         <aside class="novel-wb__tree">
           <DqCollapse v-model="treeOpen">
@@ -1333,13 +1421,6 @@ function escapeHtml(s: string) {
   min-width: 0;
 }
 
-.novel-wb__stepper--rail {
-  flex-direction: column;
-  align-items: stretch;
-  padding: 8px 8px 0;
-  gap: 4px;
-}
-
 .novel-wb__inject {
   margin: 0;
   padding: 0 12px 8px;
@@ -1511,12 +1592,77 @@ function escapeHtml(s: string) {
   padding: 8px 12px 4px;
 }
 
+.novel-wb__rail {
+  flex-shrink: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--dq-border-subtle, #000) 45%, transparent);
+  padding-bottom: 8px;
+}
+
+.novel-wb__stepper--rail {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 8px 12px 4px;
+  gap: 4px;
+}
+
+.novel-wb__rail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+}
+
+.novel-wb__gates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: var(--dq-font-size-caption);
+}
+
+.novel-wb__gate {
+  padding: 2px 8px;
+  border-radius: 4px;
+  opacity: 0.75;
+  background: color-mix(in srgb, var(--dq-border-subtle, #000) 25%, transparent);
+}
+
+.novel-wb__gate--pass {
+  opacity: 1;
+  color: var(--dq-success, #1a7f37);
+}
+
+.novel-wb__gate--fail {
+  opacity: 1;
+  color: var(--dq-danger, #cf222e);
+}
+
+.novel-wb__btn--cta {
+  font-weight: 650;
+}
+
+.novel-wb__model-tip {
+  margin: 0;
+  padding: 0 12px 4px;
+  font-size: var(--dq-font-size-caption);
+  opacity: 0.65;
+  line-height: 1.35;
+}
+
 .novel-wb__step {
   padding: 4px 8px;
+  border: none;
   border-radius: 999px;
   font-size: var(--dq-font-size-caption);
   opacity: 0.45;
   background: color-mix(in srgb, var(--dq-border-subtle, #000) 30%, transparent);
+  color: inherit;
+  cursor: pointer;
+}
+
+.novel-wb__step--done {
+  opacity: 0.7;
 }
 
 .novel-wb__step--btn {
@@ -1533,6 +1679,8 @@ function escapeHtml(s: string) {
 }
 
 .novel-wb__step--current {
+  opacity: 1;
+  font-weight: 650;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dq-accent) 45%, transparent);
 }
 

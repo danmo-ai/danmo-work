@@ -139,8 +139,8 @@ assert.ok(constrained.includes('【任务】'))
 assert.equal(pipe.phase, 'review')
 
 assert.equal(novelActionSkillId('init'), 'novel-setup')
-assert.equal(novelActionSkillId('assets'), 'novel-setup')
-assert.equal(novelActionSkillId('goldfinger'), 'novel-setup')
+assert.equal(novelActionSkillId('assets'), 'novel-plan')
+assert.equal(novelActionSkillId('goldfinger'), 'novel-plan')
 assert.equal(novelActionSkillId('outline'), 'novel-plan')
 assert.equal(novelActionSkillId('volume'), 'novel-plan')
 assert.equal(novelActionSkillId('write'), 'novel-write')
@@ -150,6 +150,8 @@ assert.equal(novelActionSkillId('reversal'), 'novel-write')
 assert.equal(novelActionSkillId('review'), 'novel-review')
 assert.equal(novelActionSkillId('polish'), 'novel-review')
 assert.equal(novelActionSkillId('review-polish-commit'), 'novel-review')
+assert.ok(pipe.step)
+assert.ok(constrained.includes('换阶段时请在 Composer 自行切换模型'))
 
 const comboProto = novelActionLoadProtocol('review-polish-commit', {
   bookId: 'star-inn',
@@ -250,7 +252,11 @@ const freezePrefill = buildConstrainedPrefill('batch-freeze', {
 })
 assert.ok(freezePrefill.includes('novel-write/references/batch-freeze.md'))
 assert.ok(freezePrefill.includes('unit_id'))
-assert.ok(freezePrefill.includes('batch-freeze.yaml'))
+assert.ok(freezePrefill.includes('frozen_batch'))
+assert.ok(freezePrefill.includes('不要写 batch-freeze.yaml'))
+assert.ok(!novelActionLoadProtocol('batch-freeze', { bookId: 'star-inn' }).skillRefs.includes(
+  'novel-write/assets/templates/batch-freeze.yaml',
+))
 
 const contractPrefill = buildNovelStagePrefill('contract', { bookId: 'star-inn', chapter: 4 })
 assert.ok(contractPrefill.includes('unit_id'))
@@ -259,27 +265,33 @@ assert.ok(contractPrefill.includes('ch004-contract.yaml'))
 assert.ok(!contractPrefill.includes('pleasure_point'))
 
 const goldPrefill = buildConstrainedPrefill('goldfinger', { bookId: 'star-inn' })
-assert.ok(goldPrefill.includes('novel-setup/assets/templates/goldfinger-card.md'))
+assert.ok(goldPrefill.includes('novel-setup/assets/templates/cast-card.md'))
 assert.ok(goldPrefill.includes('世界观与金手指'))
+assert.equal(novelActionLoadProtocol('goldfinger', { bookId: 'star-inn' }).skillId, 'novel-plan')
 
 const assetsPrefill = buildConstrainedPrefill('assets', { bookId: 'star-inn' })
 assert.ok(assetsPrefill.includes('world.md'))
 assert.ok(assetsPrefill.includes('cast-card.md'))
+assert.equal(novelActionLoadProtocol('assets', { bookId: 'star-inn' }).skillId, 'novel-plan')
 
 const outlinePrefill = buildConstrainedPrefill('outline', { bookId: 'star-inn' })
 assert.ok(outlinePrefill.includes('book_outline.md'))
-assert.ok(outlinePrefill.includes('volume-outline.md'))
+assert.ok(!outlinePrefill.includes('volume-outline.md')) // outline action is book-only now
 assert.ok(!buildNovelStagePrefill('outline', { bookId: 'star-inn' }).includes('终局储备'))
 assert.ok(!buildNovelStagePrefill('volume', { bookId: 'star-inn', volume: 1 }).includes('主爽点形态'))
 
-const dialoguePrefill = buildNovelStagePrefill('dialogue', {
-  bookId: 'star-inn',
-  chapter: 4,
-  chapterPath: 'novel/star-inn/chapters/ch004.md',
-})
-assert.ok(dialoguePrefill.includes('对话'))
-assert.ok(buildNovelStagePrefill('hook', { bookId: 'star-inn', chapter: 4 }).includes('悬念'))
-assert.ok(buildNovelStagePrefill('reversal', { bookId: 'star-inn', chapter: 4 }).includes('反转'))
+const writeProto2 = novelActionLoadProtocol('write', { bookId: 'star-inn', chapter: 2 })
+assert.ok(writeProto2.readFiles.some((f) => f.includes('ledger.md')))
+assert.ok(!writeProto2.readFiles.some((f) => f.includes('chapter_summaries.md')))
+assert.deepEqual(writeProto2.kbThemes, ['文风与去 AI 味'])
+
+const hookPrefill = buildNovelStagePrefill('hook', { bookId: 'star-inn', chapter: 4 })
+assert.ok(hookPrefill.includes('爽点强化'))
+assert.ok(buildNovelStagePrefill('reversal', { bookId: 'star-inn', chapter: 4 }).includes('爽点强化'))
+
+const preflightPrefill = buildNovelStagePrefill('preflight', { bookId: 'star-inn' })
+assert.ok(preflightPrefill.includes('last_preflight'))
+assert.ok(!preflightPrefill.includes('preflight-log.md'))
 
 const dialogueProto = novelActionLoadProtocol('dialogue', { bookId: 'star-inn', chapter: 4 })
 assert.equal(dialogueProto.skillId, 'novel-write')
@@ -293,7 +305,6 @@ assert.ok(continueProto.skillRefs.includes('novel-write/references/chapter-write
 const hookProto = novelActionLoadProtocol('hook', { bookId: 'star-inn', chapter: 4 })
 assert.ok(hookProto.kbThemes.includes('爽点与追读'))
 assert.deepEqual(novelActionLoadProtocol('reversal', { bookId: 'star-inn', chapter: 4 }).kbThemes, [
-  '情绪与场景',
   '爽点与追读',
 ])
 assert.equal(novelActionSkillId('continue'), 'novel-write')
