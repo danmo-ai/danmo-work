@@ -324,11 +324,36 @@ def unit_listed(outline_root: Path, unit_id: str) -> bool:
     return False
 
 
-def open_debt_count(book_root: Path, contract: dict) -> int:
-    n = len(nonempty_list(contract.get("reader_debt")))
+def ledger_path(book_root: Path) -> Path:
+    return book_root / "continuity/ledger.md"
+
+
+def has_reader_continuity(book_root: Path) -> bool:
+    """Prefer ledger.md; accept legacy public-lore + tracking pair."""
+    if ledger_path(book_root).is_file():
+        return True
+    return file_exists(book_root, "continuity/public-lore.md") and file_exists(
+        book_root, "continuity/tracking.md"
+    )
+
+
+def continuity_open_loops_text(book_root: Path) -> str:
+    """Text used to count open foreshadow / loop rows."""
+    ledger = ledger_path(book_root)
+    if ledger.is_file():
+        return ledger.read_text(encoding="utf-8", errors="replace")
     tracker = book_root / "continuity/foreshadow-tracker.md"
     if tracker.is_file():
-        n += count_open_foreshadows(tracker.read_text(encoding="utf-8", errors="replace"))
+        return tracker.read_text(encoding="utf-8", errors="replace")
+    tracking = book_root / "continuity/tracking.md"
+    if tracking.is_file():
+        return tracking.read_text(encoding="utf-8", errors="replace")
+    return ""
+
+
+def open_debt_count(book_root: Path, contract: dict) -> int:
+    n = len(nonempty_list(contract.get("reader_debt")))
+    n += count_open_foreshadows(continuity_open_loops_text(book_root))
     return n
 
 
@@ -350,6 +375,17 @@ def list_chapter_nums(book_root: Path, kind: str) -> list[int]:
     return out
 
 
+def summary_source_text(book_root: Path) -> tuple[str, str]:
+    """Return (text, rel) for chapter summary blocks — ledger preferred."""
+    ledger = ledger_path(book_root)
+    if ledger.is_file():
+        return ledger.read_text(encoding="utf-8", errors="replace"), "continuity/ledger.md"
+    summaries = book_root / "continuity/chapter_summaries.md"
+    if summaries.is_file():
+        return summaries.read_text(encoding="utf-8", errors="replace"), "continuity/chapter_summaries.md"
+    return "", ""
+
+
 def has_summary(summaries: str, ch: int) -> bool:
     return f"## ch{ch:03d}" in summaries
 
@@ -362,19 +398,26 @@ def hook_of(contract: dict) -> tuple[str, str]:
 
 
 def check_doctor(book_root: Path, st: dict, r: Report) -> None:
-    for rel in ("novel-state.yaml", "book-bible.md", "canon/world.md", "canon/glossary.md"):
+    for rel in ("novel-state.yaml", "book-bible.md", "canon/world.md"):
         if not file_exists(book_root, rel):
             r.blocking("layout", "missing " + rel)
     for d in ("canon", "canon/cast", "outline", "outline/volumes", "chapters", "continuity", "reviews"):
         if not file_exists(book_root, d):
             r.blocking("layout", "missing directory " + d + "/")
-    for rel in ("canon/author-lore.md", "continuity/public-lore.md", "continuity/tracking.md"):
-        if file_exists(book_root, rel):
-            continue
+    # author-lore always seeded; reader continuity = ledger.md (or legacy pair)
+    if not file_exists(book_root, "canon/author-lore.md"):
         if writing_stage(str(st.get("stage") or "")):
-            r.blocking("lore-tracks", f"missing {rel} (required from outline/writing onward)")
+            r.blocking("lore-tracks", "missing canon/author-lore.md (required from outline/writing onward)")
         else:
-            r.advisory("lore-tracks", f"missing {rel} — seed at setup")
+            r.advisory("lore-tracks", "missing canon/author-lore.md — seed at setup")
+    if not has_reader_continuity(book_root):
+        if writing_stage(str(st.get("stage") or "")):
+            r.blocking(
+                "lore-tracks",
+                "missing continuity/ledger.md (or legacy public-lore.md + tracking.md)",
+            )
+        else:
+            r.advisory("lore-tracks", "missing continuity/ledger.md — seed at setup")
     contracts = {}
     for n in list_chapter_nums(book_root, "contract"):
         contracts[n] = True
@@ -401,9 +444,11 @@ def check_preflight(book_root: Path, st: dict, ch: int, r: Report) -> None:
     if not file_exists(book_root, "novel-state.yaml"):
         r.blocking("state", "missing novel-state.yaml")
         return
-    for rel in ("continuity/public-lore.md", "continuity/tracking.md"):
-        if not file_exists(book_root, rel):
-            r.blocking("lore-tracks", f"missing {rel} — write prose from public-lore + tracking only")
+    if not has_reader_continuity(book_root):
+        r.blocking(
+            "lore-tracks",
+            "missing continuity/ledger.md (or legacy public-lore + tracking) — draft from ledger only",
+        )
     if file_exists(book_root, "canon/author-lore.md"):
         r.advisory("lore-tracks", "do not load canon/author-lore.md into the draft context")
     elif writing_stage(str(st.get("stage") or "")):
@@ -489,19 +534,19 @@ def check_postcommit(book_root: Path, st: dict, ch: int, r: Report) -> None:
         r.blocking("contract", f"{rel} status={c.get('status')} (Commit requires reviewed)")
     if not file_exists(book_root, chapter_rel(ch)):
         r.blocking("prose", f"{chapter_rel(ch)} missing")
-    summaries = book_root / "continuity/chapter_summaries.md"
-    if not summaries.is_file():
-        r.blocking("commit", "missing continuity/chapter_summaries.md")
-    elif not has_summary(summaries.read_text(encoding="utf-8", errors="replace"), ch):
-        r.blocking("commit", f"no ## ch{ch:03d} block in continuity/chapter_summaries.md")
+    text, src = summary_source_text(book_root)
+    if not src:
+        r.blocking("commit", "missing continuity/ledger.md (or legacy chapter_summaries.md)")
+    elif not has_summary(text, ch):
+        r.blocking("commit", f"no ## ch{ch:03d} block in {src}")
     last = int(st.get("last_committed_ch") or 0)
     if last < ch:
         r.blocking("state", f"last_committed_ch={last} want ≥{ch} after Commit")
-    if not file_exists(book_root, "continuity/public-lore.md"):
-        r.blocking("lore-tracks", "Commit must refresh continuity/public-lore.md from accepted prose")
-    if not file_exists(book_root, "continuity/tracking.md"):
-        r.blocking("lore-tracks", "Commit must refresh continuity/tracking.md")
-
+    if not has_reader_continuity(book_root):
+        r.blocking(
+            "lore-tracks",
+            "Commit must refresh continuity/ledger.md (or legacy public-lore + tracking)",
+        )
 
 def run(workdir: str, book_id: str, action: str, chapter: int) -> Report:
     action = (action or "").strip().lower()

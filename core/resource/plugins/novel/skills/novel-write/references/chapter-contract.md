@@ -14,7 +14,7 @@ Official name: **章合同** / chapter contract. Do not introduce other product 
 
 `table_upsert` into `chapter_contracts` is an **index/mirror** (queryable status), not a substitute for the YAML file. Always write the file first; table row should point at that path (e.g. `file: chapters/ch001-contract.yaml`).
 
-Book/volume planning stays in `outline/` (`outline.md`) and **stops at 剧情单元卡（一段章）**. Per-chapter planning is **only** 章合同 under `chapters/`. Do not copy `purpose` / `pleasure_point` / `hook` into 卷纲 or `batch-freeze.yaml`.
+Book/volume planning stays in `outline/` (`outline.md`) and **stops at 剧情单元卡（一段章）**. Per-chapter planning is **only** 章合同 under `chapters/`. Do not copy `purpose` / `pleasure_point` / `hook` into 卷纲 or novel-state freeze fields.
 
 写合同前先读本卷纲：定位本章所属 **单元卡** + 最近锚点，填 `unit_id`（`vNN-U#`，如 `v04-U2`）。按卡上 **单元节拍** 确定本章角色（建立期待/尝试/加压/决断/兑现/余波），再下推：
 - 单元功能 + 本章节拍角色 → `purpose` / `beats` 序

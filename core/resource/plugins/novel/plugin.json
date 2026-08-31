@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "novel",
-  "version": "2.1.0",
-  "description": "Novel / webnovel writing expert: setup/plan/write/review skills + craft knowledge base.",
+  "version": "2.2.0",
+  "description": "Novel / webnovel writing expert: 8-step pipeline, ledger continuity, setup/plan/write/review skills + craft KB.",
   "author": { "name": "Danmo" },
   "license": "MIT",
   "keywords": ["novel", "writing", "expert", "builtin", "knowledge"]

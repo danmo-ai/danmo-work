@@ -23,7 +23,19 @@ export interface NovelExtendedState extends NovelStateSummary {
   blockers: string[]
 }
 
+/** Coarse phase for constraint footer / legacy. */
 export type NovelPipelinePhase = 'init' | 'setup' | 'outline' | 'writing' | 'review' | 'idle'
+
+/** Eight visible pipeline steps (workbench stepper). */
+export type NovelPipelineStepId =
+  | 'init'
+  | 'setup'
+  | 'outline'
+  | 'volume'
+  | 'contract'
+  | 'write'
+  | 'review'
+  | 'commit'
 
 export type NovelChapterPhase =
   | 'empty'
@@ -81,6 +93,8 @@ export interface NovelActionDecision {
 
 export interface NovelBookPipeline {
   phase: NovelPipelinePhase
+  /** Active step among the 8-step rail. */
+  step: NovelPipelineStepId
   primaryAction: NovelStageAction | null
   primaryChapter?: number
   gates: { knowledge: GateStatus; asset: GateStatus; qc: GateStatus }
@@ -289,7 +303,11 @@ export function buildChapterPhases(
 
 export function inferBookPipelinePhase(ctx: NovelBookContext): NovelPipelinePhase {
   if (ctx.state.stage === 'idle') return 'idle'
-  if (!ctx.hasBookOutline) return 'init'
+  const art = ctx.state
+  // Prefer artifacts / disk readiness over coarse stage string
+  if (!ctx.hasBookOutline && art.stage === 'init') return 'init'
+  if (!ctx.hasBookOutline && ctx.castFileCount === 0) return 'init'
+  if (!ctx.hasBookOutline) return ctx.castFileCount === 0 ? 'setup' : 'outline'
   const phases = Object.values(ctx.chapterPhases)
   if (phases.some((p) => p === 'drafted' || p === 'review_fail' || p === 'review_pass')) {
     return 'review'
@@ -299,8 +317,30 @@ export function inferBookPipelinePhase(ctx: NovelBookContext): NovelPipelinePhas
   return 'outline'
 }
 
+/** Map book context to one of 8 visible pipeline steps. */
+export function inferPipelineStep(ctx: NovelBookContext): NovelPipelineStepId {
+  if (ctx.state.stage === 'idle') return 'commit'
+  if (!ctx.hasBookOutline && ctx.castFileCount === 0 && ctx.state.stage === 'init') return 'init'
+  if (!ctx.hasBookOutline && ctx.castFileCount === 0) return 'setup'
+  if (!ctx.hasBookOutline) return 'outline'
+  if (!ctx.hasVolumeOutline) return 'volume'
+
+  const sorted = [...ctx.entries].sort((a, b) => a.chapter - b.chapter)
+  for (const e of sorted) {
+    const ph = ctx.chapterPhases[e.chapter] ?? 'empty'
+    if (ph === 'empty' || ph === 'contract_draft') return 'contract'
+    if (ph === 'contract_ready') return 'write'
+    if (ph === 'drafted' || ph === 'review_fail') return 'review'
+    if (ph === 'review_pass') return 'commit'
+  }
+  // Has volume but no chapter work yet → next is contract
+  if (ctx.entries.length === 0) return 'contract'
+  return 'write'
+}
+
 export function computeBookPipeline(ctx: NovelBookContext): NovelBookPipeline {
   const phase = inferBookPipelinePhase(ctx)
+  const step = inferPipelineStep(ctx)
   const committed = ctx.state.lastCommittedCh
   const totalWithContract = ctx.entries.filter((e) => e.contract).length
   const percent =
@@ -323,28 +363,49 @@ export function computeBookPipeline(ctx: NovelBookContext): NovelBookPipeline {
   let primaryAction: NovelStageAction | null = null
   let primaryChapter: number | undefined
 
-  if (phase === 'init') primaryAction = 'init'
-  else if (phase === 'setup') primaryAction = 'assets'
-  else if (phase === 'outline') primaryAction = 'outline'
-  else {
-    const sorted = [...ctx.entries].sort((a, b) => a.chapter - b.chapter)
-    for (const e of sorted) {
-      const ph = ctx.chapterPhases[e.chapter] ?? 'empty'
-      const next = inferChapterNextAction(ph)
-      if (next) {
-        primaryAction = next
-        primaryChapter = e.chapter
-        break
+  switch (step) {
+    case 'init':
+      primaryAction = 'init'
+      break
+    case 'setup':
+      primaryAction = 'assets'
+      break
+    case 'outline':
+      primaryAction = 'outline'
+      break
+    case 'volume':
+      primaryAction = 'volume'
+      break
+    case 'contract':
+    case 'write':
+    case 'review':
+    case 'commit': {
+      const sorted = [...ctx.entries].sort((a, b) => a.chapter - b.chapter)
+      for (const e of sorted) {
+        const ph = ctx.chapterPhases[e.chapter] ?? 'empty'
+        const next = inferChapterNextAction(ph)
+        if (next) {
+          primaryAction = next
+          primaryChapter = e.chapter
+          break
+        }
       }
-    }
-    if (!primaryAction) {
-      primaryAction = 'continue'
-      primaryChapter = nextChapterNumber(committed, ctx.entries)
+      if (!primaryAction) {
+        if (step === 'contract' || step === 'write') {
+          primaryAction = 'contract'
+          primaryChapter = nextChapterNumber(committed, ctx.entries)
+        } else {
+          primaryAction = 'continue'
+          primaryChapter = nextChapterNumber(committed, ctx.entries)
+        }
+      }
+      break
     }
   }
 
   return {
     phase,
+    step,
     primaryAction,
     primaryChapter,
     gates,
@@ -429,9 +490,9 @@ export function canRunAction(action: NovelStageAction, ctx: NovelBookContext, ch
 export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
   switch (action) {
     case 'init':
+      return 'novel-setup'
     case 'assets':
     case 'goldfinger':
-      return 'novel-setup'
     case 'outline':
     case 'volume':
       return 'novel-plan'
@@ -467,8 +528,7 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
   const volPad = novelPrefillVolPad(ctx)
   const state = `${root}/novel-state.yaml`
   const bibleHint = `${root}/book-bible.md（只读终局储备三行，禁止整本）`
-  const summaries = `${root}/continuity/chapter_summaries.md（只读近 3 章块）`
-  const foreshadows = `${root}/continuity/（未回收伏笔 / continuity_issues）`
+  const ledger = `${root}/continuity/ledger.md（尾部：facts / tracking / loops / 近 3 章摘要）`
   const contract = `${root}/chapters/ch${chPad}-contract.yaml`
   const prose = ctx.chapterPath || `${root}/chapters/ch${chPad}.md`
   const volume = `${root}/outline/volumes/v${volPad}.md`
@@ -481,27 +541,25 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
       return {
         skillId: 'novel-setup',
         skillRefs: ['novel-setup/references/init.md', 'novel-setup/references/project-layout.md'],
-        kbThemes: ['题材与平台', '人设与群像'],
+        kbThemes: ['题材与平台'],
         readFiles: [],
       }
     case 'assets':
       return {
-        skillId: 'novel-setup',
+        skillId: 'novel-plan',
         skillRefs: [
-          'novel-setup/references/init.md',
-          'novel-setup/references/table-schema.md',
           'novel-setup/assets/templates/world.md',
           'novel-setup/assets/templates/cast-card.md',
         ],
-        kbThemes: ['人设与群像', '世界观与金手指'],
+        kbThemes: ['人设与群像'],
         readFiles: [state, bibleHint, world, `${root}/canon/cast/`],
       }
     case 'goldfinger':
       return {
-        skillId: 'novel-setup',
-        skillRefs: ['novel-setup/assets/templates/goldfinger-card.md'],
+        skillId: 'novel-plan',
+        skillRefs: ['novel-setup/assets/templates/cast-card.md'],
         kbThemes: ['世界观与金手指'],
-        readFiles: [state, bibleHint, world],
+        readFiles: [state, bibleHint, world, `${root}/canon/cast/`],
       }
     case 'outline':
       return {
@@ -509,17 +567,16 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
         skillRefs: [
           'novel-plan/references/outline.md',
           'novel-plan/assets/templates/book-outline.md',
-          'novel-plan/assets/templates/volume-outline.md',
         ],
-        kbThemes: ['节奏与结构', '爽点与追读', '题材与平台', '强约束'],
-        readFiles: [state, bibleHint, world, `${root}/canon/cast/`],
+        kbThemes: ['节奏与结构'],
+        readFiles: [state, bibleHint, world],
       }
     case 'volume':
       return {
         skillId: 'novel-plan',
         skillRefs: ['novel-plan/references/outline.md', 'novel-plan/assets/templates/volume-outline.md'],
-        kbThemes: ['节奏与结构', '强约束'],
-        readFiles: [state, bookOutline, volume, world, foreshadows],
+        kbThemes: ['节奏与结构'],
+        readFiles: [state, bookOutline, volume, ledger],
       }
     case 'contract':
       return {
@@ -528,8 +585,8 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
           'novel-write/references/chapter-contract.md',
           'novel-write/assets/templates/chapter-contract.yaml',
         ],
-        kbThemes: ['节奏与结构', '爽点与追读', '题材与平台', '强约束'],
-        readFiles: [state, `${root}/outline/volumes/（本卷纲：定位 unit_id 与最近锚点）`, bibleHint],
+        kbThemes: ['节奏与结构'],
+        readFiles: [state, `${root}/outline/volumes/（本卷纲：定位 unit_id）`, bibleHint],
       }
     case 'write':
       return {
@@ -537,10 +594,9 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
         skillRefs: [
           'novel-write/references/preflight.md',
           'novel-write/references/chapter-write.md',
-          'novel-write/references/scene-routing.md',
         ],
-        kbThemes: ['文风与去 AI 味', '爽点与追读', '情绪与场景'],
-        readFiles: [state, contract, summaries, foreshadows, cast],
+        kbThemes: ['文风与去 AI 味'],
+        readFiles: [state, contract, ledger, cast],
       }
     case 'continue':
       return {
@@ -549,8 +605,8 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
           'novel-write/references/continuation.md',
           'novel-write/references/chapter-write.md',
         ],
-        kbThemes: ['文风与去 AI 味', '情绪与场景'],
-        readFiles: [state, summaries, foreshadows],
+        kbThemes: ['文风与去 AI 味'],
+        readFiles: [state, ledger],
       }
     case 'dialogue':
       return {
@@ -570,25 +626,22 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
       return {
         skillId: 'novel-write',
         skillRefs: ['novel-write/references/scene-routing.md'],
-        kbThemes: ['情绪与场景', '爽点与追读'],
-        readFiles: [state, contract, prose, `${root}/outline/volumes/（本卷纲锚点）`],
+        kbThemes: ['爽点与追读'],
+        readFiles: [state, contract, prose],
       }
     case 'preflight':
       return {
         skillId: 'novel-write',
         skillRefs: ['novel-write/references/preflight.md'],
         kbThemes: [],
-        readFiles: [state, contract, summaries, foreshadows, cast],
+        readFiles: [state, contract, ledger, cast],
       }
     case 'batch-freeze':
       return {
         skillId: 'novel-write',
-        skillRefs: [
-          'novel-write/references/batch-freeze.md',
-          'novel-write/assets/templates/batch-freeze.yaml',
-        ],
-        kbThemes: ['节奏与结构', '爽点与追读'],
-        readFiles: [state, `${root}/outline/volumes/（本卷纲）`, `${root}/chapters/（该批章合同）`],
+        skillRefs: ['novel-write/references/batch-freeze.md'],
+        kbThemes: [],
+        readFiles: [state, `${root}/outline/volumes/（本卷纲）`, `${root}/chapters/（该批章合同）`, ledger],
       }
     case 'continuation':
       return {
@@ -597,14 +650,14 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
           'novel-write/references/continuation.md',
           'novel-write/assets/templates/style-fingerprint.md',
         ],
-        kbThemes: ['文风与去 AI 味', '情绪与场景'],
-        readFiles: [state, summaries, `${root}/chapters/`],
+        kbThemes: ['文风与去 AI 味'],
+        readFiles: [state, ledger],
       }
     case 'review':
       return {
         skillId: 'novel-review',
         skillRefs: ['novel-review/references/review-gates.md'],
-        kbThemes: ['文风与去 AI 味', '强约束', '题材与平台'],
+        kbThemes: ['文风与去 AI 味'],
         readFiles: [prose, contract],
       }
     case 'polish':
@@ -619,7 +672,7 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
         skillId: 'novel-review',
         skillRefs: ['novel-review/references/continuity-commit.md'],
         kbThemes: [],
-        readFiles: [prose, summaries, state],
+        readFiles: [prose, ledger, state],
       }
     case 'review-polish-commit':
       return {
@@ -629,14 +682,14 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
           'novel-review/references/polish-deslop.md',
           'novel-review/references/continuity-commit.md',
         ],
-        kbThemes: ['文风与去 AI 味', '强约束', '题材与平台'],
-        readFiles: [prose, contract, state, summaries, foreshadows],
+        kbThemes: ['文风与去 AI 味'],
+        readFiles: [prose, contract, state, ledger],
       }
     case 'batch-review':
       return {
         skillId: 'novel-review',
-        skillRefs: ['novel-review/references/review-gates.md', 'novel-write/references/preflight.md'],
-        kbThemes: ['文风与去 AI 味', '强约束'],
+        skillRefs: ['novel-review/references/review-gates.md'],
+        kbThemes: ['文风与去 AI 味'],
         readFiles: [`${root}/chapters/（最近 1–5 章有正文未 PASS）`, `${root}/reviews/`],
       }
     default:
@@ -676,13 +729,14 @@ export function buildConstraintFooter(
   const lines = [
     '---',
     '【工作台约束 — 必须遵守】',
-    `- 当前书阶段：${pipeline.phase}；请求动作：${action}`,
+    `- 当前书阶段：${pipeline.phase}（步进：${pipeline.step}）；请求动作：${action}`,
     `- 本轮只准用技能 ${skillId}；未 read_skill 成功前禁止 write/edit。`,
     `- knowledge_gate：${pipeline.gates.knowledge} | asset_gate：${pipeline.gates.asset} | qc_gate：${pipeline.gates.qc}`,
   ]
   if (blockers.length) lines.push(`- 阻断项：${blockers.join('；')}`)
   lines.push('- 若门禁未 PASS，禁止写正文/Commit；用 ask_user 说明阻断项。')
   lines.push('- 完成后更新 novel-state.yaml 的 gates/blockers 字段。')
+  lines.push('- 换阶段时请在 Composer 自行切换模型；工作台不会自动换模。')
   lines.push('- Team：delegate_agent.goal 必须包含本消息任务正文原文，禁止改写。')
   return lines.join('\n')
 }
@@ -711,12 +765,15 @@ export function buildConstrainedPrefill(
   return parts.join('\n\n')
 }
 
-export const NOVEL_PIPELINE_STEPS: { id: NovelPipelinePhase; action?: NovelStageAction }[] = [
+export const NOVEL_PIPELINE_STEPS: { id: NovelPipelineStepId; action?: NovelStageAction }[] = [
   { id: 'init', action: 'init' },
   { id: 'setup', action: 'assets' },
   { id: 'outline', action: 'outline' },
-  { id: 'writing', action: 'write' },
+  { id: 'volume', action: 'volume' },
+  { id: 'contract', action: 'contract' },
+  { id: 'write', action: 'write' },
   { id: 'review', action: 'review' },
+  { id: 'commit', action: 'commit' },
 ]
 
 export function novelActiveBookPath(): string {
@@ -981,10 +1038,16 @@ export function novelCastDir(bookId: string): string {
 }
 
 export function novelChapterSummariesPath(bookId: string): string {
-  return `novel/${bookId}/continuity/chapter_summaries.md`
+  // Legacy alias — prefer ledger
+  return `novel/${bookId}/continuity/ledger.md`
+}
+
+export function novelLedgerPath(bookId: string): string {
+  return `novel/${bookId}/continuity/ledger.md`
 }
 
 export function novelBatchFreezePath(bookId: string): string {
+  // Legacy path kept for soft-read; freeze now lives in novel-state.yaml
   return `novel/${bookId}/continuity/batch-freeze.yaml`
 }
 
@@ -1181,7 +1244,7 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
     case 'goldfinger':
       return [
         `书目录：${root}/`,
-        '设计或修订金手指，写入 canon/ 或 table_* resources。',
+        '设计或修订金手指，默认写入主角 cast 卡（不必单建 goldfinger.md）。',
         '先 candidate，经确认后再 canon；未确认时不要改已定稿正文。',
       ].join('\n')
     case 'contract':
@@ -1209,18 +1272,18 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       ].join('\n')
     case 'hook':
       return [
-        `为第 ${ch || 'N'} 章设计/改写悬念钩子（${chPath}）。`,
+        `为第 ${ch || 'N'} 章做爽点强化：设计/改写章末悬念钩（${chPath}）。`,
         '章末 hook 须可执行；写入合同并落到正文。',
       ].join('\n')
     case 'reversal':
       return [
-        `为第 ${ch || 'N'} 章加一处反转（${chPath}）。`,
+        `为第 ${ch || 'N'} 章做爽点强化：加一处反转（${chPath}）。`,
         '须服务合同 purpose，不推翻 Frozen_Canon；先改合同再改正文。',
       ].join('\n')
     case 'review':
       return [
         `审阅 ${chPath}，审查报告写入 ${root}/reviews/。`,
-        'qc_gate FAIL 不得宣称定稿。',
+        'PASS 写短 stub（含追更指数）；FAIL 写全文六镜。qc_gate FAIL 不得宣称定稿。',
       ].join('\n')
     case 'polish':
       return [
@@ -1232,7 +1295,7 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         ch > 0
           ? `对第 ${ch} 章（${chPath}）做 Continuity Commit。`
           : `对当前进度做 Continuity Commit（书：${root}/）。`,
-        '更新定稿文件、摘要、table_*、memory、novel-state；关闭已修复 continuity_issues。完成=工具证据。',
+        '一次补丁更新 continuity/ledger.md + 合同 status + novel-state；完成=工具证据。',
       ].join('\n')
     case 'review-polish-commit':
       return [
@@ -1247,7 +1310,7 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       return [
         `批次冻结（书：${root}/，第 ${bFrom}–${bTo} 章）。`,
         '该批章合同须 accepted，且每章 unit_id 指向本卷剧情单元。',
-        `落盘 ${root}/continuity/batch-freeze.yaml（只记范围与状态）。冻结前禁止批量写正文；确认后更新 novel-state。`,
+        '只更新 novel-state.yaml 的 frozen_batch / artifacts.batch_freeze（不要写 batch-freeze.yaml）。冻结前禁止批量写正文。',
       ].join('\n')
     case 'continuation':
       return [
@@ -1257,12 +1320,12 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
     case 'batch-review':
       return [
         `批量审稿（书：${root}/）：最近 1–5 章有正文但未 PASS 的章节。`,
-        '每章独立 review 文件；更新 gates.qc 与 blockers。',
+        '每章独立 review 文件；PASS 用短 stub；更新 gates.qc 与 blockers。',
       ].join('\n')
     case 'preflight':
       return [
         `写前预检（书：${root}/）。`,
-        '按加载协议读必读文件；写 continuity/preflight-log.md 一行回执；更新 gates/blockers。阻断则停止并 ask_user。',
+        '按加载协议读必读文件；把一行回执写入 novel-state.last_preflight；更新 gates/blockers。阻断则停止并 ask_user。',
       ].join('\n')
     default:
       return ''

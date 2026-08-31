@@ -3,7 +3,7 @@
 **Author-only.** Drafting and review of prose must **not** load this file.
 Readers never see this layer. Secrets, future reverses, true rules, and 终局储备 details live here.
 
-Copy unlock-volume rows into `book-bible.md` / 总纲（可写「待定」）；**细节与真名只写本文件**.
+Copy unlock-volume rows into `book-bible.md` only（可写「待定」）；**细节与真名只写本文件**. Do not duplicate the unlock table in `book_outline.md`.
 
 ## 终局储备（细节）
 
@@ -29,6 +29,6 @@ Copy unlock-volume rows into `book-bible.md` / 总纲（可写「待定」）；
 
 ## 使用纪律
 
-- 写正文只读 `continuity/public-lore.md` + `continuity/tracking.md` + 章合同 `forbidden`。
+- 写正文只读 `continuity/ledger.md` + 章合同 `forbidden`。
 - 需要核对「会不会提前打光」时：只核对上表「最早解锁卷」，不要把真名写进草稿上下文。
 - 改纲后同步圣经表的卷号，细节仍只改本文件。

@@ -10,6 +10,24 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import novel_gate as ng  # noqa: E402
 
+LEDGER = """# Continuity ledger
+## Public facts
+| Kind | Fact | First seen | Notes |
+|------|------|------------|-------|
+| shown_fact | 主角在城东客栈醒来 | ch001 | |
+
+## Tracking
+### Cursor
+- last_committed_ch: 0
+
+## Open loops
+| ID | Type | Summary | Planted | Status |
+|----|------|---------|---------|--------|
+| FS-001 | FS | 失踪信 | 1 | open |
+
+## Chapter summaries
+"""
+
 TREE = {
     "novel/demo/novel-state.yaml": """book_id: demo
 title: Demo
@@ -24,7 +42,6 @@ blockers: []
 """,
     "novel/demo/book-bible.md": "# bible\n",
     "novel/demo/canon/world.md": "# world\n",
-    "novel/demo/canon/glossary.md": "# glossary\n",
     "novel/demo/canon/author-lore.md": "# author lore\n终局: 宿敌真身 v5\n",
     "novel/demo/canon/cast/.gitkeep": "",
     "novel/demo/outline/volumes/v01.md": """# Volume
@@ -34,7 +51,7 @@ blockers: []
 - 单元节拍（章功能分配）：
   - ch1 建立期待：开局羞辱
   - ch2-ch3 尝试：反证身份
-  - ch4 决断：当众打脸
+  - ch4 切断：当众打脸
   - ch5 兑现：留下失踪信
 - 单元功能（本段必须完成）：开局立冲突
 - 主角局部目标：活下来并反证身份
@@ -47,14 +64,7 @@ blockers: []
 - 下一单元钩子：失踪信
 - 终局边界：宿敌真身
 """,
-    "novel/demo/continuity/public-lore.md": "# public lore\n- shown_fact: 主角在城东客栈醒来\n",
-    "novel/demo/continuity/tracking.md": "# tracking\nlast: ch000\n",
-    "novel/demo/continuity/foreshadow-tracker.md": """# Foreshadow
-| ID | Summary | Plant ch | Expect payoff | Status | Notes |
-|----|---------|----------|---------------|--------|-------|
-| FS-001 | 失踪信 | 1 | 8 | open | |
-""",
-    "novel/demo/continuity/chapter_summaries.md": "# summaries\n",
+    "novel/demo/continuity/ledger.md": LEDGER,
     "novel/demo/reviews/.gitkeep": "",
     "novel/demo/chapters/ch001-contract.yaml": """chapter: 1
 unit_id: v01-U1
@@ -97,6 +107,12 @@ class GateTests(unittest.TestCase):
         rep = ng.run(str(self.root), "demo", "doctor", 0)
         self.assertEqual(rep.verdict, "PASS", rep.format())
 
+    def test_doctor_no_glossary_required(self):
+        # glossary.md is optional; tree already has none
+        rep = ng.run(str(self.root), "demo", "doctor", 0)
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertFalse(any("glossary" in f["message"] for f in rep.findings))
+
     def test_preflight_empty_unit(self):
         p = self.root / "novel/demo/chapters/ch001-contract.yaml"
         p.write_text(p.read_text(encoding="utf-8").replace("unit_id: v01-U1", 'unit_id: ""'), encoding="utf-8")
@@ -124,8 +140,32 @@ class GateTests(unittest.TestCase):
         self.assertEqual(rep.verdict, "FAIL")
         p = self.root / "novel/demo/chapters/ch001-contract.yaml"
         p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
-        (self.root / "novel/demo/continuity/chapter_summaries.md").write_text("## ch001 客栈\n- 事件: 打脸\n", encoding="utf-8")
+        ledger = self.root / "novel/demo/continuity/ledger.md"
+        ledger.write_text(LEDGER + "## ch001 客栈\n- 事件: 打脸\n", encoding="utf-8")
         (self.root / "novel/demo/novel-state.yaml").write_text(
+            "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "postcommit", 1)
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+
+    def test_legacy_continuity_accepted(self):
+        book = self.root / "novel/demo"
+        (book / "continuity/ledger.md").unlink()
+        (book / "continuity/public-lore.md").write_text("# public\n", encoding="utf-8")
+        (book / "continuity/tracking.md").write_text("# tracking\n", encoding="utf-8")
+        (book / "continuity/chapter_summaries.md").write_text("## ch001 客栈\n- 事件: x\n", encoding="utf-8")
+        (book / "continuity/foreshadow-tracker.md").write_text(
+            "| ID | Summary | Status |\n|----|---------|--------|\n| FS-1 | x | open |\n",
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "doctor", 0)
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        rep = ng.run(str(self.root), "demo", "preflight", 1)
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        p = book / "chapters/ch001-contract.yaml"
+        p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
+        (book / "novel-state.yaml").write_text(
             "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
             encoding="utf-8",
         )

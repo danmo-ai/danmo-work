@@ -93,7 +93,8 @@ delegate_agent(agent_id="<id>", goal="...")
 
 1. 主专家选 **Team**（或开启协作）。
 2. Composer `@` / 专家图标选中「Novel Writing」，描述本章目标后发送。
-3. 专家按阶段技能走：`novel-setup` 立项 → `novel-plan` 设定/大纲 → `novel-write` 章合同/正文 → `novel-review` 审稿/润色/Commit。
+3. 专家按阶段技能走：`novel-setup` 立项 → `novel-plan` 设定/总纲/卷纲 → `novel-write` 章合同/正文 → `novel-review` 审稿/润色/Commit。  
+   Continuity 账本为 `continuity/ledger.md`；换阶段时用户自行切换 Composer 模型。
 4. 技法检索走知识库 `kb-novel-craft`（节奏与结构、爽点与追读、文风与去 AI 味等）；本书设定用项目文件 + `table_*`。
 
 详细 SOP 见各技能的 `references/`（应用内 `read_skill`）。
@@ -126,17 +127,18 @@ delegate_agent(agent_id="<id>", goal="...")
 
 小说工作台是 **流程控制台**（不是纯文件浏览器）：
 
-1. **流程轨**：立项 → 设定 → 大纲 → 写作 → 审改  
+1. **流程轨（8 步）**：立项 → 设定 → 总纲 → 卷纲 → 章合同 → 正文 → 审稿 → 定稿  
 2. **门禁点**：`knowledge` / `asset` / `qc`（读 `novel-state.yaml` 的 `gates` + 磁盘启发式）  
 3. **主 CTA**：引擎计算下一合法动作，注入 Composer + 选中 `novel`  
 4. **章状态机**：无合同 → 合同草案 → 待写 → 待审 → 审未过/待提交 → 已提交  
+5. **多模型**：换阶段时用户在 Composer **自行**切换模型；工作台不自动换模  
 
-技能流水线：`novel-setup` → `novel-plan` → `novel-write` → `novel-review`。批次冻结与续写接手收在「更多」动作里。
+技能流水线：`novel-setup` → `novel-plan` → `novel-write` → `novel-review`。批次冻结只写 `novel-state.frozen_batch`（不再使用 `batch-freeze.yaml`）。
 
-动作 Prefill Composer（可勾选 `novel` chip），末尾附带 **工作台约束块**；**不跳转** Files。书落在 `novel/<book-id>/`（`canon/`、`outline/`、`chapters/`、`continuity/`、`reviews/`；章合同=`chapters/chNNN-contract.yaml`）。
+动作 Prefill Composer（可勾选 `novel` chip），末尾附带 **工作台约束块**；**不跳转** Files。书落在 `novel/<book-id>/`（`canon/`、`outline/`、`chapters/`、`continuity/ledger.md`、`reviews/`；章合同=`chapters/chNNN-contract.yaml`）。
 
 | 门禁 | UI 推断 | Agent 真执行 |
 |------|---------|--------------|
-| asset | `canon/cast/` 有文件 | `table_query` + 读人物卡 |
-| qc | review `### VERDICT` | `review-gates.md` |
-| batch | `batch-freeze.yaml` frozen | `novel-write/references/batch-freeze.md` |
+| asset | `canon/cast/` 有文件 | 读上场人物卡（table 镜像可选） |
+| qc | review `### VERDICT` | `review-gates.md`（PASS 短 stub） |
+| batch | `novel-state` `artifacts.batch_freeze=frozen` | `novel-write/references/batch-freeze.md` |
