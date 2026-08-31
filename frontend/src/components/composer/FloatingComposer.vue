@@ -444,6 +444,7 @@ function clearComposer() {
   editingAnnotation.value = ''
   selectedSkillIds.value = []
   selectedExpertIds.value = []
+  pendingWorkbenchSkillIds.value = []
   closeAllPickers()
 }
 
@@ -623,9 +624,14 @@ function toggleButtonExpertPicker() {
   expertButtonPickerOpen.value = !expertButtonPickerOpen.value
 }
 
+function dismissPendingWorkbenchSkill(id: string) {
+  pendingWorkbenchSkillIds.value = pendingWorkbenchSkillIds.value.filter((x) => x !== id)
+}
+
 function onPickSkill(sk: AvailableSkill) {
   if (selectedSkillIds.value.includes(sk.id)) {
     selectedSkillIds.value = selectedSkillIds.value.filter((id) => id !== sk.id)
+    dismissPendingWorkbenchSkill(sk.id)
   } else {
     selectedSkillIds.value = [...selectedSkillIds.value, sk.id]
   }
@@ -689,6 +695,7 @@ async function onPickSlash(cmd: ComposerSlashCommand) {
 
 function removeSelectedSkill(id: string) {
   selectedSkillIds.value = selectedSkillIds.value.filter((x) => x !== id)
+  dismissPendingWorkbenchSkill(id)
 }
 
 function removeSelectedExpert(id: string) {
