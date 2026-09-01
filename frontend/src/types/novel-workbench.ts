@@ -249,7 +249,8 @@ export function inferChapterPhase(
 
   if (entry.prose) {
     if (verdict === 'FAIL') return 'review_fail'
-    if (verdict === 'PASS') return 'review_pass'
+    // PASS stub optional: contract reviewed (post-review, pre-commit) or legacy PASS file
+    if (verdict === 'PASS' || contractStatus === 'reviewed') return 'review_pass'
     return 'drafted'
   }
 
@@ -273,7 +274,7 @@ export function inferChapterNextAction(phase: NovelChapterPhase): NovelStageActi
       return 'write'
     case 'drafted':
     case 'review_fail':
-      return 'review'
+      return 'review-polish-commit'
     case 'review_pass':
       return 'commit'
     case 'committed':
@@ -533,7 +534,6 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
   const prose = ctx.chapterPath || `${root}/chapters/ch${chPad}.md`
   const volume = `${root}/outline/volumes/v${volPad}.md`
   const bookOutline = `${root}/outline/book_outline.md`
-  const cast = `${root}/canon/cast/（上场人物卡，按合同登场名单）`
   const world = `${root}/canon/world.md`
 
   switch (action) {
@@ -591,12 +591,9 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
     case 'write':
       return {
         skillId: 'novel-write',
-        skillRefs: [
-          'novel-write/references/preflight.md',
-          'novel-write/references/chapter-write.md',
-        ],
+        skillRefs: ['novel-write/references/chapter-write.md'],
         kbThemes: ['文风与去 AI 味'],
-        readFiles: [state, contract, ledger, cast],
+        readFiles: [state, contract],
       }
     case 'continue':
       return {
@@ -611,9 +608,9 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
     case 'dialogue':
       return {
         skillId: 'novel-write',
-        skillRefs: ['novel-write/references/scene-routing.md', 'novel-write/references/chapter-write.md'],
+        skillRefs: ['novel-write/references/chapter-write.md'],
         kbThemes: ['情绪与场景'],
-        readFiles: [state, contract, prose, cast],
+        readFiles: [state, contract, prose],
       }
     case 'hook':
       return {
@@ -625,16 +622,16 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
     case 'reversal':
       return {
         skillId: 'novel-write',
-        skillRefs: ['novel-write/references/scene-routing.md'],
+        skillRefs: ['novel-write/references/chapter-write.md'],
         kbThemes: ['爽点与追读'],
         readFiles: [state, contract, prose],
       }
     case 'preflight':
       return {
         skillId: 'novel-write',
-        skillRefs: ['novel-write/references/preflight.md'],
+        skillRefs: ['novel-write/references/chapter-write.md'],
         kbThemes: [],
-        readFiles: [state, contract, ledger, cast],
+        readFiles: [state, contract],
       }
     case 'batch-freeze':
       return {
@@ -703,25 +700,9 @@ export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStag
 
 export function formatLoadProtocol(protocol: NovelLoadProtocol): string {
   const refs = protocol.skillRefs.length
-    ? ` 以及 ${protocol.skillRefs.join('、')}`
+    ? `（${protocol.skillRefs.join('、')}）`
     : ''
-  const lines = [
-    `【本轮技能】${protocol.skillId}（Composer 已勾选；先 read_skill）`,
-    '【加载顺序 — 未完成禁止 write/edit】',
-    `1. read_skill ${protocol.skillId}${refs}`,
-  ]
-  if (protocol.kbThemes.length) {
-    lines.push(`2. search_kb ${protocol.kbThemes.join('；')}`)
-  } else {
-    lines.push('2. search_kb：本阶段无需检索技法库')
-  }
-  lines.push('3. read_file 下列路径（按序；禁止整本 bible / 全卷纲）：')
-  if (protocol.readFiles.length) {
-    for (const file of protocol.readFiles) lines.push(`   - ${file}`)
-  } else {
-    lines.push('   - （无必读项目文件）')
-  }
-  return lines.join('\n')
+  return `技能 ${protocol.skillId}${refs} — 先 read_skill；写正文先跑 gate preflight，只消费 ### CONTEXT。`
 }
 
 export function buildConstraintFooter(
@@ -732,16 +713,11 @@ export function buildConstraintFooter(
   const skillId = novelActionSkillId(action)
   const lines = [
     '---',
-    '【工作台约束 — 必须遵守】',
-    `- 当前书阶段：${pipeline.phase}（步进：${pipeline.step}）；请求动作：${action}`,
-    `- 本轮只准用技能 ${skillId}；未 read_skill 成功前禁止 write/edit。`,
-    `- knowledge_gate：${pipeline.gates.knowledge} | asset_gate：${pipeline.gates.asset} | qc_gate：${pipeline.gates.qc}`,
+    `阶段 ${pipeline.phase}/${pipeline.step} · 动作 ${action} · 技能 ${skillId}`,
+    `gates knowledge=${pipeline.gates.knowledge} asset=${pipeline.gates.asset} qc=${pipeline.gates.qc}`,
   ]
-  if (blockers.length) lines.push(`- 阻断项：${blockers.join('；')}`)
-  lines.push('- 若门禁未 PASS，禁止写正文/Commit；用 ask_user 说明阻断项。')
-  lines.push('- 完成后更新 novel-state.yaml 的 gates/blockers 字段。')
-  lines.push('- 换阶段时请在 Composer 自行切换模型；工作台不会自动换模。')
-  lines.push('- Team：delegate_agent.goal 必须包含本消息任务正文原文，禁止改写。')
+  if (blockers.length) lines.push(`阻断：${blockers.join('；')}`)
+  lines.push('Team：delegate_agent.goal 须含本消息任务原文。')
   return lines.join('\n')
 }
 
@@ -751,33 +727,25 @@ export function buildConstrainedPrefill(
   pipeline?: NovelBookPipeline,
   blockers?: string[],
 ): string {
-  const protocol = formatLoadProtocol(novelActionLoadProtocol(action, ctx))
   const body = buildNovelStagePrefill(action, ctx)
-  const parts = [protocol, `【任务】\n${body}`]
+  const skillLine = formatLoadProtocol(novelActionLoadProtocol(action, ctx))
+  const parts = [`【任务】\n${body}`, skillLine]
   if (pipeline) {
     parts.push(buildConstraintFooter(pipeline, action, blockers ?? []))
-  } else {
-    parts.push(
-      [
-        '---',
-        '【工作台约束 — 必须遵守】',
-        `- 本轮只准用技能 ${novelActionSkillId(action)}；未 read_skill 成功前禁止 write/edit。`,
-        '- Team：delegate_agent.goal 必须包含本消息任务正文原文，禁止改写。',
-      ].join('\n'),
-    )
   }
   return parts.join('\n\n')
 }
 
+/** Stepper is progress-only; clicks do not inject Composer. */
 export const NOVEL_PIPELINE_STEPS: { id: NovelPipelineStepId; action?: NovelStageAction }[] = [
-  { id: 'init', action: 'init' },
-  { id: 'setup', action: 'assets' },
-  { id: 'outline', action: 'outline' },
-  { id: 'volume', action: 'volume' },
-  { id: 'contract', action: 'contract' },
-  { id: 'write', action: 'write' },
-  { id: 'review', action: 'review' },
-  { id: 'commit', action: 'commit' },
+  { id: 'init' },
+  { id: 'setup' },
+  { id: 'outline' },
+  { id: 'volume' },
+  { id: 'contract' },
+  { id: 'write' },
+  { id: 'review' },
+  { id: 'commit' },
 ]
 
 export function novelActiveBookPath(): string {
@@ -1222,115 +1190,106 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
     case 'init':
       return [
         '开一本新书并立项。',
-        '用 ask_user 澄清题材、读者承诺、篇幅/平台、禁忌（一次一问即可）。',
-        `落盘标准树到 novel/<book-id>/（布局见加载协议中的 project-layout）。`,
-        '新角色先 candidate，经确认后再 canon；确认前不要写正文。',
+        '用一次 ask_user 收齐：题材、读者承诺、篇幅/平台、POV、禁忌。',
+        '落盘标准树到 novel/<book-id>/。新角色先 candidate；卷纲批准时一并 promote。',
       ].join('\n')
     case 'outline':
       return [
         `书目录：${root}/`,
-        `产出总纲 ${root}/outline/book_outline.md 与卷纲 ${root}/outline/volumes/vNN.md（不写章节正文）。`,
-        '卷纲止于剧情单元卡；单章任务/爽点/钩子只进章合同。每卷写完等我确认。',
+        `产出总纲 ${root}/outline/book_outline.md（不写章节正文）。`,
+        '卷纲另做；单章任务只进章合同。',
       ].join('\n')
     case 'volume':
       return [
-        `为第 ${vol || 'N'} 卷写卷纲。`,
-        `唯一落盘：${root}/outline/volumes/v${volPad}.md`,
-        '先读总纲、相关 canon、未回收伏笔；与前后卷衔接。',
-        '止于剧情单元卡（含节拍覆盖章范围）；不写章合同/正文。写完等我确认。',
+        `为第 ${vol || 'N'} 卷写卷纲 → ${root}/outline/volumes/v${volPad}.md`,
+        '止于剧情单元卡；不写章合同/正文。写完等我确认（本卷点名人物一并 canon）。',
       ].join('\n')
     case 'assets':
       return [
         `书目录：${root}/`,
-        '整理/补全人物卡与世界观：写入 canon/ 与 table_*（带 book_id）。',
-        '新实体先 candidate，经确认后再 canon；确认前不要写正文。',
+        '整理/补全人物卡与世界观到 canon/。新实体先 candidate；卷纲批准时 promote。',
       ].join('\n')
     case 'goldfinger':
       return [
         `书目录：${root}/`,
-        '设计或修订金手指，默认写入主角 cast 卡（不必单建 goldfinger.md）。',
-        '先 candidate，经确认后再 canon；未确认时不要改已定稿正文。',
+        '设计或修订金手指，默认写入主角 cast 卡。',
       ].join('\n')
     case 'contract':
       return [
-        `为第 ${ch || 'N'} 章写章合同（尚不写正文）。`,
-        `落盘：${root}/chapters/ch${chPad}-contract.yaml`,
-        '从本卷纲所属单元卡按节拍下推；必填 unit_id（vNN-U#）。对不上或节拍未覆盖本章 → 先补卷纲，勿空造合同。',
-        '里程碑章或本批首章需 ask_user 接受后再写正文。',
+        `为第 ${ch || 'N'} 章写章合同 → ${root}/chapters/ch${chPad}-contract.yaml`,
+        '从本卷纲单元卡下推；必填 unit_id。就绪后 status=accepted。',
       ].join('\n')
     case 'write':
       return [
         `写第 ${ch || 'N'} 章正文到 ${chPath}。`,
-        '前提：该章合同已 accepted（否则先补合同）。',
-        '按合同草稿落盘；P0 审稿不过不得定稿；不要只在对话里贴正文。',
+        '先 gate preflight，只消费 ### CONTEXT + 本章合同；落盘正文。',
       ].join('\n')
     case 'continue':
       return [
         `接着写下一章（书：${root}/）。`,
-        '补/更新章合同后再写正文；审一轮，P0 不过不得定稿；Commit 落盘。不要只在对话里贴正文。',
+        '补合同 → gate CONTEXT → 正文；定稿用审→润→Commit。',
       ].join('\n')
     case 'dialogue':
       return [
         `加强第 ${ch || 'N'} 章对话（${chPath}）。`,
-        '按合同 beats 写出可辨声口、推动冲突的对白；落盘到该章正文。',
+        '按合同 beats 写出可辨声口；落盘到该章正文。',
       ].join('\n')
     case 'hook':
       return [
-        `为第 ${ch || 'N'} 章做爽点强化：设计/改写章末悬念钩（${chPath}）。`,
+        `为第 ${ch || 'N'} 章改写章末悬念钩（${chPath}）。`,
         '章末 hook 须可执行；写入合同并落到正文。',
       ].join('\n')
     case 'reversal':
       return [
-        `为第 ${ch || 'N'} 章做爽点强化：加一处反转（${chPath}）。`,
-        '须服务合同 purpose，不推翻 Frozen_Canon；先改合同再改正文。',
+        `为第 ${ch || 'N'} 章加一处反转（${chPath}）。`,
+        '须服务合同 purpose；先改合同再改正文。',
       ].join('\n')
     case 'review':
       return [
-        `审阅 ${chPath}，审查报告写入 ${root}/reviews/。`,
-        'PASS 写短 stub（含追更指数）；FAIL 写全文六镜。qc_gate FAIL 不得宣称定稿。',
+        `审阅 ${chPath}。`,
+        '先 gate precommit。PASS：只更新 gates.qc，不写 review 文件。FAIL/深审：写 reviews/ 全文。',
       ].join('\n')
     case 'polish':
       return [
         `对 ${chPath} 做去 AI 味润色并落盘。`,
-        '先 exec_shell gate --action scan-deslop --chapter N，按 HITS 行号 edit；再清 P1。',
-        '改完再扫一遍（或 precommit）；exit 0 才可宣称去 AI 味。不改情节 Canon；需改情节则回到审稿/章合同。',
+        'gate scan-deslop 定位后按行号改；不改情节 Canon。',
       ].join('\n')
     case 'commit':
       return [
         ch > 0
           ? `对第 ${ch} 章（${chPath}）做 Continuity Commit。`
           : `对当前进度做 Continuity Commit（书：${root}/）。`,
-        '一次补丁更新 continuity/ledger.md + 合同 status + novel-state；完成=工具证据。',
+        '一次补丁更新 ledger + 合同 reviewed + novel-state；再 gate postcommit。',
       ].join('\n')
     case 'review-polish-commit':
       return [
         ch > 0
-          ? `对第 ${ch} 章（${chPath}）串行：审稿 → 去 AI 味 → Continuity Commit。`
-          : `对当前章节串行：审稿 → 去 AI 味 → Continuity Commit（书：${root}/）。`,
-        '未 PASS 禁止润色与定稿。润色段先 scan-deslop 再按行号改。若 reviews/ 已有 PASS 且正文未变，可从润色起并注明跳过理由。完成=工具证据。',
+          ? `对第 ${ch} 章（${chPath}）串行：审 → 可选润色 → Commit。`
+          : `对当前章节串行：审 → 可选润色 → Commit（书：${root}/）。`,
+        'PASS 不写 review 文件；FAIL 才落盘。Commit = ledger + 合同 + state + postcommit。',
       ].join('\n')
-    case 'batch-freeze':
+    case 'batch-freeze': {
       const bFrom = ctx.batchFrom && ctx.batchFrom > 0 ? ctx.batchFrom : 1
       const bTo = ctx.batchTo && ctx.batchTo > 0 ? ctx.batchTo : 8
       return [
         `批次冻结（书：${root}/，第 ${bFrom}–${bTo} 章）。`,
-        '该批章合同须 accepted，且每章 unit_id 指向本卷剧情单元。',
-        '只更新 novel-state.yaml 的 frozen_batch / artifacts.batch_freeze（不要写 batch-freeze.yaml）。冻结前禁止批量写正文。',
+        '只更新 novel-state.yaml 的 frozen_batch；按单元章范围自动冻结。',
       ].join('\n')
+    }
     case 'continuation':
       return [
         `续写/接手本书（${root}/）。`,
-        'Frozen_Canon 未确认禁止写正文；首次续写短试写待确认。',
+        'Frozen_Canon 未确认禁止写正文。',
       ].join('\n')
     case 'batch-review':
       return [
-        `批量审稿（书：${root}/）：最近 1–5 章有正文但未 PASS 的章节。`,
-        '每章独立 review 文件；PASS 用短 stub；更新 gates.qc 与 blockers。',
+        `批量审稿（书：${root}/）：最近有正文未定稿的章。`,
+        'PASS 不落盘；FAIL 写 reviews/。',
       ].join('\n')
     case 'preflight':
       return [
-        `写前预检（书：${root}/）。`,
-        '按加载协议读必读文件；把一行回执写入 novel-state.last_preflight；更新 gates/blockers。阻断则停止并 ask_user。',
+        `写前预检（书：${root}/，章 ${ch || 'N'}）。`,
+        'exec_shell gate preflight；回报 ### CONTEXT 与 VERDICT。',
       ].join('\n')
     default:
       return ''

@@ -1,29 +1,37 @@
 # Chapter write (Draft A)
 
+写正文：**先跑 gate preflight，只消费它打印的 `### CONTEXT` + 本章合同。** 不要为走流程扫全书树。
+
 ## Preflight
 
-1. `read_skill` → `preflight.md` — 读取回执 + 更新 `novel-state` gates。
-2. `exec_shell` gate script `--action preflight --chapter N`（`novel-setup/references/gate.md`）— FAIL 则停止。
-3. Read `novel-state.yaml` — confirm next chapter index.  
-4. **knowledge_gate:** `search_kb` 文风与去 AI 味；写章末钩子或章首接钩前再 `search_kb` 爽点与追读（不要复述选型表）。**ch001–ch003** → `read_skill` `opening-chapters.md` + `search_kb` 节奏与结构（黄金三章 + 章内节奏）。
-5. **asset_gate:** on-page major cast should be `canon` (or user-approved exception). Load `continuity/ledger.md` (tail). Do **not** read `canon/author-lore.md`. Table queries optional.
-6. Load accepted contract from `novel/<book-id>/chapters/chNNN-contract.yaml` (`status=accepted` or user waiver; `unit_id` must match a volume 剧情单元).  
-7. `memory_read` prefs + recent summaries (last 3–5 chapters).  
-8. 若 beats 含场景标签 → `read_skill` `scene-routing.md`（含 `scene:establish` / `scene:transition` → KB 场景沉浸）。
+1. `exec_shell` gate `--action preflight --chapter N`（`novel-setup/references/gate.md`）。exit ≠ 0 → **停止**。接手旧书另跑 `--action doctor`。
+2. 读 stdout 的 `### CONTEXT`（接钩 / 人物现场 / 开放债务 / 本章硬约束 / 单元功能）。**这是本轮唯一额外上下文。**
+3. 读本章 `chapters/chNNN-contract.yaml`（须 `accepted`；`unit_id` 对上卷纲单元）。
+4. 可选：`search_kb` **至多 1** 次（默认「文风与去 AI 味」；章末钩/接钩可换「爽点与追读」）。
+5. **ch001–ch003** → 另 `read_skill` `opening-chapters.md` + KB「节奏与结构」。
+6. beats 含场景标签（对话/打斗/系统/`scene:establish` 等）→ `search_kb` **情绪与场景** 对应小节（见 KB `06`）；**不要**再 `read_skill` 单独场景路由页。
+7. 仅当合同 `continuity_risks` 非空 → 才可 `read_file` 点名旧章。
 
-## Context package (optional file)
+**禁止：** `canon/author-lore.md`、整本 bible 终局细节、全卷纲、全书 `canon/` 通读、强制 `table_*`。
 
-If you write a context note, list **source paths/ids** only; do not fork Canon into a new editable truth.
+写入 `novel-state.yaml`：
+
+```yaml
+gates:
+  knowledge: pass|fail|unknown
+  asset: pass|fail|unknown
+  qc: unknown
+blockers: []
+last_preflight: "[YYYY-MM-DD chNNN] state:writing | contract:accepted | gate:PASS"
+```
 
 ## Draft
 
-- `write` `novel/<book-id>/chapters/chNNN.md` (zero-pad to 3+ digits).  
-- Honor `beats` / `forbidden` and POV knowledge boundary.  
-- Land `pleasure_point`; end on `hook.out` (event, not chicken-soup). Respect `word_target` (番茄 2000–3500 unless user says otherwise).
-- Modes: **full** (default) / **fast** (shorter, still contracted) — only if user asks.
+- `write` `novel/<book-id>/chapters/chNNN.md`（零填充 ≥3 位）。
+- 对齐 CONTEXT + 合同：`beats` / `forbidden` / POV 知情范围 / `pleasure_point` / `hook.out` / `word_target`。
+- Modes：**full**（默认）/ **fast**（仅用户要求）。
 
 ## After draft
 
-1. Update `chapters/chNNN-contract.yaml` `status=drafted` (and mirror `table_upsert` if used).  
-2. Immediately run **one** review round (`review-gates.md`). Do not skip.  
-3. Do not start the next chapter until Commit or user explicitly queues a batch with stop rules.
+1. 合同 `status=drafted`（`table_upsert` 可选，默认不做）。
+2. Hand off `novel-review`（审 / 润色 / Commit）。同 turn 不强制满审；勿开下一章除非 Commit 或用户明示批次。

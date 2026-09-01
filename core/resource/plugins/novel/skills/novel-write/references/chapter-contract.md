@@ -54,15 +54,14 @@ Copy `assets/templates/chapter-contract.yaml`. Keep it lean — fill only what t
 ## Process
 
 1. Read the volume outline **unit card** covering this chapter (节拍 + 功能 + 阻碍…); if missing or beats don't cover this chapter, stop and send back to `novel-plan`.
-2. Set `unit_id` to that card (`vNN-U#`). Locate this chapter's role in 单元节拍. Push down: 单元功能+节拍角色 → `purpose`/`beats`; 主爽点形态+兑现归属 → `pleasure_point`/`micro_payoff`; 禁止提前释放 → `forbidden`; 主角局部目标/关键选择 into `beats`/`state_deltas` as needed.
-3. Draft contract at `chapters/chNNN-contract.yaml` (YAML template).
-4. `table_upsert` `chapter_contracts` with matching `book_id` / `chapter` / `unit_id` / `status` / `file`.
-5. `ask_user` to accept if this is a milestone chapter or first chapter of a batch.
-6. Only then proceed to `chapter-write.md`.
+2. Set `unit_id` to that card (`vNN-U#`). Locate this chapter's role in 单元节拍. Push down fields from the unit card.
+3. Draft contract at `chapters/chNNN-contract.yaml` (YAML template); set `status=accepted` when ready to draft (default path — no per-chapter `ask_user`).
+4. Optional: `table_upsert` mirror — **默认不做**.
+5. Proceed to `chapter-write.md`.
 
 ## Status vocabulary
 
-- **Contract `status`** (this file + `chapter_contracts` table): `proposed | accepted | drafted | reviewed`.
+- **Contract `status`** (this file): `proposed | accepted | drafted | reviewed`.
 - **Artifact status** in `novel-state.yaml` only: `missing | in_progress | ready | stale | blocked`.
 
 Do not mix the two vocabularies.

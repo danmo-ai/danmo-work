@@ -78,7 +78,7 @@
 
 ### 与 scene-routing 的关系
 
-`scene-routing.md` 管 **标签 → 加载哪一节**；本节管 **怎么写进正文**。无标签时，首个 beat 仍建议用 **1 个锚点 + 入场动线** 立住，再进对话/打斗专项。
+Beat 标签 → 加载哪一节：见 `novel-write/references/scene-routing.md`（一行表）或直接按标签 `search_kb` 本节；本节管 **怎么写进正文**。无标签时，首个 beat 仍建议用 **1 个锚点 + 入场动线** 立住，再进对话/打斗专项。
 
 ## 对话场景
 

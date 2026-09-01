@@ -20,12 +20,30 @@ LEDGER = """# Continuity ledger
 ### Cursor
 - last_committed_ch: 0
 
+### Cast snapshot（上场角色）
+
+| 角色 | 位置 | 目标 | 伤势/资源 | 知情范围 |
+|------|------|------|-----------|----------|
+| 主角 | 城东客栈 | 反证身份 | 无伤 | 不知宿敌真身 |
+
+### Cannot rewind
+
+-
+
 ## Open loops
 | ID | Type | Summary | Planted | Status |
 |----|------|---------|---------|--------|
 | FS-001 | FS | 失踪信 | 1 | open |
 
 ## Chapter summaries
+"""
+
+POST_SUMMARY = """## ch001 客栈
+- 事件: 当众打脸并留下失踪信
+- 状态变化: 主角: 被辱→声望回升
+- 伏笔: FS-001 plant 失踪信
+- 钩子: 明日午时当众验骨
+- 下章指向: 验骨现场
 """
 
 TREE = {
@@ -72,6 +90,10 @@ title_working: 客栈
 purpose: 主角被当众羞辱后反证身份
 beats: ["羞辱", "反证", "留下失踪信"]
 pleasure_point: 当众打脸
+state_deltas: ["主角: 被辱→声望回升"]
+info_control:
+  reveals: []
+  foreshadowing: ["FS-001: plant"]
 hook:
   type: 未兑现承诺
   out: 明日午时当众验骨
@@ -102,6 +124,11 @@ class GateTests(unittest.TestCase):
     def test_preflight_pass(self):
         rep = ng.run(str(self.root), "demo", "preflight", 1)
         self.assertEqual(rep.verdict, "PASS", rep.format())
+        blob = rep.format()
+        self.assertIn("### CONTEXT", blob)
+        self.assertIn("接钩", blob)
+        self.assertIn("本章硬约束", blob)
+        self.assertIn("单元功能", blob)
 
     def test_doctor_pass(self):
         rep = ng.run(str(self.root), "demo", "doctor", 0)
@@ -180,7 +207,7 @@ class GateTests(unittest.TestCase):
         p = self.root / "novel/demo/chapters/ch001-contract.yaml"
         p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
         ledger = self.root / "novel/demo/continuity/ledger.md"
-        ledger.write_text(LEDGER + "## ch001 客栈\n- 事件: 打脸\n", encoding="utf-8")
+        ledger.write_text(LEDGER + POST_SUMMARY, encoding="utf-8")
         (self.root / "novel/demo/novel-state.yaml").write_text(
             "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
             encoding="utf-8",
@@ -188,12 +215,33 @@ class GateTests(unittest.TestCase):
         rep = ng.run(str(self.root), "demo", "postcommit", 1)
         self.assertEqual(rep.verdict, "PASS", rep.format())
 
+    def test_postcommit_incomplete_summary(self):
+        p = self.root / "novel/demo/chapters/ch001-contract.yaml"
+        p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
+        ledger = self.root / "novel/demo/continuity/ledger.md"
+        ledger.write_text(LEDGER + "## ch001 客栈\n- 事件: 打脸\n", encoding="utf-8")
+        (self.root / "novel/demo/novel-state.yaml").write_text(
+            "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "postcommit", 1)
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("missing summary keys" in f["message"] for f in rep.findings), rep.format())
+
     def test_legacy_continuity_accepted(self):
         book = self.root / "novel/demo"
         (book / "continuity/ledger.md").unlink()
         (book / "continuity/public-lore.md").write_text("# public\n", encoding="utf-8")
         (book / "continuity/tracking.md").write_text("# tracking\n", encoding="utf-8")
-        (book / "continuity/chapter_summaries.md").write_text("## ch001 客栈\n- 事件: x\n", encoding="utf-8")
+        (book / "continuity/chapter_summaries.md").write_text(
+            "## ch001 客栈\n"
+            "- 事件: x\n"
+            "- 状态变化: 主角: a→b\n"
+            "- 伏笔: FS-001 plant\n"
+            "- 钩子: y\n"
+            "- 下章指向: z\n",
+            encoding="utf-8",
+        )
         (book / "continuity/foreshadow-tracker.md").write_text(
             "| ID | Summary | Status |\n|----|---------|--------|\n| FS-1 | x | open |\n",
             encoding="utf-8",

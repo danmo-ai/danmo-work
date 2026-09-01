@@ -2,44 +2,26 @@
 
 ## Policy
 
-- **Exactly one** review round per draft cycle before Commit.  
-- Run gate script `--action precommit` **before** writing VERDICT PASS. Script FAIL → `qc_gate` FAIL.  
+- **Exactly one** review round per draft cycle before Commit.
+- Run gate `--action precommit` **before** claiming PASS. Script FAIL → `qc_gate` FAIL.
 - Writers own fixes; review diagnoses.
 
-## Happy path（PASS stub）
+## Happy path（PASS — 不落盘 review 文件）
 
-If precommit PASS and no P0 craft issues, `write` a **short** `reviews/chNNN-review.md`:
+precommit PASS 且无 P0 craft 问题时：
 
-```markdown
-### VERDICT
-PASS
+1. **不要**写 `reviews/chNNN-review.md`。
+2. 更新 `novel-state.yaml`：`gates.qc: pass`，清掉本章相关 `blockers`。
+3. 合同保持 `drafted`（或本轮直接进入 Commit 时再改 `reviewed`）。
+4. 可选短润色 → `polish-deslop.md`；然后 `continuity-commit.md`。
 
-### BLOCKING
-None.
+用户点「深审」或发现 P0 → 走 FAIL / 六镜全文（必须落盘）。
 
-### ADVISORY
-- ...
-
-### SCORES
-| 维度 | 分 |
-|------|-----|
-| 钩子力度 | /10 |
-| 逻辑可回溯 | /10 |
-| 人物活感 | /10 |
-| 语言质地 | /10 |
-| 反转锋利度 | /10 |
-| 余味延展 | /10 |
-| 追更指数 | /10 |
-
-### 追更 / 读者期待（可选）
-- 章末钩是否可感知：是/否
-- 中段加压：有/无
-- 一句话：读者为什么想点下一章
-```
-
-任一项 ≤4 且该透镜 blocking → 改写为 FAIL 全文（见下）。用户点「深审」或发现 P0 → 全文六镜。
+任一项分数 ≤4 且该透镜 blocking → 按 FAIL 全文写盘。
 
 ## FAIL / 深审 — 六镜全文
+
+仅 FAIL 或用户深审时 `write` `reviews/chNNN-review.md`：
 
 | Lens | Blocking if… |
 |------|----------------|
@@ -62,8 +44,6 @@ None.
 番茄向/免费网文额外检查（ch1–3 blocking，之后 advisory）：开篇 3 句内有冲突、首章末必钩、合同 `pleasure_point` 与 `hook` 非空且正文兑现。
 
 Plus **anti-AI P0** from KB「文风与去 AI 味」— always blocking.
-
-FAIL 全文模板：
 
 ```markdown
 ### VERDICT
@@ -96,14 +76,14 @@ FAIL
 
 ## Severity
 
-- **P0 / blocking:** must fix before Commit  
-- **P1 / advisory:** can ship with note in review stub  
+- **P0 / blocking:** must fix before Commit
+- **P1 / advisory:** can ship；记在 state blockers 或 FAIL 文件即可
 
 ## qc_gate
 
-- Gate 脚本 precommit FAIL → FAIL.  
-- FAIL → fix → short re-check of blocking list only → then Commit.  
-- PASS → polish (optional) or `continuity-commit.md`.  
-- 更新 `novel-state.yaml` `gates.qc` 与 `blockers`.  
+- Gate 脚本 precommit FAIL → FAIL。
+- FAIL → 落盘 review → fix → 短复核 blocking → 再 Commit。
+- PASS → 不落盘 → polish（可选）或 `continuity-commit.md`。
+- 更新 `novel-state.yaml` `gates.qc` 与 `blockers`。
 
-`table_upsert` continuity_issues **optional**.
+`table_upsert` continuity_issues **optional**（默认不做）。

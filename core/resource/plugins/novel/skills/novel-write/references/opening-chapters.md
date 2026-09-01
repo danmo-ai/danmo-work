@@ -10,12 +10,11 @@
 
 ## Preflight add-on
 
-在 `preflight.md` 最小集之外：
+在 `chapter-write.md` gate CONTEXT 之外：
 
 1. `read_skill` 本文。
-2. `search_kb` **节奏与结构**（黄金三章 + 章内节奏）。
-3. `search_kb` **题材与平台**（番茄向 + 本书 `qc_profile` 题材行）。
-4. 确认 ch001 合同 `purpose` 含「读者承诺」一句（爽 / 虐 / 悬疑 / 情感——四选一写进合同，不写进正文）。
+2. `search_kb` **节奏与结构**（黄金三章 + 章内节奏）。本阶段至多再加 1 次「题材与平台」（番茄向）。
+3. 确认 ch001 合同 `purpose` 含「读者承诺」一句（爽 / 虐 / 悬疑 / 情感——四选一写进合同，不写进正文）。
 
 ## 三章分工（每章只交付一行核心）
 
@@ -62,11 +61,11 @@
 - [ ] 读者能回答：「这类书主要看什么？」
 - [ ] 章末钩引向 **下一单元**（不是本书终局）
 
-## 与 scene-routing / 沉浸
+## 与场景沉浸
 
-beats 含 `scene:establish` / `scene:transition` / 地点切换时 → `read_skill` `scene-routing.md`，并 `search_kb` **情绪与场景 → 场景沉浸**。
+beats 含 `scene:establish` / `scene:transition` / 地点切换时 → `search_kb` **情绪与场景 → 场景沉浸**（见 KB `06`）。
 
 ## Handoff
 
-- 写完后仍走 `review-gates.md`；ch1–3 番茄向项为 **blocking**。
+- 写完后走 `review-gates.md`；ch1–3 番茄向项为 **blocking**。PASS 不落盘 review。
 - 定稿后 ch004 起按普通 `chapter-write.md`，不必再加载本文（除非用户重写前三章）。

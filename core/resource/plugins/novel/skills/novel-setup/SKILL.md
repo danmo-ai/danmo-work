@@ -6,29 +6,29 @@ license: MIT
 compatibility: Requires write, edit, read_file, glob, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "2.2"
+  version: "2.3"
   category: creative-writing
 ---
 
 # Novel Setup（立项开书）
 
-Scaffold one book. **Stop when the tree and bible exist.** Do not outline volumes or write prose.
+Scaffold one book. **Stop when the tree and bible exist.**
 
-**Pipeline step 1/8：立项.** 用户可自行切换推理模型；本技能不换模型。
+**Pipeline step 1/8.** 本技能不换模型。
 
 ## When to load
 
-`read_skill` this skill for 开书 / 立项 / 想写一本. Vague premise → `brainstorming` + `ask_user` first.
+开书 / 立项 / 想写一本. Vague premise → `brainstorming` + **one packed** `ask_user`.
 
-## Do（少交互）
+## Do
 
-1. `read_skill` `novel-setup/references/init.md`（按需再开 `project-layout.md`）.
+1. `read_skill` `novel-setup/references/init.md`（按需 `project-layout.md`）.
 2. `search_kb` **至多一次**：题材与平台.
-3. Create `novel/<book-id>/` English tree; `write` `book-bible.md`（含终局储备）、`novel-state.yaml` (`stage: init`)、`canon/world.md`、`canon/author-lore.md`、`continuity/ledger.md`.
-4. Cast starts `candidate` from `cast-card.md`; confirm via `ask_user` before `canon`. 金手指默认写在主角卡.
-5. Templates: `novel-setup/assets/templates/*`（bible / state / world / cast-card / author-lore / ledger）.
-6. Run gate script `--action doctor` before handing off. Legacy books without `ledger.md` → merge old continuity files first (see init.md).
+3. Create `novel/<book-id>/`；`write` bible（含终局储备）、`novel-state.yaml`、`canon/world.md`、`canon/author-lore.md`、`continuity/ledger.md`.
+4. Cast 起 `candidate`（`cast-card.md`）；金手指默认写在主角卡。promote 等到卷纲批准.
+5. Templates: bible / state / world / cast-card / author-lore / ledger only.
+6. Gate `--action doctor`. Legacy 无 ledger → merge 后 archive（见 init.md）.
 
 ## Stop
 
-Report paths written. Do not invent the next book or jump to volume outline unless asked. Next steps: 设定/总纲 → `novel-plan`.
+Report paths. Next: 设定/总纲 → `novel-plan`.

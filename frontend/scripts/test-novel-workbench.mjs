@@ -92,6 +92,8 @@ const entryReady = {
 }
 assert.equal(inferChapterPhase(entryReady, 0, 'status: accepted', null), 'contract_ready')
 assert.equal(inferChapterNextAction('contract_ready'), 'write')
+assert.equal(inferChapterNextAction('drafted'), 'review-polish-commit')
+assert.equal(inferChapterNextAction('review_fail'), 'review-polish-commit')
 assert.equal(inferChapterNextAction('review_pass'), 'commit')
 
 const entries = buildChapterEntries(
@@ -128,14 +130,12 @@ const reviewOk = canRunAction('review', { ...ctx, castFileCount: 2 }, 2)
 assert.equal(reviewOk.allowed, true)
 
 const constrained = buildConstrainedPrefill('write', { bookId: 'star-inn', chapter: 2 }, pipe, [])
-assert.ok(constrained.includes('工作台约束'))
-assert.ok(constrained.includes('preflight.md'))
-assert.ok(constrained.includes('novel-write'))
-assert.ok(constrained.includes('【本轮技能】novel-write'))
-assert.ok(constrained.includes('【加载顺序'))
-assert.ok(constrained.includes('未 read_skill 成功前禁止 write/edit'))
-assert.ok(constrained.includes('search_kb 文风与去 AI 味'))
 assert.ok(constrained.includes('【任务】'))
+assert.ok(constrained.includes('novel-write'))
+assert.ok(constrained.includes('chapter-write.md'))
+assert.ok(constrained.includes('### CONTEXT') || constrained.includes('gate preflight'))
+assert.ok(constrained.includes('技能 novel-write'))
+assert.ok(constrained.includes('阶段'))
 assert.equal(pipe.phase, 'review')
 
 assert.equal(novelActionSkillId('init'), 'novel-setup')
@@ -151,7 +151,7 @@ assert.equal(novelActionSkillId('review'), 'novel-review')
 assert.equal(novelActionSkillId('polish'), 'novel-review')
 assert.equal(novelActionSkillId('review-polish-commit'), 'novel-review')
 assert.ok(pipe.step)
-assert.ok(constrained.includes('换阶段时请在 Composer 自行切换模型'))
+assert.ok(constrained.includes('delegate_agent.goal'))
 
 const comboProto = novelActionLoadProtocol('review-polish-commit', {
   bookId: 'star-inn',
@@ -169,9 +169,8 @@ const comboPrefill = buildConstrainedPrefill('review-polish-commit', {
   chapter: 4,
   chapterPath: 'novel/star-inn/chapters/ch004.md',
 })
-assert.ok(comboPrefill.includes('审稿 → 去 AI 味 → Continuity Commit'))
-assert.ok(comboPrefill.includes('未 PASS 禁止润色与定稿'))
-assert.ok(comboPrefill.includes('scan-deslop'))
+assert.ok(comboPrefill.includes('审') && comboPrefill.includes('Commit'))
+assert.ok(comboPrefill.includes('PASS 不写 review') || comboPrefill.includes('不写 review'))
 assert.ok(comboPrefill.includes('novel-review/references/review-gates.md'))
 assert.ok(comboPrefill.includes('novel-review/references/polish-deslop.md'))
 assert.ok(!comboPrefill.includes('【串行协议'))
@@ -205,12 +204,13 @@ assert.ok(comboBlocked.blockers.includes('blocker.alreadyCommitted'))
 
 const writeProto = novelActionLoadProtocol('write', { bookId: 'star-inn', chapter: 2 })
 assert.equal(writeProto.skillId, 'novel-write')
-assert.ok(writeProto.skillRefs.includes('novel-write/references/preflight.md'))
-assert.ok(formatLoadProtocol(writeProto).includes('read_skill novel-write'))
+assert.ok(writeProto.skillRefs.includes('novel-write/references/chapter-write.md'))
+assert.ok(!writeProto.skillRefs.includes('novel-write/references/preflight.md'))
+assert.ok(formatLoadProtocol(writeProto).includes('先 read_skill'))
 
 const initPrefill = buildConstrainedPrefill('init', {})
-assert.ok(initPrefill.includes('【本轮技能】novel-setup'))
-assert.ok(initPrefill.includes('未 read_skill 成功前禁止 write/edit'))
+assert.ok(initPrefill.includes('技能 novel-setup'))
+assert.ok(initPrefill.includes('一次 ask_user'))
 
 const stages = [
   'init',
@@ -253,22 +253,19 @@ const freezePrefill = buildConstrainedPrefill('batch-freeze', {
   batchTo: 8,
 })
 assert.ok(freezePrefill.includes('novel-write/references/batch-freeze.md'))
-assert.ok(freezePrefill.includes('unit_id'))
 assert.ok(freezePrefill.includes('frozen_batch'))
-assert.ok(freezePrefill.includes('不要写 batch-freeze.yaml'))
+assert.ok(freezePrefill.includes('不要写 batch-freeze.yaml') || freezePrefill.includes('只更新 novel-state'))
 assert.ok(!novelActionLoadProtocol('batch-freeze', { bookId: 'star-inn' }).skillRefs.includes(
   'novel-write/assets/templates/batch-freeze.yaml',
 ))
 
 const contractPrefill = buildNovelStagePrefill('contract', { bookId: 'star-inn', chapter: 4 })
 assert.ok(contractPrefill.includes('unit_id'))
-assert.ok(contractPrefill.includes('vNN-U#'))
 assert.ok(contractPrefill.includes('ch004-contract.yaml'))
 assert.ok(!contractPrefill.includes('pleasure_point'))
 
 const goldPrefill = buildConstrainedPrefill('goldfinger', { bookId: 'star-inn' })
 assert.ok(goldPrefill.includes('novel-setup/assets/templates/cast-card.md'))
-assert.ok(goldPrefill.includes('世界观与金手指'))
 assert.equal(novelActionLoadProtocol('goldfinger', { bookId: 'star-inn' }).skillId, 'novel-plan')
 
 const assetsPrefill = buildConstrainedPrefill('assets', { bookId: 'star-inn' })
@@ -283,21 +280,22 @@ assert.ok(!buildNovelStagePrefill('outline', { bookId: 'star-inn' }).includes('�
 assert.ok(!buildNovelStagePrefill('volume', { bookId: 'star-inn', volume: 1 }).includes('主爽点形态'))
 
 const writeProto2 = novelActionLoadProtocol('write', { bookId: 'star-inn', chapter: 2 })
-assert.ok(writeProto2.readFiles.some((f) => f.includes('ledger.md')))
+assert.ok(writeProto2.readFiles.some((f) => f.includes('contract.yaml')))
 assert.ok(!writeProto2.readFiles.some((f) => f.includes('chapter_summaries.md')))
 assert.deepEqual(writeProto2.kbThemes, ['文风与去 AI 味'])
 
 const hookPrefill = buildNovelStagePrefill('hook', { bookId: 'star-inn', chapter: 4 })
-assert.ok(hookPrefill.includes('爽点强化'))
-assert.ok(buildNovelStagePrefill('reversal', { bookId: 'star-inn', chapter: 4 }).includes('爽点强化'))
+assert.ok(hookPrefill.includes('悬念钩') || hookPrefill.includes('hook'))
+assert.ok(buildNovelStagePrefill('reversal', { bookId: 'star-inn', chapter: 4 }).includes('反转'))
 
-const preflightPrefill = buildNovelStagePrefill('preflight', { bookId: 'star-inn' })
-assert.ok(preflightPrefill.includes('last_preflight'))
+const preflightPrefill = buildNovelStagePrefill('preflight', { bookId: 'star-inn', chapter: 4 })
+assert.ok(preflightPrefill.includes('gate preflight') || preflightPrefill.includes('### CONTEXT'))
 assert.ok(!preflightPrefill.includes('preflight-log.md'))
 
 const dialogueProto = novelActionLoadProtocol('dialogue', { bookId: 'star-inn', chapter: 4 })
 assert.equal(dialogueProto.skillId, 'novel-write')
-assert.ok(dialogueProto.skillRefs.includes('novel-write/references/scene-routing.md'))
+assert.ok(dialogueProto.skillRefs.includes('novel-write/references/chapter-write.md'))
+assert.ok(!dialogueProto.skillRefs.includes('novel-write/references/scene-routing.md'))
 assert.ok(dialogueProto.kbThemes.includes('情绪与场景'))
 
 const continueProto = novelActionLoadProtocol('continue', { bookId: 'star-inn', chapter: 4 })

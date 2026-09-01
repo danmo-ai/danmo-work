@@ -22,7 +22,7 @@ novel/<book-id>/
   continuity/
     ledger.md                   # Public facts + Tracking + Open loops + ## chNNN 摘要
   reviews/
-    ch001-review.md             # PASS 短 stub；FAIL 全文
+    ch001-review.md             # 仅 FAIL / 深审；PASS 不落盘
   extras/                       # optional non-Canon
   _archive/                     # optional migrated / replaced materials
 ```

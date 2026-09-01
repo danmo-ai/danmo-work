@@ -895,10 +895,9 @@ function escapeHtml(s: string) {
     <template v-else-if="view === 'book' && selectedBookId">
       <div v-if="pipeline" class="novel-wb__rail">
         <div class="novel-wb__stepper novel-wb__stepper--rail" role="list">
-          <button
+          <span
             v-for="s in pipelineSteps"
             :key="s.id"
-            type="button"
             role="listitem"
             class="novel-wb__step"
             :class="{
@@ -907,11 +906,9 @@ function escapeHtml(s: string) {
                 pipelineSteps.findIndex((x) => x.id === pipeline.step) >
                 pipelineSteps.findIndex((x) => x.id === s.id),
             }"
-            :disabled="!s.action"
-            @click="s.action && runAction(s.action, pipeline.primaryChapter, undefined, s.id === 'volume' ? nextVolume : undefined)"
           >
             {{ stepperLabel(s.id) }}
-          </button>
+          </span>
         </div>
         <div class="novel-wb__rail-meta">
           <div class="novel-wb__gates" :aria-label="t('novelWorkbench.gatePanel')">
@@ -1139,9 +1136,8 @@ function escapeHtml(s: string) {
             >
               {{ chapterDeskPrimary.label }}
             </button>
-            <template v-if="readingIsContract">
+            <template v-if="readingIsContract && !chapterDeskPrimary">
               <button
-                v-if="!chapterDeskPrimary"
                 type="button"
                 class="novel-wb__btn novel-wb__btn--ghost"
                 @click="runAction('contract', readingChapter || treeSel.n, readPath || undefined)"
@@ -1150,72 +1146,75 @@ function escapeHtml(s: string) {
               </button>
             </template>
             <template v-else-if="readingIsProse && readingChapter">
+              <details v-if="readingEntry?.prose" class="novel-wb__more">
+                <summary>{{ t('novelWorkbench.moreActions') }}</summary>
+                <div class="novel-wb__more-body">
+                  <button
+                    type="button"
+                    class="novel-wb__btn novel-wb__btn--ghost"
+                    :disabled="!isActionAllowed('write', readingChapter)"
+                    @click="runAction('write', readingChapter, readPath || undefined)"
+                  >
+                    {{ t('novelWorkbench.actionAskRewrite') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="novel-wb__btn novel-wb__btn--ghost"
+                    @click="runAction('dialogue', readingChapter, readPath || undefined)"
+                  >
+                    {{ t('novelWorkbench.actionDialogue') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="novel-wb__btn novel-wb__btn--ghost"
+                    @click="runAction('hook', readingChapter, readPath || undefined)"
+                  >
+                    {{ t('novelWorkbench.actionHook') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="novel-wb__btn novel-wb__btn--ghost"
+                    @click="runAction('reversal', readingChapter, readPath || undefined)"
+                  >
+                    {{ t('novelWorkbench.actionReversal') }}
+                  </button>
+                  <button
+                    v-if="chapterDeskPrimary?.action !== 'review'"
+                    type="button"
+                    class="novel-wb__btn novel-wb__btn--ghost"
+                    :disabled="!isActionAllowed('review', readingChapter)"
+                    @click="runAction('review', readingChapter, readPath || undefined)"
+                  >
+                    {{ t('novelWorkbench.actionReview') }}
+                  </button>
+                  <button
+                    v-if="chapterDeskPrimary?.action !== 'polish'"
+                    type="button"
+                    class="novel-wb__btn novel-wb__btn--ghost"
+                    :disabled="!isActionAllowed('polish', readingChapter)"
+                    @click="runAction('polish', readingChapter, readPath || undefined)"
+                  >
+                    {{ t('novelWorkbench.actionPolish') }}
+                  </button>
+                  <button
+                    v-if="chapterDeskPrimary?.action !== 'commit'"
+                    type="button"
+                    class="novel-wb__btn novel-wb__btn--ghost"
+                    :disabled="!isActionAllowed('commit', readingChapter)"
+                    @click="runAction('commit', readingChapter, readPath || undefined)"
+                  >
+                    {{ t('novelWorkbench.actionCommit') }}
+                  </button>
+                </div>
+              </details>
               <button
+                v-else
                 type="button"
                 class="novel-wb__btn novel-wb__btn--ghost"
                 :disabled="!isActionAllowed('write', readingChapter)"
                 @click="runAction('write', readingChapter, readPath || undefined)"
               >
-                {{ readingEntry?.prose ? t('novelWorkbench.actionAskRewrite') : t('novelWorkbench.actionAskWrite', { n: readingChapter }) }}
-              </button>
-              <template v-if="readingEntry?.prose">
-                <button
-                  type="button"
-                  class="novel-wb__btn novel-wb__btn--ghost"
-                  @click="runAction('dialogue', readingChapter, readPath || undefined)"
-                >
-                  {{ t('novelWorkbench.actionDialogue') }}
-                </button>
-                <button
-                  type="button"
-                  class="novel-wb__btn novel-wb__btn--ghost"
-                  @click="runAction('hook', readingChapter, readPath || undefined)"
-                >
-                  {{ t('novelWorkbench.actionHook') }}
-                </button>
-                <button
-                  type="button"
-                  class="novel-wb__btn novel-wb__btn--ghost"
-                  @click="runAction('reversal', readingChapter, readPath || undefined)"
-                >
-                  {{ t('novelWorkbench.actionReversal') }}
-                </button>
-              </template>
-              <button
-                v-if="chapterDeskPrimary?.action !== 'review'"
-                type="button"
-                class="novel-wb__btn novel-wb__btn--ghost"
-                :disabled="!isActionAllowed('review', readingChapter)"
-                @click="runAction('review', readingChapter, readPath || undefined)"
-              >
-                {{ t('novelWorkbench.actionReview') }}
-              </button>
-              <button
-                v-if="chapterDeskPrimary?.action !== 'polish'"
-                type="button"
-                class="novel-wb__btn novel-wb__btn--ghost"
-                :disabled="!isActionAllowed('polish', readingChapter)"
-                @click="runAction('polish', readingChapter, readPath || undefined)"
-              >
-                {{ t('novelWorkbench.actionPolish') }}
-              </button>
-              <button
-                v-if="chapterDeskPrimary?.action !== 'commit'"
-                type="button"
-                class="novel-wb__btn novel-wb__btn--ghost"
-                :disabled="!isActionAllowed('commit', readingChapter)"
-                @click="runAction('commit', readingChapter, readPath || undefined)"
-              >
-                {{ t('novelWorkbench.actionCommit') }}
-              </button>
-              <button
-                v-if="readingEntry?.prose && chapterDeskPrimary?.action !== 'review-polish-commit'"
-                type="button"
-                class="novel-wb__btn novel-wb__btn--ghost"
-                :disabled="!isActionAllowed('review-polish-commit', readingChapter)"
-                @click="runAction('review-polish-commit', readingChapter, readPath || undefined)"
-              >
-                {{ t('novelWorkbench.actionReviewPolishCommit') }}
+                {{ t('novelWorkbench.actionAskWrite', { n: readingChapter }) }}
               </button>
             </template>
           </div>
@@ -1658,7 +1657,31 @@ function escapeHtml(s: string) {
   opacity: 0.45;
   background: color-mix(in srgb, var(--dq-border-subtle, #000) 30%, transparent);
   color: inherit;
+  cursor: default;
+  user-select: none;
+}
+
+.novel-wb__more {
+  display: inline-block;
+  margin-left: 4px;
+}
+
+.novel-wb__more > summary {
   cursor: pointer;
+  font-size: var(--dq-font-size-caption);
+  opacity: 0.75;
+  list-style: none;
+}
+
+.novel-wb__more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.novel-wb__more-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .novel-wb__step--done {

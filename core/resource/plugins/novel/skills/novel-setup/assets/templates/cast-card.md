@@ -1,6 +1,6 @@
 # {{name}}
 
-`status`: candidate  # candidate → 经 ask_user 后 canon。未 canon 不得进正文。
+`status`: candidate  # candidate → 卷纲批准时一并 canon。未 canon 不得进正文。
 
 ## 功能
 
@@ -37,4 +37,4 @@ POV 只能写其可知信息。隐藏设定不得「刚好猜中」，除非章�
 |------|------|------|----------|
 | | | | |
 
-Promote to `canon` and `table_*` `characters` only after `ask_user`.
+Promote to `canon` when the volume outline is approved (batch with other named cast). Unconfirmed `candidate` must not enter prose.

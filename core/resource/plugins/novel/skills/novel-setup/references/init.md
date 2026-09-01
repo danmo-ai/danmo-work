@@ -2,7 +2,7 @@
 
 ## Sufficiency gate
 
-Do **not** create a half-baked project. Before seeding files/tables, collect via `ask_user` (one question at a time when needed):
+Do **not** create a half-baked project. Before seeding files, collect via **one** `ask_user` covering:
 
 1. Working title / book-id slug  
 2. Genre + channel (网文长篇 / 短篇 / 文学向等)  
@@ -11,22 +11,23 @@ Do **not** create a half-baked project. Before seeding files/tables, collect via
 5. POV + tense  
 6. Hard taboos / rating constraints  
 
-Optional: platform tone (番茄/起点等) as **preference**, not hard rules.
+Optional in the same ask: platform tone (番茄/起点等) as **preference**, not hard rules.
 
 If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding the defaults from KB 题材与平台（章字数 2000–3500、断章必钩、3–5 章一爽点、黄金三章闭环）so later stages inherit them without re-searching.
 
 ## Steps（少交互）
 
 1. `read_skill` → `project-layout.md`（按需再开 `table-schema.md` / templates）.  
-2. `search_kb` **一次**：题材与平台（knowledge_gate）；人设主题按需再查.  
+2. `search_kb` **一次**：题材与平台（knowledge_gate）.  
 3. Create the **standard English tree** under `novel/<book-id>/`:  
    `canon/` (+ `cast/`), `outline/` (+ `volumes/`), `chapters/`, `continuity/`, `reviews/`.  
 4. `write` `book-bible.md`（含终局储备表）and `novel-state.yaml` (stage=`init`).  
-5. Seed `canon/world.md` + `canon/author-lore.md` from templates。人物卡用 `cast-card.md`，先 `candidate`。金手指默认写入主角卡（不必单建 `goldfinger.md`）。术语稀少时写在 `world.md`，**不必**建 `glossary.md`.  
+5. Seed `canon/world.md` + `canon/author-lore.md` from templates。人物卡用 `cast-card.md`，先 `candidate`。金手指默认写入主角卡。术语稀少时写在 `world.md`.  
 6. Seed `continuity/ledger.md`（可空表，不可缺文件）.  
-7. Optional: seed tables with `book_id`（文件权威；table 镜像可选）.  
-8. `memory_update` project: promise, genre, taboos, 终局储备卷号（不要把 author-lore 细节写入 memory）.  
-9. Gate 脚本 `--action doctor` once; fix blocking layout holes. Stop for human confirmation before mass outlining if bible is still thin.
+7. `memory_update` project: promise, genre, taboos, 终局储备卷号（不要把 author-lore 细节写入 memory）.  
+8. Gate 脚本 `--action doctor` once; fix blocking layout holes. Stop for human confirmation before mass outlining if bible is still thin.
+
+**默认不做：** `table_*` 镜像。
 
 ## Done when
 

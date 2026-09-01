@@ -231,6 +231,7 @@ class Report:
         self.chapter = chapter
         self.verdict = "PASS"
         self.findings: list[dict] = []
+        self.context_lines: list[str] = []
 
     def blocking(self, check: str, msg: str) -> None:
         self.findings.append({"severity": "blocking", "check": check, "message": msg})
@@ -247,6 +248,9 @@ class Report:
             lines += ["", "### BOOK", self.book_id]
         if self.chapter:
             lines += ["", "### CHAPTER", str(self.chapter)]
+        if self.context_lines:
+            lines += ["", "### CONTEXT"]
+            lines.extend(self.context_lines)
         lines += ["", "### BLOCKING"]
         blocks = [f for f in self.findings if f["severity"] == "blocking"]
         if not blocks:
@@ -271,6 +275,7 @@ class Report:
             "chapter": self.chapter,
             "verdict": self.verdict,
             "findings": self.findings,
+            "context": self.context_lines,
         }
 
 
@@ -492,6 +497,277 @@ def hook_of(contract: dict) -> tuple[str, str]:
     return str(hook.get("type") or "").strip(), str(hook.get("out") or "").strip()
 
 
+SUMMARY_KEYS = ("事件", "状态变化", "伏笔", "钩子", "下章指向")
+FS_ID_RE = re.compile(r"FS-\d+", re.I)
+UNIT_BEAT_RE = re.compile(
+    r"ch\s*(\d+)\s*(?:[-–—]\s*ch\s*(\d+))?\s*(建立期待|尝试|加压|决断|兑现|余波|切断)[：:]\s*(.*)",
+    re.I,
+)
+CAST_ANCHOR_RE = re.compile(r"^\s*[-*]\s*\*?\*?(视觉|语言|行为)\*?\*?[：:]\s*(.*)")
+
+
+def extract_chapter_summary_block(text: str, ch: int) -> str:
+    needle = f"## ch{ch:03d}"
+    i = text.find(needle)
+    if i < 0:
+        return ""
+    rest = text[i:]
+    nxt = re.search(r"\n## ch\d+", rest[1:])
+    return rest if not nxt else rest[: nxt.start() + 1]
+
+
+def summary_has_five_keys(block: str) -> list[str]:
+    missing = []
+    for key in SUMMARY_KEYS:
+        if not re.search(rf"[-*]\s*{re.escape(key)}\s*[：:]", block):
+            missing.append(key)
+    return missing
+
+
+def parse_cast_snapshot_names(ledger_text: str) -> set[str]:
+    names: set[str] = set()
+    in_cast = False
+    for line in ledger_text.splitlines():
+        if re.match(r"^###\s*Cast snapshot", line, re.I) or "Cast snapshot" in line and line.startswith("#"):
+            in_cast = True
+            continue
+        if in_cast and line.startswith("#"):
+            break
+        if in_cast and line.strip().startswith("|"):
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if not cells or cells[0] in ("角色", "----", "---") or set(cells[0]) <= {"-", ":"}:
+                continue
+            if cells[0]:
+                names.add(cells[0])
+    return names
+
+
+def parse_open_loop_ids(ledger_text: str) -> set[str]:
+    ids: set[str] = set()
+    in_loops = False
+    for line in ledger_text.splitlines():
+        if re.match(r"^##\s*Open loops", line, re.I):
+            in_loops = True
+            continue
+        if in_loops and line.startswith("## ") and "Open loops" not in line:
+            break
+        if in_loops:
+            for m in FS_ID_RE.finditer(line):
+                ids.add(m.group(0).upper())
+    return ids
+
+
+def state_delta_who(items: list[str]) -> list[str]:
+    out = []
+    for item in items:
+        s = item.strip()
+        if ":" in s:
+            out.append(s.split(":", 1)[0].strip())
+        elif "：" in s:
+            out.append(s.split("：", 1)[0].strip())
+        elif s:
+            out.append(s)
+    return [w for w in out if w]
+
+
+def foreshadow_ids_from_contract(contract: dict) -> list[str]:
+    info = contract.get("info_control") or {}
+    if not isinstance(info, dict):
+        return []
+    raw = info.get("foreshadowing") or []
+    items = raw if isinstance(raw, list) else nonempty_list(raw)
+    found: list[str] = []
+    for item in items:
+        for m in FS_ID_RE.finditer(str(item)):
+            found.append(m.group(0).upper())
+    return found
+
+
+def previous_hook_out(book_root: Path, ch: int) -> str:
+    if ch <= 1:
+        return ""
+    prev = ch - 1
+    try:
+        c, _ = load_contract(book_root, prev)
+        _, hout = hook_of(c)
+        if hout:
+            return hout
+    except OSError:
+        pass
+    text, _ = summary_source_text(book_root)
+    block = extract_chapter_summary_block(text, prev)
+    m = re.search(r"[-*]\s*下章指向\s*[：:]\s*(.+)", block)
+    if m:
+        return m.group(1).strip()
+    m = re.search(r"[-*]\s*钩子\s*[：:]\s*(.+)", block)
+    return m.group(1).strip() if m else ""
+
+
+def unit_beat_line(book_root: Path, unit_id: str, ch: int) -> str:
+    unit_id = (unit_id or "").strip()
+    outline = book_root / "outline"
+    if not unit_id or not outline.is_dir():
+        return ""
+    for path in outline.rglob("*.md"):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if unit_id not in text and f"`{unit_id}`" not in text:
+            continue
+        # Prefer beat lines covering this chapter
+        for line in text.splitlines():
+            m = UNIT_BEAT_RE.search(line)
+            if not m:
+                continue
+            a, b, role, detail = m.group(1), m.group(2), m.group(3), m.group(4)
+            start, end = int(a), int(b) if b else int(a)
+            if start <= ch <= end:
+                return f"{role}: {detail.strip()}" if detail.strip() else role
+        # Fallback: unit function line near unit id
+        if f"`{unit_id}`" in text or unit_id in text:
+            for line in text.splitlines():
+                if "单元功能" in line and "：" in line:
+                    return line.split("：", 1)[-1].strip() or line.strip()
+    return ""
+
+
+def cast_snapshot_rows(ledger_text: str) -> list[str]:
+    rows: list[str] = []
+    in_cast = False
+    for line in ledger_text.splitlines():
+        if re.match(r"^###\s*Cast snapshot", line, re.I) or (
+            "Cast snapshot" in line and line.startswith("#")
+        ):
+            in_cast = True
+            continue
+        if in_cast and line.startswith("#"):
+            break
+        if in_cast and line.strip().startswith("|"):
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if not cells or cells[0] in ("角色",) or set(cells[0]) <= {"-", ":"}:
+                continue
+            rows.append("| " + " | ".join(cells) + " |")
+    return rows
+
+
+def open_loops_rows(ledger_text: str) -> list[str]:
+    rows: list[str] = []
+    in_loops = False
+    for line in ledger_text.splitlines():
+        if re.match(r"^##\s*Open loops", line, re.I):
+            in_loops = True
+            continue
+        if in_loops and line.startswith("## ") and "Open loops" not in line:
+            break
+        if in_loops and line.strip().startswith("|"):
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if not cells or cells[0].upper() in ("ID",) or set(cells[0]) <= {"-", ":"}:
+                continue
+            rows.append("| " + " | ".join(cells) + " |")
+    return rows
+
+
+def load_cast_anchors(book_root: Path, names: list[str]) -> list[str]:
+    cast_dir = book_root / "canon" / "cast"
+    if not cast_dir.is_dir() or not names:
+        return []
+    files = list(cast_dir.glob("*.md"))
+    out: list[str] = []
+    for name in names:
+        for path in files:
+            text = path.read_text(encoding="utf-8", errors="replace")
+            title = path.stem
+            first = text.splitlines()[0] if text.splitlines() else ""
+            if name not in text and name not in title and name not in first:
+                continue
+            anchors = []
+            for line in text.splitlines():
+                m = CAST_ANCHOR_RE.match(line)
+                if m and m.group(2).strip():
+                    anchors.append(f"{m.group(1)}={m.group(2).strip()}")
+            label = first.lstrip("# ").strip() or title
+            if anchors:
+                out.append(f"{label}: " + "; ".join(anchors[:3]))
+            else:
+                out.append(f"{label}: (无三锚点行)")
+            break
+    return out
+
+
+def build_preflight_context(book_root: Path, contract: dict, ch: int, r: Report) -> list[str]:
+    lines: list[str] = []
+    prev_hook = previous_hook_out(book_root, ch)
+    beats = nonempty_list(contract.get("beats"))
+    debts = nonempty_list(contract.get("reader_debt"))
+    if prev_hook:
+        lines.append(f"- 接钩（上章）: {prev_hook}")
+        joined = " ".join(beats + debts)
+        if prev_hook not in joined and not any(
+            len(tok) >= 4 and tok in joined for tok in re.split(r"[\s，,。；;、]+", prev_hook) if tok
+        ):
+            r.advisory(
+                "hook-continue",
+                "beats[0]/reader_debt 未明显接住上章 hook.out — 确认章首接钩",
+            )
+    else:
+        lines.append("- 接钩（上章）: （首章或无上章钩）")
+
+    ledger_text = ""
+    ledger = ledger_path(book_root)
+    if ledger.is_file():
+        ledger_text = ledger.read_text(encoding="utf-8", errors="replace")
+
+    who = state_delta_who(nonempty_list(contract.get("state_deltas")))
+    # Also match cast files mentioned in beats
+    cast_dir = book_root / "canon" / "cast"
+    if cast_dir.is_dir():
+        for path in cast_dir.glob("*.md"):
+            stem = path.stem
+            blob = " ".join(beats + nonempty_list(contract.get("state_deltas")))
+            if stem in blob or any(stem in b for b in beats):
+                if stem not in who:
+                    who.append(stem)
+    snap = cast_snapshot_rows(ledger_text)
+    lines.append("- 人物现场（Cast snapshot）:")
+    if snap:
+        for row in snap:
+            if who and not any(w in row for w in who):
+                continue
+            lines.append(f"  {row}")
+        if who and not any(any(w in row for w in who) for row in snap):
+            lines.append(f"  （合同点名 {', '.join(who)} 不在 snapshot — Commit 后须补）")
+    else:
+        lines.append("  （ledger 无 Cast snapshot 表）")
+
+    anchors = load_cast_anchors(book_root, who)
+    lines.append("- 三锚点（上场）:")
+    if anchors:
+        for a in anchors:
+            lines.append(f"  - {a}")
+    else:
+        lines.append("  （无点名角色或无人物卡）")
+
+    loops = open_loops_rows(ledger_text)
+    lines.append("- 开放债务:")
+    if loops:
+        for row in loops[:8]:
+            lines.append(f"  {row}")
+    else:
+        lines.append("  （无 open loops 行）")
+
+    _, hout = hook_of(contract)
+    lines.append("- 本章硬约束:")
+    lines.append(f"  purpose: {str(contract.get('purpose') or '').strip()}")
+    lines.append(f"  beats: {beats}")
+    lines.append(f"  forbidden: {nonempty_list(contract.get('forbidden'))}")
+    lines.append(f"  state_deltas: {nonempty_list(contract.get('state_deltas'))}")
+    lines.append(f"  hook.out: {hout}")
+
+    unit = str(contract.get("unit_id") or "").strip()
+    beat_line = unit_beat_line(book_root, unit, ch)
+    lines.append(f"- 单元功能 ({unit or '?'}): {beat_line or '（未在卷纲解析到本章节拍）'}")
+    lines.append("- 加载纪律: 只消费本 CONTEXT + 本章合同；禁止扫树；禁止 author-lore。")
+    return lines
+
+
 def check_doctor(book_root: Path, st: dict, r: Report) -> None:
     for rel in ("novel-state.yaml", "book-bible.md", "canon/world.md"):
         if not file_exists(book_root, rel):
@@ -580,6 +856,7 @@ def check_preflight(book_root: Path, st: dict, ch: int, r: Report) -> None:
     debts = open_debt_count(book_root, c)
     if debts > MAX_OPEN_DEBTS:
         r.blocking("reader_debt", f"open foreshadows+reader_debt={debts} exceeds {MAX_OPEN_DEBTS}")
+    r.context_lines = build_preflight_context(book_root, c, ch, r)
 
 
 def check_precommit(book_root: Path, st: dict, ch: int, r: Report) -> None:
@@ -626,6 +903,35 @@ def check_postcommit(book_root: Path, st: dict, ch: int, r: Report) -> None:
         r.blocking("commit", "missing continuity/ledger.md (or legacy chapter_summaries.md)")
     elif not has_summary(text, ch):
         r.blocking("commit", f"no ## ch{ch:03d} block in {src}")
+    else:
+        block = extract_chapter_summary_block(text, ch)
+        missing = summary_has_five_keys(block)
+        if missing:
+            r.blocking(
+                "commit",
+                f"## ch{ch:03d} missing summary keys: {', '.join(missing)} "
+                f"(need 事件/状态变化/伏笔/钩子/下章指向)",
+            )
+        # state_deltas → Cast snapshot
+        who = state_delta_who(nonempty_list(c.get("state_deltas")))
+        if who and src.endswith("ledger.md"):
+            names = parse_cast_snapshot_names(text)
+            for w in who:
+                if not any(w in n or n in w for n in names):
+                    r.blocking(
+                        "commit",
+                        f"state_deltas who={w} not found in ledger Cast snapshot after Commit",
+                    )
+        # FS-ids → Open loops
+        fs_ids = foreshadow_ids_from_contract(c)
+        if fs_ids and src.endswith("ledger.md"):
+            loop_ids = parse_open_loop_ids(text)
+            for fs in fs_ids:
+                if fs not in loop_ids:
+                    r.blocking(
+                        "commit",
+                        f"foreshadowing {fs} not found in ledger Open loops after Commit",
+                    )
     last = int(st.get("last_committed_ch") or 0)
     if last < ch:
         r.blocking("state", f"last_committed_ch={last} want ≥{ch} after Commit")

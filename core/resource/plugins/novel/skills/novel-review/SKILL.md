@@ -6,30 +6,30 @@ license: MIT
 compatibility: Requires write, edit, read_file, grep, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "2.2"
+  version: "2.3"
   category: creative-writing
 ---
 
 # Novel Review（审稿 · 润色 · Commit）
 
-One review round → gate script precommit → fix P0 → Commit (gate script postcommit). `qc_gate` FAIL blocks「定稿」.
+One review → gate precommit → fix P0 → Commit (gate postcommit). `qc_gate` FAIL blocks 定稿.
 
-**Pipeline steps 7–8/8：润色审稿 → 一致性 Commit.** 用户可自行切换旗舰模型；本技能不换模型。
+**Pipeline steps 7–8/8.** 本技能不换模型。
 
 ## When to load
 
-审稿 / 检查 / 去 AI 味 / 润色 / Continuity Commit / 批量审稿.
+审稿 / 去 AI 味 / Continuity Commit / 批量审稿 / 审→润→定.
 
-## Do（少交互）
+## Do
 
 | Intent | Load | search_kb（≤1） |
 |--------|------|-----------------|
-| 审稿 / 批量审 | `novel-review/references/review-gates.md` | 文风与去 AI 味 |
+| 审稿 / 批量审 | `review-gates.md` | 文风与去 AI 味 |
 | 去 AI 味 | `polish-deslop.md` | 文风与去 AI 味 |
 | Commit | `continuity-commit.md` | — |
 
-Write reviews under `reviews/`: **PASS → 短 stub**；**FAIL → 全文六镜**. Commit：**一次** `apply_patch` 更新 `continuity/ledger.md` + contract status + `novel-state.yaml`. Table upserts optional.
+**PASS：不写 `reviews/` 文件**，只更新 `gates.qc`。**FAIL / 深审：写全文六镜。** Commit = 一次 patch（ledger 五要素摘要 + Cast snapshot + Open loops + 合同 `reviewed` + state）+ `postcommit` exit 0.
 
 ## Stop
 
-Report files. Completion = tool evidence. Do not start the next book.
+Completion = tool evidence. Do not start the next book.
