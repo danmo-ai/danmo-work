@@ -9,7 +9,7 @@ Do **not** rely on silent `openai` fallback for vendors with custom fields.
 | Dialect ID | Vendors / model IDs | Enable thinking | Effort / intensity | Echo `reasoning_content` | Official notes |
 |---|---|---|---|---|---|
 | `openai` | OpenAI GPT-5 / o-series; many gateways | `reasoning_effort` when on | `none` `minimal` `low` `medium` `high` `xhigh` `max` (model-dependent) | No | [Reasoning](https://platform.openai.com/docs/guides/reasoning) |
-| `deepseek` | `deepseek-v4-*`, `deepseek-chat`, `deepseek-reasoner` | `thinking.type` = `enabled` / `disabled` | When on: `reasoning_effort` `high` \| `max` (map low/medium→high) | Yes (tool / multi-turn) | [api-docs.deepseek.com](https://api-docs.deepseek.com/) |
+| `deepseek` | `deepseek-v4-*`, `deepseek-v4-flash-vision-exp`, `deepseek-chat`, `deepseek-reasoner` | `thinking.type` = `enabled` / `disabled` | When on: `reasoning_effort` `high` \| `max` (map low/medium→high) | Yes (tool / multi-turn) | [api-docs.deepseek.com](https://api-docs.deepseek.com/) |
 | `qwen` | Qwen3.x via DashScope compatible-mode | `enable_thinking` bool | Optional `thinking_budget` from `effort_budget_tokens` | Yes | [Thinking](https://docs.qwencloud.com/developer-guides/text-generation/thinking) |
 | `kimi` | `kimi-k2.6`, `kimi-k2.5` | `thinking.type` + `keep: all` when on | Toggle only (no effort field) | Yes when preserved | [models-overview](https://platform.kimi.ai/docs/api/models-overview) |
 | `kimi_code` | `kimi-k2.7-code*`, `kimi-for-coding*` | Always on; only `enabled`+`keep:all` (or omit). **`disabled` errors** | N/A | Yes (required) | Same as above — K2.7 Code |

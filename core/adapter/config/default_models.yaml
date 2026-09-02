@@ -15,6 +15,20 @@
   - medium
   - high
   - xhigh
+  - max
+- model: gpt-5.6-sol
+  reasoning_dialect: openai
+  vision: true
+  context_window: 1050000
+  max_output: 128000
+  available_efforts:
+  - 'off'
+  - none
+  - low
+  - medium
+  - high
+  - xhigh
+  - max
 - model: gpt-5.6-terra
   reasoning_dialect: openai
   vision: true
@@ -27,6 +41,7 @@
   - medium
   - high
   - xhigh
+  - max
 - model: gpt-5.6-luna
   reasoning_dialect: openai
   vision: true
@@ -39,6 +54,7 @@
   - medium
   - high
   - xhigh
+  - max
 - model: gpt-5
   reasoning_dialect: openai
   vision: true
@@ -113,6 +129,30 @@
   context_window: 128000
   max_output: 16384
 - model: claude-sonnet-5
+  vision: true
+  context_window: 1000000
+  max_output: 128000
+  thinking_mode: adaptive
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+  - xhigh
+  - max
+- model: claude-opus-5
+  vision: true
+  context_window: 1000000
+  max_output: 128000
+  thinking_mode: adaptive
+  available_efforts:
+  - 'off'
+  - low
+  - medium
+  - high
+  - xhigh
+  - max
+- model: claude-fable-5-1
   vision: true
   context_window: 1000000
   max_output: 128000
@@ -236,6 +276,15 @@
   - 'off'
   - high
   - max
+- model: deepseek-v4-flash-vision-exp
+  reasoning_dialect: deepseek
+  vision: true
+  context_window: 1000000
+  max_output: 384000
+  available_efforts:
+  - 'off'
+  - high
+  - max
 - model: deepseek-chat
   reasoning_dialect: deepseek
   context_window: 1000000
@@ -250,6 +299,23 @@
   max_output: 384000
   available_efforts:
   - 'off'
+  - high
+  - max
+- model: glm-5.3
+  reasoning_dialect: glm
+  context_window: 1048576
+  max_output: 131072
+  available_efforts:
+  - low
+  - high
+  - max
+- model: glm-5.3-flash
+  reasoning_dialect: glm
+  vision: true
+  context_window: 1048576
+  max_output: 131072
+  available_efforts:
+  - low
   - high
   - max
 - model: glm-5.2
@@ -584,6 +650,17 @@
   - low
   - medium
   - high
+- model: gemini-3.6-flash
+  reasoning_dialect: gemini
+  vision: true
+  context_window: 1048576
+  max_output: 65536
+  available_efforts:
+  - 'off'
+  - minimal
+  - low
+  - medium
+  - high
 - model: gemini-3.5-flash
   reasoning_dialect: gemini
   vision: true
@@ -613,6 +690,15 @@
   available_efforts:
   - 'off'
   - minimal
+  - low
+  - medium
+  - high
+- model: grok-4.6
+  reasoning_dialect: grok
+  vision: true
+  context_window: 500000
+  max_output: 128000
+  available_efforts:
   - low
   - medium
   - high
