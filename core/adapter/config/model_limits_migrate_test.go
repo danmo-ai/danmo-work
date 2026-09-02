@@ -223,3 +223,52 @@ func TestDefaultModelConfigsDeepSeekVisionExp(t *testing.T) {
 		t.Fatalf("dialect: %q", vision.ReasoningDialect)
 	}
 }
+
+func TestDefaultModelConfigsHeadVendorLatest(t *testing.T) {
+	defaults := DefaultModelConfigs()
+	byModel := make(map[string]domain.ModelConfig, len(defaults))
+	for _, m := range defaults {
+		byModel[m.Model] = m
+	}
+	cases := []struct {
+		model   string
+		vision  bool
+		ctx     int
+		maxOut  int
+		dialect string
+	}{
+		{"claude-opus-5", true, 1_000_000, 128_000, ""},
+		{"claude-fable-5-1", true, 1_000_000, 128_000, ""},
+		{"gpt-5.6-sol", true, 1_050_000, 128_000, "openai"},
+		{"glm-5.3", false, 1_048_576, 131_072, "glm"},
+		{"glm-5.3-flash", true, 1_048_576, 131_072, "glm"},
+		{"gemini-3.6-flash", true, 1_048_576, 65_536, "gemini"},
+		{"grok-4.6", true, 500_000, 128_000, "grok"},
+	}
+	for _, tc := range cases {
+		m, ok := byModel[tc.model]
+		if !ok {
+			t.Fatalf("missing %s in built-in catalog", tc.model)
+		}
+		if m.Vision != tc.vision {
+			t.Fatalf("%s vision=%v want %v", tc.model, m.Vision, tc.vision)
+		}
+		if m.ContextWindow != tc.ctx || m.MaxOutput != tc.maxOut {
+			t.Fatalf("%s limits context=%d max_output=%d", tc.model, m.ContextWindow, m.MaxOutput)
+		}
+		if tc.dialect != "" && m.ReasoningDialect != tc.dialect {
+			t.Fatalf("%s dialect=%q want %q", tc.model, m.ReasoningDialect, tc.dialect)
+		}
+	}
+	gpt56 := byModel["gpt-5.6"]
+	hasMax := false
+	for _, e := range gpt56.AvailableEfforts {
+		if e == "max" {
+			hasMax = true
+			break
+		}
+	}
+	if !hasMax {
+		t.Fatal("gpt-5.6 should expose max reasoning effort")
+	}
+}
