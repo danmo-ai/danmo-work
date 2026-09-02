@@ -28,7 +28,7 @@ var ReasoningDialectInfos = []ReasoningDialectInfo{
 	{
 		ID:          ReasoningDialectDeepSeek,
 		Label:       "DeepSeek",
-		Vendors:     "deepseek-v4-*, deepseek-chat, deepseek-reasoner",
+		Vendors:     "deepseek-v4-*, deepseek-v4-flash-vision-exp, deepseek-chat, deepseek-reasoner",
 		RequestHint: "thinking.type + reasoning_effort (high|max)",
 		Echo:        true,
 		EffortsHint: "off → thinking.disabled; on → high|max",

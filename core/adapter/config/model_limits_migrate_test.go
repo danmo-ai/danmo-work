@@ -200,3 +200,26 @@ func TestModelConfigsDivergedFromBuiltinDetectsStaleParams(t *testing.T) {
 		t.Fatal("expected no diverge after refresh")
 	}
 }
+
+func TestDefaultModelConfigsDeepSeekVisionExp(t *testing.T) {
+	defaults := DefaultModelConfigs()
+	var vision *domain.ModelConfig
+	for i := range defaults {
+		if defaults[i].Model == "deepseek-v4-flash-vision-exp" {
+			vision = &defaults[i]
+			break
+		}
+	}
+	if vision == nil {
+		t.Fatal("missing deepseek-v4-flash-vision-exp in built-in catalog")
+	}
+	if !vision.Vision {
+		t.Fatal("expected vision=true for deepseek-v4-flash-vision-exp")
+	}
+	if vision.ContextWindow != 1_000_000 || vision.MaxOutput != 384_000 {
+		t.Fatalf("limits: context=%d max_output=%d", vision.ContextWindow, vision.MaxOutput)
+	}
+	if vision.ReasoningDialect != "deepseek" {
+		t.Fatalf("dialect: %q", vision.ReasoningDialect)
+	}
+}
