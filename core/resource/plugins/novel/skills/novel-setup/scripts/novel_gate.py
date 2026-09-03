@@ -821,6 +821,11 @@ def load_cast_anchors(book_root: Path, names: list[str]) -> list[str]:
 
 def build_preflight_context(book_root: Path, contract: dict, ch: int, r: Report) -> list[str]:
     lines: list[str] = []
+    style = style_fingerprint_brief(book_root)
+    if style:
+        lines.append("- 风格指纹（本书固定，写入时对齐 POV/语域/句式/禁语/章末钩）:")
+        for ln in style.splitlines():
+            lines.append(f"  {ln}")
     prev_hook = previous_hook_out(book_root, ch)
     beats = nonempty_list(contract.get("beats"))
     debts = nonempty_list(contract.get("reader_debt"))
@@ -1168,7 +1173,7 @@ def _style_card_lines(bible_text: str) -> list[str]:
 
 
 def style_fingerprint_brief(book_root: Path) -> str:
-    """Style brief for the `context` hook action: canon/style-fingerprint.md,
+    """Style brief injected at the top of preflight CONTEXT: canon/style-fingerprint.md,
     falling back to the book-bible Style card. Capped at STYLE_MAX_RUNES."""
     fp = book_root / "canon" / "style-fingerprint.md"
     if fp.is_file():
@@ -1193,28 +1198,12 @@ def style_fingerprint_brief(book_root: Path) -> str:
     return "\n".join(kept).strip()
 
 
-def run_context_hook(workdir: str, book_id: str) -> dict:
-    """Hook entry (subagentStart): emit additionalContext JSON. Never raises —
-    a hook failure must not block the turn, so any error degrades to {}."""
-    brief = ""
-    try:
-        root, _ = resolve_book(workdir, book_id)
-        brief = style_fingerprint_brief(root)
-    except Exception:
-        brief = ""
-    if not brief:
-        return {}
-    return {
-        "additionalContext": "风格指纹（本书固定，写入/审稿时对齐 POV/语域/句式/禁语/章末钩）:\n" + brief
-    }
-
-
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Novel write-gate / doctor / deslop scan (skill script)")
     p.add_argument(
         "--action",
         default="doctor",
-        help="preflight | precommit | postcommit | doctor | scan-deslop | context",
+        help="preflight | precommit | postcommit | doctor | scan-deslop",
     )
     p.add_argument("--workdir", default=".", help="project root or book root")
     p.add_argument("--book-id", default="", help="slug under novel/<book-id>/")
@@ -1223,14 +1212,6 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--to", dest="to_ch", type=int, default=0, help="scan-deslop range end")
     p.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
-    if (args.action or "").strip().lower() == "context":
-        json.dump(
-            run_context_hook(os.path.abspath(args.workdir), args.book_id),
-            sys.stdout,
-            ensure_ascii=False,
-        )
-        sys.stdout.write("\n")
-        return 0
     try:
         rep, hit_lines = run_with_hits(
             os.path.abspath(args.workdir),

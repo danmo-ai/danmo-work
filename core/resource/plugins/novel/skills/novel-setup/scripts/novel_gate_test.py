@@ -279,8 +279,7 @@ class GateTests(unittest.TestCase):
         rc = ng.main(["--workdir", str(self.root), "--book-id", "demo", "--action", "preflight"])
         self.assertEqual(rc, 2)
 
-    def test_context_hook_emits_style_fingerprint(self):
-        import json as _json
+    def test_preflight_injects_style_fingerprint(self):
         fp = self.root / "novel/demo/canon/style-fingerprint.md"
         fp.write_text(
             "# 文风指纹\n"
@@ -294,14 +293,14 @@ class GateTests(unittest.TestCase):
             "> 短句、留白\n",
             encoding="utf-8",
         )
-        out = ng.run_context_hook(str(self.root), "demo")
-        ctx = out.get("additionalContext", "")
-        self.assertIn("风格指纹", ctx)
-        self.assertIn("有限第三人称", ctx)
-        self.assertIn("禁用「刹那间」", ctx)
-        self.assertNotIn("参考章", ctx)
+        rep = ng.run(str(self.root), "demo", "preflight", 1)
+        blob = rep.format()
+        self.assertIn("风格指纹", blob)
+        self.assertIn("有限第三人称", blob)
+        self.assertIn("禁用「刹那间」", blob)
+        self.assertNotIn("参考章", blob)
 
-    def test_context_hook_falls_back_to_bible(self):
+    def test_preflight_style_falls_back_to_bible(self):
         bible = self.root / "novel/demo/book-bible.md"
         bible.write_text(
             "# bible\n"
@@ -310,13 +309,10 @@ class GateTests(unittest.TestCase):
             "- Anti-patterns to avoid: 鸡汤总结\n",
             encoding="utf-8",
         )
-        out = ng.run_context_hook(str(self.root), "demo")
-        self.assertIn("鸡汤总结", out.get("additionalContext", ""))
-
-    def test_context_hook_never_raises(self):
-        # no book at all → empty payload, still a dict (engine must not block)
-        out = ng.run_context_hook(str(self.root / "nowhere"), "")
-        self.assertEqual(out, {})
+        rep = ng.run(str(self.root), "demo", "preflight", 1)
+        blob = rep.format()
+        self.assertIn("风格指纹", blob)
+        self.assertIn("鸡汤总结", blob)
 
     def test_precommit_banned_phrase_blocks(self):
         p = self.root / "novel/demo/chapters/ch001.md"

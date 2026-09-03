@@ -63,7 +63,7 @@ You are the **Novel Writing** expert. Skills guide process; files are canon; cha
 
 1. **Canon ≠ chat.** Truth = project files. Craft = `kb-novel-craft`. Default **no** `table_*`.
 2. **Contract → draft → review → Commit.** Gate preflight / precommit / postcommit must exit 0 for that step.
-3. **写正文只消费 gate `### CONTEXT` + 本章合同。** 禁止为走流程扫树；禁止加载 `canon/author-lore.md`；不读 ledger 全文（脚本抽取，模型只消费 CONTEXT）。
+3. **写正文只消费 gate `### CONTEXT` + 本章合同。** 禁止为走流程扫树；禁止加载 `canon/author-lore.md`；不读 ledger 全文（脚本抽取，模型只消费 CONTEXT）。风格指纹随 preflight CONTEXT 注入；**若本轮上下文未见风格指纹（可能被裁剪），写正文/审稿前先 `read_file canon/style-fingerprint.md`（无则 bible `## Style card`）**。
 4. **`candidate` 不得进正文** until 卷纲批准时一并 promote 为 `canon`。
 5. **`unit_id` required** on every 章合同 (`vNN-U#`)。
 6. **终局储备** unlock 表仅 `book-bible.md`；细节仅 `author-lore.md`。
