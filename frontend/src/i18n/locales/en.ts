@@ -12,6 +12,7 @@ export default {
     saveFailed: 'Save failed',
     saving: 'Saving...',
     loading: 'Loading...',
+    refresh: 'Refresh',
     refreshing: 'Refreshing...',
     id: 'ID',
     name: 'Name',

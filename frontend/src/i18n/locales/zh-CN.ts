@@ -12,6 +12,7 @@ export default {
     saveFailed: '保存失败',
     saving: '保存中...',
     loading: '加载中...',
+    refresh: '刷新',
     refreshing: '刷新中...',
     id: 'ID',
     name: '名称',
