@@ -59,3 +59,36 @@ func TestInjectInspectHTML(t *testing.T) {
 		t.Fatal("script should appear before </body>")
 	}
 }
+
+func TestProjectRawBaseTag(t *testing.T) {
+	cases := []struct {
+		path string
+		want string
+	}{
+		{path: "/api/v1/projects/p1/raw/index.html", want: `<base href="/api/v1/projects/p1/raw/">`},
+		{path: "/api/v1/projects/p1/raw/docs/demo.html", want: `<base href="/api/v1/projects/p1/raw/docs/">`},
+		{path: "/api/v1/projects/p1/raw/a/b/c.html", want: `<base href="/api/v1/projects/p1/raw/a/b/">`},
+	}
+	for _, tc := range cases {
+		if got := projectRawBaseTag(tc.path); got != tc.want {
+			t.Fatalf("%s: got %q want %q", tc.path, got, tc.want)
+		}
+	}
+}
+
+func TestInjectBaseAndInspect(t *testing.T) {
+	in := []byte("<html><head><title>t</title></head><body>hi</body></html>")
+	out := injectBaseAndInspect(in, `<base href="/api/v1/projects/p/raw/docs/">`)
+	if !bytes.Contains(out, []byte(`<base href="/api/v1/projects/p/raw/docs/">`)) {
+		t.Fatal("base tag not injected")
+	}
+	if !bytes.Contains(out, []byte("__dqInspectInstalled")) {
+		t.Fatal("inspect script not injected")
+	}
+	// Existing <base> must not be duplicated.
+	withBase := []byte(`<html><head><base href="/other/"><title>t</title></head><body></body></html>`)
+	out2 := injectBaseAndInspect(withBase, `<base href="/api/v1/projects/p/raw/docs/">`)
+	if bytes.Count(bytes.ToLower(out2), []byte("<base")) != 1 {
+		t.Fatalf("expected single base tag, got %s", out2)
+	}
+}

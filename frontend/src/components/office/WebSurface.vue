@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ElementAnnotatePopover from '@/components/center/ElementAnnotatePopover.vue'
-import { apiBaseUrl } from '@/utils/desktop'
+import { apiBaseUrl, projectRawUrl as buildProjectRawUrl } from '@/utils/desktop'
 import { renderMarkdown } from '@/utils/markdown-render'
 import { toast } from '@/utils/feedback'
 import {
@@ -63,7 +63,7 @@ function toProxyUrl(rawUrl: string): string {
 }
 
 function projectRawUrl(filePath: string): string {
-  return `${apiBaseUrl()}/api/v1/projects/${props.projectId}/raw/${encodeURIComponent(filePath)}`
+  return buildProjectRawUrl(props.projectId, filePath)
 }
 
 async function loadMdContent(urlOrPath: string) {

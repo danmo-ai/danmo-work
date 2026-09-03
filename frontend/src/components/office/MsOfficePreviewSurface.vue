@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { fetchJSON } from '@/api/client'
-import { apiBaseUrl } from '@/utils/desktop'
+import { projectRawUrl } from '@/utils/desktop'
 import { toast } from '@/utils/feedback'
 import { routeProjectFile } from '@/utils/file-route'
 import { siblingUniverIrPath, stringifyUniverFile } from '@/utils/univer-ir'
@@ -34,7 +34,7 @@ const kindLabel = computed(() => {
 
 const rawUrl = computed(() => {
   if (!props.projectId || !props.path) return ''
-  return `${apiBaseUrl()}/api/v1/projects/${props.projectId}/raw/${encodeURIComponent(props.path)}`
+  return projectRawUrl(props.projectId, props.path)
 })
 
 async function convertToIr() {

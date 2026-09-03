@@ -7,7 +7,7 @@ import { toast } from '@/utils/feedback'
 import { routeProjectFile } from '@/utils/file-route'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import { useStageAiReviewStore } from '@/stores/stageAiReview'
-import { apiBaseUrl } from '@/utils/desktop'
+import { projectRawUrl } from '@/utils/desktop'
 import UnifiedDiffView from '@/components/office/UnifiedDiffView.vue'
 
 interface GitDiffResult {
@@ -95,7 +95,7 @@ function openFile() {
   }
   const routed = routeProjectFile(props.path)
   if (routed.kind === 'web' || routed.kind === 'media') {
-    const url = `${apiBaseUrl()}/api/v1/projects/${props.projectId}/raw/${encodeURIComponent(props.path)}`
+    const url = projectRawUrl(props.projectId, props.path)
     workspaceUi.openStage({ ...routed, url })
     return
   }

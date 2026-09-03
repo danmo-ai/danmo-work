@@ -17,6 +17,20 @@ export function apiBaseUrl(): string {
 }
 
 /**
+ * Project file URL for iframe / media preview (`/projects/:id/raw/...`).
+ * Encodes each path segment but keeps `/` so relative HTML assets resolve
+ * against the file's directory (backend also injects `<base>` for HTML).
+ */
+export function projectRawUrl(projectId: string, filePath: string): string {
+  const encoded = filePath
+    .replace(/\\/g, '/')
+    .split('/')
+    .map((seg) => encodeURIComponent(seg))
+    .join('/')
+  return `${apiBaseUrl()}/api/v1/projects/${projectId}/raw/${encoded}`
+}
+
+/**
  * Wait until the local Go backend accepts HTTP (desktop first-launch race).
  * Sidecar spawn ≠ ready: migrate/SQLite can delay listen on first open.
  * Non-desktop runtimes return true immediately.

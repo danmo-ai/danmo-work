@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -1518,10 +1519,15 @@ func uploadProjectFile(h *Handler) gin.HandlerFunc {
 	}
 }
 
-// serveProjectFile serves a project file directly at /projects/:id/files/:filepath
+// serveProjectFile serves a project file at /projects/:id/raw/*filepath.
+// HTML gets the same treatment as /proxy: <base href> for relative assets + inspect script.
 func serveProjectFile(h *Handler) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		filepath := strings.TrimPrefix(c.Param("filepath"), "/")
+		if unescaped, err := url.PathUnescape(filepath); err == nil {
+			filepath = unescaped
+		}
+		filepath = strings.ReplaceAll(filepath, "\\", "/")
 		if filepath == "" || filepath == "content" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file path"})
 			return
@@ -1534,9 +1540,8 @@ func serveProjectFile(h *Handler) gin.HandlerFunc {
 		if i := strings.Index(ct, ";"); i != -1 {
 			ct = ct[:i]
 		}
-		// Inject inspect listener into HTML responses
 		if ct == "text/html" {
-			data = injectInspectHTML(data)
+			data = injectBaseAndInspect(data, projectRawBaseTag(c.Request.URL.Path))
 		}
 		c.Header("Content-Type", ct)
 		c.Data(http.StatusOK, ct, data)
