@@ -27,6 +27,7 @@ type PluginManager struct {
 	knowledgeManager *KnowledgeManager
 
 	installed map[string]domain.PluginInstalled
+	hooks     []domain.ResolvedHook
 	mu        sync.RWMutex
 }
 
@@ -62,6 +63,7 @@ func (pm *PluginManager) Init(ctx context.Context) error {
 	var expertDirs []string
 	var mcpFiles []string
 	var kbRoots []string
+	var hooks []domain.ResolvedHook
 
 	for _, p := range pm.installed {
 		root := p.RootPath
@@ -84,6 +86,19 @@ func (pm *PluginManager) Init(ctx context.Context) error {
 			mcpFiles = append(mcpFiles, mcpPath)
 		}
 
+		// Codex-style hooks.json: context-injection hooks. Only builtin
+		// plugins may auto-execute (market hooks are a new attack surface).
+		hooksPath := filepath.Join(root, "hooks.json")
+		if st, err := os.Stat(hooksPath); err == nil && !st.IsDir() {
+			if !p.Builtin {
+				log.Printf("[plugins] %s: hooks.json ignored (non-builtin plugin)", p.Name)
+			} else if cfg, err := LoadHooksConfig(hooksPath); err != nil {
+				log.Printf("[plugins] %s: invalid hooks.json: %v", p.Name, err)
+			} else {
+				hooks = append(hooks, resolveHooks(p.Name, root, cfg)...)
+			}
+		}
+
 		extDir := filepath.Join(root, domain.DanmoWorkExtensionKey)
 		if st, err := os.Stat(extDir); err == nil && st.IsDir() {
 			ed := filepath.Join(extDir, "experts")
@@ -100,6 +115,9 @@ func (pm *PluginManager) Init(ctx context.Context) error {
 
 	pm.skillManager.SetPluginSkillDirs(skillDirs)
 	pm.agentManager.SetPluginExpertDirs(expertDirs)
+	pm.mu.Lock()
+	pm.hooks = hooks
+	pm.mu.Unlock()
 	if pm.knowledgeManager != nil {
 		pm.knowledgeManager.SetPluginKBRoots(kbRoots)
 	}

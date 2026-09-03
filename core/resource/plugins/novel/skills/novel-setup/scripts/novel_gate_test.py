@@ -279,6 +279,45 @@ class GateTests(unittest.TestCase):
         rc = ng.main(["--workdir", str(self.root), "--book-id", "demo", "--action", "preflight"])
         self.assertEqual(rc, 2)
 
+    def test_context_hook_emits_style_fingerprint(self):
+        import json as _json
+        fp = self.root / "novel/demo/canon/style-fingerprint.md"
+        fp.write_text(
+            "# 文风指纹\n"
+            "## POV 与语域\n"
+            "- 视角：有限第三人称\n"
+            "## 禁语与套话\n"
+            "- 禁用「刹那间」\n"
+            "## 参考章\n"
+            "- ch001 代表句\n"
+            "## 指纹摘要\n"
+            "> 短句、留白\n",
+            encoding="utf-8",
+        )
+        out = ng.run_context_hook(str(self.root), "demo")
+        ctx = out.get("additionalContext", "")
+        self.assertIn("风格指纹", ctx)
+        self.assertIn("有限第三人称", ctx)
+        self.assertIn("禁用「刹那间」", ctx)
+        self.assertNotIn("参考章", ctx)
+
+    def test_context_hook_falls_back_to_bible(self):
+        bible = self.root / "novel/demo/book-bible.md"
+        bible.write_text(
+            "# bible\n"
+            "## Style card\n"
+            "- POV: 有限第三人称\n"
+            "- Anti-patterns to avoid: 鸡汤总结\n",
+            encoding="utf-8",
+        )
+        out = ng.run_context_hook(str(self.root), "demo")
+        self.assertIn("鸡汤总结", out.get("additionalContext", ""))
+
+    def test_context_hook_never_raises(self):
+        # no book at all → empty payload, still a dict (engine must not block)
+        out = ng.run_context_hook(str(self.root / "nowhere"), "")
+        self.assertEqual(out, {})
+
     def test_precommit_banned_phrase_blocks(self):
         p = self.root / "novel/demo/chapters/ch001.md"
         p.write_text("他嘴角微微上扬，心里某种说不出的滋味。\n", encoding="utf-8")

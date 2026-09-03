@@ -252,6 +252,7 @@ func New(cfg Config) *Core {
 	eng := dqruntime.NewEngine(sessions, turnManager, pm, approvalManager, turnLogManager, agents, skills, knowledge, st.Memories(), provider, stream, checkpointStore, loader, appCfg.Data.Dir)
 	eng.SetFileChangeStore(fileChangeStore)
 	eng.SetTableStore(tableStore)
+	eng.SetPluginHooks(pluginManager.Hooks())
 	eng.SetPreTurnSnapshot(func(ctx context.Context, projectID, sessionID, turnID, userInput string, extraPaths []string) {
 		seen := map[string]bool{}
 		var paths []string

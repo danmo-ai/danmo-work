@@ -106,6 +106,7 @@ func TestNovelPluginPacksSkillAndCraftKB(t *testing.T) {
 		"novel/ai.danmo.work/knowledge/09-lore-tracks.md",
 		"novel/skills/novel-setup/scripts/novel_gate.py",
 		"novel/skills/novel-setup/references/gate.md",
+		"novel/hooks.json",
 	} {
 		if _, err := fs.ReadFile(FS, p); err != nil {
 			t.Fatalf("%s: %v", p, err)
@@ -150,6 +151,16 @@ func TestNovelPluginPacksSkillAndCraftKB(t *testing.T) {
 	}
 	if _, err := fs.Stat(FS, "novel/skills/novel-plan/assets/templates/goldfinger-card.md"); err == nil {
 		t.Fatal("goldfinger-card.md belongs under novel-setup, not novel-plan")
+	}
+	hooksJSON, err := fs.ReadFile(FS, "novel/hooks.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(hooksJSON), `"subagentStart"`) || !strings.Contains(string(hooksJSON), `"matcher": "novel"`) {
+		t.Fatal("novel/hooks.json must declare a subagentStart context hook matched to the novel expert")
+	}
+	if !strings.Contains(string(hooksJSON), "${PLUGIN_DIR}") || !strings.Contains(string(hooksJSON), "${WORKDIR}") {
+		t.Fatal("novel/hooks.json must use ${PLUGIN_DIR}/${WORKDIR} placeholders (materialized paths differ per host)")
 	}
 	meta, err := fs.ReadFile(FS, "novel/ai.danmo.work/knowledge/_meta.json")
 	if err != nil {

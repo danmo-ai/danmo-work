@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hooks": {
+    "subagentStart": [
+      {
+        "matcher": "novel",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_DIR}/skills/novel-setup/scripts/novel_gate.py\" --action context --workdir \"${WORKDIR}\"",
+            "timeoutSec": 5
+          }
+        ]
+      }
+    ]
+  }
+}

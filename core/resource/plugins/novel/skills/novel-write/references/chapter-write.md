@@ -2,6 +2,8 @@
 
 写正文：**先跑 gate preflight，只消费它打印的 `### CONTEXT` + 本章合同。** 不要为走流程扫全书树。
 
+风格指纹（`canon/style-fingerprint.md` 或 bible Style card）由引擎 hook（`hooks.json` → `subagentStart`）在每轮自动注入 `<plugin-context>`，无需手动读取；若该轮未见注入，以 gate CONTEXT + 合同为准，不要自行扫文件补。
+
 ## Preflight
 
 1. `exec_shell` gate `--action preflight --chapter N`（`novel-setup/references/gate.md`）。exit ≠ 0 → **停止**。接手旧书另跑 `--action doctor`。

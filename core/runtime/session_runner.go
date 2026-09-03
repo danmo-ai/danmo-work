@@ -70,6 +70,9 @@ type Engine struct {
 	readSkill      *builtin.ReadSkill
 	// preTurnSnapshot runs before tools (AI review). Optional.
 	preTurnSnapshot func(ctx context.Context, projectID, sessionID, turnID, userInput string, extraPaths []string)
+	// pluginHooks are Codex-style context hooks resolved from builtin plugins
+	// (hooks.json). Executed per turn, output joins EphemeralContext.
+	pluginHooks []domain.ResolvedHook
 }
 
 type approvalMeta struct {
@@ -668,7 +671,10 @@ func (e *Engine) ResumeTurn(ctx context.Context, sessionID, turnID string) error
 			Model: s.ModelID, MaxSteps: agentPtr.Steps, WorkDir: workDir, ProjectID: s.ProjectID, Messages: messages,
 			Path:             []domain.TurnPathEntry{{TurnID: turnID, AgentID: agentPtr.ID}},
 			PlanMode:         s.PlanMode,
-			EphemeralContext: e.knowledgeHitsText(agentPtr, goal, cfg.knowledgeSearchTopK),
+			EphemeralContext: joinEphemeral(
+				e.knowledgeHitsText(agentPtr, goal, cfg.knowledgeSearchTopK),
+				e.hookContextText(ctx, agentPtr, domain.HookEventUserPromptSubmit, sessionID, s.ProjectID, workDir, goal),
+			),
 			ClaimSteers:      func() []Message { return e.claimSteerMessages(sessionID) },
 		})
 
@@ -1321,7 +1327,10 @@ func (e *Engine) runTurn(ctx context.Context, sessionID, turnID, goal, modelID, 
 		ProjectID:        projectID,
 		PlanMode:         planMode,
 		Messages:         messages,
-		EphemeralContext: e.knowledgeHitsText(agent, goal, cfg.knowledgeSearchTopK),
+		EphemeralContext: joinEphemeral(
+			e.knowledgeHitsText(agent, goal, cfg.knowledgeSearchTopK),
+			e.hookContextText(ctx, agent, domain.HookEventUserPromptSubmit, sessionID, projectID, workDir, goal),
+		),
 		Path:             []domain.TurnPathEntry{{TurnID: turnID, AgentID: agent.ID}},
 		ClaimSteers:      func() []Message { return e.claimSteerMessages(sessionID) },
 	})
@@ -1611,7 +1620,10 @@ func (e *Engine) buildTeamRegistry(agent domain.Agent, planMode bool) *tool.Regi
 			}
 			messages = append(messages, Message{Role: RoleUser, Content: goal})
 			childCtx.Messages = messages
-			childCtx.EphemeralContext = e.knowledgeHitsText(workerAgent, goal, cfg.knowledgeSearchTopK)
+			childCtx.EphemeralContext = joinEphemeral(
+				e.knowledgeHitsText(workerAgent, goal, cfg.knowledgeSearchTopK),
+				e.hookContextText(ctx, workerAgent, domain.HookEventSubagentStart, sessionID, projectID, workDir, goal),
+			)
 
 			// Nested tool-run log for zip/debug only — not parent LLM history.
 			e.turnLog.CreateNested(childTurnID, sessionID, projectID, workerAgent.ID, goal)

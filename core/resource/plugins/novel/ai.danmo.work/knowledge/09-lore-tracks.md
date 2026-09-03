@@ -19,6 +19,8 @@ ledger 只留**当前卷**章摘要明细；卷收束（人工确认）后该卷
 
 允许：gate preflight 打印的 `### CONTEXT`（上章接钩 / 点名角色 Cast snapshot 行 / 开放债务 ≤8 条 / 单元功能）+ 本章合同 + 上场 `canon/cast` 公开段。**模型不读 ledger 全文**——脚本抽取，模型只消费抽取结果。
 
+**风格指纹**走引擎 hook：`novel/hooks.json` 声明 `subagentStart` → gate `--action context`，每轮把 `canon/style-fingerprint.md`（无则退回 bible `## Style card`）压缩 ≤480 字注入 `<plugin-context>`。**角色卡不走 hook**：只按章点名注入三锚点，避免伤口/弧光等半剧透字段常驻与 POV 泄露。
+
 禁止：`author-lore.md`、圣经「终局储备」细节栏、未 Commit 草稿里的剧透、`continuity/summaries/` 归档全量通读.
 
 ## Legacy

@@ -60,6 +60,7 @@ UNIT_ID_RE = re.compile(r"^v\d+-U\d+$")
 VOLUME_UNIT_ROW = re.compile(r"\|\s*U(\d+)\s*\|")
 OPEN_STATUS = re.compile(r"(?i)\|\s*open\s*\|")
 ADVANCED_STATUS = re.compile(r"(?i)\|\s*advanced\s*\|")
+STYLE_MAX_RUNES = 480  # context hook: keep the injected style brief tiny
 
 
 def _unquote(s: str) -> str:
@@ -1149,12 +1150,71 @@ def run(workdir: str, book_id: str, action: str, chapter: int) -> Report:
     return rep
 
 
+def _style_card_lines(bible_text: str) -> list[str]:
+    """Extract the book-bible `## Style card` block (POV / Voice notes / Anti-patterns)."""
+    out: list[str] = []
+    grab = False
+    for ln in bible_text.splitlines():
+        s = ln.strip()
+        if s.startswith("## Style card"):
+            grab = True
+            continue
+        if grab:
+            if s.startswith("#"):
+                break
+            if s:
+                out.append(ln)
+    return out
+
+
+def style_fingerprint_brief(book_root: Path) -> str:
+    """Style brief for the `context` hook action: canon/style-fingerprint.md,
+    falling back to the book-bible Style card. Capped at STYLE_MAX_RUNES."""
+    fp = book_root / "canon" / "style-fingerprint.md"
+    if fp.is_file():
+        lines = fp.read_text(encoding="utf-8", errors="replace").strip().splitlines()
+    else:
+        bible = book_root / "book-bible.md"
+        if not bible.is_file():
+            return ""
+        lines = _style_card_lines(bible.read_text(encoding="utf-8", errors="replace"))
+    kept: list[str] = []
+    total = 0
+    for ln in lines:
+        s = ln.strip()
+        if not s:
+            continue
+        if s.startswith("## 参考章") or s.startswith("## 指纹摘要"):
+            break
+        total += rune_count(s)
+        if total > STYLE_MAX_RUNES:
+            break
+        kept.append(ln)
+    return "\n".join(kept).strip()
+
+
+def run_context_hook(workdir: str, book_id: str) -> dict:
+    """Hook entry (subagentStart): emit additionalContext JSON. Never raises —
+    a hook failure must not block the turn, so any error degrades to {}."""
+    brief = ""
+    try:
+        root, _ = resolve_book(workdir, book_id)
+        brief = style_fingerprint_brief(root)
+    except Exception:
+        brief = ""
+    if not brief:
+        return {}
+    return {
+        "additionalContext": "风格指纹（本书固定，写入/审稿时对齐 POV/语域/句式/禁语/章末钩）:\n" + brief
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Novel write-gate / doctor / deslop scan (skill script)")
     p.add_argument(
         "--action",
         default="doctor",
-        help="preflight | precommit | postcommit | doctor | scan-deslop",
+        help="preflight | precommit | postcommit | doctor | scan-deslop | context",
     )
     p.add_argument("--workdir", default=".", help="project root or book root")
     p.add_argument("--book-id", default="", help="slug under novel/<book-id>/")
@@ -1163,6 +1223,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--to", dest="to_ch", type=int, default=0, help="scan-deslop range end")
     p.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
+    if (args.action or "").strip().lower() == "context":
+        json.dump(
+            run_context_hook(os.path.abspath(args.workdir), args.book_id),
+            sys.stdout,
+            ensure_ascii=False,
+        )
+        sys.stdout.write("\n")
+        return 0
     try:
         rep, hit_lines = run_with_hits(
             os.path.abspath(args.workdir),
