@@ -7,15 +7,19 @@
 | 轨 | 路径 | 谁可读 | 来源 |
 |----|------|--------|------|
 | **author-lore** | `canon/author-lore.md` | 作者 / 规划 / 改纲 | 立项时写入；含终局细节、隐藏规则、角色私密 |
-| **ledger** | `continuity/ledger.md` | 写正文、审稿、续写 | **只从已 Commit 章节重建**：Public facts + Tracking + Open loops + 章摘要 |
+| **ledger** | `continuity/ledger.md` | 写正文、审稿、续写 | **只从已 Commit 章节重建**：Public facts + Tracking + Open loops + Volume summaries + 当前卷章摘要 |
 
 `candidate` vs `canon` 管人物卡能不能进正文。两轨管 **信息对读者是否已公开**。
 
+## ledger 体积治理
+
+ledger 只留**当前卷**章摘要明细；卷收束（人工确认）后该卷明细归档到 `continuity/summaries/vNN.md`，ledger 留 `### vNN 卷总结`（500–800 字）。体积 ≈ O(当前卷章数 + 卷数×800字)。gate `postcommit` 对归档章节照常有效。
+
 ## 写正文加载
 
-允许：`ledger.md`（尾部）+ 本章合同 + 上场 `canon/cast` 公开段.
+允许：gate preflight 打印的 `### CONTEXT`（上章接钩 / 点名角色 Cast snapshot 行 / 开放债务 ≤8 条 / 单元功能）+ 本章合同 + 上场 `canon/cast` 公开段。**模型不读 ledger 全文**——脚本抽取，模型只消费抽取结果。
 
-禁止：`author-lore.md`、圣经「终局储备」细节栏、未 Commit 草稿里的剧透.
+禁止：`author-lore.md`、圣经「终局储备」细节栏、未 Commit 草稿里的剧透、`continuity/summaries/` 归档全量通读.
 
 ## Legacy
 
@@ -30,4 +34,5 @@
 - [ ] 正文未使用 author-lore 中未到解锁卷的底牌
 - [ ] ledger 没有作者侧真相
 - [ ] Open loops ≤5
+- [ ] 卷收束后旧卷明细已归档 `continuity/summaries/vNN.md`，ledger 只留卷总结
 - [ ] 写前 preflight 未把 author-lore 列入读取回执

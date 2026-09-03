@@ -4,7 +4,7 @@
 
 ## CP1 — 反向解析（DNA）
 
-1. 扫描已有正文、大纲、`canon/`（**跳过 `author-lore.md` 直到 Frozen_Canon 确认**）、`continuity/ledger.md`（或 legacy public-lore / tracking）、`reviews/`（若有）。
+1. 扫描已有正文、大纲、`canon/`（**跳过 `author-lore.md` 直到 Frozen_Canon 确认**）、`reviews/`（若有）。continuity 读取顺序：ledger `## Volume summaries`（各卷总结块）→ ledger 当前卷 `## chNNN` 明细 → 需要更多细节时才开 `continuity/summaries/vNN.md` 归档（**禁止全量通读归档**）。
 2. `write` `canon/style-fingerprint.md`（模板 `style-fingerprint.md`）：句式、禁语、POV、对话占比、章末习惯。
 3. 提取作品 DNA：读者承诺、主冲突、金手指边界、活跃伏笔、人物状态快照。
 4. `novel-state.yaml` 设 `continuation_mode: true`；`stage: writing`（尚无正文则 `setup`）。禁止自造 `continuation` 阶段。

@@ -6,7 +6,7 @@ license: MIT
 compatibility: Requires write, edit, read_file, glob, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "2.3"
+  version: "2.4"
   category: creative-writing
 ---
 

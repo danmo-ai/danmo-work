@@ -279,6 +279,66 @@ class GateTests(unittest.TestCase):
         rc = ng.main(["--workdir", str(self.root), "--book-id", "demo", "--action", "preflight"])
         self.assertEqual(rc, 2)
 
+    def test_precommit_banned_phrase_blocks(self):
+        p = self.root / "novel/demo/chapters/ch001.md"
+        p.write_text("他嘴角微微上扬，心里某种说不出的滋味。\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "precommit", 1)
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("禁词表命中" in f["message"] for f in rep.findings), rep.format())
+
+    def test_precommit_english_leak_blocks(self):
+        p = self.root / "novel/demo/chapters/ch001.md"
+        p.write_text("他觉得这件事 very 离谱，简直像个 joke。\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "precommit", 1)
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("英文泄漏" in f["message"] for f in rep.findings), rep.format())
+        # whitelist tokens must not trigger
+        p.write_text("他比了个 OK 的手势，转身就走。\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "precommit", 1)
+        self.assertFalse(any("英文泄漏" in f["message"] for f in rep.findings), rep.format())
+
+    def test_precommit_emdash_density_blocks(self):
+        p = self.root / "novel/demo/chapters/ch001.md"
+        # ~120 runes, 3 dashes → 25/千字 > 5
+        p.write_text("他停了——又走——回头——" + "看着。" * 30 + "\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "precommit", 1)
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("破折号密度" in f["message"] for f in rep.findings), rep.format())
+
+    def test_precommit_simile_overload_blocks(self):
+        p = self.root / "novel/demo/chapters/ch001.md"
+        lines = [f"第{i}段，天色像是泼墨。" for i in range(9)]
+        p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "precommit", 1)
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("比喻词" in f["message"] for f in rep.findings), rep.format())
+
+    def test_precommit_counts_reported(self):
+        p = self.root / "novel/demo/chapters/ch001.md"
+        body = "客栈里有人笑他，他亮出腰牌，对面的人脸色变了。" * 40  # ~1000 runes
+        p.write_text(body + "他看着远处——没说话。天色像是泼墨。\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "precommit", 1)
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        blob = rep.format()
+        self.assertIn("### COUNTS", blob)
+        self.assertIn("em_dash_count: 1", blob)
+        self.assertIn("simile_count: 1", blob)
+        self.assertIn("english_leak_count: 0", blob)
+
+    def test_postcommit_archived_summary_accepted(self):
+        # volume-close archive: ## ch001 block moved out of ledger into continuity/summaries/v01.md
+        p = self.root / "novel/demo/chapters/ch001-contract.yaml"
+        p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
+        arch = self.root / "novel/demo/continuity/summaries/v01.md"
+        arch.parent.mkdir(parents=True, exist_ok=True)
+        arch.write_text("# v01 归档摘要\n" + POST_SUMMARY, encoding="utf-8")
+        (self.root / "novel/demo/novel-state.yaml").write_text(
+            "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "postcommit", 1)
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+
 
 if __name__ == "__main__":
     unittest.main()
