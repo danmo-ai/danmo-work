@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 )
@@ -75,6 +76,19 @@ func injectBaseAndInspect(body []byte, baseTag string) []byte {
 		}
 	}
 	return injectInspectHTML(body)
+}
+
+// projectRawBaseTag builds a <base> pointing at the directory of a /raw/... HTML URL
+// so relative CSS/JS/images resolve through the same project file server (proxy-like).
+func projectRawBaseTag(requestPath string) string {
+	dir := path.Dir(requestPath)
+	if dir == "." || dir == "" {
+		dir = "/"
+	}
+	if !strings.HasSuffix(dir, "/") {
+		dir += "/"
+	}
+	return `<base href="` + dir + `">`
 }
 
 func injectInspectHTML(body []byte) []byte {

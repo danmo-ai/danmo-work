@@ -38,7 +38,7 @@ import type { RightWorkspaceTab } from '@/stores/workspaceUi'
 import { renderMarkdown } from '@/utils/markdown-render'
 import { nestedWheelRedirectDelta } from '@/utils/nested-scroll-chain'
 import { toast } from '@/utils/feedback'
-import { apiBaseUrl, saveBlobAs } from '@/utils/desktop'
+import { apiBaseUrl, projectRawUrl, saveBlobAs } from '@/utils/desktop'
 import type { ElementAttachment } from '@/types/element-attachment'
 import type { CodeSelectionAttachment } from '@/types/code-attachment'
 import type { OfficeEditAttachment } from '@/types/office-edit-attachment'
@@ -139,7 +139,7 @@ async function openFileInOffice(filePath: string) {
   }
   const routed = routeProjectFile(filePath, contentHint)
   if (routed.kind === 'web' || routed.kind === 'media') {
-    const url = `${apiBaseUrl()}/api/v1/projects/${sessions.selectedProjectId}/raw/${encodeURIComponent(filePath)}`
+    const url = projectRawUrl(sessions.selectedProjectId, filePath)
     workspaceUi.openStage({ ...routed, url })
     return
   }
