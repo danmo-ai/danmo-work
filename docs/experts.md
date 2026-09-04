@@ -135,7 +135,7 @@ delegate_agent(agent_id="<id>", goal="...")
 
 技能流水线：`novel-setup` → `novel-plan` → `novel-write` → `novel-review`。批次冻结只写 `novel-state.frozen_batch`。写正文消费 gate `### CONTEXT`；PASS 审稿不落盘。
 
-动作 Prefill Composer（可勾选 `novel` chip），末尾附带 **工作台约束块**；**不跳转** Files。书落在 `novel/<book-id>/`（`canon/`、`outline/`、`chapters/`、`continuity/ledger.md`、`reviews/`；章合同=`chapters/chNNN-contract.yaml`）。
+动作 Prefill Composer（可勾选 `novel` chip）：**技能 + 意图/流程 + 书/章路径**，末尾附带 **工作台约束块**；不硬编码 skill reference 路径（由技能 Intent→Load 表决定）。**不跳转** Files。书落在 `novel/<book-id>/`（`canon/`、`outline/`、`chapters/`、`continuity/ledger.md`、`reviews/`；章合同=`chapters/chNNN-contract.yaml`）。
 
 | 门禁 | UI 推断 | Agent 真执行 |
 |------|---------|--------------|
