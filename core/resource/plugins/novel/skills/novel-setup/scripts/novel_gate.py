@@ -55,7 +55,8 @@ ENGLISH_WHITELIST = {
     "USB", "PDF", "PPT", "VS", "SPA", "KPI", "NBA", "CBA", "SUV", "MV", "BGM",
 }
 CH_FILE_RE = re.compile(r"^ch(\d+)\.md$")
-CH_CONTRACT_RE = re.compile(r"^ch(\d+)-contract\.yaml$")
+CH_OUTLINE_RE = re.compile(r"^ch(\d+)-outline\.yaml$")
+CH_CONTRACT_LEGACY_RE = re.compile(r"^ch(\d+)-contract\.yaml$")  # one-shot migrate only
 UNIT_ID_RE = re.compile(r"^v\d+-U\d+$")
 VOLUME_UNIT_ROW = re.compile(r"\|\s*U(\d+)\s*\|")
 OPEN_STATUS = re.compile(r"(?i)\|\s*open\s*\|")
@@ -154,8 +155,14 @@ def load_yaml_map(text: str) -> dict:
     return root
 
 
+def outline_rel(ch: int) -> str:
+    """Canonical chapter-outline path (章纲)."""
+    return f"chapters/ch{ch:03d}-outline.yaml"
+
+
 def contract_rel(ch: int) -> str:
-    return f"chapters/ch{ch:03d}-contract.yaml"
+    """Alias for outline_rel (historical call sites / gate codes)."""
+    return outline_rel(ch)
 
 
 def chapter_rel(ch: int) -> str:
@@ -163,11 +170,42 @@ def chapter_rel(ch: int) -> str:
 
 
 def parse_chapter_num(name: str) -> int | None:
-    m = CH_FILE_RE.match(name) or CH_CONTRACT_RE.match(name)
+    m = CH_FILE_RE.match(name) or CH_OUTLINE_RE.match(name)
     if not m:
         return None
     n = int(m.group(1))
     return n if n > 0 else None
+
+
+def migrate_chapter_outline_filenames(book_root: Path) -> list[str]:
+    """One-shot: chapters/chNNN-contract.yaml → chNNN-outline.yaml.
+
+    If both exist, keep outline and move the legacy file to `_archive/chapters/`.
+    Idempotent — no-op when no *-contract.yaml remain.
+    """
+    d = book_root / "chapters"
+    if not d.is_dir():
+        return []
+    done: list[str] = []
+    for e in sorted(d.iterdir()):
+        if e.is_dir() or not CH_CONTRACT_LEGACY_RE.match(e.name):
+            continue
+        m = CH_CONTRACT_LEGACY_RE.match(e.name)
+        assert m is not None
+        n = int(m.group(1))
+        dest = book_root / outline_rel(n)
+        if dest.is_file():
+            arch_dir = book_root / "_archive" / "chapters"
+            arch_dir.mkdir(parents=True, exist_ok=True)
+            arch = arch_dir / e.name
+            if arch.exists():
+                arch = arch_dir / f"{e.stem}-dup{e.suffix}"
+            e.rename(arch)
+            done.append(f"{e.name} → _archive/chapters/{arch.name} (kept {dest.name})")
+        else:
+            e.rename(dest)
+            done.append(f"{e.name} → {dest.name}")
+    return done
 
 
 def file_exists(root: Path, rel: str) -> bool:
@@ -204,8 +242,10 @@ def load_state(path: Path) -> dict:
 
 
 def load_contract(book_root: Path, chapter: int) -> tuple[dict, str]:
-    rel = contract_rel(chapter)
+    rel = outline_rel(chapter)
     path = book_root / rel
+    if not path.is_file():
+        raise FileNotFoundError(rel)
     data = load_yaml_map(path.read_text(encoding="utf-8"))
     return data, rel
 
@@ -585,7 +625,7 @@ def list_chapter_nums(book_root: Path, kind: str) -> list[int]:
             continue
         if kind == "md" and CH_FILE_RE.match(e.name):
             out.append(n)
-        elif kind == "contract" and CH_CONTRACT_RE.match(e.name):
+        elif kind == "contract" and CH_OUTLINE_RE.match(e.name):
             out.append(n)
     return out
 
@@ -912,7 +952,7 @@ def build_preflight_context(book_root: Path, contract: dict, ch: int, r: Report)
                 continue
             lines.append(f"  {row}")
         if who and not any(any(w in row for w in who) for row in snap):
-            lines.append(f"  （合同点名 {', '.join(who)} 不在 snapshot — Commit 后须补）")
+            lines.append(f"  （章纲点名 {', '.join(who)} 不在 snapshot — Commit 后须补）")
     else:
         lines.append("  （ledger 无 Cast snapshot 表）")
 
@@ -949,7 +989,7 @@ def build_preflight_context(book_root: Path, contract: dict, ch: int, r: Report)
     unit = str(contract.get("unit_id") or "").strip()
     beat_line = unit_beat_line(book_root, unit, ch)
     lines.append(f"- 单元功能 ({unit or '?'}): {beat_line or '（未在卷纲解析到本章节拍）'}")
-    lines.append("- 加载纪律: 只消费本 CONTEXT + 本章合同；禁止扫树；禁止 author-lore。")
+    lines.append("- 加载纪律: 只消费本 CONTEXT + 本章纲；禁止扫树；禁止 author-lore。")
     return lines
 
 
@@ -1180,6 +1220,7 @@ def run_with_hits(
             f"unknown action {action!r} (preflight|precommit|postcommit|doctor|scan-deslop)"
         )
     root, st = resolve_book(workdir, book_id)
+    migrated = migrate_chapter_outline_filenames(root)
     bid = str(st.get("book_id") or root.name)
     hit_lines: list[str] = []
     if action == "scan-deslop":
@@ -1199,6 +1240,8 @@ def run_with_hits(
                 check_precommit(root, st, chapter, r)
             else:
                 check_postcommit(root, st, chapter, r)
+    for note in migrated:
+        r.advisory("migrate", f"章纲文件名迁移: {note}")
     r.finalize()
     return r, hit_lines
 

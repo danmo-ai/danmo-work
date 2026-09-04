@@ -32,12 +32,13 @@ Suggested collections (names are conventions — be consistent within a book):
 
 `id`, `book_id`, `kind` (`goldfinger|item|power`), `name`, `cost`, `limits`, `last_uses`, `notes`
 
-## `chapter_contracts`
+## `chapter_outlines`
 
 `id`, `book_id`, `chapter`, `unit_id`, `purpose`, `beats`, `forbidden`, `hook`, `pov`, `status`, `file`
 
-Mirror/index only. Authoritative contract body is always
-`novel/<book-id>/chapters/chNNN-contract.yaml`. Prefer `file: chapters/chNNN-contract.yaml`.
+Mirror/index only. Authoritative chapter-outline body is always
+`novel/<book-id>/chapters/chNNN-outline.yaml`. Prefer `file: chapters/chNNN-outline.yaml`.
+If an older project still has table `chapter_contracts`, rename/recreate as `chapter_outlines` when convenient (optional mirror).
 
 ## `continuity_issues`
 
@@ -52,4 +53,4 @@ Track open chapter-end hooks per KB「追读力」；开放债务建议 ≤5。
 ## Query habits
 
 - Prefer `table_query` with `book_id` + chapter/relevance filters.  
-- Never load all rows into the draft prompt — select involved ids from the contract.
+- Never load all rows into the draft prompt — select involved ids from the chapter outline.

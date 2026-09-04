@@ -17,7 +17,7 @@ novel/<book-id>/
     book_outline.md             # 结构/卷地图；不复制终局储备（见 bible）
     volumes/                    # v01.md … 剧情单元卡
   chapters/
-    ch001-contract.yaml         # 章合同 (YAML only; required before draft)
+    ch001-outline.yaml         # 章纲 (YAML only; required before draft)
     ch001.md                    # prose after draft / Commit
   continuity/
     ledger.md                   # Public facts + Tracking + Open loops + ## chNNN 摘要
@@ -27,9 +27,14 @@ novel/<book-id>/
   _archive/                     # optional migrated / replaced materials
 ```
 
-## Legacy paths (read-only migrate)
+## Legacy paths (one-shot migrate)
 
-Older books may still have `continuity/public-lore.md`, `tracking.md`, `chapter_summaries.md`, `foreshadow-tracker.md`, `batch-freeze.yaml`, `canon/glossary.md`. Prefer merging into `ledger.md` + `novel-state.frozen_batch` on cold-start (`novel-setup` doctor / skill note). Gate accepts either layout.
+Older books may still have `continuity/public-lore.md`, `tracking.md`, `chapter_summaries.md`, `foreshadow-tracker.md`, `batch-freeze.yaml`, `canon/glossary.md`, or `chapters/chNNN-contract.yaml`. On cold-start / gate (any action):
+
+- Continuity pair → merge into `ledger.md` + `novel-state.frozen_batch`, then `_archive/`
+- `chNNN-contract.yaml` → rename to `chNNN-outline.yaml` (if both exist, keep outline and archive the contract file)
+
+After migrate, only `chNNN-outline.yaml` is valid. Gate does **not** dual-read legacy names.
 
 ## Project-root source briefs (optional)
 
@@ -38,10 +43,10 @@ Author-imported briefs may live at the **project files root** (sibling of `novel
 ## Rules
 
 - `<book-id>`: short slug (ascii or pinyin), stable for the book.
-- **Prose truth:** `chapters/*.md` after Commit (never `*-contract.yaml`).
-- **Chapter contract truth:** `chapters/chNNN-contract.yaml` only (YAML).
+- **Prose truth:** `chapters/*.md` after Commit (never `*-outline.yaml`).
+- **Chapter outline truth:** `chapters/chNNN-outline.yaml` only (YAML).
 - **Canon truth:** `canon/*` (+ optional `table_*` index). Files are authoritative; table upserts are optional mirrors.
-- **Outline truth:** book/volume plans under `outline/` only. Volume outlines stop at **剧情单元卡**. Per-chapter planning is **章合同** only (`unit_id` 回指单元).
+- **Outline truth:** book/volume plans under `outline/` only. Volume outlines stop at **剧情单元卡**. Per-chapter planning is **章纲** only (`unit_id` 回指单元).
 - **Continuity truth:** `continuity/ledger.md` (reader facts + tracking + open loops + chapter summaries).
 - **Lore tracks:** `canon/author-lore.md` (author-only) vs `continuity/ledger.md` (reader-known + serial cursor). Do not merge author-lore into the ledger.
 - **终局储备:** unlock table only in `book-bible.md`; details only in `author-lore.md`. Do not duplicate the unlock table in `book_outline.md`.
@@ -54,7 +59,7 @@ Author-imported briefs may live at the **project files root** (sibling of `novel
 | 设定（圣经 / 世界 / 人物） | `book-bible.md` + `canon/`（含 `cast/`） |
 | 作者侧底牌 | `canon/author-lore.md`（写正文不加载） |
 | Book & volume outlines | `outline/` |
-| 章合同 + prose | `chapters/` |
+| 章纲 + prose | `chapters/` |
 | 读者已知 / 连载状态 / 伏笔 / 章摘要 | `continuity/ledger.md` |
 | Review reports | `reviews/` |
 | Batch freeze | `novel-state.yaml` → `frozen_batch` only |

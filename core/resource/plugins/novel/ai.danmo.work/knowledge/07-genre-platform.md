@@ -60,4 +60,4 @@
 - [ ] 读者承诺与平台/篇幅匹配
 - [ ] `qc_profile` 已写入 novel-state
 - [ ] 番茄向：本章 2000–3500 字，章末有具体钩子
-- [ ] 合同 pleasure_point 与 hook 非空
+- [ ] 章纲 pleasure_point 与 hook 非空

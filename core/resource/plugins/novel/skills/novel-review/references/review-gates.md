@@ -13,7 +13,7 @@ precommit PASS、无 P0 craft 问题、且量化评分 ≥85 时：
 
 1. **不要**写 `reviews/chNNN-review.md`。
 2. 更新 `novel-state.yaml`：`gates.qc: pass`，清掉本章相关 `blockers`。
-3. 合同保持 `drafted`（或本轮直接进入 Commit 时再改 `reviewed`）。
+3. 章纲保持 `drafted`（或本轮直接进入 Commit 时再改 `reviewed`）。
 4. 可选短润色 → `polish-deslop.md`；然后 `continuity-commit.md`。
 
 用户点「深审」或发现 P0 → 走 FAIL / 六镜全文（必须落盘）。
@@ -76,7 +76,7 @@ REVISE 两轮仍不过 → **FORCED PASS**：遗留问题打 severity 标签（`
 | **StrongConstraints** | 金手指代劳关键抉择；时间线冲突；活跃叙事线 >3；提前打光终局底牌；无关角色夺走高光 |
 | **追更指数** | 章末无可感知悬念且中段无加压（番茄向 ch1–3 blocking） |
 
-番茄向/免费网文额外检查（ch1–3 blocking，之后 advisory）：开篇 3 句内有冲突、首章末必钩、合同 `pleasure_point` 与 `hook` 非空且正文兑现。
+番茄向/免费网文额外检查（ch1–3 blocking，之后 advisory）：开篇 3 句内有冲突、首章末必钩、章纲 `pleasure_point` 与 `hook` 非空且正文兑现。
 
 Plus **anti-AI P0** from KB「文风与去 AI 味」— always blocking（含量化硬指标四项）。
 

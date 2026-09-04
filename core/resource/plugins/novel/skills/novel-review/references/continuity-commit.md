@@ -1,6 +1,6 @@
 # Continuity Commit
 
-Commit = tools landed. Prefer **one** `apply_patch` covering ledger + contract + novel-state.
+Commit = tools landed. Prefer **one** `apply_patch` covering ledger + chapter outline + novel-state.
 
 ## When
 
@@ -12,7 +12,7 @@ Update `continuity/ledger.md` in one pass:
 
 1. **Public facts** — new shown_fact / inference from this chapter only  
 2. **Tracking** — cursor, cast snapshot deltas, cannot-rewind  
-3. **Open loops** — plant / advance / pay off（≤5 open；`dangling` = bug）；合同 `info_control.foreshadowing` 的 FS-id 必须出现在表中  
+3. **Open loops** — plant / advance / pay off（≤5 open；`dangling` = bug）；章纲 `info_control.foreshadowing` 的 FS-id 必须出现在表中  
 4. **Chapter summaries** — append fixed block（五要素齐全，gate 硬检；第 6 行「线索」可选）:
 
 ```markdown
@@ -25,7 +25,7 @@ Update `continuity/ledger.md` in one pass:
 - 线索: thread PLANTED/ADVANCED/RESOLVED（可选）
 ```
 
-合同每条 `state_deltas` 的「谁」必须出现在 Cast snapshot。
+章纲每条 `state_deltas` 的「谁」必须出现在 Cast snapshot。
 
 **关系回写**：`state_deltas` 涉及关系变化（信任±/站队/债务/秘密共享）时，**同一 patch** 更新相关人物卡「关系」表的「当前」列——关系状态的事实源是人物卡，ledger 不另存；不回写会导致下次 preflight 注入过期的关系行。
 
@@ -34,7 +34,7 @@ Update `continuity/ledger.md` in one pass:
 ## Tool actions（少交互）
 
 1. Ensure final text in `chapters/chNNN.md`.  
-2. Set `chapters/chNNN-contract.yaml` `status=reviewed`.  
+2. Set `chapters/chNNN-outline.yaml` `status=reviewed`.  
 3. Patch `continuity/ledger.md` (facts + tracking + loops + summary).  
 4. Update `novel-state.yaml` (`last_committed_ch`, stage, gates).  
 5. Optional: `memory_update` / `table_upsert` — **默认不做**.  
@@ -72,5 +72,5 @@ Update `continuity/ledger.md` in one pass:
 
 ## Resume
 
-Cold start: gate `--action doctor` → `novel-state` → `ledger.md`（**Volume summaries + 当前卷明细**，勿读归档全量）→ next contract.  
+Cold start: gate `--action doctor` → `novel-state` → `ledger.md`（**Volume summaries + 当前卷明细**，勿读归档全量）→ next chapter outline.  
 If legacy continuity files exist without ledger → merge into `ledger.md` then archive.

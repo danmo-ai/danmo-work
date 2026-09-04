@@ -99,7 +99,7 @@ func TestNovelPluginPacksSkillAndCraftKB(t *testing.T) {
 		"novel/skills/novel-setup/assets/templates/novel-state.yaml",
 		"novel/skills/novel-setup/assets/templates/author-lore.md",
 		"novel/skills/novel-setup/assets/templates/ledger.md",
-		"novel/skills/novel-write/assets/templates/chapter-contract.yaml",
+		"novel/skills/novel-write/assets/templates/chapter-outline.yaml",
 		"novel/skills/novel-write/assets/templates/style-fingerprint.md",
 		"novel/skills/novel-plan/assets/templates/book-outline.md",
 		"novel/skills/novel-plan/assets/templates/volume-outline.md",
@@ -111,12 +111,12 @@ func TestNovelPluginPacksSkillAndCraftKB(t *testing.T) {
 			t.Fatalf("%s: %v", p, err)
 		}
 	}
-	contract, err := fs.ReadFile(FS, "novel/skills/novel-write/assets/templates/chapter-contract.yaml")
+	outline, err := fs.ReadFile(FS, "novel/skills/novel-write/assets/templates/chapter-outline.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(contract), "unit_id:") {
-		t.Fatal("chapter-contract.yaml must require unit_id")
+	if !strings.Contains(string(outline), "unit_id:") {
+		t.Fatal("chapter-outline.yaml must require unit_id")
 	}
 	cast, err := fs.ReadFile(FS, "novel/skills/novel-setup/assets/templates/cast-card.md")
 	if err != nil {
