@@ -121,10 +121,12 @@ function yamlScalar(raw: string, key: string): string {
 }
 
 function yamlNestedScalar(raw: string, parent: string, key: string): string {
-  const blockRe = new RegExp(`^${parent}:\\s*\\n([\\s\\S]*?)(?=^\\S|$)`, 'm')
+  // Capture indented block under `parent:` until next top-level key.
+  // Do not use `$` in a non-greedy lookahead — it stops at the first nested line EOL.
+  const blockRe = new RegExp(`^${parent}:\\s*\\n((?:[ \\t].*\\n?)*)`, 'm')
   const block = raw.match(blockRe)
   if (!block) return ''
-  const re = new RegExp(`^\\s+${key}:\\s*(.*)$`, 'm')
+  const re = new RegExp(`^[ \\t]+${key}:\\s*(.*)$`, 'm')
   const m = block[1].match(re)
   if (!m) return ''
   return (m[1] ?? '').trim().replace(/^["']|["']$/g, '')
@@ -210,13 +212,41 @@ export function parseNovelStateExtended(raw: string): NovelExtendedState {
   }
 }
 
-export function parseContractYaml(raw: string): { status: string; title: string; unitId: string } {
+/** Structured fields from chapters/chNNN-outline.yaml (best-effort scalars). */
+export interface NovelContractFields {
+  status: string
+  title: string
+  unitId: string
+  scene: string
+  purpose: string
+  pleasurePoint: string
+  microPayoff: string
+  emotionLine: string
+  wordTarget: string
+  hookType: string
+  hookOut: string
+}
+
+export function parseContractYaml(raw: string): NovelContractFields {
   const status = yamlScalar(raw, 'status').toLowerCase()
   return {
     status: status || 'proposed',
     title: yamlScalar(raw, 'title_working'),
     unitId: yamlScalar(raw, 'unit_id'),
+    scene: yamlScalar(raw, 'scene'),
+    purpose: yamlScalar(raw, 'purpose'),
+    pleasurePoint: yamlScalar(raw, 'pleasure_point'),
+    microPayoff: yamlScalar(raw, 'micro_payoff'),
+    emotionLine: yamlScalar(raw, 'emotion_line'),
+    wordTarget: yamlScalar(raw, 'word_target'),
+    hookType: yamlNestedScalar(raw, 'hook', 'type'),
+    hookOut: yamlNestedScalar(raw, 'hook', 'out'),
   }
+}
+
+/** True when the chapter still needs author/agent work (not yet committed). */
+export function isChapterPhasePending(phase: NovelChapterPhase): boolean {
+  return phase !== 'committed'
 }
 
 export function parseReviewVerdict(raw: string): 'PASS' | 'FAIL' | null {
