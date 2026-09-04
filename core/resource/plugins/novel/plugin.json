@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "novel",
   "version": "2.4.0",
-  "description": "Novel / webnovel writing expert: 8-step pipeline, ledger continuity + gate CONTEXT, quantitative anti-AI hard checks, 10-dim weighted review gate, volume-close archiving, setup/plan/write/review skills + 10-topic craft KB.",
+  "description": "Novel / webnovel writing expert: 8-step pipeline, ledger continuity + gate CONTEXT, quantitative anti-AI hard checks, 10-dim weighted review gate, volume-close archiving, setup/plan/write/review skills + 12-topic craft KB.",
   "author": { "name": "Danmo" },
   "license": "MIT",
   "keywords": ["novel", "writing", "expert", "builtin", "knowledge"]
