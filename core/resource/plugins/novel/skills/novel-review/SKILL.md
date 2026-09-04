@@ -29,7 +29,7 @@ One review → gate precommit → fix P0 → Commit (gate postcommit). `qc_gate`
 | Commit | `continuity-commit.md` | — |
 | 卷收束 | `continuity-commit.md` 卷收束节 + `review-gates.md` Assembly Checklist | — |
 
-**PASS：不写 `reviews/` 文件**，只更新 `gates.qc`。**FAIL / 深审：写全文六镜 + 10 维评分。** Commit = 一次 patch（ledger 五要素摘要 + Cast snapshot + Open loops + 合同 `reviewed` + state）+ `postcommit` exit 0.
+**PASS：不写 `reviews/` 文件**，只更新 `gates.qc`。**FAIL / 深审：写全文六镜 + 10 维评分。** Commit = 一次 patch（ledger 五要素摘要 + Cast snapshot + Open loops + 章纲 `reviewed` + state）+ `postcommit` exit 0.
 反 AI 量化硬检（破折号/英文泄漏/禁词/比喻）exit 0 才可宣称定稿；审稿报告引用 gate `### COUNTS` 四计数。
 
 ## Stop

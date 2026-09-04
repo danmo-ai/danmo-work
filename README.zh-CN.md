@@ -62,7 +62,7 @@
 | **Data** | CSV / JSON 分析与报表 |
 | **GitHub** | Issue / PR / Actions / Release |
 | **Danmo Make** | 本机图片 / 视频 / 音频生成（需另装 Danmo Make） |
-| **Novel Writing** | 长篇小说：立项 → 章合同 → 正文 → 审稿 → 提交 |
+| **Novel Writing** | 长篇小说：立项 → 章纲 → 正文 → 审稿 → 提交 |
 | **CodeGraph**（市场） | 代码智能：定义、引用、影响面 |
 
 Composer 里 `@` 一下，或者干脆说一句「让文档专家写份报告」，主专家就知道该委派了。主专家只看子专家交回来的报告，主链上下文保持精简、对 KV Cache 友好。想在 Teams 里自建子专家也行，技能、工具、知识库、连接器随你绑。

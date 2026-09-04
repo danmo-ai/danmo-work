@@ -29,6 +29,6 @@ Copy unlock-volume rows into `book-bible.md` only（可写「待定」）；**�
 
 ## 使用纪律
 
-- 写正文只读 `continuity/ledger.md` + 章合同 `forbidden`。
+- 写正文只读 `continuity/ledger.md` + 章纲 `forbidden`。
 - 需要核对「会不会提前打光」时：只核对上表「最早解锁卷」，不要把真名写进草稿上下文。
 - 改纲后同步圣经表的卷号，细节仍只改本文件。

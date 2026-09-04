@@ -1,11 +1,11 @@
 # Expansion（字数不足时的扩写纪律）
 
-Draft 达不到合同 `word_target` × 0.6（gate precommit advisory）或明显「赶、薄、欠戏剧化」时使用。
+Draft 达不到章纲 `word_target` × 0.6（gate precommit advisory）或明显「赶、薄、欠戏剧化」时使用。
 短而「紧、快、完整」的章节**不要硬扩**——找用户确认调整 `word_target` 更合适。
 
 ## 总规则
 
-- **每章最多用 3 种技术**，在章合同或修订说明里注明用了哪几种。
+- **每章最多用 3 种技术**，在章纲或修订说明里注明用了哪几种。
 - 一切扩写必须服务故事：删掉该段会弱化章节才算有效扩写，否则是注水。
 - 扩写段落仍须有张力（冲突/悬念/新信息至少其一）。
 - 快节奏章节不拖慢：宁改目标字数。
@@ -39,7 +39,7 @@ Draft 达不到合同 `word_target` × 0.6（gate precommit advisory）或明显
 | 餐饮社交 | 味道层次、餐具声、席间沉默 |
 
 ### 5. 副线编织
-从 ledger Open loops / 合同 `info_control` 找该推进的副线，织入主线场景（背景里的一次照面、一句转述）。
+从 ledger Open loops / 章纲 `info_control` 找该推进的副线，织入主线场景（背景里的一次照面、一句转述）。
 - 何时用：主线单薄的章节。何时不用：高潮章、开篇章。
 
 ### 6. 节奏调制
@@ -62,6 +62,6 @@ Draft 达不到合同 `word_target` × 0.6（gate precommit advisory）或明显
 
 ## 与流程的衔接
 
-1. 扩写前先确认不是结构问题（场景缺失 → 改合同 beats，回到章合同）。
+1. 扩写前先确认不是结构问题（场景缺失 → 改章纲 beats，回到章纲）。
 2. 扩写仍是改 `chapters/chNNN.md` 同一文件，就地覆盖，不搞版本增殖。
 3. 扩写后重跑 gate `precommit`（字数 advisory 应消失；不得引入新的 deslop blocking）。

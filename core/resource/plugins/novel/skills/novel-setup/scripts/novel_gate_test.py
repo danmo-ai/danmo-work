@@ -84,7 +84,7 @@ blockers: []
 """,
     "novel/demo/continuity/ledger.md": LEDGER,
     "novel/demo/reviews/.gitkeep": "",
-    "novel/demo/chapters/ch001-contract.yaml": """chapter: 1
+    "novel/demo/chapters/ch001-outline.yaml": """chapter: 1
 unit_id: v01-U1
 title_working: 客栈
 purpose: 主角被当众羞辱后反证身份
@@ -141,13 +141,13 @@ class GateTests(unittest.TestCase):
         self.assertFalse(any("glossary" in f["message"] for f in rep.findings))
 
     def test_preflight_empty_unit(self):
-        p = self.root / "novel/demo/chapters/ch001-contract.yaml"
+        p = self.root / "novel/demo/chapters/ch001-outline.yaml"
         p.write_text(p.read_text(encoding="utf-8").replace("unit_id: v01-U1", 'unit_id: ""'), encoding="utf-8")
         rep = ng.run(str(self.root), "demo", "preflight", 1)
         self.assertEqual(rep.verdict, "FAIL", rep.format())
 
     def test_preflight_unknown_hook(self):
-        p = self.root / "novel/demo/chapters/ch001-contract.yaml"
+        p = self.root / "novel/demo/chapters/ch001-outline.yaml"
         p.write_text(p.read_text(encoding="utf-8").replace("type: 未兑现承诺", "type: 悬念"), encoding="utf-8")
         rep = ng.run(str(self.root), "demo", "preflight", 1)
         self.assertEqual(rep.verdict, "FAIL", rep.format())
@@ -190,8 +190,8 @@ class GateTests(unittest.TestCase):
 
     def test_scan_deslop_range_and_clean(self):
         (self.root / "novel/demo/chapters/ch001.md").write_text("客栈里有人笑他。他亮出腰牌。\n", encoding="utf-8")
-        (self.root / "novel/demo/chapters/ch002-contract.yaml").write_text(
-            (self.root / "novel/demo/chapters/ch001-contract.yaml").read_text(encoding="utf-8").replace(
+        (self.root / "novel/demo/chapters/ch002-outline.yaml").write_text(
+            (self.root / "novel/demo/chapters/ch001-outline.yaml").read_text(encoding="utf-8").replace(
                 "chapter: 1", "chapter: 2"
             ),
             encoding="utf-8",
@@ -204,7 +204,7 @@ class GateTests(unittest.TestCase):
     def test_postcommit(self):
         rep = ng.run(str(self.root), "demo", "postcommit", 1)
         self.assertEqual(rep.verdict, "FAIL")
-        p = self.root / "novel/demo/chapters/ch001-contract.yaml"
+        p = self.root / "novel/demo/chapters/ch001-outline.yaml"
         p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
         ledger = self.root / "novel/demo/continuity/ledger.md"
         ledger.write_text(LEDGER + POST_SUMMARY, encoding="utf-8")
@@ -216,7 +216,7 @@ class GateTests(unittest.TestCase):
         self.assertEqual(rep.verdict, "PASS", rep.format())
 
     def test_postcommit_incomplete_summary(self):
-        p = self.root / "novel/demo/chapters/ch001-contract.yaml"
+        p = self.root / "novel/demo/chapters/ch001-outline.yaml"
         p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
         ledger = self.root / "novel/demo/continuity/ledger.md"
         ledger.write_text(LEDGER + "## ch001 客栈\n- 事件: 打脸\n", encoding="utf-8")
@@ -250,7 +250,7 @@ class GateTests(unittest.TestCase):
         self.assertEqual(rep.verdict, "PASS", rep.format())
         rep = ng.run(str(self.root), "demo", "preflight", 1)
         self.assertEqual(rep.verdict, "PASS", rep.format())
-        p = book / "chapters/ch001-contract.yaml"
+        p = book / "chapters/ch001-outline.yaml"
         p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
         (book / "novel-state.yaml").write_text(
             "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
@@ -302,7 +302,7 @@ class GateTests(unittest.TestCase):
             "| 林雪 | 恩情 | 暗中护持 | ch12 摊牌 |\n",
             encoding="utf-8",
         )
-        p = self.root / "novel/demo/chapters/ch001-contract.yaml"
+        p = self.root / "novel/demo/chapters/ch001-outline.yaml"
         p.write_text(
             p.read_text(encoding="utf-8").replace(
                 'state_deltas: ["主角: 被辱→声望回升"]',
@@ -401,7 +401,7 @@ class GateTests(unittest.TestCase):
 
     def test_postcommit_archived_summary_accepted(self):
         # volume-close archive: ## ch001 block moved out of ledger into continuity/summaries/v01.md
-        p = self.root / "novel/demo/chapters/ch001-contract.yaml"
+        p = self.root / "novel/demo/chapters/ch001-outline.yaml"
         p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
         arch = self.root / "novel/demo/continuity/summaries/v01.md"
         arch.parent.mkdir(parents=True, exist_ok=True)
@@ -412,6 +412,18 @@ class GateTests(unittest.TestCase):
         )
         rep = ng.run(str(self.root), "demo", "postcommit", 1)
         self.assertEqual(rep.verdict, "PASS", rep.format())
+
+    def test_legacy_contract_filename_accepted(self):
+        """Older books used chNNN-contract.yaml; gate must still resolve them."""
+        book = self.root / "novel/demo"
+        outline = book / "chapters/ch001-outline.yaml"
+        legacy = book / "chapters/ch001-contract.yaml"
+        legacy.write_text(outline.read_text(encoding="utf-8"), encoding="utf-8")
+        outline.unlink()
+        self.assertEqual(ng.resolve_outline_rel(book, 1), "chapters/ch001-contract.yaml")
+        rep = ng.run(str(self.root), "demo", "preflight", 1)
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertIn("本章纲", rep.format())
 
 
 if __name__ == "__main__":

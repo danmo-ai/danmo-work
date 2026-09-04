@@ -25,7 +25,7 @@
 
 ## 后续流程
 
-复用 `novel-write/references/batch-freeze.md` → `chapter-contract.md` → `chapter-write.md` → `review-gates.md` → `continuity-commit.md`。
+复用 `novel-write/references/batch-freeze.md` → `chapter-outline.md` → `chapter-write.md` → `review-gates.md` → `continuity-commit.md`。
 
 ## Human stops
 

@@ -1,6 +1,6 @@
 # Novel gate script
 
-Deterministic layout / contract / deslop checks. **Not a Go builtin.** Run with `exec_shell` only.
+Deterministic layout / chapter-outline / deslop checks. **Not a Go builtin.** Run with `exec_shell` only.
 
 Same pack as the other `novel-setup` resources. After plugin sync:
 
@@ -32,9 +32,9 @@ python3 "${WORK_HOME}/plugins/novel/skills/novel-setup/scripts/novel_gate.py" \
 
 `scan-deslop` prints `### HITS` lines as `chapters/chNNN.md:L42: 一级词「仿佛」 | …excerpt…`, then the usual `### VERDICT`. Same P0 thresholds as precommit (toxic ≥1 / level-one ≥3 / soup ending). Use before/after polish edits; do not invent a second deslop script.
 
-`preflight` also prints `### CONTEXT`（接钩 / 人物现场 / 开放债务 / 本章硬约束 / 单元功能）— 写正文只消费这一段 + 本章合同。
+`preflight` also prints `### CONTEXT`（接钩 / 人物现场 / 开放债务 / 本章硬约束 / 单元功能）— 写正文只消费这一段 + 本章纲。
 
-`postcommit` 硬检摘要五要素、`state_deltas`→Cast snapshot、合同 FS-id→Open loops。
+`postcommit` 硬检摘要五要素、`state_deltas`→Cast snapshot、章纲 FS-id→Open loops。
 
 If the book root is the workdir (it contains `novel-state.yaml`), omit `--book-id`.
 

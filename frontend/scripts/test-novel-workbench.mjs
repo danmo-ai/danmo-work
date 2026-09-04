@@ -16,6 +16,7 @@ import {
   isNovelContractPath,
   nextChapterNumber,
   nextVolumeNumber,
+  novelChapterContractPath,
   parseBatchFreezeYaml,
   parseContractYaml,
   parseNovelStateExtended,
@@ -77,7 +78,7 @@ const entryCommitted = {
   chapter: 1,
   label: 'ch001',
   prose: { name: 'ch001.md', path: 'a', isDir: false },
-  contract: { name: 'ch001-contract.yaml', path: 'b', isDir: false },
+  contract: { name: 'ch001-outline.yaml', path: 'b', isDir: false },
 }
 assert.equal(
   inferChapterPhase(entryCommitted, 3, 'status: reviewed', '### VERDICT\nPASS'),
@@ -87,7 +88,7 @@ const entryReady = {
   chapter: 2,
   label: 'ch002',
   prose: null,
-  contract: { name: 'ch002-contract.yaml', path: 'b', isDir: false },
+  contract: { name: 'ch002-outline.yaml', path: 'b', isDir: false },
 }
 assert.equal(inferChapterPhase(entryReady, 0, 'status: accepted', null), 'contract_ready')
 assert.equal(inferChapterNextAction('contract_ready'), 'write')
@@ -97,8 +98,8 @@ assert.equal(inferChapterNextAction('review_pass'), 'commit')
 
 const entries = buildChapterEntries(
   [
-    { name: 'ch001-contract.yaml', path: 'novel/b/chapters/ch001-contract.yaml', isDir: false },
-    { name: 'ch002-contract.yaml', path: 'novel/b/chapters/ch002-contract.yaml', isDir: false },
+    { name: 'ch001-outline.yaml', path: 'novel/b/chapters/ch001-outline.yaml', isDir: false },
+    { name: 'ch002-outline.yaml', path: 'novel/b/chapters/ch002-outline.yaml', isDir: false },
     { name: 'ch002.md', path: 'novel/b/chapters/ch002.md', isDir: false },
   ],
   [],
@@ -234,7 +235,7 @@ for (const action of stages) {
     chapterPath: 'novel/star-inn/chapters/ch004.md',
   })
   assert.ok(text.trim().length > 0, action)
-  assert.ok(!text.includes('章纲'), `${action} must not say 章纲`)
+  assert.ok(!text.includes('章合同'), `${action} must not say 章合同`)
   assert.ok(!text.includes('细纲'), `${action} must not say 细纲`)
   // Task body must not restate skill/template field inventories.
   assert.ok(!text.includes('按 read_skill'), `${action} must not duplicate read_skill (load protocol owns that)`)
@@ -263,8 +264,15 @@ assert.ok(!freezePrefill.includes('batch-freeze.yaml') || freezePrefill.includes
 
 const contractPrefill = buildNovelStagePrefill('contract', { bookId: 'star-inn', chapter: 4 })
 assert.ok(contractPrefill.includes('unit_id'))
-assert.ok(contractPrefill.includes('ch004-contract.yaml'))
+assert.ok(contractPrefill.includes('ch004-outline.yaml'))
+assert.ok(contractPrefill.includes('章纲'))
+assert.ok(!contractPrefill.includes('章合同'))
 assert.ok(!contractPrefill.includes('pleasure_point'))
+assert.equal(novelChapterContractPath('star-inn', 4), 'novel/star-inn/chapters/ch004-outline.yaml')
+assert.equal(isNovelContractName('ch004-outline.yaml'), true)
+assert.equal(isNovelContractName('ch004-contract.yaml'), true)
+assert.equal(isNovelContractPath('novel/b/chapters/ch001-outline.yaml'), true)
+assert.equal(isNovelContractPath('novel/b/chapters/ch001-contract.yaml'), true)
 
 const goldPrefill = buildConstrainedPrefill('goldfinger', { bookId: 'star-inn' })
 assert.ok(goldPrefill.includes('技能 novel-plan · 意图 goldfinger'))
@@ -324,7 +332,7 @@ assert.ok(!polishPrefill.includes('polish-deslop.md'))
 
 assert.equal(chapterNumFromName('ch001.md'), 1)
 assert.equal(isNovelChapterPath('novel/b/chapters/ch003.md'), true)
-assert.equal(isNovelContractPath('novel/b/chapters/ch001-contract.yaml'), true)
+assert.equal(isNovelContractPath('novel/b/chapters/ch001-outline.yaml'), true)
 
 const sorted = sortChapterNodes([
   { name: 'ch10.md', path: 'novel/b/chapters/ch10.md', isDir: false },

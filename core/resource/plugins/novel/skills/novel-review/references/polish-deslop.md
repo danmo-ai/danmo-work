@@ -17,4 +17,4 @@ Use after review PASS, or when user asks only for deslop.
 - Distinct dialogue
 - Concrete 章末钩子
 
-Do not change plot Canon during polish; if a plot fix is required, return to review/contract.
+Do not change plot Canon during polish; if a plot fix is required, return to review/chapter-outline.

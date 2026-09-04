@@ -62,7 +62,7 @@ The lead agent runs the session; specialists do focused work on demand, each in 
 | **Data** | CSV / JSON analysis and reporting |
 | **GitHub** | Issues, PRs, Actions, releases |
 | **Danmo Make** | Local image / video / audio generation (separate app) |
-| **Novel Writing** | Long-form fiction: outline → chapter contract → draft → review → commit |
+| **Novel Writing** | Long-form fiction: outline → chapter outline → draft → review → commit |
 | **CodeGraph** (market) | Code intelligence — definitions, references, impact |
 
 Summon a specialist with `@` in the Composer, or just ask in plain language ("delegate the Document expert…"). The lead only sees the subagent's report, so the main context stays lean and KV-cache friendly. You can also build your own subagents in Teams, binding skills, tools, knowledge bases, and connectors.

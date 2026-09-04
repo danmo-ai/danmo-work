@@ -1,7 +1,7 @@
 ---
 name: novel-plan
 source: builtin
-description: Plan a novel already scaffolded. Use for 人设/世界观, 金手指, book/volume outlines. Not for 章合同, batch freeze, prose, or review.
+description: Plan a novel already scaffolded. Use for 人设/世界观, 金手指, book/volume outlines. Not for 章纲, batch freeze, prose, or review.
 license: MIT
 compatibility: Requires write, edit, read_file, glob; Core table_*, memory_*, search_kb; ask_user
 metadata:
@@ -12,7 +12,7 @@ metadata:
 
 # Novel Plan（设定 · 总纲 · 卷纲）
 
-Lock canon and outlines. **No chapter contracts, no chapter bodies.**
+Lock canon and outlines. **No chapter outlines, no chapter bodies.**
 
 **Pipeline steps 2–4/8.** 本技能不换模型。
 

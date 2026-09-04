@@ -841,23 +841,25 @@ export function novelChapterFilePath(bookId: string, chapter: number): string {
 
 export function novelChapterContractPath(bookId: string, chapter: number): string {
   const pad = String(chapter).padStart(3, '0')
-  return `novel/${bookId}/chapters/ch${pad}-contract.yaml`
+  return `novel/${bookId}/chapters/ch${pad}-outline.yaml`
 }
 
 export function isNovelChapterPath(path: string): boolean {
   const p = path.replace(/\\/g, '/')
-  return /\/chapters\/[^/]+\.md$/i.test(p) && !/contract\.md$/i.test(p)
+  return /\/chapters\/[^/]+\.md$/i.test(p) && !/(?:contract|outline)\.md$/i.test(p)
 }
 
+/** Chapter outline YAML under chapters/ (canonical *-outline.yaml; legacy *-contract.yaml). */
 export function isNovelContractName(name: string): boolean {
-  return /contract\.(ya?ml)$/i.test(name)
+  return /^ch\d+-(?:outline|contract)\.(ya?ml)$/i.test(name)
 }
 
 export function isNovelContractPath(path: string): boolean {
-  return /contract\.(ya?ml)$/i.test(path.replace(/\\/g, '/'))
+  const p = path.replace(/\\/g, '/')
+  return /\/chapters\/ch\d+-(?:outline|contract)\.(ya?ml)$/i.test(p)
 }
 
-/** One numbered chapter slot: optional prose (.md) + optional contract (.yaml). */
+/** One numbered chapter slot: optional prose (.md) + optional chapter outline (.yaml). */
 export interface NovelChapterEntry {
   chapter: number
   label: string
@@ -876,7 +878,7 @@ export function sortChapterNodes(nodes: NovelFileNode[]): NovelFileNode[] {
   })
 }
 
-/** Merge chapters/*.md prose and *contract.yaml under chapters/ (legacy outline/ contracts still merged if present). */
+/** Merge chapters/*.md prose and chapter-outline YAML under chapters/ (canonical *-outline.yaml; legacy *-contract.yaml). */
 export function buildChapterEntries(...nodeLists: NovelFileNode[][]): NovelChapterEntry[] {
   const byCh = new Map<number, NovelChapterEntry>()
   const ensure = (n: number): NovelChapterEntry => {
@@ -899,7 +901,13 @@ export function buildChapterEntries(...nodeLists: NovelFileNode[][]): NovelChapt
       if (n == null) continue
       if (isNovelContractName(node.name)) {
         const e = ensure(n)
-        if (!e.contract) e.contract = node
+        const isCanonical = /outline\.(ya?ml)$/i.test(node.name)
+        const existingIsCanonical = e.contract
+          ? /outline\.(ya?ml)$/i.test(e.contract.name)
+          : false
+        if (!e.contract || (isCanonical && !existingIsCanonical)) {
+          e.contract = node
+        }
       } else if (/\.md$/i.test(node.name)) {
         // Only treat chapters-dir prose as body; outline/*.md is not chapter prose.
         const p = (node.path || '').replace(/\\/g, '/')
@@ -918,7 +926,7 @@ export function sortMdNodes(nodes: NovelFileNode[]): NovelFileNode[] {
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
 }
 
-/** Outline / misc: markdown plus contract yaml so contracts under outline/ also surface. */
+/** Outline / misc: markdown plus chapter-outline yaml so legacy outlines under outline/ also surface. */
 export function sortWorkbenchDocNodes(nodes: NovelFileNode[]): NovelFileNode[] {
   return nodes
     .filter((n) => !n.isDir && (/\.md$/i.test(n.name) || isNovelContractName(n.name)))
@@ -1003,12 +1011,12 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       return [
         `书目录：${root}/`,
         `产出总纲 ${root}/outline/book_outline.md（不写章节正文）。`,
-        '卷纲另做；单章任务只进章合同。',
+        '卷纲另做；单章任务只进章纲。',
       ].join('\n')
     case 'volume':
       return [
         `为第 ${vol || 'N'} 卷写卷纲 → ${root}/outline/volumes/v${volPad}.md`,
-        '止于剧情单元卡；不写章合同/正文。写完等我确认（本卷点名人物一并 canon）。',
+        '止于剧情单元卡；不写章纲/正文。写完等我确认（本卷点名人物一并 canon）。',
       ].join('\n')
     case 'assets':
       return [
@@ -1022,33 +1030,33 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       ].join('\n')
     case 'contract':
       return [
-        `为第 ${ch || 'N'} 章写章合同 → ${root}/chapters/ch${chPad}-contract.yaml`,
+        `为第 ${ch || 'N'} 章写章纲 → ${root}/chapters/ch${chPad}-outline.yaml`,
         '从本卷纲单元卡下推；必填 unit_id。就绪后 status=accepted。',
       ].join('\n')
     case 'write':
       return [
         `写第 ${ch || 'N'} 章正文到 ${chPath}。`,
-        '先 gate preflight，只消费 ### CONTEXT + 本章合同；落盘正文。',
+        '先 gate preflight，只消费 ### CONTEXT + 本章纲；落盘正文。',
       ].join('\n')
     case 'continue':
       return [
         `接着写下一章（书：${root}/）。`,
-        '补合同 → gate CONTEXT → 正文；定稿用审→润→Commit。',
+        '补章纲 → gate CONTEXT → 正文；定稿用审→润→Commit。',
       ].join('\n')
     case 'dialogue':
       return [
         `加强第 ${ch || 'N'} 章对话（${chPath}）。`,
-        '按合同 beats 写出可辨声口；落盘到该章正文。',
+        '按章纲 beats 写出可辨声口；落盘到该章正文。',
       ].join('\n')
     case 'hook':
       return [
         `为第 ${ch || 'N'} 章改写章末悬念钩（${chPath}）。`,
-        '章末 hook 须可执行；写入合同并落到正文。',
+        '章末 hook 须可执行；写入章纲并落到正文。',
       ].join('\n')
     case 'reversal':
       return [
         `为第 ${ch || 'N'} 章加一处反转（${chPath}）。`,
-        '须服务合同 purpose；先改合同再改正文。',
+        '须服务章纲 purpose；先改章纲再改正文。',
       ].join('\n')
     case 'review':
       return [
@@ -1065,14 +1073,14 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         ch > 0
           ? `对第 ${ch} 章（${chPath}）做 Continuity Commit。`
           : `对当前进度做 Continuity Commit（书：${root}/）。`,
-        '一次补丁更新 ledger + 合同 reviewed + novel-state；再 gate postcommit。',
+        '一次补丁更新 ledger + 章纲 reviewed + novel-state；再 gate postcommit。',
       ].join('\n')
     case 'review-polish-commit':
       return [
         ch > 0
           ? `对第 ${ch} 章（${chPath}）串行：审 → 可选润色 → Commit。`
           : `对当前章节串行：审 → 可选润色 → Commit（书：${root}/）。`,
-        'PASS 不写 review 文件；FAIL 才落盘。Commit = ledger + 合同 + state + postcommit。',
+        'PASS 不写 review 文件；FAIL 才落盘。Commit = ledger + 章纲 + state + postcommit。',
       ].join('\n')
     case 'batch-freeze': {
       const bFrom = ctx.batchFrom && ctx.batchFrom > 0 ? ctx.batchFrom : 1
