@@ -54,10 +54,11 @@ Copy `assets/templates/chapter-contract.yaml`. Keep it lean — fill only what t
 ## Process
 
 1. Read the volume outline **unit card** covering this chapter (节拍 + 功能 + 阻碍…); if missing or beats don't cover this chapter, stop and send back to `novel-plan`.
-2. Set `unit_id` to that card (`vNN-U#`). Locate this chapter's role in 单元节拍. Push down fields from the unit card.
-3. Draft contract at `chapters/chNNN-contract.yaml` (YAML template); set `status=accepted` when ready to draft (default path — no per-chapter `ask_user`).
-4. Optional: `table_upsert` mirror — **默认不做**.
-5. Proceed to `chapter-write.md`.
+2. **状态对齐（只读小节，不读全文）**：读 ledger `### Cast snapshot` 中本章涉及角色的行（`state_deltas` 的「从X」必须与 snapshot 当前值一致，不得凭空发明）；beats 涉及双人对手戏时，另读相关人物卡的「关系」段（当前关系不对 → 先 Commit 补登或调整 beats）。
+3. Set `unit_id` to that card (`vNN-U#`). Locate this chapter's role in 单元节拍. Push down fields from the unit card.
+4. Draft contract at `chapters/chNNN-contract.yaml` (YAML template); set `status=accepted` when ready to draft (default path — no per-chapter `ask_user`).
+5. Optional: `table_upsert` mirror — **默认不做**.
+6. Proceed to `chapter-write.md`.
 
 ## Status vocabulary
 

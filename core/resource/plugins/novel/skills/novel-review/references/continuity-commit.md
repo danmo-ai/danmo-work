@@ -27,6 +27,8 @@ Update `continuity/ledger.md` in one pass:
 
 合同每条 `state_deltas` 的「谁」必须出现在 Cast snapshot。
 
+**关系回写**：`state_deltas` 涉及关系变化（信任±/站队/债务/秘密共享）时，**同一 patch** 更新相关人物卡「关系」表的「当前」列——关系状态的事实源是人物卡，ledger 不另存；不回写会导致下次 preflight 注入过期的关系行。
+
 **Patch 锚点规范**：摘要块追加到 `## Chapter summaries` 节末尾，锚点用上一章块首行（`## chNNN-1 …` 起 5–7 行）作为上文；Open loops / Cast snapshot 用整行替换。避免对超大 ledger 做模糊匹配。
 
 ## Tool actions（少交互）

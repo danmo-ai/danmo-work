@@ -792,6 +792,21 @@ def open_loops_rows(ledger_text: str) -> list[str]:
     return rows
 
 
+def _match_cast_file(files: list[Path], name: str) -> tuple[Path, str] | tuple[None, None]:
+    """Find the cast file for a character: exact filename (stem) match first,
+    then fall back to content match (aliases). Content-first matching is wrong:
+    another character's card may mention this name in its 关系 table."""
+    for path in files:
+        if path.stem == name:
+            return path, path.read_text(encoding="utf-8", errors="replace")
+    for path in files:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        first = text.splitlines()[0] if text.splitlines() else ""
+        if name in text or name in path.stem or name in first:
+            return path, text
+    return None, None
+
+
 def load_cast_anchors(book_root: Path, names: list[str]) -> list[str]:
     cast_dir = book_root / "canon" / "cast"
     if not cast_dir.is_dir() or not names:
@@ -799,23 +814,55 @@ def load_cast_anchors(book_root: Path, names: list[str]) -> list[str]:
     files = list(cast_dir.glob("*.md"))
     out: list[str] = []
     for name in names:
-        for path in files:
-            text = path.read_text(encoding="utf-8", errors="replace")
-            title = path.stem
-            first = text.splitlines()[0] if text.splitlines() else ""
-            if name not in text and name not in title and name not in first:
+        path, text = _match_cast_file(files, name)
+        if path is None:
+            continue
+        anchors = []
+        for line in text.splitlines():
+            m = CAST_ANCHOR_RE.match(line)
+            if m and m.group(2).strip():
+                anchors.append(f"{m.group(1)}={m.group(2).strip()}")
+        first = text.splitlines()[0] if text.splitlines() else ""
+        label = first.lstrip("# ").strip() or path.stem
+        if anchors:
+            out.append(f"{label}: " + "; ".join(anchors[:3]))
+        else:
+            out.append(f"{label}: (无三锚点行)")
+    return out
+
+
+def load_cast_relations(book_root: Path, names: list[str]) -> list[str]:
+    """Relationship rows between on-scene characters only: from each named
+    character's cast card 关系 table, keep rows whose 对方 is also on scene."""
+    cast_dir = book_root / "canon" / "cast"
+    if not cast_dir.is_dir() or len(names) < 2:
+        return []
+    files = list(cast_dir.glob("*.md"))
+    out: list[str] = []
+    for name in names:
+        path, text = _match_cast_file(files, name)
+        if path is None:
+            continue
+        first = text.splitlines()[0] if text.splitlines() else ""
+        label = first.lstrip("# ").strip() or path.stem
+        in_rel = False
+        for line in text.splitlines():
+            s = line.strip()
+            if s.startswith("#"):
+                in_rel = "关系" in s
                 continue
-            anchors = []
-            for line in text.splitlines():
-                m = CAST_ANCHOR_RE.match(line)
-                if m and m.group(2).strip():
-                    anchors.append(f"{m.group(1)}={m.group(2).strip()}")
-            label = first.lstrip("# ").strip() or title
-            if anchors:
-                out.append(f"{label}: " + "; ".join(anchors[:3]))
-            else:
-                out.append(f"{label}: (无三锚点行)")
-            break
+            if not in_rel or not s.startswith("|"):
+                continue
+            cells = [c.strip() for c in s.strip("|").split("|")]
+            if not cells or cells[0] in ("对方",) or set(cells[0]) <= {"-", ":"}:
+                continue
+            other = cells[0]
+            if other == name or other == label:
+                continue
+            if not any(other == w or other in w or w in other for w in names):
+                continue
+            detail = " / ".join(c for c in cells[1:3] if c)
+            out.append(f"{label} → {other}: {detail}" if detail else f"{label} → {other}")
     return out
 
 
@@ -876,6 +923,12 @@ def build_preflight_context(book_root: Path, contract: dict, ch: int, r: Report)
             lines.append(f"  - {a}")
     else:
         lines.append("  （无点名角色或无人物卡）")
+
+    relations = load_cast_relations(book_root, who)
+    if relations:
+        lines.append("- 关系（在场角色间，来自人物卡关系表）:")
+        for rel in relations:
+            lines.append(f"  - {rel}")
 
     loops = open_loops_rows(ledger_text)
     lines.append("- 开放债务:")

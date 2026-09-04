@@ -43,6 +43,8 @@ POV 只能写其可知信息。隐藏设定不得「刚好猜中」，除非章�
 
 ## 关系（只写会影响剧情的）
 
+「当前」列 = 关系状态的唯一事实源：Commit 时若 `state_deltas` 涉及关系变化，同步回写本列（见 `novel-review/references/continuity-commit.md`）。preflight 会把「对方也在场」的行注入本章 CONTEXT。
+
 | 对方 | 类型 | 当前 | 变化节点 |
 |------|------|------|----------|
 | | | | |

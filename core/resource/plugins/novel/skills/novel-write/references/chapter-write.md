@@ -7,7 +7,7 @@
 ## Preflight
 
 1. `exec_shell` gate `--action preflight --chapter N`（`novel-setup/references/gate.md`）。exit ≠ 0 → **停止**。接手旧书另跑 `--action doctor`。
-2. 读 stdout 的 `### CONTEXT`（风格指纹 / 接钩 / 人物现场 / 开放债务 / 本章硬约束 / 单元功能）。**这是本轮唯一额外上下文。**
+2. 读 stdout 的 `### CONTEXT`（风格指纹 / 接钩 / 人物现场 / 三锚点 / 在场角色间关系 / 开放债务 / 本章硬约束 / 单元功能）。**这是本轮唯一额外上下文。**
 3. 读本章 `chapters/chNNN-contract.yaml`（须 `accepted`；`unit_id` 对上卷纲单元）。
 4. 可选：`search_kb` **至多 1** 次（默认「文风与去 AI 味」；章末钩/接钩可换「爽点与追读」）。
 5. **ch001–ch003** → 另 `read_skill` `opening-chapters.md` + KB「节奏与结构」。

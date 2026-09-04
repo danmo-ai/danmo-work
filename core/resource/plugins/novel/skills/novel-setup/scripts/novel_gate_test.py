@@ -279,6 +279,45 @@ class GateTests(unittest.TestCase):
         rc = ng.main(["--workdir", str(self.root), "--book-id", "demo", "--action", "preflight"])
         self.assertEqual(rc, 2)
 
+    def test_preflight_injects_on_scene_relations(self):
+        cast = self.root / "novel/demo/canon/cast"
+        (cast / "林雪.md").write_text(
+            "# 林雪\n"
+            "- 视觉: 横断左眉的疤\n"
+            "- 语言: 短句不解释\n"
+            "- 行为: 摸戒指\n"
+            "## 关系（只写会影响剧情的）\n"
+            "| 对方 | 类型 | 当前 | 变化节点 |\n"
+            "|------|------|------|----------|\n"
+            "| 老周 | 债务 | 欠一条命 | ch12 摊牌 |\n"
+            "| 宿敌 | 镜像 | 互相试探 | — |\n",
+            encoding="utf-8",
+        )
+        (cast / "老周.md").write_text(
+            "# 老周\n"
+            "- 视觉: 缺指右手\n"
+            "## 关系（只写会影响剧情的）\n"
+            "| 对方 | 类型 | 当前 | 变化节点 |\n"
+            "|------|------|------|----------|\n"
+            "| 林雪 | 恩情 | 暗中护持 | ch12 摊牌 |\n",
+            encoding="utf-8",
+        )
+        p = self.root / "novel/demo/chapters/ch001-contract.yaml"
+        p.write_text(
+            p.read_text(encoding="utf-8").replace(
+                'state_deltas: ["主角: 被辱→声望回升"]',
+                'state_deltas: ["林雪: 被辱→声望回升", "老周: 旁观→出手"]',
+            ),
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "preflight", 1)
+        blob = rep.format()
+        self.assertIn("关系（在场角色间", blob)
+        self.assertIn("林雪 → 老周", blob)
+        self.assertIn("欠一条命", blob)
+        self.assertIn("老周 → 林雪", blob)
+        self.assertNotIn("宿敌", blob)  # 场外角色的关系行不注入
+
     def test_preflight_injects_style_fingerprint(self):
         fp = self.root / "novel/demo/canon/style-fingerprint.md"
         fp.write_text(

@@ -17,11 +17,13 @@ ledger 只留**当前卷**章摘要明细；卷收束（人工确认）后该卷
 
 ## 写正文加载
 
-允许：gate preflight 打印的 `### CONTEXT`（上章接钩 / 点名角色 Cast snapshot 行 / 开放债务 ≤8 条 / 单元功能）+ 本章合同 + 上场 `canon/cast` 公开段。**模型不读 ledger 全文**——脚本抽取，模型只消费抽取结果。
+允许：gate preflight 打印的 `### CONTEXT`（**风格指纹** / 上章接钩 / 点名角色 Cast snapshot 行 + 三锚点 + **在场角色间关系行** / 开放债务 ≤8 条 / 单元功能）+ 本章合同 + 上场 `canon/cast` 公开段。**模型不读 ledger 全文**——脚本抽取，模型只消费抽取结果。人物卡全文不进上下文：只有三锚点行与关系行（仅 `对方 ∈ 本章在场名单` 的行）被注入，伤口/弧光等半剧透字段不常驻。
 
 **风格指纹**随 preflight CONTEXT 注入：`canon/style-fingerprint.md`（无则退回 bible `## Style card`）由脚本压缩 ≤480 字拼进 CONTEXT 顶部，每章写前自动对齐 POV/语域/句式/禁语/章末钩。上下文被裁剪导致本轮未见指纹时，按专家规则 `read_file` 补读该文件（不要扫树）。**角色卡不全量进 CONTEXT**：只按章点名注入三锚点，避免伤口/弧光等半剧透字段常驻与 POV 泄露。
 
 禁止：`author-lore.md`、圣经「终局储备」细节栏、未 Commit 草稿里的剧透、`continuity/summaries/` 归档全量通读.
+
+**章合同阶段例外**：写合同前允许读 ledger 的 `### Cast snapshot` 小节（只读涉及角色的行）与点名人物卡的「关系」段，用于对齐 `state_deltas` 起点；仍不读 ledger 全文、不读 author-lore。
 
 ## Legacy
 

@@ -14,6 +14,7 @@
 
 - Plot branches / what-if docs **must not** mutate Canon until the user picks one.
 - Use the templates: `assets/templates/book-outline.md`, `assets/templates/volume-outline.md` — fixed sections, no free-form reinvention.
+- **规划「情绪/人物弧」与单元卡关键选择前，先读本卷点名人物卡**（四件套/矛盾/弧光/关系表）——卷纲的人物走向必须与卡的弧光、关系现状兼容；卷纲批准时一并核对。
 - `search_kb` **至多一次**「节奏与结构」before locking volume shape. 终局细节只写 `canon/author-lore.md`；unlock 卷号只维护在圣经。
 - After user OK on volume outline, update `novel-state.yaml` (`stage: outline`, artifacts).
 - Do not batch-write chapters until asset_gate: core cast + world skeleton are `canon`.
