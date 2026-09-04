@@ -70,13 +70,6 @@ export type NovelStageAction =
 
 export type NovelSkillId = 'novel-setup' | 'novel-plan' | 'novel-write' | 'novel-review'
 
-export interface NovelLoadProtocol {
-  skillId: NovelSkillId
-  skillRefs: string[]
-  kbThemes: string[]
-  readFiles: string[]
-}
-
 export interface NovelStagePrefillCtx {
   bookId?: string
   chapter?: number
@@ -508,201 +501,14 @@ export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
   }
 }
 
-function novelPrefillRoot(ctx: NovelStagePrefillCtx): string {
-  const bookId = (ctx.bookId ?? '').trim() || '<book-id>'
-  return `novel/${bookId}`
-}
-
-function novelPrefillChPad(ctx: NovelStagePrefillCtx): string {
-  const ch = ctx.chapter && ctx.chapter > 0 ? ctx.chapter : 0
-  return ch > 0 ? String(ch).padStart(3, '0') : 'NNN'
-}
-
-function novelPrefillVolPad(ctx: NovelStagePrefillCtx): string {
-  const vol = ctx.volume && ctx.volume > 0 ? ctx.volume : 0
-  return vol > 0 ? String(vol).padStart(2, '0') : 'NN'
-}
-
-export function novelActionLoadProtocol(action: NovelStageAction, ctx: NovelStagePrefillCtx): NovelLoadProtocol {
-  const root = novelPrefillRoot(ctx)
-  const chPad = novelPrefillChPad(ctx)
-  const volPad = novelPrefillVolPad(ctx)
-  const state = `${root}/novel-state.yaml`
-  const bibleHint = `${root}/book-bible.md（只读终局储备三行，禁止整本）`
-  const ledger = `${root}/continuity/ledger.md（尾部：facts / tracking / loops / 近 3 章摘要）`
-  const contract = `${root}/chapters/ch${chPad}-contract.yaml`
-  const prose = ctx.chapterPath || `${root}/chapters/ch${chPad}.md`
-  const volume = `${root}/outline/volumes/v${volPad}.md`
-  const bookOutline = `${root}/outline/book_outline.md`
-  const world = `${root}/canon/world.md`
-
-  switch (action) {
-    case 'init':
-      return {
-        skillId: 'novel-setup',
-        skillRefs: ['novel-setup/references/init.md', 'novel-setup/references/project-layout.md'],
-        kbThemes: ['题材与平台'],
-        readFiles: [],
-      }
-    case 'assets':
-      return {
-        skillId: 'novel-plan',
-        skillRefs: [
-          'novel-setup/assets/templates/world.md',
-          'novel-setup/assets/templates/cast-card.md',
-        ],
-        kbThemes: ['人设与群像'],
-        readFiles: [state, bibleHint, world, `${root}/canon/cast/`],
-      }
-    case 'goldfinger':
-      return {
-        skillId: 'novel-plan',
-        skillRefs: ['novel-setup/assets/templates/cast-card.md'],
-        kbThemes: ['世界观与金手指'],
-        readFiles: [state, bibleHint, world, `${root}/canon/cast/`],
-      }
-    case 'outline':
-      return {
-        skillId: 'novel-plan',
-        skillRefs: [
-          'novel-plan/references/outline.md',
-          'novel-plan/assets/templates/book-outline.md',
-        ],
-        kbThemes: ['节奏与结构'],
-        readFiles: [state, bibleHint, world],
-      }
-    case 'volume':
-      return {
-        skillId: 'novel-plan',
-        skillRefs: ['novel-plan/references/outline.md', 'novel-plan/assets/templates/volume-outline.md'],
-        kbThemes: ['节奏与结构'],
-        readFiles: [state, bookOutline, volume, ledger],
-      }
-    case 'contract':
-      return {
-        skillId: 'novel-write',
-        skillRefs: [
-          'novel-write/references/chapter-contract.md',
-          'novel-write/assets/templates/chapter-contract.yaml',
-        ],
-        kbThemes: ['节奏与结构'],
-        readFiles: [state, `${root}/outline/volumes/（本卷纲：定位 unit_id）`, bibleHint],
-      }
-    case 'write':
-      return {
-        skillId: 'novel-write',
-        skillRefs: ['novel-write/references/chapter-write.md'],
-        kbThemes: ['文风与去 AI 味'],
-        readFiles: [state, contract],
-      }
-    case 'continue':
-      return {
-        skillId: 'novel-write',
-        skillRefs: [
-          'novel-write/references/continuation.md',
-          'novel-write/references/chapter-write.md',
-        ],
-        kbThemes: ['文风与去 AI 味'],
-        readFiles: [state, ledger],
-      }
-    case 'dialogue':
-      return {
-        skillId: 'novel-write',
-        skillRefs: ['novel-write/references/chapter-write.md'],
-        kbThemes: ['情绪与场景'],
-        readFiles: [state, contract, prose],
-      }
-    case 'hook':
-      return {
-        skillId: 'novel-write',
-        skillRefs: ['novel-write/references/chapter-write.md'],
-        kbThemes: ['爽点与追读'],
-        readFiles: [state, contract, prose],
-      }
-    case 'reversal':
-      return {
-        skillId: 'novel-write',
-        skillRefs: ['novel-write/references/chapter-write.md'],
-        kbThemes: ['爽点与追读'],
-        readFiles: [state, contract, prose],
-      }
-    case 'preflight':
-      return {
-        skillId: 'novel-write',
-        skillRefs: ['novel-write/references/chapter-write.md'],
-        kbThemes: [],
-        readFiles: [state, contract],
-      }
-    case 'batch-freeze':
-      return {
-        skillId: 'novel-write',
-        skillRefs: ['novel-write/references/batch-freeze.md'],
-        kbThemes: [],
-        readFiles: [state, `${root}/outline/volumes/（本卷纲）`, `${root}/chapters/（该批章合同）`, ledger],
-      }
-    case 'continuation':
-      return {
-        skillId: 'novel-write',
-        skillRefs: [
-          'novel-write/references/continuation.md',
-          'novel-write/assets/templates/style-fingerprint.md',
-        ],
-        kbThemes: ['文风与去 AI 味'],
-        readFiles: [state, ledger],
-      }
-    case 'review':
-      return {
-        skillId: 'novel-review',
-        skillRefs: ['novel-review/references/review-gates.md'],
-        kbThemes: ['文风与去 AI 味'],
-        readFiles: [prose, contract],
-      }
-    case 'polish':
-      return {
-        skillId: 'novel-review',
-        skillRefs: [
-          'novel-review/references/polish-deslop.md',
-          'novel-setup/references/gate.md',
-        ],
-        kbThemes: ['文风与去 AI 味'],
-        readFiles: [prose],
-      }
-    case 'commit':
-      return {
-        skillId: 'novel-review',
-        skillRefs: ['novel-review/references/continuity-commit.md'],
-        kbThemes: [],
-        readFiles: [prose, ledger, state],
-      }
-    case 'review-polish-commit':
-      return {
-        skillId: 'novel-review',
-        skillRefs: [
-          'novel-review/references/review-gates.md',
-          'novel-review/references/polish-deslop.md',
-          'novel-review/references/continuity-commit.md',
-          'novel-setup/references/gate.md',
-        ],
-        kbThemes: ['文风与去 AI 味'],
-        readFiles: [prose, contract, state, ledger],
-      }
-    case 'batch-review':
-      return {
-        skillId: 'novel-review',
-        skillRefs: ['novel-review/references/review-gates.md'],
-        kbThemes: ['文风与去 AI 味'],
-        readFiles: [`${root}/chapters/（最近 1–5 章有正文未 PASS）`, `${root}/reviews/`],
-      }
-    default:
-      return { skillId: 'novel-write', skillRefs: [], kbThemes: [], readFiles: [state] }
-  }
-}
-
-export function formatLoadProtocol(protocol: NovelLoadProtocol): string {
-  const refs = protocol.skillRefs.length
-    ? `（${protocol.skillRefs.join('、')}）`
-    : ''
-  return `技能 ${protocol.skillId}${refs} — 先 read_skill；写正文先跑 gate preflight，只消费 ### CONTEXT。`
+/**
+ * Composer load line: skill + intent only.
+ * Which reference / template / KB theme to open lives in each skill's
+ * Intent→Load table — do not hardcode skillRefs here (skill updates would desync).
+ */
+export function formatLoadProtocol(action: NovelStageAction): string {
+  const skillId = novelActionSkillId(action)
+  return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；写正文先跑 gate preflight，只消费 ### CONTEXT。`
 }
 
 export function buildConstraintFooter(
@@ -728,7 +534,7 @@ export function buildConstrainedPrefill(
   blockers?: string[],
 ): string {
   const body = buildNovelStagePrefill(action, ctx)
-  const skillLine = formatLoadProtocol(novelActionLoadProtocol(action, ctx))
+  const skillLine = formatLoadProtocol(action)
   const parts = [`【任务】\n${body}`, skillLine]
   if (pipeline) {
     parts.push(buildConstraintFooter(pipeline, action, blockers ?? []))
@@ -1183,8 +989,8 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
   const root = `novel/${bookId}`
   const vol = ctx.volume && ctx.volume > 0 ? ctx.volume : 0
   const volPad = vol > 0 ? String(vol).padStart(2, '0') : 'NN'
-  // Keep intent + paths only. Field lists / section inventories live in skill
-  // refs from novelActionLoadProtocol — do not restate them here.
+  // Keep intent + project paths only. Which skill reference / template / KB
+  // theme to open lives in the skill Intent→Load table (see formatLoadProtocol).
 
   switch (action) {
     case 'init':
