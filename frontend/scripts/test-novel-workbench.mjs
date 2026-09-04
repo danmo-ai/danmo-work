@@ -70,6 +70,18 @@ assert.equal(ext.blockers.length, 1)
 assert.equal(parseContractYaml('status: accepted').status, 'accepted')
 assert.equal(parseContractYaml('title_working: 孙馆长\nstatus: proposed').title, '孙馆长')
 assert.equal(parseContractYaml('unit_id: v04-U2\nstatus: proposed').unitId, 'v04-U2')
+{
+  const c = parseContractYaml(`title_working: 客栈
+purpose: 打脸
+hook:
+  type: 未兑现承诺
+  out: 明日验骨
+status: accepted
+`)
+  assert.equal(c.purpose, '打脸')
+  assert.equal(c.hookType, '未兑现承诺')
+  assert.equal(c.hookOut, '明日验骨')
+}
 assert.equal(parseReviewVerdict('### VERDICT\nPASS'), 'PASS')
 assert.equal(parseReviewVerdict('### VERDICT\nFAIL'), 'FAIL')
 assert.equal(parseBatchFreezeYaml('status: frozen').status, 'frozen')
