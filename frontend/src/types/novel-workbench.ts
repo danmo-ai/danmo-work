@@ -849,14 +849,14 @@ export function isNovelChapterPath(path: string): boolean {
   return /\/chapters\/[^/]+\.md$/i.test(p) && !/(?:contract|outline)\.md$/i.test(p)
 }
 
-/** Chapter outline YAML under chapters/ (canonical *-outline.yaml; legacy *-contract.yaml). */
+/** Chapter outline YAML under chapters/ (`chNNN-outline.yaml`). */
 export function isNovelContractName(name: string): boolean {
-  return /^ch\d+-(?:outline|contract)\.(ya?ml)$/i.test(name)
+  return /^ch\d+-outline\.(ya?ml)$/i.test(name)
 }
 
 export function isNovelContractPath(path: string): boolean {
   const p = path.replace(/\\/g, '/')
-  return /\/chapters\/ch\d+-(?:outline|contract)\.(ya?ml)$/i.test(p)
+  return /\/chapters\/ch\d+-outline\.(ya?ml)$/i.test(p)
 }
 
 /** One numbered chapter slot: optional prose (.md) + optional chapter outline (.yaml). */
@@ -878,7 +878,7 @@ export function sortChapterNodes(nodes: NovelFileNode[]): NovelFileNode[] {
   })
 }
 
-/** Merge chapters/*.md prose and chapter-outline YAML under chapters/ (canonical *-outline.yaml; legacy *-contract.yaml). */
+/** Merge chapters/*.md prose and chapter-outline YAML under chapters/ (`*-outline.yaml`). */
 export function buildChapterEntries(...nodeLists: NovelFileNode[][]): NovelChapterEntry[] {
   const byCh = new Map<number, NovelChapterEntry>()
   const ensure = (n: number): NovelChapterEntry => {
@@ -901,13 +901,7 @@ export function buildChapterEntries(...nodeLists: NovelFileNode[][]): NovelChapt
       if (n == null) continue
       if (isNovelContractName(node.name)) {
         const e = ensure(n)
-        const isCanonical = /outline\.(ya?ml)$/i.test(node.name)
-        const existingIsCanonical = e.contract
-          ? /outline\.(ya?ml)$/i.test(e.contract.name)
-          : false
-        if (!e.contract || (isCanonical && !existingIsCanonical)) {
-          e.contract = node
-        }
+        if (!e.contract) e.contract = node
       } else if (/\.md$/i.test(node.name)) {
         // Only treat chapters-dir prose as body; outline/*.md is not chapter prose.
         const p = (node.path || '').replace(/\\/g, '/')

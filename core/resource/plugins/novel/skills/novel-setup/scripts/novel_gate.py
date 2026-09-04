@@ -56,8 +56,7 @@ ENGLISH_WHITELIST = {
 }
 CH_FILE_RE = re.compile(r"^ch(\d+)\.md$")
 CH_OUTLINE_RE = re.compile(r"^ch(\d+)-outline\.yaml$")
-CH_CONTRACT_RE = re.compile(r"^ch(\d+)-contract\.yaml$")  # legacy filename
-CH_OUTLINE_ANY_RE = re.compile(r"^ch(\d+)-(?:outline|contract)\.yaml$")
+CH_CONTRACT_LEGACY_RE = re.compile(r"^ch(\d+)-contract\.yaml$")  # one-shot migrate only
 UNIT_ID_RE = re.compile(r"^v\d+-U\d+$")
 VOLUME_UNIT_ROW = re.compile(r"\|\s*U(\d+)\s*\|")
 OPEN_STATUS = re.compile(r"(?i)\|\s*open\s*\|")
@@ -162,19 +161,7 @@ def outline_rel(ch: int) -> str:
 
 
 def contract_rel(ch: int) -> str:
-    """Legacy alias kept for callers; prefer outline_rel for new writes."""
-    return outline_rel(ch)
-
-
-def legacy_contract_rel(ch: int) -> str:
-    return f"chapters/ch{ch:03d}-contract.yaml"
-
-
-def resolve_outline_rel(book_root: Path, ch: int) -> str:
-    """Prefer canonical *-outline.yaml; fall back to legacy *-contract.yaml."""
-    for rel in (outline_rel(ch), legacy_contract_rel(ch)):
-        if (book_root / rel).is_file():
-            return rel
+    """Alias for outline_rel (historical call sites / gate codes)."""
     return outline_rel(ch)
 
 
@@ -183,11 +170,42 @@ def chapter_rel(ch: int) -> str:
 
 
 def parse_chapter_num(name: str) -> int | None:
-    m = CH_FILE_RE.match(name) or CH_OUTLINE_ANY_RE.match(name)
+    m = CH_FILE_RE.match(name) or CH_OUTLINE_RE.match(name)
     if not m:
         return None
     n = int(m.group(1))
     return n if n > 0 else None
+
+
+def migrate_chapter_outline_filenames(book_root: Path) -> list[str]:
+    """One-shot: chapters/chNNN-contract.yaml → chNNN-outline.yaml.
+
+    If both exist, keep outline and move the legacy file to `_archive/chapters/`.
+    Idempotent — no-op when no *-contract.yaml remain.
+    """
+    d = book_root / "chapters"
+    if not d.is_dir():
+        return []
+    done: list[str] = []
+    for e in sorted(d.iterdir()):
+        if e.is_dir() or not CH_CONTRACT_LEGACY_RE.match(e.name):
+            continue
+        m = CH_CONTRACT_LEGACY_RE.match(e.name)
+        assert m is not None
+        n = int(m.group(1))
+        dest = book_root / outline_rel(n)
+        if dest.is_file():
+            arch_dir = book_root / "_archive" / "chapters"
+            arch_dir.mkdir(parents=True, exist_ok=True)
+            arch = arch_dir / e.name
+            if arch.exists():
+                arch = arch_dir / f"{e.stem}-dup{e.suffix}"
+            e.rename(arch)
+            done.append(f"{e.name} → _archive/chapters/{arch.name} (kept {dest.name})")
+        else:
+            e.rename(dest)
+            done.append(f"{e.name} → {dest.name}")
+    return done
 
 
 def file_exists(root: Path, rel: str) -> bool:
@@ -224,7 +242,7 @@ def load_state(path: Path) -> dict:
 
 
 def load_contract(book_root: Path, chapter: int) -> tuple[dict, str]:
-    rel = resolve_outline_rel(book_root, chapter)
+    rel = outline_rel(chapter)
     path = book_root / rel
     if not path.is_file():
         raise FileNotFoundError(rel)
@@ -607,7 +625,7 @@ def list_chapter_nums(book_root: Path, kind: str) -> list[int]:
             continue
         if kind == "md" and CH_FILE_RE.match(e.name):
             out.append(n)
-        elif kind == "contract" and CH_OUTLINE_ANY_RE.match(e.name):
+        elif kind == "contract" and CH_OUTLINE_RE.match(e.name):
             out.append(n)
     return out
 
@@ -1202,6 +1220,7 @@ def run_with_hits(
             f"unknown action {action!r} (preflight|precommit|postcommit|doctor|scan-deslop)"
         )
     root, st = resolve_book(workdir, book_id)
+    migrated = migrate_chapter_outline_filenames(root)
     bid = str(st.get("book_id") or root.name)
     hit_lines: list[str] = []
     if action == "scan-deslop":
@@ -1221,6 +1240,8 @@ def run_with_hits(
                 check_precommit(root, st, chapter, r)
             else:
                 check_postcommit(root, st, chapter, r)
+    for note in migrated:
+        r.advisory("migrate", f"章纲文件名迁移: {note}")
     r.finalize()
     return r, hit_lines
 

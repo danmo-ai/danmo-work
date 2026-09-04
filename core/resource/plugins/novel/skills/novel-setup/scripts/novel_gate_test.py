@@ -413,17 +413,40 @@ class GateTests(unittest.TestCase):
         rep = ng.run(str(self.root), "demo", "postcommit", 1)
         self.assertEqual(rep.verdict, "PASS", rep.format())
 
-    def test_legacy_contract_filename_accepted(self):
-        """Older books used chNNN-contract.yaml; gate must still resolve them."""
+    def test_migrates_legacy_contract_filename(self):
+        """One-shot: chNNN-contract.yaml → chNNN-outline.yaml; no dual-read after migrate."""
         book = self.root / "novel/demo"
         outline = book / "chapters/ch001-outline.yaml"
         legacy = book / "chapters/ch001-contract.yaml"
-        legacy.write_text(outline.read_text(encoding="utf-8"), encoding="utf-8")
+        body = outline.read_text(encoding="utf-8")
         outline.unlink()
-        self.assertEqual(ng.resolve_outline_rel(book, 1), "chapters/ch001-contract.yaml")
-        rep = ng.run(str(self.root), "demo", "preflight", 1)
+        legacy.write_text(body, encoding="utf-8")
+        self.assertFalse((book / "chapters/ch001-outline.yaml").exists())
+        rep = ng.run(str(self.root), "demo", "doctor", 0)
         self.assertEqual(rep.verdict, "PASS", rep.format())
-        self.assertIn("本章纲", rep.format())
+        self.assertTrue((book / "chapters/ch001-outline.yaml").is_file())
+        self.assertFalse(legacy.exists())
+        blob = rep.format()
+        self.assertIn("章纲文件名迁移", blob)
+        self.assertIn("ch001-contract.yaml → ch001-outline.yaml", blob)
+        # Second run is idempotent (no re-migrate noise required, file already outline)
+        rep2 = ng.run(str(self.root), "demo", "preflight", 1)
+        self.assertEqual(rep2.verdict, "PASS", rep2.format())
+        self.assertNotIn("章纲文件名迁移", rep2.format())
+
+    def test_migrate_archives_duplicate_contract(self):
+        book = self.root / "novel/demo"
+        outline = book / "chapters/ch001-outline.yaml"
+        legacy = book / "chapters/ch001-contract.yaml"
+        legacy.write_text(outline.read_text(encoding="utf-8").replace("title_working: ", "title_working: legacy-"), encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "doctor", 0)
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertTrue(outline.is_file())
+        self.assertFalse(legacy.exists())
+        arch = book / "_archive/chapters/ch001-contract.yaml"
+        self.assertTrue(arch.is_file(), rep.format())
+        self.assertIn("legacy-", arch.read_text(encoding="utf-8"))
+        self.assertNotIn("legacy-", outline.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

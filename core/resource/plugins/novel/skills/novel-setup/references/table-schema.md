@@ -36,8 +36,9 @@ Suggested collections (names are conventions — be consistent within a book):
 
 `id`, `book_id`, `chapter`, `unit_id`, `purpose`, `beats`, `forbidden`, `hook`, `pov`, `status`, `file`
 
-Mirror/index only (legacy table name `chapter_contracts` may still appear in older projects). Authoritative chapter-outline body is always
+Mirror/index only. Authoritative chapter-outline body is always
 `novel/<book-id>/chapters/chNNN-outline.yaml`. Prefer `file: chapters/chNNN-outline.yaml`.
+If an older project still has table `chapter_contracts`, rename/recreate as `chapter_outlines` when convenient (optional mirror).
 
 ## `continuity_issues`
 

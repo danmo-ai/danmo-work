@@ -11,7 +11,7 @@ Official name: **章纲** / chapter outline. Do not introduce other product name
 | Path | `novel/<book-id>/chapters/chNNN-outline.yaml` (zero-pad chapter to 3+ digits) |
 | Format | **YAML only** — copy `assets/templates/chapter-outline.yaml` via `read_skill` |
 | Forbidden | Markdown chapter outlines, files under `outline/` for per-chapter plans, alternate directories or suffixes |
-| Legacy | Older books may still have `chNNN-contract.yaml` — gate and workbench read either; **new writes use `*-outline.yaml` only** |
+| Migrate | Gate renames legacy `chNNN-contract.yaml` → `chNNN-outline.yaml` once (any action; doctor/cold-start). No dual-read. |
 
 `table_upsert` into `chapter_outlines` is an **index/mirror** (queryable status), not a substitute for the YAML file. Always write the file first; table row should point at that path (e.g. `file: chapters/ch001-outline.yaml`).
 

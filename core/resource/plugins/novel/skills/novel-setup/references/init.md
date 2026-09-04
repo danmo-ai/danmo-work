@@ -41,3 +41,5 @@ If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding
 ## Legacy migrate
 
 If cold-start finds `public-lore.md` / `tracking.md` / `chapter_summaries.md` without `ledger.md`, merge into `continuity/ledger.md` then move old files to `_archive/`.
+
+Gate also one-shot renames `chapters/chNNN-contract.yaml` → `chNNN-outline.yaml` (any gate action; idempotent). Do not keep dual filenames.
