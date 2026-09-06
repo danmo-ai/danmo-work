@@ -154,6 +154,7 @@ function runPrimary() {
   }
   const proseActions: NovelStageAction[] = [
     'write',
+    'expand',
     'review',
     'polish',
     'commit',

@@ -1,24 +1,26 @@
 ---
 name: novel-write
 source: builtin
-description: Chapter loop for a planned novel. Use for 章纲, batch freeze, drafting or continuing chapters, 字数不足扩写, and Frozen_Canon continuation. Not for book-level outline or final review/Commit.
+description: Chapter outline and first-draft prose only. Use for 章纲, batch freeze, drafting/continuing chapters, and Frozen_Canon continuation. Not for 扩写, deslop, review, or Continuity Commit — those are novel-review (separate turn / model).
 license: MIT
 compatibility: Requires write, edit, read_file, grep, glob, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "2.5"
+  version: "2.6"
   category: creative-writing
 ---
 
-# Novel Write（章纲 · 正文）
+# Novel Write（章纲 · 正文初稿）
 
-Chapter outline → draft only. Review / Commit → `novel-review`.
+Chapter outline → **first draft only**. 扩写 / 审 / 润色 / Commit → `novel-review`（**另开一轮**，便于写作用更好模型）。
 
-**Pipeline steps 5–6/8.** 本技能不换模型。
+**Pipeline steps 5–6/8.** 本技能不换模型；写完正文后停下，由用户换模再定稿。
 
 ## When to load
 
-写第 N 章 / 章纲 / 批次冻结 / 续写 / 接手 / 爽点强化 / 字数不足扩写.
+写第 N 章 / 章纲 / 批次冻结 / 续写 / 接手 / 爽点强化（对白·钩·反转）.
+
+**不要**在本技能回合做：字数扩写、去 AI 味、审稿、连续性定稿。
 
 ## Do
 
@@ -30,7 +32,6 @@ Chapter outline → draft only. Review / Commit → `novel-review`.
 | 开篇 ch1–3 | 上栏 + `opening-chapters.md` | 节奏与结构 |
 | 续写接手 | `continuation.md` | 文风与去 AI 味 |
 | 爽点强化 | `chapter-write.md` | 爽点与追读 |
-| 字数不足/扩写 | `expansion.md` | 扩写与字数控制 |
 
 写正文：**gate preflight → 只消费 `### CONTEXT` + 本章纲。** 禁止扫树；禁止 `author-lore`。批次冻结按单元章范围默认写入 `frozen_batch`（见 `batch-freeze.md`）。
 
@@ -40,7 +41,8 @@ Chapter outline → draft only. Review / Commit → `novel-review`.
 - Gate preflight FAIL → no prose.
 - Frozen_Canon unconfirmed → no prose.
 - Batch write >1 chapter without freeze → run `batch-freeze` first.
+- **Draft turn ends at disk prose.** Do not expand / deslop / review / Commit in the same turn unless the user explicitly demands a single-turn exception.
 
 ## Stop
 
-Draft on disk. Hand off `novel-review`.
+Draft on disk → status `drafted`. Hand off `novel-review`（扩写如需 → 审 → 润色 → Commit）. Suggest user switch model before that turn.

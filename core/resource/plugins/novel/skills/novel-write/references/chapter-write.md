@@ -48,4 +48,5 @@ last_preflight: "[YYYY-MM-DD chNNN] state:writing | contract:accepted | gate:PAS
 ## After draft
 
 1. 章纲 `status=drafted`（`table_upsert` 可选，默认不做）。
-2. Hand off `novel-review`（审 / 润色 / Commit）。同 turn 不强制满审；勿开下一章除非 Commit 或用户明示批次。
+2. **本轮到此结束。** 勿在同 turn 做扩写 / 去 AI 味 / 审稿 / Continuity Commit（留给 `novel-review` 另开一轮，便于用户换模）。
+3. Hand off：字数不足 → `expansion.md`；然后审 → 可选润色 → Commit。勿开下一章除非用户明示批次且已 Commit。

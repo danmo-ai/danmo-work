@@ -185,6 +185,8 @@ function primaryActionLabel(action: NovelStageAction, chapter?: number): string 
       return t('novelWorkbench.actionHook')
     case 'reversal':
       return t('novelWorkbench.actionReversal')
+    case 'expand':
+      return t('novelWorkbench.actionExpand')
     case 'volume':
       return t('novelWorkbench.actionVolumeOutline', { n: chapter && chapter > 0 ? chapter : 'N' })
     case 'review':
@@ -294,6 +296,7 @@ const moreActions = computed(() => {
   push('dialogue', t('novelWorkbench.actionDialogue'))
   push('hook', t('novelWorkbench.actionHook'))
   push('reversal', t('novelWorkbench.actionReversal'))
+  push('expand', t('novelWorkbench.actionExpand'))
   push('review', t('novelWorkbench.actionReview'))
   push('polish', t('novelWorkbench.actionPolish'))
   push('commit', t('novelWorkbench.actionCommit'))

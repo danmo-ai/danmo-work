@@ -160,6 +160,7 @@ assert.equal(novelActionSkillId('dialogue'), 'novel-write')
 assert.equal(novelActionSkillId('hook'), 'novel-write')
 assert.equal(novelActionSkillId('reversal'), 'novel-write')
 assert.equal(novelActionSkillId('review'), 'novel-review')
+assert.equal(novelActionSkillId('expand'), 'novel-review')
 assert.equal(novelActionSkillId('polish'), 'novel-review')
 assert.equal(novelActionSkillId('review-polish-commit'), 'novel-review')
 assert.ok(pipe.step)
@@ -176,12 +177,38 @@ const comboPrefill = buildConstrainedPrefill('review-polish-commit', {
   chapter: 4,
   chapterPath: 'novel/star-inn/chapters/ch004.md',
 })
-assert.ok(comboPrefill.includes('审') && comboPrefill.includes('Commit'))
-assert.ok(comboPrefill.includes('PASS 不写 review') || comboPrefill.includes('不写 review'))
+assert.ok(comboPrefill.includes('扩写') && comboPrefill.includes('Commit'))
+assert.ok(comboPrefill.includes('定稿') || comboPrefill.includes('换经济'))
 assert.ok(comboPrefill.includes('技能 novel-review · 意图 review-polish-commit'))
 assert.ok(!comboPrefill.includes('novel-review/references/'))
 assert.ok(!comboPrefill.includes('【串行协议'))
 assert.ok(!comboPrefill.includes('六透镜'))
+
+const expandPrefill = buildConstrainedPrefill('expand', {
+  bookId: 'star-inn',
+  chapter: 4,
+  chapterPath: 'novel/star-inn/chapters/ch004.md',
+})
+assert.ok(expandPrefill.includes('技能 novel-review · 意图 expand'))
+assert.ok(expandPrefill.includes('扩写'))
+assert.ok(!expandPrefill.includes('/references/'))
+
+const expandAllowed = canRunAction(
+  'expand',
+  {
+    bookId: 'star-inn',
+    state: ext,
+    entries,
+    chapterPhases: { 4: 'drafted' },
+    castFileCount: 1,
+    hasBookOutline: true,
+    hasVolumeOutline: true,
+    hasBatchFreezeFile: true,
+    batchFreezeFrozen: true,
+  },
+  4,
+)
+assert.equal(expandAllowed.allowed, true)
 
 const comboAllowed = canRunAction('review-polish-commit', {
   bookId: 'star-inn',
@@ -231,6 +258,7 @@ const stages = [
   'dialogue',
   'hook',
   'reversal',
+  'expand',
   'review',
   'polish',
   'commit',
@@ -308,6 +336,7 @@ assert.ok(!buildNovelStagePrefill('volume', { bookId: 'star-inn', volume: 1 }).i
 const writePrefill = buildConstrainedPrefill('write', { bookId: 'star-inn', chapter: 2 })
 assert.ok(writePrefill.includes('技能 novel-write · 意图 write'))
 assert.ok(writePrefill.includes('ch002') || writePrefill.includes('第 2 章'))
+assert.ok(writePrefill.includes('停下') || writePrefill.includes('不要扩写'))
 assert.ok(!writePrefill.includes('chapter-write.md'))
 assert.ok(!writePrefill.includes('chapter_summaries.md'))
 

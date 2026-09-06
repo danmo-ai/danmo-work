@@ -93,7 +93,7 @@ delegate_agent(agent_id="<id>", goal="...")
 
 1. 主专家选 **Team**（或开启协作）。
 2. Composer `@` / 专家图标选中「Novel Writing」，描述本章目标后发送。
-3. 专家按阶段技能走：`novel-setup` 立项 → `novel-plan` 设定/总纲/卷纲 → `novel-write` 章纲/正文 → `novel-review` 审稿/润色/Commit。  
+3. 专家按阶段技能走：`novel-setup` 立项 → `novel-plan` 设定/总纲/卷纲 → `novel-write` 章纲/**正文首稿** → `novel-review` **扩写 / 审稿 / 润色 / Commit**（与写作分 turn，便于写作用更好模型）。  
    Continuity 账本为 `continuity/ledger.md`；换阶段时用户自行切换 Composer 模型。
 4. 技法检索走知识库 `kb-novel-craft`（节奏与结构、爽点与追读、文风与去 AI 味等）；本书设定用项目文件 + `table_*`。
 
@@ -131,9 +131,9 @@ delegate_agent(agent_id="<id>", goal="...")
 2. **门禁点**：`knowledge` / `asset` / `qc`（读 `novel-state.yaml` 的 `gates` + 磁盘启发式）  
 3. **主 CTA**：引擎计算下一合法动作，注入 Composer + 选中 `novel`  
 4. **章状态机**：无章纲 → 章纲草案 → 待写 → 待审 → 审未过/待提交 → 已提交  
-5. **多模型**：换阶段时用户在 Composer **自行**切换模型；工作台不自动换模  
+5. **多模型**：写作首稿与「扩写 / 润色 / 定稿」分 turn；用户在 Composer **自行**切换模型；工作台不自动换模  
 
-技能流水线：`novel-setup` → `novel-plan` → `novel-write` → `novel-review`。批次冻结只写 `novel-state.frozen_batch`。写正文消费 gate `### CONTEXT`；PASS 审稿不落盘。
+技能流水线：`novel-setup` → `novel-plan` → `novel-write`（首稿）→ `novel-review`（扩写·审·润·Commit）。批次冻结只写 `novel-state.frozen_batch`。写正文消费 gate `### CONTEXT`；PASS 审稿不落盘。
 
 动作 Prefill Composer（可勾选 `novel` chip）：**技能 + 意图/流程 + 书/章路径**，末尾附带 **工作台约束块**；不硬编码 skill reference 路径（由技能 Intent→Load 表决定）。**不跳转** Files。书落在 `novel/<book-id>/`（`canon/`、`outline/`、`chapters/`、`continuity/ledger.md`、`reviews/`；章纲=`chapters/chNNN-outline.yaml`）。
 

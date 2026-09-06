@@ -1,5 +1,7 @@
 # Expansion（字数不足时的扩写纪律）
 
+**定稿车道**（`novel-review`）：首稿已由 `novel-write` 落盘后，另开一轮再扩。勿与写作首稿同 turn（便于写作用更好模型）。
+
 Draft 达不到章纲 `word_target` × 0.6（gate precommit advisory）或明显「赶、薄、欠戏剧化」时使用。
 短而「紧、快、完整」的章节**不要硬扩**——找用户确认调整 `word_target` 更合适。
 

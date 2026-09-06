@@ -59,6 +59,7 @@ export type NovelStageAction =
   | 'dialogue'
   | 'hook'
   | 'reversal'
+  | 'expand'
   | 'review'
   | 'polish'
   | 'commit'
@@ -445,6 +446,7 @@ export function canRunAction(action: NovelStageAction, ctx: NovelBookContext, ch
 
   if (
     action === 'write' ||
+    action === 'expand' ||
     action === 'review' ||
     action === 'commit' ||
     action === 'polish' ||
@@ -470,6 +472,15 @@ export function canRunAction(action: NovelStageAction, ctx: NovelBookContext, ch
     ) {
       blockers.push('blocker.needBatchFreeze')
     }
+  }
+
+  if (action === 'expand') {
+    const target = chapter ?? ch ?? 0
+    const phase = ctx.chapterPhases[target]
+    if (phase !== 'drafted' && phase !== 'review_fail' && phase !== 'review_pass') {
+      blockers.push('blocker.needDraft')
+    }
+    if (phase === 'committed') blockers.push('blocker.alreadyCommitted')
   }
 
   if (action === 'review') {
@@ -520,6 +531,7 @@ export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
     case 'outline':
     case 'volume':
       return 'novel-plan'
+    case 'expand':
     case 'review':
     case 'polish':
     case 'commit':
@@ -538,7 +550,13 @@ export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
  */
 export function formatLoadProtocol(action: NovelStageAction): string {
   const skillId = novelActionSkillId(action)
-  return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；写正文先跑 gate preflight，只消费 ### CONTEXT。`
+  if (skillId === 'novel-write' && (action === 'write' || action === 'continue' || action === 'preflight')) {
+    return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；写正文先跑 gate preflight，只消费 ### CONTEXT；落盘后停下（扩写/润色/定稿另轮）。`
+  }
+  if (skillId === 'novel-review') {
+    return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；定稿车道（扩写/审/润/Commit），与写作首稿分 turn。`
+  }
+  return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill。`
 }
 
 export function buildConstraintFooter(
@@ -1059,13 +1077,14 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       ].join('\n')
     case 'write':
       return [
-        `写第 ${ch || 'N'} 章正文到 ${chPath}。`,
-        '先 gate preflight，只消费 ### CONTEXT + 本章纲；落盘正文。',
+        `写第 ${ch || 'N'} 章正文首稿到 ${chPath}。`,
+        '先 gate preflight，只消费 ### CONTEXT + 本章纲；落盘正文后停下。',
+        '本轮不要扩写、去 AI 味或 Continuity Commit（另开一轮定稿，便于换模）。',
       ].join('\n')
     case 'continue':
       return [
-        `接着写下一章（书：${root}/）。`,
-        '补章纲 → gate CONTEXT → 正文；定稿用审→润→Commit。',
+        `接着写下一章首稿（书：${root}/）。`,
+        '补章纲 → gate CONTEXT → 正文落盘后停下；扩写/润色/定稿另开一轮。',
       ].join('\n')
     case 'dialogue':
       return [
@@ -1081,6 +1100,11 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       return [
         `为第 ${ch || 'N'} 章加一处反转（${chPath}）。`,
         '须服务章纲 purpose；先改章纲再改正文。',
+      ].join('\n')
+    case 'expand':
+      return [
+        `对 ${chPath} 做字数/厚度扩写并落盘（首稿后定稿车道）。`,
+        '按 expansion 纪律 ≤3 种技术；改完复跑 gate precommit。不改情节 Canon 主线。',
       ].join('\n')
     case 'review':
       return [
@@ -1102,9 +1126,9 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
     case 'review-polish-commit':
       return [
         ch > 0
-          ? `对第 ${ch} 章（${chPath}）串行：审 → 可选润色 → Commit。`
-          : `对当前章节串行：审 → 可选润色 → Commit（书：${root}/）。`,
-        'PASS 不写 review 文件；FAIL 才落盘。Commit = ledger + 章纲 + state + postcommit。',
+          ? `对第 ${ch} 章（${chPath}）定稿串行：扩写(如需) → 审 → 可选润色 → Commit。`
+          : `对当前章节定稿串行：扩写(如需) → 审 → 可选润色 → Commit（书：${root}/）。`,
+        '这是写作之后的定稿轮（可换经济/质检模型）。PASS 不写 review 文件；FAIL 才落盘。',
       ].join('\n')
     case 'batch-freeze': {
       const bFrom = ctx.batchFrom && ctx.batchFrom > 0 ? ctx.batchFrom : 1

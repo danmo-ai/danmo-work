@@ -4,7 +4,7 @@
 
 ## 判断
 
-- **赶、薄、欠戏剧化** → 扩写（技术见 `novel-write/references/expansion.md`，每章 ≤3 种）。
+- **赶、薄、欠戏剧化** → 扩写（技术见 `novel-review/references/expansion.md`，每章 ≤3 种；首稿后另开一轮，勿与写作同 turn）。
 - **紧、快、完整但短** → 调整章纲 `word_target`（找用户确认），不要注水。
 
 ## 七技术速查
