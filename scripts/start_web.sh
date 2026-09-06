@@ -21,7 +21,9 @@ echo "    Frontend: http://localhost:${FRONTEND_PORT}/app/  (Vite HMR)"
 
 cd "$DQ_ROOT/frontend"
 if [[ ! -d node_modules ]] || [[ package-lock.json -nt node_modules ]]; then
-  npm install
+  echo "==> Installing frontend deps (npm install --prefer-offline)..."
+  npm install --prefer-offline --no-audit --no-fund
+  touch node_modules
 fi
 
 DEV_BACKEND_BIN="$DQ_RUN_DIR/backend-bin"

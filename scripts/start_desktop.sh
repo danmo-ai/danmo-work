@@ -20,7 +20,14 @@ echo "    Desktop : Tauri webview (Vite HMR on :${DQ_FRONTEND_PORT})"
 
 cd "$DQ_ROOT/frontend"
 if [[ ! -d node_modules ]] || [[ package-lock.json -nt node_modules ]]; then
-  npm install
+  # Visible progress: otherwise the banner looks "stuck" while npm talks to the registry.
+  # --prefer-offline avoids a full re-fetch when cache/node_modules already exist;
+  # --no-audit/--no-fund skip slow network side-channels that often hang on bad links.
+  echo "==> Installing frontend deps (npm install --prefer-offline)..."
+  npm install --prefer-offline --no-audit --no-fund
+  # Refresh mtime so a killed mid-install cannot force reinstall on every restart
+  # (npm may touch package-lock.json before finishing).
+  touch node_modules
 fi
 
 # Tauri externalBin requires a target-tripled sidecar even in dev.
