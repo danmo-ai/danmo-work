@@ -18,7 +18,7 @@ Chapter outline → **first draft only**. 扩写 / 审 / 润色 / Commit → `no
 
 ## When to load
 
-写第 N 章 / 章纲 / 批次冻结 / 续写 / 接手 / 爽点强化（对白·钩·反转）.
+写第 N 章 / 章纲 / 批次冻结 / 续写 / 接手 / 卡文救援 / 爽点强化（对白·钩·反转）.
 
 **不要**在本技能回合做：字数扩写、去 AI 味、审稿、连续性定稿。
 
@@ -30,8 +30,9 @@ Chapter outline → **first draft only**. 扩写 / 审 / 润色 / Commit → `no
 | 批次冻结 | `batch-freeze.md` | — |
 | 写正文 | `chapter-write.md`（含 preflight） | 文风与去 AI 味 |
 | 开篇 ch1–3 | 上栏 + `opening-chapters.md` | 节奏与结构 |
-| 续写接手 | `continuation.md` | 文风与去 AI 味 |
+| 续写 / 卡文 | `continuation.md`（含卡文四法） | 文风与去 AI 味 |
 | 爽点强化 | `chapter-write.md` | 爽点与追读 |
+| 场景/对白质感 | `chapter-write.md` + 按需 `scene-routing.md` | 情绪与场景 或 文风与去 AI 味 |
 
 写正文：**gate preflight → 只消费 `### CONTEXT` + 本章纲。** 禁止扫树；禁止 `author-lore`。批次冻结按单元章范围默认写入 `frozen_batch`（见 `batch-freeze.md`）。
 

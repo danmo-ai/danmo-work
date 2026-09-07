@@ -27,7 +27,7 @@ Post-draft lane（可与写作分模）：字数不足先扩写 → 一轮审稿
 | Intent | Load | search_kb（≤1） |
 |--------|------|-----------------|
 | 字数不足/扩写 | `expansion.md` | 扩写与字数控制 |
-| 审稿 / 批量审 | `review-gates.md`（10 维加权评分门） | 文风与去 AI 味 |
+| 审稿 / 批量审 | `review-gates.md`（10 维加权 + 发稿前四步自查） | 文风与去 AI 味 |
 | 去 AI 味 | `polish-deslop.md`（先跑 scan-deslop 拿 COUNTS） | 文风与去 AI 味 |
 | Commit | `continuity-commit.md` | — |
 | 卷收束 | `continuity-commit.md` 卷收束节 + `review-gates.md` Assembly Checklist | — |

@@ -14,7 +14,7 @@ novel/<book-id>/
     style-fingerprint.md        # optional（续写）
     proposals.md                # optional what-if
   outline/
-    book_outline.md             # 结构/卷地图；不复制终局储备（见 bible）
+    book_outline.md             # 总纲：核心纲/承诺/强设定指针/全书结构钩与双线/分卷表；不复制终局储备（见 bible）
     volumes/                    # v01.md … 剧情单元卡
   chapters/
     ch001-outline.yaml         # 章纲 (YAML only; required before draft)

@@ -21,8 +21,9 @@ Book/volume planning stays in `outline/` (`outline.md`) and **stops at 剧情单
 - 单元功能 + 本章节拍角色 → `purpose` / `beats` 序
 - 主爽点形态 + 兑现归属 → `pleasure_point` / `micro_payoff`
 - 禁止提前释放 + 终局边界 → `forbidden` / `constraint_checks`
-- 主角局部目标 / 关键选择 / 核心阻碍 → `beats` / `state_deltas` 动机与冲突面
-- 段末「下一单元钩子」只定 `hook.type` 方向；`hook.out` 在章纲写具体事件
+- 主角局部目标（欲望）/ 核心阻碍 / 关键选择 → `beats` / `state_deltas` 矛盾面（欲望+阻碍）
+- 段末「下一单元钩子」（短线结构钩）只定 `hook.type` 方向；`hook.out` 在章纲写具体事件
+- 单元「推进线」若标感情/双：本章勿抢走已承诺的主爽点契约（见强约束）
 
 卷纲只有目标句、没有单元卡，节拍未覆盖本章，或 `unit_id` 对不上 → 退回 `novel-plan` 补卷纲，不要空造章纲。
 

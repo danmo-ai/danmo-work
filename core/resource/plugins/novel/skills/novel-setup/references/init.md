@@ -15,6 +15,20 @@ Optional in the same ask: platform tone (番茄/起点等) as **preference**, no
 
 If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding the defaults from KB 题材与平台（章字数 2000–3500、断章必钩、3–5 章一爽点、黄金三章闭环）so later stages inherit them without re-searching.
 
+## 开书筹备 checklist（写入 bible 前自检）
+
+与 sufficiency 一并想清；不必另开一轮 ask，可挤进同一 `ask_user` 或作者自答：
+
+| 项 | 问什么 | 落盘 |
+|----|--------|------|
+| 题材切口 | 第一场冲突从哪进？擅长标签是什么（非纯追热点） | bible 读者承诺 + genre |
+| 主角目标 | 开局欲望是否可观察、能否随剧情演变 | 主角卡欲望/伤口 |
+| 关系冲突 | 主对立与拉扯是否够撑长篇（人物 > 噱头） | cast 关系 / 卷对手气味 |
+| 体量 | 框架能否撑约 **30 万字+**（新手练控场量级） | Length target；总纲分卷表 |
+| 核心纲+强设定 | 主线一句说清；设定能否持续生矛盾 | bible + `world.md` 四层骨架 |
+
+习惯建议（非强制）：日更前尽量 **存稿 3–5 章**；前几本以完本练控场为主，允许扑街换书。
+
 ## Steps（少交互）
 
 1. `read_skill` → `project-layout.md`（按需再开 `table-schema.md` / templates）.  
@@ -37,6 +51,7 @@ If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding
 - `canon/world.md` 四层骨架已落盘  
 - `canon/author-lore.md` + `continuity/ledger.md` 已落盘  
 - Gate 脚本 doctor 无 blocking layout holes
+- 开书筹备 checklist 五项已有答案（可写在 bible 备注）
 
 ## Legacy migrate
 

@@ -24,7 +24,8 @@ Lock canon and outlines. **No chapter outlines, no chapter bodies.**
 
 | Intent | Load | search_kb（≤1） |
 |--------|------|-----------------|
-| 总纲 / 卷纲 | `novel-plan/references/outline.md` | 节奏与结构 |
+| 总纲 | `novel-plan/references/outline.md` + 模板 `book-outline.md`（锁纲 checklist） | 节奏与结构 |
+| 卷纲 | `novel-plan/references/outline.md` + 模板 `volume-outline.md`（锁卷 checklist / 单元卡） | 节奏与结构 |
 | 人设 / 世界观 | templates `world.md` + `cast-card.md` | 人设与群像 |
 | 金手指 | `cast-card.md` 金手指段 | 世界观与金手指 |
 
