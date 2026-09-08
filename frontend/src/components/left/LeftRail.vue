@@ -500,7 +500,6 @@ watch(() => projects.projects.length, (len) => {
 
           <div class="module-sidebar__section">
             <div class="module-sidebar__section-head">
-              <span class="module-sidebar__section-title">{{ $t('navigation.projects') }}</span>
               <div class="module-sidebar__view-toggle" role="group" :aria-label="$t('navigation.sessionView')">
                 <button
                   type="button"
@@ -974,23 +973,15 @@ watch(() => projects.projects.length, (len) => {
 .module-sidebar__section-head {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
   padding: 0;
-}
-
-.module-sidebar__section-title {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--dq-font-size-caption);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--dq-sidebar-section-fg, var(--dq-label-tertiary));
 }
 
 .module-sidebar__view-toggle {
   display: inline-flex;
   flex-shrink: 0;
+  margin-right: auto;
   border: 1px solid var(--dq-separator-light);
   border-radius: 6px;
   overflow: hidden;
