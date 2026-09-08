@@ -112,6 +112,7 @@ const marketSelected = computed(() => {
 
 <template>
   <WorkspaceShell
+    :title="$t('navigation.plugins')"
     :has-selection="hasSelection"
     :custom-rail="true"
     @keydown="onKeydown"

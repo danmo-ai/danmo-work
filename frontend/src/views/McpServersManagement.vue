@@ -349,6 +349,7 @@ function onKeydown(e: KeyboardEvent) {
 
 <template>
   <WorkspaceShell
+    :title="$t('navigation.mcpServer')"
     custom-rail
     :has-selection="hasSelection"
     @create="openCreate"

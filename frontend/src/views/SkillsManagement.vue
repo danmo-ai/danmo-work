@@ -475,6 +475,7 @@ function formatSize(bytes: number): string {
 
 <template>
   <WorkspaceShell
+    :title="$t('navigation.skills')"
     custom-rail
     :has-selection="hasSelection"
     @keydown="onKeydown"
