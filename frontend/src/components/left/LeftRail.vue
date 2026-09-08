@@ -282,7 +282,6 @@ function sessionTitle(t_: Session): string {
 
 const userLabel = computed(() => t('navigation.userFallback'))
 const userInitial = computed(() => userLabel.value.slice(0, 1).toUpperCase())
-const userPlan = computed(() => 'Danmo')
 
 const libraryActive = computed(() =>
   libraryItems.value.some((item) => item.module === props.activeModule),
@@ -740,12 +739,8 @@ watch(() => projects.projects.length, (len) => {
         </div>
 
         <footer class="module-sidebar__footer">
-          <div class="module-sidebar__user">
+          <div class="module-sidebar__user" :title="userLabel" :aria-label="userLabel">
             <span class="module-sidebar__avatar" aria-hidden="true">{{ userInitial }}</span>
-            <span class="module-sidebar__info">
-              <span class="module-sidebar__name">{{ userLabel }}</span>
-              <span class="module-sidebar__plan">{{ userPlan }}</span>
-            </span>
           </div>
           <button
             type="button"
@@ -1596,12 +1591,11 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .module-sidebar__user {
-  flex: 1;
-  min-width: 0;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
+  justify-content: center;
+  padding: 2px;
   border-radius: 8px;
 }
 
@@ -1621,9 +1615,11 @@ watch(() => projects.projects.length, (len) => {
 
 .module-sidebar__version {
   position: relative;
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   margin: 0;
   border: none;
@@ -1652,27 +1648,6 @@ watch(() => projects.projects.length, (len) => {
   border-radius: 50%;
   background: var(--dq-accent);
   flex-shrink: 0;
-}
-
-.module-sidebar__info {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.module-sidebar__name {
-  font-size: var(--dq-font-size-nav);
-  font-weight: 500;
-  color: var(--dq-sidebar-item-fg, var(--dq-label-secondary));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.module-sidebar__plan {
-  font-size: var(--dq-font-size-caption);
-  color: var(--dq-sidebar-meta-fg, var(--dq-label-quaternary));
 }
 
 .module-sidebar__libraries,
