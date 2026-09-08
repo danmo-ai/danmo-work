@@ -170,7 +170,7 @@ function onKeydown(e: KeyboardEvent) {
 
 <template>
   <WorkspaceShell
-    :title="$t('automations.title')"
+    :title="$t('navigation.automations')"
     :count="automations.items.length"
     :count-label="$t('automations.title')"
     :create-label="$t('automations.newAutomation')"

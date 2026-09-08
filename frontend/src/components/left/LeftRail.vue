@@ -287,6 +287,11 @@ const libraryActive = computed(() =>
   libraryItems.value.some((item) => item.module === props.activeModule),
 )
 
+const libraryActiveLabel = computed(() => {
+  const item = libraryItems.value.find((x) => x.module === props.activeModule)
+  return item?.label ?? t('navigation.libraries')
+})
+
 const expandedProjectNames = computed({
   get: () => [...expandedProjects.value],
   set: (names: string[]) => {
@@ -441,8 +446,8 @@ watch(() => projects.projects.length, (len) => {
       <div class="module-sidebar__strip-spacer" />
       <DqDropdown @command="onLibraryCommand">
         <DqIconButton
-          :aria-label="$t('navigation.libraries')"
-          :title="$t('navigation.libraries')"
+          :aria-label="libraryActive ? libraryActiveLabel : $t('navigation.libraries')"
+          :title="libraryActive ? libraryActiveLabel : $t('navigation.libraries')"
           :class="{ 'is-active-lib': libraryActive }"
         >
           <DqIcon :size="16"><Grid /></DqIcon>
@@ -454,7 +459,20 @@ watch(() => projects.projects.length, (len) => {
               :key="item.module"
               :command="item.module"
             >
-              {{ item.label }}
+              <span class="module-sidebar__lib-item" :class="{ 'is-current': props.activeModule === item.module }">
+                <span>{{ item.label }}</span>
+                <svg
+                  v-if="props.activeModule === item.module"
+                  class="module-sidebar__lib-check"
+                  viewBox="0 0 16 16"
+                  width="14"
+                  height="14"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path d="M3.5 8.5l3 3 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
             </DqDropdownItem>
           </DqDropdownMenu>
         </template>
@@ -757,8 +775,8 @@ watch(() => projects.projects.length, (len) => {
             <DqIconButton
               class="module-sidebar__libraries"
               :class="{ 'is-active-lib': libraryActive }"
-              :aria-label="$t('navigation.libraries')"
-              :title="$t('navigation.libraries')"
+              :aria-label="libraryActive ? libraryActiveLabel : $t('navigation.libraries')"
+              :title="libraryActive ? libraryActiveLabel : $t('navigation.libraries')"
             >
               <DqIcon :size="18"><Grid /></DqIcon>
             </DqIconButton>
@@ -769,7 +787,20 @@ watch(() => projects.projects.length, (len) => {
                   :key="item.module"
                   :command="item.module"
                 >
-                  {{ item.label }}
+                  <span class="module-sidebar__lib-item" :class="{ 'is-current': props.activeModule === item.module }">
+                    <span>{{ item.label }}</span>
+                    <svg
+                      v-if="props.activeModule === item.module"
+                      class="module-sidebar__lib-check"
+                      viewBox="0 0 16 16"
+                      width="14"
+                      height="14"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path d="M3.5 8.5l3 3 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </span>
                 </DqDropdownItem>
               </DqDropdownMenu>
             </template>
@@ -1662,6 +1693,25 @@ watch(() => projects.projects.length, (len) => {
 }
 
 .module-sidebar__libraries.is-active-lib {
+  color: var(--dq-accent);
+}
+
+.module-sidebar__lib-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-width: 140px;
+}
+
+.module-sidebar__lib-item.is-current {
+  color: var(--dq-accent);
+  font-weight: 600;
+}
+
+.module-sidebar__lib-check {
+  flex-shrink: 0;
   color: var(--dq-accent);
 }
 

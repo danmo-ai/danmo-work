@@ -326,6 +326,7 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
 
 <template>
   <WorkspaceShell
+    :title="$t('navigation.workers')"
     custom-rail
     :has-selection="hasSelection"
     @keydown="onWorkspaceKeydown"
