@@ -175,6 +175,18 @@ export const useSessionsStore = defineStore('sessions', () => {
     try {
       sessions.value = asArray(await fetchJSON<Session[]>('/sessions'))
       try {
+        const { useOpenSessionTabsStore } = await import('@/stores/openSessionTabs')
+        useOpenSessionTabsStore().prune(
+          new Set(
+            sessions.value
+              .filter((s) => s.status !== 'archived')
+              .map((s) => s.id),
+          ),
+        )
+      } catch {
+        /* open tabs optional */
+      }
+      try {
         const { useWeixinStore } = await import('@/stores/weixin')
         await useWeixinStore().refreshBindings()
       } catch {
@@ -219,6 +231,12 @@ export const useSessionsStore = defineStore('sessions', () => {
       composingNew.value = false
       resetStreamState()
       turns.value = []
+      try {
+        const { useOpenSessionTabsStore } = await import('@/stores/openSessionTabs')
+        useOpenSessionTabsStore().open(t.id)
+      } catch {
+        /* open tabs optional */
+      }
       // Poll history before SSE — same order as selectSession — so turn.started
       // is never missing when ask_user / permission cards arrive on a busy stream.
       await loadSessionEvents(t.id)
@@ -245,6 +263,14 @@ export const useSessionsStore = defineStore('sessions', () => {
       })
       const idx = sessions.value.findIndex((x) => x.id === id)
       if (idx >= 0) sessions.value[idx] = t
+      if (t.status === 'archived') {
+        try {
+          const { useOpenSessionTabsStore } = await import('@/stores/openSessionTabs')
+          useOpenSessionTabsStore().remove(id)
+        } catch {
+          /* open tabs optional */
+        }
+      }
     } catch (e) {
       // Stale session id / DB switch must not crash the app (e.g. after saving a provider
       // syncModelSelection PATCHes the current session and may 404).
@@ -255,6 +281,12 @@ export const useSessionsStore = defineStore('sessions', () => {
           sessions.value = sessions.value.filter((s) => s.id !== id)
           startCompose()
         }
+        try {
+          const { useOpenSessionTabsStore } = await import('@/stores/openSessionTabs')
+          useOpenSessionTabsStore().remove(id)
+        } catch {
+          /* open tabs optional */
+        }
         return
       }
       throw e
@@ -264,6 +296,12 @@ export const useSessionsStore = defineStore('sessions', () => {
   async function deleteSession(id: string) {
     await fetchJSON(`/sessions/${id}`, { method: 'DELETE' })
     sessions.value = sessions.value.filter((t) => t.id !== id)
+    try {
+      const { useOpenSessionTabsStore } = await import('@/stores/openSessionTabs')
+      useOpenSessionTabsStore().remove(id)
+    } catch {
+      /* open tabs optional */
+    }
     if (currentSessionId.value === id) {
       startCompose()
     }
@@ -276,6 +314,12 @@ export const useSessionsStore = defineStore('sessions', () => {
     sessions.value = sessions.value.filter((s) => s.projectId !== projectId)
     if (selectedProjectId.value === projectId) {
       selectedProjectId.value = null
+    }
+    if (removed.size) {
+      void import('@/stores/openSessionTabs').then(({ useOpenSessionTabsStore }) => {
+        const tabs = useOpenSessionTabsStore()
+        for (const id of removed) tabs.remove(id)
+      }).catch(() => { /* open tabs optional */ })
     }
     if (currentSessionId.value && removed.has(currentSessionId.value)) {
       startCompose()
@@ -702,6 +746,12 @@ export const useSessionsStore = defineStore('sessions', () => {
       if (decoded.effort) {
         selectedEffort.value = decoded.effort
       }
+    }
+    try {
+      const { useOpenSessionTabsStore } = await import('@/stores/openSessionTabs')
+      useOpenSessionTabsStore().open(id)
+    } catch {
+      /* open tabs optional */
     }
     resetStreamState()
     turns.value = []

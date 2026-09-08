@@ -98,7 +98,7 @@ function hasMoreSessions(p: Project): boolean {
   return projectSessions(p).length > DEFAULT_VISIBLE_TASKS
 }
 
-const menuItems = computed(() => [
+const libraryItems = computed(() => [
   { module: 'workers' as const, label: t('navigation.workers'), icon: Grid },
   { module: 'knowledge' as const, label: t('navigation.knowledge'), icon: Document },
   { module: 'skills' as const, label: t('navigation.skills'), icon: MagicStick },
@@ -110,6 +110,12 @@ const menuItems = computed(() => [
 
 function navigate(module: AppModule) {
   emit('navigate', module)
+}
+
+function onLibraryCommand(cmd: string) {
+  if (libraryItems.value.some((item) => item.module === cmd)) {
+    navigate(cmd as AppModule)
+  }
 }
 
 function onNewSession(projectId?: string) {
@@ -126,9 +132,19 @@ function selectSession(id: string) {
 }
 
 async function archiveSession(id: string) {
+  const wasCurrent = sessions.currentSessionId === id && !sessions.composingNew
   try {
     await sessions.updateSession(id, { status: 'archived' })
     toast.success(t('sessions.archived'))
+    if (wasCurrent) {
+      const { useOpenSessionTabsStore } = await import('@/stores/openSessionTabs')
+      const next = useOpenSessionTabsStore().openIds[0] ?? null
+      if (next) {
+        emit('selectSession', next)
+      } else {
+        emit('newSession')
+      }
+    }
   } catch (e) {
     toast.error(e instanceof Error ? e.message : t('sessions.archiveFailed'))
   }
@@ -268,16 +284,9 @@ const userLabel = computed(() => t('navigation.userFallback'))
 const userInitial = computed(() => userLabel.value.slice(0, 1).toUpperCase())
 const userPlan = computed(() => 'Danmo')
 
-/** Default collapsed so chats/projects stay primary; persist only after user toggles. */
-const resourcesCollapsed = ref(localStorage.getItem('app-resources-collapsed') !== '0')
-watch(resourcesCollapsed, (v) => localStorage.setItem('app-resources-collapsed', v ? '1' : '0'))
-
-const resourceOpen = computed({
-  get: () => (resourcesCollapsed.value ? [] : ['resources']),
-  set: (names: string[]) => {
-    resourcesCollapsed.value = !names.includes('resources')
-  },
-})
+const libraryActive = computed(() =>
+  libraryItems.value.some((item) => item.module === props.activeModule),
+)
 
 const expandedProjectNames = computed({
   get: () => [...expandedProjects.value],
@@ -431,6 +440,26 @@ watch(() => projects.projects.length, (len) => {
         </svg>
       </DqIconButton>
       <div class="module-sidebar__strip-spacer" />
+      <DqDropdown @command="onLibraryCommand">
+        <DqIconButton
+          :aria-label="$t('navigation.libraries')"
+          :title="$t('navigation.libraries')"
+          :class="{ 'is-active-lib': libraryActive }"
+        >
+          <DqIcon :size="16"><Grid /></DqIcon>
+        </DqIconButton>
+        <template #dropdown>
+          <DqDropdownMenu>
+            <DqDropdownItem
+              v-for="item in libraryItems"
+              :key="item.module"
+              :command="item.module"
+            >
+              {{ item.label }}
+            </DqDropdownItem>
+          </DqDropdownMenu>
+        </template>
+      </DqDropdown>
       <DqIconButton :aria-label="$t('navigation.settings')" @click="navigate('settings')">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3" />
@@ -708,35 +737,6 @@ watch(() => projects.projects.length, (len) => {
               </DqCollapse>
             </nav>
           </div>
-          <div class="module-sidebar__divider" />
-
-          <div class="module-sidebar__modules">
-            <DqCollapse v-model="resourceOpen" class="module-sidebar__resource-collapse">
-            <DqCollapseItem name="resources" :title="$t('navigation.resources')">
-            <nav class="module-sidebar__menu" :aria-label="t('navigation.moduleNavAria')">
-              <button
-                v-for="item in menuItems"
-                :key="item.module"
-                type="button"
-                class="module-sidebar__nav"
-                :class="{ 'is-active': props.activeModule === item.module }"
-                @click="navigate(item.module)"
-              >
-                <DqIcon :size="16">
-                  <component :is="item.icon" v-if="item.icon" />
-                  <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="7" height="7" rx="1.5" />
-                    <rect x="14" y="3" width="7" height="7" rx="1.5" />
-                    <rect x="3" y="14" width="7" height="7" rx="1.5" />
-                    <rect x="14" y="14" width="7" height="7" rx="1.5" />
-                  </svg>
-                </DqIcon>
-                <span>{{ item.label }}</span>
-              </button>
-            </nav>
-            </DqCollapseItem>
-            </DqCollapse>
-          </div>
 
         </div>
 
@@ -759,6 +759,27 @@ watch(() => projects.projects.length, (len) => {
             <span>v{{ appVersion || '…' }}</span>
             <span v-if="hasUpdate" class="module-sidebar__update-dot" aria-hidden="true" />
           </button>
+          <DqDropdown @command="onLibraryCommand">
+            <DqIconButton
+              class="module-sidebar__libraries"
+              :class="{ 'is-active-lib': libraryActive }"
+              :aria-label="$t('navigation.libraries')"
+              :title="$t('navigation.libraries')"
+            >
+              <DqIcon :size="18"><Grid /></DqIcon>
+            </DqIconButton>
+            <template #dropdown>
+              <DqDropdownMenu>
+                <DqDropdownItem
+                  v-for="item in libraryItems"
+                  :key="item.module"
+                  :command="item.module"
+                >
+                  {{ item.label }}
+                </DqDropdownItem>
+              </DqDropdownMenu>
+            </template>
+          </DqDropdown>
           <DqIconButton class="module-sidebar__settings" :aria-label="$t('navigation.settings')" @click="navigate('settings')">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="3" />
@@ -1663,13 +1684,19 @@ watch(() => projects.projects.length, (len) => {
   color: var(--dq-sidebar-meta-fg, var(--dq-label-quaternary));
 }
 
+.module-sidebar__libraries,
 .module-sidebar__settings {
   flex-shrink: 0;
   color: var(--dq-label-tertiary);
 }
 
+.module-sidebar__libraries:hover,
 .module-sidebar__settings:hover {
   color: var(--dq-sidebar-item-emphasis-fg, var(--dq-label-secondary));
+}
+
+.module-sidebar__libraries.is-active-lib {
+  color: var(--dq-accent);
 }
 
 .module-sidebar__resize {

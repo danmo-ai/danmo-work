@@ -11,7 +11,7 @@ import ComposerPendingDecisions from '@/components/composer/ComposerPendingDecis
 import ComposerPendingQueue from '@/components/composer/ComposerPendingQueue.vue'
 import WelcomeEmpty from '@/components/center/WelcomeEmpty.vue'
 import ApprovalRail from '@/components/center/ApprovalRail.vue'
-import ActiveSessionsBar from '@/components/center/ActiveSessionsBar.vue'
+import SessionTabBar from '@/components/center/SessionTabBar.vue'
 import ToolCardBlock from '@/components/center/ToolCardBlock.vue'
 import ToolCardGroup from '@/components/center/ToolCardGroup.vue'
 import TurnSection from '@/components/center/TurnSection.vue'
@@ -1650,6 +1650,7 @@ function onTitleKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="session-workspace">
+    <SessionTabBar @jump-pending="jumpToFirstPendingApproval" />
     <header v-if="sessions.currentSession" class="session-workspace__head">
       <div class="session-workspace__identity">
         <template v-if="isEditingTitle">
@@ -1685,11 +1686,6 @@ function onTitleKeydown(e: KeyboardEvent) {
             </svg>
           </button>
         </div>
-        <ActiveSessionsBar
-          class="session-workspace__active"
-          @select="(id) => { sessions.selectSession(id); router.push({ name: 'sessions', params: { id } }) }"
-          @jump-pending="jumpToFirstPendingApproval"
-        />
       </div>
       <div class="session-workspace__actions">
         <DqButton
@@ -2048,10 +2044,6 @@ function onTitleKeydown(e: KeyboardEvent) {
   min-width: 0;
   flex: 1;
   flex-wrap: wrap;
-}
-
-.session-workspace__active {
-  flex-shrink: 0;
 }
 
 .session-workspace__title {
