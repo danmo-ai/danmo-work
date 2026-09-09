@@ -4,14 +4,16 @@
 
 风格指纹随 preflight CONTEXT 注入（`canon/style-fingerprint.md`，无则 bible Style card）。**本轮上下文未见风格指纹（可能被裁剪）→ `read_file canon/style-fingerprint.md` 补齐**，不要扫树找别的。
 
+**批量（冻结批次 + 用户明示 / Workbench `batch-write`）→ `batch-draft.md`**，同 turn 可写多章首稿；本文件管**单章**。
+
 ## Preflight
 
-1. `exec_shell` gate `--action preflight --chapter N`（`novel-setup/references/gate.md`）。exit ≠ 0 → **停止**。接手旧书另跑 `--action doctor`。
+1. `exec_shell` gate `--action preflight --chapter N`（`novel-setup/references/gate.md`）。exit ≠ 0 → **停止**。接手旧书另跑 `--action doctor`（批量路径禁止重跑 doctor）。
 2. 读 stdout 的 `### CONTEXT`（风格指纹 / 接钩 / 人物现场 / 三锚点 / 在场角色间关系 / 开放债务 / 本章硬约束 / 单元功能）。**这是本轮唯一额外上下文。**
 3. 读本章 `chapters/chNNN-outline.yaml`（须 `accepted`；`unit_id` 对上卷纲单元）。
 4. 可选：`search_kb` **至多 1** 次（默认「文风与去 AI 味」；章末钩/接钩可换「爽点与追读」）。
 5. **ch001–ch003** → 另 `read_skill` `opening-chapters.md` + KB「节奏与结构」。
-6. beats 含场景标签（对话/打斗/系统/`scene:establish` 等）→ `search_kb` **情绪与场景** 对应小节（见 KB `06`）；**不要**再 `read_skill` 单独场景路由页。
+6. beats 含场景标签（对话/打斗/系统/`scene:establish` 等）→ `search_kb` **情绪与场景** 对应条目（见 KB `06`）；**不要**再 `read_skill` 单独场景路由页。
 7. 仅当章纲 `continuity_risks` 非空 → 才可 `read_file` 点名旧章。
 
 **禁止：** `canon/author-lore.md`、整本 bible 终局细节、全卷纲、全书 `canon/` 通读、强制 `table_*`。
@@ -49,4 +51,4 @@ last_preflight: "[YYYY-MM-DD chNNN] state:writing | contract:accepted | gate:PAS
 
 1. 章纲 `status=drafted`（`table_upsert` 可选，默认不做）。
 2. **本轮到此结束。** 勿在同 turn 做扩写 / 去 AI 味 / 审稿 / Continuity Commit（留给 `novel-review` 另开一轮，便于用户换模）。
-3. Hand off：字数不足 → `expansion.md`；然后审 → 可选润色 → Commit。勿开下一章除非用户明示批次且已 Commit。
+3. Hand off：字数不足 → `expansion.md`；然后审 → 可选润色 → Commit。用户明示批次且 `frozen_batch` 有效时，可同 turn 继续下章首稿（见 `batch-draft.md`）——**不要求**上一章已 Commit；接钩用章纲 `hook.out` 链。

@@ -470,6 +470,85 @@ class GateTests(unittest.TestCase):
         ng.write_book_text(p, "你好\n")
         self.assertEqual(p.read_bytes(), "你好\n".encode("utf-8"))
 
+    def _seed_ch2_accepted(self) -> None:
+        book = self.root / "novel/demo"
+        outline = (book / "chapters/ch001-outline.yaml").read_text(encoding="utf-8")
+        ch2 = (
+            outline.replace("chapter: 1", "chapter: 2")
+            .replace("title_working: 客栈", "title_working: 验骨")
+            .replace(
+                "purpose: 主角被当众羞辱后反证身份",
+                "purpose: 午时当众验骨推进失踪信",
+            )
+            .replace('beats: ["羞辱", "反证", "留下失踪信"]', 'beats: ["验骨", "对质", "新钩"]')
+            .replace("pleasure_point: 当众打脸", "pleasure_point: 验骨反转")
+            .replace(
+                'state_deltas: ["主角: 被辱→声望回升"]',
+                'state_deltas: ["主角: 声望回升→当众立信"]',
+            )
+            .replace("out: 明日午时当众验骨", "out: 信上出现第二处血印")
+        )
+        (book / "chapters/ch002-outline.yaml").write_text(ch2, encoding="utf-8")
+        (book / "chapters/ch002.md").write_text(
+            "午时验骨。对面的人脸色变了。信上出现第二处血印。\n",
+            encoding="utf-8",
+        )
+
+    def test_preflight_range_pass(self):
+        self._seed_ch2_accepted()
+        rep = ng.run(str(self.root), "demo", "preflight", 0, from_ch=1, to_ch=2)
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertEqual(len(rep.chapter_reports), 2)
+        blob = rep.format()
+        self.assertIn("### RANGE", blob)
+        self.assertIn("1-2", blob)
+        self.assertIn("### CHAPTER 1", blob)
+        self.assertIn("### CHAPTER 2", blob)
+        self.assertIn("### CONTEXT", blob)
+
+    def test_preflight_range_partial_fail(self):
+        self._seed_ch2_accepted()
+        p = self.root / "novel/demo/chapters/ch002-outline.yaml"
+        p.write_text(p.read_text(encoding="utf-8").replace("unit_id: v01-U1", 'unit_id: ""'), encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "preflight", 0, from_ch=1, to_ch=2)
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertEqual(rep.chapter_reports[0].verdict, "PASS")
+        self.assertEqual(rep.chapter_reports[1].verdict, "FAIL")
+        self.assertIn("failed chapters: 2", rep.format())
+        rc = ng.main(
+            [
+                "--workdir",
+                str(self.root),
+                "--book-id",
+                "demo",
+                "--action",
+                "preflight",
+                "--from",
+                "1",
+                "--to",
+                "2",
+            ]
+        )
+        self.assertEqual(rc, 1)
+
+    def test_precommit_range_pass(self):
+        self._seed_ch2_accepted()
+        for n in (1, 2):
+            p = self.root / f"novel/demo/chapters/ch00{n}-outline.yaml"
+            p.write_text(
+                p.read_text(encoding="utf-8").replace("status: accepted", "status: drafted"),
+                encoding="utf-8",
+            )
+        rep = ng.run(str(self.root), "demo", "precommit", 0, from_ch=1, to_ch=2)
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertEqual(len(rep.chapter_reports), 2)
+        for cr in rep.chapter_reports:
+            self.assertIn("em_dash_count", cr.counts)
+
+    def test_postcommit_rejects_range(self):
+        with self.assertRaises(ValueError):
+            ng.run(str(self.root), "demo", "postcommit", 0, from_ch=1, to_ch=2)
+
 
 if __name__ == "__main__":
     unittest.main()

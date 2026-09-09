@@ -60,7 +60,11 @@ Copy `assets/templates/chapter-outline.yaml`. Keep it lean — fill only what th
 3. Set `unit_id` to that card (`vNN-U#`). Locate this chapter's role in 单元节拍. Push down fields from the unit card.
 4. Draft chapter outline at `chapters/chNNN-outline.yaml` (YAML template); set `status=accepted` when ready to draft (default path — no per-chapter `ask_user`).
 5. Optional: `table_upsert` mirror — **默认不做**.
-6. Proceed to `chapter-write.md`.
+6. Proceed to `chapter-write.md`（单章）或与 `batch-freeze.md` 同 turn 批量写齐后再 `batch-draft.md`.
+
+### 批量章纲
+
+一批多章时：**卷纲 + ledger Open loops / Cast snapshot 只读一次**，再连续写 N 份 `chNNN-outline.yaml`。**勿每章重读卷纲全文。** 连续 3 章 `pleasure_point` 为空必须重排。通常与批次冻结同 turn 完成。
 
 ## Status vocabulary
 

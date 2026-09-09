@@ -6,7 +6,7 @@ license: MIT
 compatibility: Requires write, edit, read_file, grep, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "2.5"
+  version: "2.6"
   category: creative-writing
 ---
 
@@ -14,11 +14,11 @@ metadata:
 
 Post-draft lane（可与写作分模）：字数不足先扩写 → 一轮审稿 → gate precommit → 修 P0 → 可选去 AI 味 → Continuity Commit（gate postcommit）。`qc_gate` FAIL blocks 定稿.
 
-**Pipeline steps 7–8/8**（扩写属定稿前修补，仍本技能）. 本技能不换模型。
+**Pipeline steps 7–8/8**（扩写属定稿前修补，仍本技能）. 本技能不换模型。**与 novel-write 分开**：禁止在首稿 turn 定稿。
 
 ## When to load
 
-字数不足扩写 / 审稿 / 去 AI 味（含量化硬检）/ Continuity Commit / 批量审稿 / 卷收束 / 审→润→定 / 扩→审→润→定.
+字数不足扩写 / 审稿 / 去 AI 味（含量化硬检）/ Continuity Commit / 批量审稿定稿 / 卷收束 / 审→润→定 / 扩→审→润→定.
 
 **不要**用本技能写首稿正文（首稿 → `novel-write`）。
 
@@ -27,7 +27,8 @@ Post-draft lane（可与写作分模）：字数不足先扩写 → 一轮审稿
 | Intent | Load | search_kb（≤1） |
 |--------|------|-----------------|
 | 字数不足/扩写 | `expansion.md` | 扩写与字数控制 |
-| 审稿 / 批量审 | `review-gates.md`（10 维加权 + 发稿前四步自查） | 文风与去 AI 味 |
+| 审稿（单章） | `review-gates.md`（10 维加权 + 发稿前四步自查） | 文风与去 AI 味 |
+| 批量审 / 批量定稿 | `batch-review.md`（按章序扩→审→Commit） | 文风与去 AI 味 |
 | 去 AI 味 | `polish-deslop.md`（先跑 scan-deslop 拿 COUNTS） | 文风与去 AI 味 |
 | Commit | `continuity-commit.md` | — |
 | 卷收束 | `continuity-commit.md` 卷收束节 + `review-gates.md` Assembly Checklist | — |
@@ -35,6 +36,8 @@ Post-draft lane（可与写作分模）：字数不足先扩写 → 一轮审稿
 
 **PASS：不写 `reviews/` 文件**，只更新 `gates.qc`。**FAIL / 深审：写全文六镜 + 10 维评分。** Commit = 一次 patch（ledger 五要素摘要 + Cast snapshot + Open loops + 章纲 `reviewed` + state）+ `postcommit` exit 0.
 反 AI 量化硬检（破折号/英文泄漏/禁词/比喻）exit 0 才可宣称定稿；审稿报告引用 gate `### COUNTS` 四计数。
+
+批量定稿：同 turn 可处理多章，但 **Commit 必须按章号升序**；任一章 FAIL 停后续 Commit（见 `batch-review.md`）。可用 `precommit --from/--to` / `scan-deslop --from/--to` 减进程往返；`postcommit` 仍逐章。
 
 ## Stop
 

@@ -161,6 +161,16 @@ const deskBatchFreezeAllowed = computed(() => {
   return canRunAction('batch-freeze', bookContext.value).allowed
 })
 
+const deskBatchWriteAllowed = computed(() => {
+  if (!bookContext.value) return false
+  return canRunAction('batch-write', bookContext.value).allowed
+})
+
+const deskBatchReviewAllowed = computed(() => {
+  if (!bookContext.value) return false
+  return canRunAction('batch-review', bookContext.value).allowed
+})
+
 function primaryActionLabel(action: NovelStageAction, chapter?: number): string {
   switch (action) {
     case 'init':
@@ -171,6 +181,10 @@ function primaryActionLabel(action: NovelStageAction, chapter?: number): string 
       return t('novelWorkbench.actionAssets')
     case 'batch-freeze':
       return t('novelWorkbench.actionBatchFreeze')
+    case 'batch-write':
+      return t('novelWorkbench.actionBatchWrite')
+    case 'batch-review':
+      return t('novelWorkbench.actionBatchReview')
     case 'continuation':
       return t('novelWorkbench.actionContinuation')
     case 'contract':
@@ -763,6 +777,8 @@ async function openLedger(node: NovelFileNode) {
           :setup-shows-goldfinger="setupShowsGoldfinger"
           :has-book-outline="Boolean(bookOutlineFile)"
           :desk-batch-freeze-allowed="deskBatchFreezeAllowed"
+          :desk-batch-write-allowed="deskBatchWriteAllowed"
+          :desk-batch-review-allowed="deskBatchReviewAllowed"
           :selected-volume-num="selectedVolumeNum"
           :next-volume="nextVolume"
           @action="onInspectorAction"

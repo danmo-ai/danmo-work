@@ -3,6 +3,7 @@
 
 python3 novel_gate.py --action doctor|preflight|precommit|postcommit|scan-deslop \\
   --workdir PROJECT [--book-id SLUG] [--chapter N] [--from A --to B] [--json]
+  preflight|precommit|scan-deslop accept --from/--to; postcommit is --chapter only.
 Exit 0 PASS, 1 FAIL, 2 usage/error.
 """
 from __future__ import annotations
@@ -348,6 +349,9 @@ class Report:
         self.findings: list[dict] = []
         self.context_lines: list[str] = []
         self.counts: dict[str, int] = {}
+        self.chapter_reports: list[Report] = []
+        self.range_from = 0
+        self.range_to = 0
 
     def add_counts(self, **kw: int) -> None:
         for k, v in kw.items():
@@ -360,14 +364,23 @@ class Report:
         self.findings.append({"severity": "advisory", "check": check, "message": msg})
 
     def finalize(self) -> None:
+        if self.chapter_reports:
+            for cr in self.chapter_reports:
+                cr.finalize()
+            failed = [cr.chapter for cr in self.chapter_reports if cr.verdict == "FAIL"]
+            if failed:
+                self.verdict = "FAIL"
+                self.blocking(
+                    "batch",
+                    "failed chapters: " + ", ".join(str(c) for c in failed),
+                )
+            else:
+                self.verdict = "PASS"
+            return
         self.verdict = "FAIL" if any(f["severity"] == "blocking" for f in self.findings) else "PASS"
 
-    def format(self) -> str:
-        lines = ["### VERDICT", self.verdict, "", "### ACTION", self.action]
-        if self.book_id:
-            lines += ["", "### BOOK", self.book_id]
-        if self.chapter:
-            lines += ["", "### CHAPTER", str(self.chapter)]
+    def _format_body(self) -> list[str]:
+        lines: list[str] = []
         if self.context_lines:
             lines += ["", "### CONTEXT"]
             lines.extend(self.context_lines)
@@ -390,10 +403,30 @@ class Report:
         else:
             for f in adv:
                 lines.append(f"- [{f['check']}] {f['message']}")
+        return lines
+
+    def format(self) -> str:
+        lines = ["### VERDICT", self.verdict, "", "### ACTION", self.action]
+        if self.book_id:
+            lines += ["", "### BOOK", self.book_id]
+        if self.chapter_reports:
+            lines += ["", "### RANGE", f"{self.range_from}-{self.range_to}"]
+            fail_note = [f for f in self.findings if f["check"] == "batch"]
+            if fail_note:
+                lines += ["", "### BLOCKING"]
+                for f in fail_note:
+                    lines.append(f"- [{f['check']}] {f['message']}")
+            for cr in self.chapter_reports:
+                lines += ["", f"### CHAPTER {cr.chapter}", "### VERDICT", cr.verdict]
+                lines.extend(cr._format_body())
+            return "\n".join(lines) + "\n"
+        if self.chapter:
+            lines += ["", "### CHAPTER", str(self.chapter)]
+        lines.extend(self._format_body())
         return "\n".join(lines) + "\n"
 
     def as_dict(self) -> dict:
-        return {
+        d: dict = {
             "action": self.action,
             "book_id": self.book_id,
             "book_root": self.book_root,
@@ -403,6 +436,79 @@ class Report:
             "context": self.context_lines,
             "counts": self.counts,
         }
+        if self.chapter_reports:
+            d["range"] = {"from": self.range_from, "to": self.range_to}
+            d["chapters"] = [cr.as_dict() for cr in self.chapter_reports]
+        return d
+
+
+class BookCache:
+    """Per-process book reads shared across a chapter range (one gate invocation)."""
+
+    def __init__(self, book_root: Path):
+        self.book_root = book_root
+        self._ledger: str | None = None
+        self._open_loops: str | None = None
+        self._outline_texts: list[tuple[Path, str]] | None = None
+        self._cast_files: list[Path] | None = None
+        self._cast_texts: dict[str, str] | None = None
+        self._style: str | None = None
+        self._style_loaded = False
+        self._summary: tuple[str, str] | None = None
+
+    def ledger_text(self) -> str:
+        if self._ledger is None:
+            lp = ledger_path(self.book_root)
+            self._ledger = read_book_text(lp) if lp.is_file() else ""
+        return self._ledger
+
+    def open_loops_text(self) -> str:
+        if self._open_loops is None:
+            if self.ledger_text():
+                self._open_loops = self.ledger_text()
+            else:
+                tracker = self.book_root / "continuity/foreshadow-tracker.md"
+                if tracker.is_file():
+                    self._open_loops = read_book_text(tracker)
+                else:
+                    tracking = self.book_root / "continuity/tracking.md"
+                    self._open_loops = read_book_text(tracking) if tracking.is_file() else ""
+        return self._open_loops
+
+    def outline_texts(self) -> list[tuple[Path, str]]:
+        if self._outline_texts is None:
+            outline = self.book_root / "outline"
+            out: list[tuple[Path, str]] = []
+            if outline.is_dir():
+                for path in sorted(outline.rglob("*.md")):
+                    out.append((path, read_book_text(path)))
+            self._outline_texts = out
+        return self._outline_texts
+
+    def cast_paths(self) -> list[Path]:
+        if self._cast_files is None:
+            cast_dir = self.book_root / "canon" / "cast"
+            self._cast_files = list(cast_dir.glob("*.md")) if cast_dir.is_dir() else []
+        return self._cast_files
+
+    def cast_text_map(self) -> dict[str, str]:
+        """path.as_posix() → text; load once for anchors + relations."""
+        if self._cast_texts is None:
+            self._cast_texts = {}
+            for path in self.cast_paths():
+                self._cast_texts[path.as_posix()] = read_book_text(path)
+        return self._cast_texts
+
+    def style_brief(self) -> str:
+        if not self._style_loaded:
+            self._style = style_fingerprint_brief(self.book_root)
+            self._style_loaded = True
+        return self._style or ""
+
+    def summary_source(self) -> tuple[str, str]:
+        if self._summary is None:
+            self._summary = summary_source_text(self.book_root)
+        return self._summary
 
 
 def last_runes(s: str, n: int) -> str:
@@ -615,9 +721,9 @@ def count_open_foreshadows(tracker: str) -> int:
     return n
 
 
-def unit_listed(outline_root: Path, unit_id: str) -> bool:
+def unit_listed(outline_root: Path, unit_id: str, cache: BookCache | None = None) -> bool:
     unit_id = unit_id.strip()
-    if not unit_id or not outline_root.is_dir():
+    if not unit_id:
         return False
     u_short = ""
     vol = ""
@@ -625,8 +731,13 @@ def unit_listed(outline_root: Path, unit_id: str) -> bool:
     if i >= 0:
         vol = unit_id[:i]
         u_short = unit_id[i + 1 :]
-    for path in outline_root.rglob("*.md"):
-        text = read_book_text(path)
+    if cache is not None:
+        texts = cache.outline_texts()
+    elif outline_root.is_dir():
+        texts = [(path, read_book_text(path)) for path in outline_root.rglob("*.md")]
+    else:
+        return False
+    for path, text in texts:
         if unit_id in text:
             return True
         if u_short and VOLUME_UNIT_ROW.search(text) and f"| {u_short} |" in text:
@@ -649,8 +760,10 @@ def has_reader_continuity(book_root: Path) -> bool:
     )
 
 
-def continuity_open_loops_text(book_root: Path) -> str:
+def continuity_open_loops_text(book_root: Path, cache: BookCache | None = None) -> str:
     """Text used to count open foreshadow / loop rows."""
+    if cache is not None:
+        return cache.open_loops_text()
     ledger = ledger_path(book_root)
     if ledger.is_file():
         return read_book_text(ledger)
@@ -663,9 +776,9 @@ def continuity_open_loops_text(book_root: Path) -> str:
     return ""
 
 
-def open_debt_count(book_root: Path, contract: dict) -> int:
+def open_debt_count(book_root: Path, contract: dict, cache: BookCache | None = None) -> int:
     n = len(nonempty_list(contract.get("reader_debt")))
-    n += count_open_foreshadows(continuity_open_loops_text(book_root))
+    n += count_open_foreshadows(continuity_open_loops_text(book_root, cache))
     return n
 
 
@@ -807,7 +920,7 @@ def foreshadow_ids_from_contract(contract: dict) -> list[str]:
     return found
 
 
-def previous_hook_out(book_root: Path, ch: int) -> str:
+def previous_hook_out(book_root: Path, ch: int, cache: BookCache | None = None) -> str:
     if ch <= 1:
         return ""
     prev = ch - 1
@@ -818,7 +931,10 @@ def previous_hook_out(book_root: Path, ch: int) -> str:
             return hout
     except OSError:
         pass
-    text, _ = summary_source_text(book_root)
+    if cache is not None:
+        text, _ = cache.summary_source()
+    else:
+        text, _ = summary_source_text(book_root)
     block = extract_chapter_summary_block(text, prev)
     m = re.search(r"[-*]\s*下章指向\s*[：:]\s*(.+)", block)
     if m:
@@ -827,13 +943,18 @@ def previous_hook_out(book_root: Path, ch: int) -> str:
     return m.group(1).strip() if m else ""
 
 
-def unit_beat_line(book_root: Path, unit_id: str, ch: int) -> str:
+def unit_beat_line(book_root: Path, unit_id: str, ch: int, cache: BookCache | None = None) -> str:
     unit_id = (unit_id or "").strip()
-    outline = book_root / "outline"
-    if not unit_id or not outline.is_dir():
+    if not unit_id:
         return ""
-    for path in outline.rglob("*.md"):
-        text = read_book_text(path)
+    if cache is not None:
+        texts = cache.outline_texts()
+    else:
+        outline = book_root / "outline"
+        if not outline.is_dir():
+            return ""
+        texts = [(path, read_book_text(path)) for path in outline.rglob("*.md")]
+    for path, text in texts:
         if unit_id not in text and f"`{unit_id}`" not in text:
             continue
         # Prefer beat lines covering this chapter
@@ -889,29 +1010,47 @@ def open_loops_rows(ledger_text: str) -> list[str]:
     return rows
 
 
-def _match_cast_file(files: list[Path], name: str) -> tuple[Path, str] | tuple[None, None]:
+def _match_cast_file(
+    files: list[Path],
+    name: str,
+    text_map: dict[str, str] | None = None,
+) -> tuple[Path, str] | tuple[None, None]:
     """Find the cast file for a character: exact filename (stem) match first,
     then fall back to content match (aliases). Content-first matching is wrong:
     another character's card may mention this name in its 关系 table."""
     for path in files:
         if path.stem == name:
-            return path, read_book_text(path)
+            text = text_map.get(path.as_posix()) if text_map is not None else read_book_text(path)
+            assert text is not None
+            return path, text
     for path in files:
-        text = read_book_text(path)
+        text = text_map.get(path.as_posix()) if text_map is not None else read_book_text(path)
+        assert text is not None
         first = text.splitlines()[0] if text.splitlines() else ""
         if name in text or name in path.stem or name in first:
             return path, text
     return None, None
 
 
-def load_cast_anchors(book_root: Path, names: list[str]) -> list[str]:
-    cast_dir = book_root / "canon" / "cast"
-    if not cast_dir.is_dir() or not names:
+def load_cast_anchors(
+    book_root: Path, names: list[str], cache: BookCache | None = None
+) -> list[str]:
+    if not names:
         return []
-    files = list(cast_dir.glob("*.md"))
+    if cache is not None:
+        files = cache.cast_paths()
+        text_map = cache.cast_text_map()
+    else:
+        cast_dir = book_root / "canon" / "cast"
+        if not cast_dir.is_dir():
+            return []
+        files = list(cast_dir.glob("*.md"))
+        text_map = None
+    if not files:
+        return []
     out: list[str] = []
     for name in names:
-        path, text = _match_cast_file(files, name)
+        path, text = _match_cast_file(files, name, text_map)
         if path is None:
             continue
         anchors = []
@@ -928,16 +1067,27 @@ def load_cast_anchors(book_root: Path, names: list[str]) -> list[str]:
     return out
 
 
-def load_cast_relations(book_root: Path, names: list[str]) -> list[str]:
+def load_cast_relations(
+    book_root: Path, names: list[str], cache: BookCache | None = None
+) -> list[str]:
     """Relationship rows between on-scene characters only: from each named
     character's cast card 关系 table, keep rows whose 对方 is also on scene."""
-    cast_dir = book_root / "canon" / "cast"
-    if not cast_dir.is_dir() or len(names) < 2:
+    if len(names) < 2:
         return []
-    files = list(cast_dir.glob("*.md"))
+    if cache is not None:
+        files = cache.cast_paths()
+        text_map = cache.cast_text_map()
+    else:
+        cast_dir = book_root / "canon" / "cast"
+        if not cast_dir.is_dir():
+            return []
+        files = list(cast_dir.glob("*.md"))
+        text_map = None
+    if not files:
+        return []
     out: list[str] = []
     for name in names:
-        path, text = _match_cast_file(files, name)
+        path, text = _match_cast_file(files, name, text_map)
         if path is None:
             continue
         first = text.splitlines()[0] if text.splitlines() else ""
@@ -963,14 +1113,16 @@ def load_cast_relations(book_root: Path, names: list[str]) -> list[str]:
     return out
 
 
-def build_preflight_context(book_root: Path, contract: dict, ch: int, r: Report) -> list[str]:
+def build_preflight_context(
+    book_root: Path, contract: dict, ch: int, r: Report, cache: BookCache | None = None
+) -> list[str]:
     lines: list[str] = []
-    style = style_fingerprint_brief(book_root)
+    style = cache.style_brief() if cache is not None else style_fingerprint_brief(book_root)
     if style:
         lines.append("- 风格指纹（本书固定，写入时对齐 POV/语域/句式/禁语/章末钩）:")
         for ln in style.splitlines():
             lines.append(f"  {ln}")
-    prev_hook = previous_hook_out(book_root, ch)
+    prev_hook = previous_hook_out(book_root, ch, cache)
     beats = nonempty_list(contract.get("beats"))
     debts = nonempty_list(contract.get("reader_debt"))
     if prev_hook:
@@ -986,21 +1138,25 @@ def build_preflight_context(book_root: Path, contract: dict, ch: int, r: Report)
     else:
         lines.append("- 接钩（上章）: （首章或无上章钩）")
 
-    ledger_text = ""
-    ledger = ledger_path(book_root)
-    if ledger.is_file():
-        ledger_text = read_book_text(ledger)
+    if cache is not None:
+        ledger_text = cache.ledger_text()
+        cast_files = cache.cast_paths()
+    else:
+        ledger_text = ""
+        ledger = ledger_path(book_root)
+        if ledger.is_file():
+            ledger_text = read_book_text(ledger)
+        cast_dir = book_root / "canon" / "cast"
+        cast_files = list(cast_dir.glob("*.md")) if cast_dir.is_dir() else []
 
     who = state_delta_who(nonempty_list(contract.get("state_deltas")))
     # Also match cast files mentioned in beats
-    cast_dir = book_root / "canon" / "cast"
-    if cast_dir.is_dir():
-        for path in cast_dir.glob("*.md"):
-            stem = path.stem
-            blob = " ".join(beats + nonempty_list(contract.get("state_deltas")))
-            if stem in blob or any(stem in b for b in beats):
-                if stem not in who:
-                    who.append(stem)
+    for path in cast_files:
+        stem = path.stem
+        blob = " ".join(beats + nonempty_list(contract.get("state_deltas")))
+        if stem in blob or any(stem in b for b in beats):
+            if stem not in who:
+                who.append(stem)
     snap = cast_snapshot_rows(ledger_text)
     lines.append("- 人物现场（Cast snapshot）:")
     if snap:
@@ -1013,7 +1169,7 @@ def build_preflight_context(book_root: Path, contract: dict, ch: int, r: Report)
     else:
         lines.append("  （ledger 无 Cast snapshot 表）")
 
-    anchors = load_cast_anchors(book_root, who)
+    anchors = load_cast_anchors(book_root, who, cache)
     lines.append("- 三锚点（上场）:")
     if anchors:
         for a in anchors:
@@ -1021,7 +1177,7 @@ def build_preflight_context(book_root: Path, contract: dict, ch: int, r: Report)
     else:
         lines.append("  （无点名角色或无人物卡）")
 
-    relations = load_cast_relations(book_root, who)
+    relations = load_cast_relations(book_root, who, cache)
     if relations:
         lines.append("- 关系（在场角色间，来自人物卡关系表）:")
         for rel in relations:
@@ -1044,7 +1200,7 @@ def build_preflight_context(book_root: Path, contract: dict, ch: int, r: Report)
     lines.append(f"  hook.out: {hout}")
 
     unit = str(contract.get("unit_id") or "").strip()
-    beat_line = unit_beat_line(book_root, unit, ch)
+    beat_line = unit_beat_line(book_root, unit, ch, cache)
     lines.append(f"- 单元功能 ({unit or '?'}): {beat_line or '（未在卷纲解析到本章节拍）'}")
     lines.append("- 加载纪律: 只消费本 CONTEXT + 本章纲；禁止扫树；禁止 author-lore。")
     return lines
@@ -1058,25 +1214,20 @@ def check_doctor(book_root: Path, st: dict, r: Report) -> None:
         if not file_exists(book_root, d):
             r.blocking("layout", "missing directory " + d + "/")
     # Encoding: detect only — convert with scripts/migrate_novel_encoding.py
-    bad_enc: list[str] = []
+    # Stop at first bad file (batch paths must not re-run doctor).
     for path in iter_book_text_files(book_root, skip_archive=True):
         if not is_utf8_file(path):
             try:
                 rel = str(path.relative_to(book_root))
             except ValueError:
                 rel = str(path)
-            bad_enc.append(rel)
-            if len(bad_enc) >= 8:
-                break
-    if bad_enc:
-        more = "" if len(bad_enc) < 8 else " …"
-        r.blocking(
-            "encoding",
-            "non-UTF-8 text: "
-            + ", ".join(bad_enc)
-            + more
-            + " — run python3 scripts/migrate_novel_encoding.py",
-        )
+            r.blocking(
+                "encoding",
+                "non-UTF-8 text: "
+                + rel
+                + " — run python3 scripts/migrate_novel_encoding.py",
+            )
+            break
     # author-lore always seeded; reader continuity = ledger.md (or legacy pair)
     if not file_exists(book_root, "canon/author-lore.md"):
         if writing_stage(str(st.get("stage") or "")):
@@ -1113,7 +1264,21 @@ def check_doctor(book_root: Path, st: dict, r: Report) -> None:
         r.blocking("state", f"last_committed_ch={last} but {chapter_rel(last)} missing")
 
 
-def check_preflight(book_root: Path, st: dict, ch: int, r: Report) -> None:
+def _frozen_batch_range(st: dict) -> tuple[int, int] | None:
+    fb = st.get("frozen_batch")
+    if isinstance(fb, dict):
+        try:
+            a, b = int(fb.get("from") or 0), int(fb.get("to") or 0)
+        except (TypeError, ValueError):
+            return None
+        if a > 0 and b >= a:
+            return a, b
+    return None
+
+
+def check_preflight(
+    book_root: Path, st: dict, ch: int, r: Report, cache: BookCache | None = None
+) -> None:
     if not file_exists(book_root, "novel-state.yaml"):
         r.blocking("state", "missing novel-state.yaml")
         return
@@ -1126,6 +1291,12 @@ def check_preflight(book_root: Path, st: dict, ch: int, r: Report) -> None:
         r.advisory("lore-tracks", "do not load canon/author-lore.md into the draft context")
     elif writing_stage(str(st.get("stage") or "")):
         r.blocking("lore-tracks", "missing canon/author-lore.md")
+    fb = _frozen_batch_range(st)
+    if fb and writing_stage(str(st.get("stage") or "")) and not (fb[0] <= ch <= fb[1]):
+        r.advisory(
+            "frozen_batch",
+            f"ch{ch:03d} outside frozen_batch {fb[0]}-{fb[1]} (single-chapter bypass OK if intentional)",
+        )
     try:
         c, rel = load_contract(book_root, ch)
     except OSError as e:
@@ -1142,7 +1313,7 @@ def check_preflight(book_root: Path, st: dict, ch: int, r: Report) -> None:
         r.blocking("unit_id", f"{rel} unit_id empty — return to novel-plan")
     elif not UNIT_ID_RE.match(unit):
         r.blocking("unit_id", f"{rel} unit_id={unit} must match vNN-U#")
-    elif not unit_listed(book_root / "outline", unit):
+    elif not unit_listed(book_root / "outline", unit, cache):
         r.blocking("unit_id", f"{unit} not found in outline/ — return to novel-plan")
     if is_blank(c.get("purpose")):
         r.blocking("contract", "purpose empty")
@@ -1155,13 +1326,15 @@ def check_preflight(book_root: Path, st: dict, ch: int, r: Report) -> None:
         r.blocking("hook", "hook.out empty (need a concrete event)")
     if tomato_profile(str(st.get("qc_profile") or "")) and is_blank(c.get("pleasure_point")):
         r.blocking("pleasure_point", f"qc_profile={st.get('qc_profile')} requires pleasure_point")
-    debts = open_debt_count(book_root, c)
+    debts = open_debt_count(book_root, c, cache)
     if debts > MAX_OPEN_DEBTS:
         r.blocking("reader_debt", f"open foreshadows+reader_debt={debts} exceeds {MAX_OPEN_DEBTS}")
-    r.context_lines = build_preflight_context(book_root, c, ch, r)
+    r.context_lines = build_preflight_context(book_root, c, ch, r, cache)
 
 
-def check_precommit(book_root: Path, st: dict, ch: int, r: Report) -> None:
+def check_precommit(
+    book_root: Path, st: dict, ch: int, r: Report, cache: BookCache | None = None
+) -> None:
     try:
         c, rel = load_contract(book_root, ch)
     except OSError as e:
@@ -1185,7 +1358,7 @@ def check_precommit(book_root: Path, st: dict, ch: int, r: Report) -> None:
         n = rune_count(prose)
         if n < wt * 6 // 10:
             r.advisory("length", f"prose ~{n} runes vs word_target={wt}")
-    debts = open_debt_count(book_root, c)
+    debts = open_debt_count(book_root, c, cache)
     if debts > MAX_OPEN_DEBTS:
         r.blocking("reader_debt", f"open foreshadows+reader_debt={debts} exceeds {MAX_OPEN_DEBTS}")
 
@@ -1273,14 +1446,19 @@ def check_scan_deslop(book_root: Path, chapters: list[int], r: Report) -> list[s
     return out
 
 
-def resolve_scan_chapters(chapter: int, from_ch: int, to_ch: int) -> list[int]:
+def resolve_chapters(action: str, chapter: int, from_ch: int, to_ch: int) -> list[int]:
+    """Resolve --chapter or --from/--to for ranged actions."""
     if chapter > 0:
         return [chapter]
     if from_ch > 0 and to_ch > 0:
         if to_ch < from_ch:
             raise ValueError(f"--to {to_ch} < --from {from_ch}")
         return list(range(from_ch, to_ch + 1))
-    raise ValueError("scan-deslop requires --chapter N or --from A --to B")
+    raise ValueError(f"{action} requires --chapter N or --from A --to B")
+
+
+def resolve_scan_chapters(chapter: int, from_ch: int, to_ch: int) -> list[int]:
+    return resolve_chapters("scan-deslop", chapter, from_ch, to_ch)
 
 
 def run_with_hits(
@@ -1301,30 +1479,53 @@ def run_with_hits(
     bid = str(st.get("book_id") or root.name)
     hit_lines: list[str] = []
     if action == "scan-deslop":
-        chapters = resolve_scan_chapters(chapter, from_ch, to_ch)
+        chapters = resolve_chapters(action, chapter, from_ch, to_ch)
         r = Report(action, bid, root, chapters[0] if len(chapters) == 1 else 0)
         hit_lines = check_scan_deslop(root, chapters, r)
-    else:
+    elif action == "doctor":
+        r = Report(action, bid, root, 0)
+        check_doctor(root, st, r)
+    elif action == "postcommit":
+        if chapter <= 0:
+            raise ValueError("postcommit requires --chapter N (no range)")
         r = Report(action, bid, root, chapter)
-        if action == "doctor":
-            check_doctor(root, st, r)
-        else:
-            if chapter <= 0:
-                raise ValueError(f"chapter is required for {action}")
+        check_postcommit(root, st, chapter, r)
+    else:
+        # preflight / precommit — single chapter or --from/--to
+        chapters = resolve_chapters(action, chapter, from_ch, to_ch)
+        cache = BookCache(root)
+        if len(chapters) == 1:
+            r = Report(action, bid, root, chapters[0])
             if action == "preflight":
-                check_preflight(root, st, chapter, r)
-            elif action == "precommit":
-                check_precommit(root, st, chapter, r)
+                check_preflight(root, st, chapters[0], r, cache)
             else:
-                check_postcommit(root, st, chapter, r)
+                check_precommit(root, st, chapters[0], r, cache)
+        else:
+            r = Report(action, bid, root, 0)
+            r.range_from = chapters[0]
+            r.range_to = chapters[-1]
+            for ch in chapters:
+                cr = Report(action, bid, root, ch)
+                if action == "preflight":
+                    check_preflight(root, st, ch, cr, cache)
+                else:
+                    check_precommit(root, st, ch, cr, cache)
+                r.chapter_reports.append(cr)
     for note in migrated:
         r.advisory("migrate", f"章纲文件名迁移: {note}")
     r.finalize()
     return r, hit_lines
 
 
-def run(workdir: str, book_id: str, action: str, chapter: int) -> Report:
-    rep, _ = run_with_hits(workdir, book_id, action, chapter)
+def run(
+    workdir: str,
+    book_id: str,
+    action: str,
+    chapter: int,
+    from_ch: int = 0,
+    to_ch: int = 0,
+) -> Report:
+    rep, _ = run_with_hits(workdir, book_id, action, chapter, from_ch, to_ch)
     return rep
 
 
@@ -1382,8 +1583,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--workdir", default=".", help="project root or book root")
     p.add_argument("--book-id", default="", help="slug under novel/<book-id>/")
     p.add_argument("--chapter", type=int, default=0)
-    p.add_argument("--from", dest="from_ch", type=int, default=0, help="scan-deslop range start")
-    p.add_argument("--to", dest="to_ch", type=int, default=0, help="scan-deslop range end")
+    p.add_argument(
+        "--from",
+        dest="from_ch",
+        type=int,
+        default=0,
+        help="range start (preflight|precommit|scan-deslop)",
+    )
+    p.add_argument(
+        "--to",
+        dest="to_ch",
+        type=int,
+        default=0,
+        help="range end (preflight|precommit|scan-deslop)",
+    )
     p.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
     try:

@@ -3,9 +3,10 @@
 ## Policy
 
 - **Exactly one** review round per draft cycle before Commit.
-- Run gate `--action precommit` **before** claiming PASS. Script FAIL → `qc_gate` FAIL。
+- Run gate `--action precommit` **before** claiming PASS. Script FAIL → `qc_gate` FAIL。批量可用 `precommit --from A --to B`（见 `batch-review.md`）；单章语义不变。
 - Writers own fixes; review diagnoses。
 - 审稿报告必须引用 gate `### COUNTS` 四计数（em_dash / ai_vocab / english_leak / simile）。
+- **批量定稿** → `batch-review.md`（与写作 turn 分开；Commit 按章序）。
 
 ## Happy path（PASS — 不落盘 review 文件）
 

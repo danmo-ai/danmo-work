@@ -35,6 +35,8 @@ const props = defineProps<{
   setupShowsGoldfinger: boolean
   hasBookOutline: boolean
   deskBatchFreezeAllowed: boolean
+  deskBatchWriteAllowed: boolean
+  deskBatchReviewAllowed: boolean
   selectedVolumeNum: number
   nextVolume: number
 }>()
@@ -322,6 +324,22 @@ function runPrimary() {
           >
             {{ t('novelWorkbench.actionBatchFreeze') }}
           </button>
+          <button
+            v-if="deskBatchWriteAllowed"
+            type="button"
+            class="novel-wb-btn novel-wb-btn--ghost"
+            @click="emit('action', 'batch-write')"
+          >
+            {{ t('novelWorkbench.actionBatchWrite') }}
+          </button>
+          <button
+            v-if="deskBatchReviewAllowed"
+            type="button"
+            class="novel-wb-btn novel-wb-btn--ghost"
+            @click="emit('action', 'batch-review')"
+          >
+            {{ t('novelWorkbench.actionBatchReview') }}
+          </button>
         </div>
 
         <div v-else-if="treeKind === 'volume'" class="novel-insp__more-stack">
@@ -338,6 +356,22 @@ function runPrimary() {
             @click="emit('action', 'batch-freeze')"
           >
             {{ t('novelWorkbench.actionBatchFreeze') }}
+          </button>
+          <button
+            v-if="deskBatchWriteAllowed"
+            type="button"
+            class="novel-wb-btn novel-wb-btn--ghost"
+            @click="emit('action', 'batch-write')"
+          >
+            {{ t('novelWorkbench.actionBatchWrite') }}
+          </button>
+          <button
+            v-if="deskBatchReviewAllowed"
+            type="button"
+            class="novel-wb-btn novel-wb-btn--ghost"
+            @click="emit('action', 'batch-review')"
+          >
+            {{ t('novelWorkbench.actionBatchReview') }}
           </button>
         </div>
 

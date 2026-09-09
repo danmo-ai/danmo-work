@@ -37,6 +37,11 @@ stage: writing
 - `artifacts.batch_freeze: frozen` 前：**禁止**批量正文.
 - 单章模式：用户明确只写一章时可 bypass（state 留痕），仍须该章纲 `accepted`.
 
+## 冻结后下一步
+
+默认 → **`batch-draft.md`（一轮多章首稿）**，再另开一轮 `novel-review` / `batch-review.md` 定稿。  
+**不是**「写一章 → Commit → 再写下一章」。接钩用章纲 `hook.out` 链；Commit 留在定稿 turn 按章序做。
+
 ## 解冻
 
 总纲/卷纲或已冻结章纲结构性修改 → 评估影响 → 清/改 `frozen_batch` → 重新走本流程.

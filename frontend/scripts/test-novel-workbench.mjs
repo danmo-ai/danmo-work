@@ -264,6 +264,7 @@ const stages = [
   'commit',
   'review-polish-commit',
   'batch-freeze',
+  'batch-write',
   'continuation',
   'batch-review',
   'preflight',
@@ -301,6 +302,52 @@ assert.ok(freezePrefill.includes('frozen_batch'))
 assert.ok(freezePrefill.includes('不要写 batch-freeze.yaml') || freezePrefill.includes('只更新 novel-state'))
 assert.ok(!freezePrefill.includes('batch-freeze.md'))
 assert.ok(!freezePrefill.includes('batch-freeze.yaml') || freezePrefill.includes('不要写 batch-freeze.yaml'))
+
+const batchWriteOk = canRunAction('batch-write', {
+  ...ctx,
+  castFileCount: 2,
+  batchFreezeFrozen: true,
+  chapterPhases: { 1: 'contract_draft', 2: 'contract_ready' },
+  entries: [
+    { chapter: 1, label: 'ch001', prose: null, contract: { name: 'ch001-outline.yaml', path: 'a', isDir: false } },
+    { chapter: 2, label: 'ch002', prose: null, contract: { name: 'ch002-outline.yaml', path: 'b', isDir: false } },
+  ],
+})
+assert.equal(batchWriteOk.allowed, true)
+
+const batchWriteBlocked = canRunAction('batch-write', { ...ctx, castFileCount: 2, batchFreezeFrozen: false })
+assert.equal(batchWriteBlocked.allowed, false)
+assert.ok(batchWriteBlocked.blockers.includes('blocker.needBatchFreeze'))
+
+const batchWritePrefill = buildConstrainedPrefill('batch-write', {
+  bookId: 'star-inn',
+  batchFrom: 1,
+  batchTo: 8,
+})
+assert.ok(batchWritePrefill.includes('技能 novel-write · 意图 batch-write'))
+assert.ok(batchWritePrefill.includes('preflight --from/--to'))
+assert.ok(batchWritePrefill.includes('drafted'))
+assert.ok(!batchWritePrefill.includes('batch-draft.md'))
+
+const batchReviewOk = canRunAction('batch-review', {
+  ...ctx,
+  castFileCount: 2,
+  chapterPhases: { 1: 'drafted', 2: 'review_fail' },
+  entries: [
+    { chapter: 1, label: 'ch001', prose: { name: 'ch001.md', path: 'a', isDir: false }, contract: null },
+    { chapter: 2, label: 'ch002', prose: { name: 'ch002.md', path: 'b', isDir: false }, contract: null },
+  ],
+})
+assert.equal(batchReviewOk.allowed, true)
+
+const batchReviewPrefill = buildConstrainedPrefill('batch-review', {
+  bookId: 'star-inn',
+  batchFrom: 1,
+  batchTo: 8,
+})
+assert.ok(batchReviewPrefill.includes('技能 novel-review · 意图 batch-review'))
+assert.ok(batchReviewPrefill.includes('按章序'))
+assert.ok(!batchReviewPrefill.includes('batch-review.md'))
 
 const contractPrefill = buildNovelStagePrefill('contract', { bookId: 'star-inn', chapter: 4 })
 assert.ok(contractPrefill.includes('unit_id'))

@@ -65,6 +65,7 @@ export type NovelStageAction =
   | 'commit'
   | 'review-polish-commit'
   | 'batch-freeze'
+  | 'batch-write'
   | 'continuation'
   | 'batch-review'
   | 'preflight'
@@ -514,6 +515,19 @@ export function canRunAction(action: NovelStageAction, ctx: NovelBookContext, ch
     if (ctx.batchFreezeFrozen) blockers.push('blocker.batchAlreadyFrozen')
   }
 
+  if (action === 'batch-write') {
+    if (ctx.castFileCount === 0) blockers.push('blocker.noCast')
+    if (!ctx.batchFreezeFrozen) blockers.push('blocker.needBatchFreeze')
+    const from = ctx.state.frozenBatch?.from ?? 0
+    const to = ctx.state.frozenBatch?.to ?? 0
+    const pending = ctx.entries.filter((e) => {
+      if (from > 0 && to >= from && (e.chapter < from || e.chapter > to)) return false
+      const phase = ctx.chapterPhases[e.chapter]
+      return phase === 'contract_ready' || phase === 'contract_draft'
+    })
+    if (!pending.length) blockers.push('blocker.noChapterToWrite')
+  }
+
   if (action === 'batch-review') {
     const drafted = ctx.entries.filter((e) => ctx.chapterPhases[e.chapter] === 'drafted' || ctx.chapterPhases[e.chapter] === 'review_fail')
     if (!drafted.length) blockers.push('blocker.noDraftToReview')
@@ -550,7 +564,7 @@ export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
  */
 export function formatLoadProtocol(action: NovelStageAction): string {
   const skillId = novelActionSkillId(action)
-  if (skillId === 'novel-write' && (action === 'write' || action === 'continue' || action === 'preflight')) {
+  if (skillId === 'novel-write' && (action === 'write' || action === 'continue' || action === 'preflight' || action === 'batch-write')) {
     return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；写正文先跑 gate preflight，只消费 ### CONTEXT；落盘后停下（扩写/润色/定稿另轮）。`
   }
   if (skillId === 'novel-review') {
@@ -1135,7 +1149,17 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       const bTo = ctx.batchTo && ctx.batchTo > 0 ? ctx.batchTo : 8
       return [
         `批次冻结（书：${root}/，第 ${bFrom}–${bTo} 章）。`,
-        '只更新 novel-state.yaml 的 frozen_batch；按单元章范围自动冻结。',
+        '按单元章范围写齐章纲（status=accepted）并只更新 novel-state.yaml 的 frozen_batch。',
+        '冻结后下一动作是批量首稿，不是逐章写完即 Commit。',
+      ].join('\n')
+    }
+    case 'batch-write': {
+      const bFrom = ctx.batchFrom && ctx.batchFrom > 0 ? ctx.batchFrom : 1
+      const bTo = ctx.batchTo && ctx.batchTo > 0 ? ctx.batchTo : 8
+      return [
+        `批量正文首稿（书：${root}/，frozen_batch 第 ${bFrom}–${bTo} 章）。`,
+        '一次 gate preflight --from/--to；按章写 chNNN.md → status=drafted；本轮到此停。',
+        '勿扩写/审稿/Commit（另开定稿轮）。接钩用章纲 hook.out 链，不要求上章已 Commit。',
       ].join('\n')
     }
     case 'continuation':
@@ -1143,11 +1167,19 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         `续写/接手本书（${root}/）。`,
         'Frozen_Canon 未确认禁止写正文。',
       ].join('\n')
-    case 'batch-review':
+    case 'batch-review': {
+      const bFrom = ctx.batchFrom && ctx.batchFrom > 0 ? ctx.batchFrom : 0
+      const bTo = ctx.batchTo && ctx.batchTo > 0 ? ctx.batchTo : 0
+      const rangeHint =
+        bFrom > 0 && bTo >= bFrom
+          ? `优先区间第 ${bFrom}–${bTo} 章内已 drafted / review_fail 的章`
+          : '最近有正文未定稿的章（drafted / review_fail）'
       return [
-        `批量审稿（书：${root}/）：最近有正文未定稿的章。`,
-        'PASS 不落盘；FAIL 写 reviews/。',
+        `批量审稿定稿（书：${root}/）：${rangeHint}。`,
+        '与写作分 turn。可选 scan-deslop / precommit --from/--to；按章序：扩写(如需)→审→Commit→postcommit。',
+        'PASS 不落盘 reviews/；FAIL 写 reviews/ 并停后续章 Commit。禁止跳章 Commit。',
       ].join('\n')
+    }
     case 'preflight':
       return [
         `写前预检（书：${root}/，章 ${ch || 'N'}）。`,

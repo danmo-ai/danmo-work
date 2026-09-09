@@ -6,6 +6,8 @@ Commit = tools landed. Prefer **one** `apply_patch` covering ledger + chapter ou
 
 After review PASS (and optional polish), before starting the next chapter. PASS 不要求 `reviews/` 文件。
 
+**批量定稿**（`batch-review.md`）：同 turn 可连续 Commit 多章，但**每章独立一次 patch + `postcommit --chapter N`**，必须按章号升序，禁止跳章或合并多章为一次 postcommit。
+
 ## Snapshot（写入 ledger，勿拆多文件）
 
 Update `continuity/ledger.md` in one pass:
