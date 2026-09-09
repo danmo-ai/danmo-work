@@ -6,7 +6,6 @@ description: Interactive browser operator. Navigates pages, clicks/types via sna
 persona: Browser operator
 mode: subagent
 category: research
-inherit_ambient: false
 steps: 20
 skills:
   - browser

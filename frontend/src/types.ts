@@ -10,12 +10,10 @@ export interface Agent {
   steps?: number
   skillIds?: string[]
   tools?: ToolBinding[]
-  /** Connector ids (exact; API field mcpServers). Used when inheritAmbient is false. */
+  /** Connector ids (exact; API field mcpServers). Used for subagents; primary mounts ambient connectors. */
   mcpServers?: string[]
   knowledgeIds?: string[]
   canDelegate?: boolean
-  /** Ambient layer: FS skills + all enabled connectors. Default: primary true, subagent false. */
-  inheritAmbient?: boolean
   builtin?: boolean
   marketSource?: string
 }
@@ -33,7 +31,6 @@ export interface CreateAgentPayload {
   mcpServers?: string[]
   knowledgeIds?: string[]
   canDelegate?: boolean
-  inheritAmbient?: boolean
 }
 
 export interface UpdateAgentPayload {
@@ -48,7 +45,6 @@ export interface UpdateAgentPayload {
   mcpServers?: string[]
   knowledgeIds?: string[]
   canDelegate?: boolean
-  inheritAmbient?: boolean
 }
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'external'

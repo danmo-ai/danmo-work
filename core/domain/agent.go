@@ -43,14 +43,11 @@ type Agent struct {
 	Steps        int           `json:"steps"`
 	SkillIDs     []string      `json:"skillIds"`
 	Tools        []ToolBinding `json:"tools"`
-	// MCPServers lists MCP server ids this agent may use when InheritAmbient
-	// is false. Ambient on → all enabled servers (this list ignored for mount).
+	// MCPServers lists MCP server ids this agent may use when Mode is subagent.
+	// Primary agents mount all ambient-eligible servers (this list ignored for mount).
 	MCPServers   []string `json:"mcpServers,omitempty"`
 	KnowledgeIDs []string `json:"knowledgeIds"`
 	CanDelegate  bool     `json:"canDelegate"`
-	// InheritAmbient is unused (replaced by AgentMode) but kept for backward compat.
-	// Primary agents get all skills/MCP; subagents get only bound.
-	InheritAmbient *bool `json:"inheritAmbient,omitempty"`
 	// Source tracks the origin: builtin, market, or user.
 	Source string `json:"source,omitempty"`
 	Builtin bool `json:"builtin"`
@@ -75,15 +72,6 @@ type ToolBinding struct {
 	ToolID    string    `json:"toolId"`
 	MCPServer string    `json:"mcpServer,omitempty"` // deprecated; migrate → Agent.MCPServers
 	RiskLevel RiskLevel `json:"riskLevel"`
-}
-
-// InheritsAmbient reports whether this agent receives Ambient capabilities
-// (filesystem skills + all enabled MCP servers).
-func (a Agent) InheritsAmbient() bool {
-	if a.InheritAmbient != nil {
-		return *a.InheritAmbient
-	}
-	return a.Mode != AgentModeSubagent
 }
 
 // PlanModeAllowedToolIDs is the built-in read-only tool whitelist used when

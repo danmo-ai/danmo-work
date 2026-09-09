@@ -14,7 +14,6 @@ description: Demo
 persona: Facilitator
 mode: subagent
 steps: 8
-inherit_ambient: false
 mcp_servers:
   - github
 skills:
@@ -44,9 +43,6 @@ You facilitate meetings.
 	}
 	if a.SystemPrompt == "" {
 		t.Fatal("empty system prompt")
-	}
-	if a.InheritAmbient == nil || *a.InheritAmbient {
-		t.Fatalf("inherit_ambient: %+v", a.InheritAmbient)
 	}
 	if len(a.Tools) != 1 || a.Tools[0].ToolID != "read_file" {
 		t.Fatalf("tools (Core ask_user must be stripped): %+v", a.Tools)
