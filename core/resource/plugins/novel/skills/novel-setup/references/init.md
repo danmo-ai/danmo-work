@@ -35,7 +35,7 @@ If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding
 2. `search_kb` **一次**：题材与平台（knowledge_gate）.  
 3. Create the **standard English tree** under `novel/<book-id>/`:  
    `canon/` (+ `cast/`), `outline/` (+ `volumes/`), `chapters/`, `continuity/`, `reviews/`.  
-4. `write` `book-bible.md`（含终局储备表）and `novel-state.yaml` (stage=`init`).  
+4. `write` `book-bible.md`（含终局储备表）and `novel-state.yaml` (stage=`init`). All new text via `write`/`edit`/`apply_patch` — **UTF-8 only**.  
 5. Seed `canon/world.md` + `canon/author-lore.md` from templates。人物卡用 `cast-card.md`，先 `candidate`。金手指默认写入主角卡。术语稀少时写在 `world.md`.  
 6. Seed `continuity/ledger.md`（可空表，不可缺文件）.  
 7. `memory_update` project: promise, genre, taboos, 终局储备卷号（不要把 author-lore 细节写入 memory）.  

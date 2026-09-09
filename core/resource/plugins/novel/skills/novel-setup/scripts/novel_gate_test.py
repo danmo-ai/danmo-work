@@ -448,6 +448,28 @@ class GateTests(unittest.TestCase):
         self.assertIn("legacy-", arch.read_text(encoding="utf-8"))
         self.assertNotIn("legacy-", outline.read_text(encoding="utf-8"))
 
+    def test_doctor_blocks_non_utf8(self):
+        prose = self.root / "novel/demo/chapters/ch001.md"
+        # Pure GB18030 chapter body
+        prose.write_bytes("客栈里有人笑他。\n".encode("gb18030"))
+        rep = ng.run(str(self.root), "demo", "doctor", 0)
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        enc = [f for f in rep.findings if f["check"] == "encoding"]
+        self.assertTrue(enc, rep.format())
+        self.assertIn("migrate_novel_encoding", enc[0]["message"])
+
+    def test_read_book_text_rejects_gb18030(self):
+        p = self.root / "novel/demo/chapters/ch001.md"
+        p.write_bytes("中文\n".encode("gb18030"))
+        with self.assertRaises(UnicodeDecodeError) as cm:
+            ng.read_book_text(p)
+        self.assertIn("migrate_novel_encoding", str(cm.exception))
+
+    def test_write_book_text_utf8(self):
+        p = self.root / "novel/demo/tmp-utf8.md"
+        ng.write_book_text(p, "你好\n")
+        self.assertEqual(p.read_bytes(), "你好\n".encode("utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

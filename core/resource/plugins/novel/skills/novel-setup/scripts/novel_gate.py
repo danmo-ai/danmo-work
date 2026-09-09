@@ -212,8 +212,65 @@ def file_exists(root: Path, rel: str) -> bool:
     return (root / rel).exists()
 
 
+MIGRATE_HINT = (
+    "non-UTF-8 text file — run: python3 scripts/migrate_novel_encoding.py "
+    "(from DanQing-Teams repo; or set WORK_DATA_DIR)"
+)
+BOOK_TEXT_SUFFIXES = {".md", ".yaml", ".yml", ".txt", ".json"}
+
+
+def _force_stdio_utf8() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+
+def read_book_text(path: Path) -> str:
+    """Strict UTF-8 read. Raises UnicodeDecodeError with migrate hint."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as e:
+        raise UnicodeDecodeError(
+            e.encoding,
+            e.object,
+            e.start,
+            e.end,
+            f"{path}: {MIGRATE_HINT}",
+        ) from None
+
+
+def write_book_text(path: Path, text: str) -> None:
+    """Always persist UTF-8 (no BOM)."""
+    path.write_text(text, encoding="utf-8")
+
+
 def read_text(root: Path, rel: str) -> str:
-    return (root / rel).read_text(encoding="utf-8")
+    return read_book_text(root / rel)
+
+
+def is_utf8_file(path: Path) -> bool:
+    try:
+        path.read_bytes().decode("utf-8")
+        return True
+    except UnicodeDecodeError:
+        return False
+
+
+def iter_book_text_files(book_root: Path, *, skip_archive: bool = True) -> list[Path]:
+    out: list[Path] = []
+    if not book_root.is_dir():
+        return out
+    for path in book_root.rglob("*"):
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in BOOK_TEXT_SUFFIXES:
+            continue
+        if skip_archive and "_archive" in path.parts:
+            continue
+        out.append(path)
+    return sorted(out)
 
 
 def is_blank(s) -> bool:
@@ -235,7 +292,7 @@ def tomato_profile(profile: str) -> bool:
 
 
 def load_state(path: Path) -> dict:
-    st = load_yaml_map(path.read_text(encoding="utf-8"))
+    st = load_yaml_map(read_book_text(path))
     if not st.get("book_id"):
         st["book_id"] = path.parent.name
     return st
@@ -246,7 +303,7 @@ def load_contract(book_root: Path, chapter: int) -> tuple[dict, str]:
     path = book_root / rel
     if not path.is_file():
         raise FileNotFoundError(rel)
-    data = load_yaml_map(path.read_text(encoding="utf-8"))
+    data = load_yaml_map(read_book_text(path))
     return data, rel
 
 
@@ -569,7 +626,7 @@ def unit_listed(outline_root: Path, unit_id: str) -> bool:
         vol = unit_id[:i]
         u_short = unit_id[i + 1 :]
     for path in outline_root.rglob("*.md"):
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = read_book_text(path)
         if unit_id in text:
             return True
         if u_short and VOLUME_UNIT_ROW.search(text) and f"| {u_short} |" in text:
@@ -596,13 +653,13 @@ def continuity_open_loops_text(book_root: Path) -> str:
     """Text used to count open foreshadow / loop rows."""
     ledger = ledger_path(book_root)
     if ledger.is_file():
-        return ledger.read_text(encoding="utf-8", errors="replace")
+        return read_book_text(ledger)
     tracker = book_root / "continuity/foreshadow-tracker.md"
     if tracker.is_file():
-        return tracker.read_text(encoding="utf-8", errors="replace")
+        return read_book_text(tracker)
     tracking = book_root / "continuity/tracking.md"
     if tracking.is_file():
-        return tracking.read_text(encoding="utf-8", errors="replace")
+        return read_book_text(tracking)
     return ""
 
 
@@ -634,10 +691,10 @@ def summary_source_text(book_root: Path) -> tuple[str, str]:
     """Return (text, rel) for chapter summary blocks — ledger preferred."""
     ledger = ledger_path(book_root)
     if ledger.is_file():
-        return ledger.read_text(encoding="utf-8", errors="replace"), "continuity/ledger.md"
+        return read_book_text(ledger), "continuity/ledger.md"
     summaries = book_root / "continuity/chapter_summaries.md"
     if summaries.is_file():
-        return summaries.read_text(encoding="utf-8", errors="replace"), "continuity/chapter_summaries.md"
+        return read_book_text(summaries), "continuity/chapter_summaries.md"
     return "", ""
 
 
@@ -651,7 +708,7 @@ def archived_summary_text(book_root: Path, ch: int) -> str:
     if not d.is_dir():
         return ""
     for path in sorted(d.glob("*.md")):
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = read_book_text(path)
         if has_summary(text, ch):
             return text
     return ""
@@ -776,7 +833,7 @@ def unit_beat_line(book_root: Path, unit_id: str, ch: int) -> str:
     if not unit_id or not outline.is_dir():
         return ""
     for path in outline.rglob("*.md"):
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = read_book_text(path)
         if unit_id not in text and f"`{unit_id}`" not in text:
             continue
         # Prefer beat lines covering this chapter
@@ -838,9 +895,9 @@ def _match_cast_file(files: list[Path], name: str) -> tuple[Path, str] | tuple[N
     another character's card may mention this name in its 关系 table."""
     for path in files:
         if path.stem == name:
-            return path, path.read_text(encoding="utf-8", errors="replace")
+            return path, read_book_text(path)
     for path in files:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = read_book_text(path)
         first = text.splitlines()[0] if text.splitlines() else ""
         if name in text or name in path.stem or name in first:
             return path, text
@@ -932,7 +989,7 @@ def build_preflight_context(book_root: Path, contract: dict, ch: int, r: Report)
     ledger_text = ""
     ledger = ledger_path(book_root)
     if ledger.is_file():
-        ledger_text = ledger.read_text(encoding="utf-8", errors="replace")
+        ledger_text = read_book_text(ledger)
 
     who = state_delta_who(nonempty_list(contract.get("state_deltas")))
     # Also match cast files mentioned in beats
@@ -1000,6 +1057,26 @@ def check_doctor(book_root: Path, st: dict, r: Report) -> None:
     for d in ("canon", "canon/cast", "outline", "outline/volumes", "chapters", "continuity", "reviews"):
         if not file_exists(book_root, d):
             r.blocking("layout", "missing directory " + d + "/")
+    # Encoding: detect only — convert with scripts/migrate_novel_encoding.py
+    bad_enc: list[str] = []
+    for path in iter_book_text_files(book_root, skip_archive=True):
+        if not is_utf8_file(path):
+            try:
+                rel = str(path.relative_to(book_root))
+            except ValueError:
+                rel = str(path)
+            bad_enc.append(rel)
+            if len(bad_enc) >= 8:
+                break
+    if bad_enc:
+        more = "" if len(bad_enc) < 8 else " …"
+        r.blocking(
+            "encoding",
+            "non-UTF-8 text: "
+            + ", ".join(bad_enc)
+            + more
+            + " — run python3 scripts/migrate_novel_encoding.py",
+        )
     # author-lore always seeded; reader continuity = ledger.md (or legacy pair)
     if not file_exists(book_root, "canon/author-lore.md"):
         if writing_stage(str(st.get("stage") or "")):
@@ -1019,7 +1096,7 @@ def check_doctor(book_root: Path, st: dict, r: Report) -> None:
         contracts[n] = True
         try:
             c, rel = load_contract(book_root, n)
-        except OSError as e:
+        except (OSError, UnicodeDecodeError) as e:
             r.blocking("orphan-contract", f"{contract_rel(n)}: {e}")
             continue
         ch_field = int(c.get("chapter") or 0)
@@ -1149,7 +1226,7 @@ def check_postcommit(book_root: Path, st: dict, ch: int, r: Report) -> None:
     ledger_text = ""
     lp = ledger_path(book_root)
     if lp.is_file():
-        ledger_text = lp.read_text(encoding="utf-8", errors="replace")
+        ledger_text = read_book_text(lp)
     # state_deltas → Cast snapshot
     who = state_delta_who(nonempty_list(c.get("state_deltas")))
     if who and ledger_text:
@@ -1273,12 +1350,12 @@ def style_fingerprint_brief(book_root: Path) -> str:
     falling back to the book-bible Style card. Capped at STYLE_MAX_RUNES."""
     fp = book_root / "canon" / "style-fingerprint.md"
     if fp.is_file():
-        lines = fp.read_text(encoding="utf-8", errors="replace").strip().splitlines()
+        lines = read_book_text(fp).strip().splitlines()
     else:
         bible = book_root / "book-bible.md"
         if not bible.is_file():
             return ""
-        lines = _style_card_lines(bible.read_text(encoding="utf-8", errors="replace"))
+        lines = _style_card_lines(read_book_text(bible))
     kept: list[str] = []
     total = 0
     for ln in lines:
@@ -1295,6 +1372,7 @@ def style_fingerprint_brief(book_root: Path) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _force_stdio_utf8()
     p = argparse.ArgumentParser(description="Novel write-gate / doctor / deslop scan (skill script)")
     p.add_argument(
         "--action",
@@ -1317,6 +1395,9 @@ def main(argv: list[str] | None = None) -> int:
             args.from_ch,
             args.to_ch,
         )
+    except UnicodeDecodeError as e:
+        print(e.reason if e.reason else str(e), file=sys.stderr)
+        return 2
     except ValueError as e:
         print(e, file=sys.stderr)
         return 2

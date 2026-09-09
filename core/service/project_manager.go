@@ -323,17 +323,26 @@ func (m *ProjectManager) ReadFileContent(ctx context.Context, projectID, subPath
 	defer f.Close()
 
 	const maxSize = 1 << 20
-	var buf strings.Builder
+	var data []byte
 	if info.Size() > maxSize {
 		lr := io.LimitReader(f, maxSize)
-		data, _ := io.ReadAll(lr)
-		buf.Write(data)
-		buf.WriteString("\n\n... (file truncated)")
+		data, _ = io.ReadAll(lr)
+		text, decErr := decodeProjectTextBytes(data)
+		if decErr != nil {
+			// Fall back to raw bytes as string for undecodable/binary-ish text.
+			fc.Content = string(data) + "\n\n... (file truncated)"
+		} else {
+			fc.Content = text + "\n\n... (file truncated)"
+		}
 	} else {
-		data, _ := io.ReadAll(f)
-		buf.Write(data)
+		data, _ = io.ReadAll(f)
+		text, decErr := decodeProjectTextBytes(data)
+		if decErr != nil {
+			fc.Content = string(data)
+		} else {
+			fc.Content = text
+		}
 	}
-	fc.Content = buf.String()
 	return fc, nil
 }
 

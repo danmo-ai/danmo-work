@@ -270,6 +270,7 @@ func (m *Manager) Run(ctx context.Context, opts port.SandboxRunOptions) ([]byte,
 		opts.Env = filterEnv(os.Environ())
 	}
 	opts.Env = ensureWorkHomeEnv(opts.Env)
+	opts.Env = ensureUTF8Env(opts.Env)
 
 	m.mu.RLock()
 	cfg := m.cfg

@@ -32,6 +32,7 @@ func (h *Write) Schema() domain.ToolSchema {
 			"- If the file already exists, you MUST use read_file first to read its contents.\n" +
 			"- ALWAYS prefer editing existing files with apply_patch (begin-patch) or edit. NEVER write new files unless explicitly required.\n" +
 			"- Do NOT use exec_shell with cat/echo/heredoc for writing files.\n" +
+			"- Text files are always persisted as UTF-8 (no BOM); legacy encodings are converted on write.\n" +
 			"- The result includes a unified diff when overwriting an existing file.",
 		Parameters: map[string]any{
 			"type": "object",

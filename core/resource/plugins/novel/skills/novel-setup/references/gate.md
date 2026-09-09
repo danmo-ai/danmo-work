@@ -43,3 +43,15 @@ If the book root is the workdir (it contains `novel-state.yaml`), omit `--book-i
 Exit: `0` PASS, `1` FAIL, `2` usage/IO error. FAIL prints `### VERDICT` / BLOCKING — copy into `novel-state.yaml` `blockers`. Do not claim 定稿 without exit 0 on the matching action.
 
 `exec_shell` is allowed **only** for this script. Do not use shell for file IO or other commands.
+
+## Encoding (UTF-8)
+
+Book text must be UTF-8. `doctor` **detects** non-UTF-8 and BLOCKS with a pointer to the one-shot migrator — it does **not** rewrite files.
+
+```bash
+# from DanQing-Teams repo (or set WORK_DATA_DIR)
+python3 scripts/migrate_novel_encoding.py --dry-run
+python3 scripts/migrate_novel_encoding.py
+```
+
+Gate reads are strict UTF-8 (no `errors=replace`). Convert legacy GB18030 before preflight/precommit.

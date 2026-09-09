@@ -39,6 +39,7 @@ func (h *Edit) Schema() domain.ToolSchema {
 			"- newString must be different from oldString.\n" +
 			"- Use replaceAll for replacing and renaming strings across the file.\n" +
 			"- For multi-hunk or multi-file edits, prefer apply_patch (begin-patch) instead of many edit calls.\n" +
+			"- Text files are always persisted as UTF-8 (no BOM); legacy encodings are converted on write.\n" +
 			"- The result includes a unified diff showing what was changed.",
 		Parameters: map[string]any{
 			"type": "object",

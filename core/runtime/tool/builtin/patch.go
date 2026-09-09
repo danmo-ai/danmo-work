@@ -58,7 +58,8 @@ func (h *ApplyPatch) Schema() domain.ToolSchema {
 			"- Matching is search-based (no line numbers required) and tolerates small whitespace/indent drift.\n" +
 			"- Also accepts classic unified diffs (`---/`+++`/`@@ -l,s +l,s @@`) as a fallback.\n" +
 			"- Read target files first when updating existing content.\n" +
-			"- Prefer this over multiple edit calls when changing several places at once.",
+			"- Prefer this over multiple edit calls when changing several places at once.\n" +
+			"- Text files are always persisted as UTF-8 (no BOM); legacy encodings are converted on write.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -335,7 +336,7 @@ func (h *ApplyPatch) Execute(_ context.Context, input map[string]any) (domain.To
 			msg = fmt.Sprintf("Patched %q → moved to %q (%d hunks)", fp.relPath, finalRel, len(fp.hunks))
 		}
 		if !fp.isCreate {
-			msg += encodingNote(fp.meta)
+			msg += conversionNote(fp.meta, writeEncodingMeta(fp.meta))
 		}
 		results = append(results, msg)
 		op := "update"

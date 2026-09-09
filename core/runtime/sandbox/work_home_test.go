@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -28,6 +29,40 @@ func TestEnsureWorkHomeEnv(t *testing.T) {
 	}
 	if saw != home {
 		t.Fatalf("WORK_HOME=%q want %q env=%v", saw, home, got)
+	}
+}
+
+func TestEnsureUTF8Env(t *testing.T) {
+	got := ensureUTF8Env([]string{"PATH=/bin", "PYTHONIOENCODING=ascii"})
+	m := map[string]string{}
+	for _, e := range got {
+		k, v, ok := strings.Cut(e, "=")
+		if ok {
+			m[k] = v
+		}
+	}
+	if m["PYTHONUTF8"] != "1" {
+		t.Fatalf("PYTHONUTF8=%q", m["PYTHONUTF8"])
+	}
+	if m["PYTHONIOENCODING"] != "utf-8" {
+		t.Fatalf("PYTHONIOENCODING=%q want utf-8 (override)", m["PYTHONIOENCODING"])
+	}
+	if runtime.GOOS != "windows" {
+		if m["LC_ALL"] != "C.UTF-8" || m["LANG"] != "C.UTF-8" {
+			t.Fatalf("locale env=%v", m)
+		}
+	}
+	// Preserve existing LANG
+	got2 := ensureUTF8Env([]string{"LANG=en_US.UTF-8"})
+	m2 := map[string]string{}
+	for _, e := range got2 {
+		k, v, ok := strings.Cut(e, "=")
+		if ok {
+			m2[k] = v
+		}
+	}
+	if runtime.GOOS != "windows" && m2["LANG"] != "en_US.UTF-8" {
+		t.Fatalf("LANG overwritten: %v", m2)
 	}
 }
 
