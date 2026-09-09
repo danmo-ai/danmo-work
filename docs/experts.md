@@ -107,7 +107,7 @@ delegate_agent(agent_id="<id>", goal="...")
 - **孤儿技能 / 连接器**：跨专家复用的 SOP（TDD、debugging、document-writing…）与产品连接器目录仍走原 home / catalog 模式，不强制塞进某个专家插件。
 - **市场（Market）**：安装 `kind: plugin`（推荐）或 `skill` / `connector`。历史上的 `kind: expert` / `bundle` 已由插件取代。
 - **自定义**：在 Teams 新建子专家，绑定技能、工具、知识库与 MCP；主专家开启协作后即可被 `@` / 图标召唤。
-- **Ambient**：子专家默认不继承全量 Ambient MCP；需要的连接器应写在专家的 `mcpServers` 绑定里（如 GitHub、Danmo Make）。
+- **Ambient**：子专家不继承全量 Ambient（磁盘技能 / ambient MCP）；需要的连接器应写在专家的 `mcpServers` 绑定里（如 GitHub、Danmo Make）。
 
 ---
 

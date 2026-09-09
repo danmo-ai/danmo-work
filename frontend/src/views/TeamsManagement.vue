@@ -35,10 +35,6 @@ const activeTab = ref<ConfigTab>('overview')
 const pendingTool = ref<ToolBinding>({ toolId: '', riskLevel: 'low' })
 const pendingMcpServer = ref('')
 
-function defaultInheritAmbient(mode?: Agent['mode']): boolean {
-  return mode !== 'subagent'
-}
-
 function emptyAgentForm(): AgentForm {
   return {
     id: '',
@@ -53,7 +49,6 @@ function emptyAgentForm(): AgentForm {
     knowledgeIds: [],
     steps: 0,
     canDelegate: false,
-    inheritAmbient: true,
   }
 }
 
@@ -143,7 +138,6 @@ function selectAgent(id: string) {
       tools: agent.tools ? [...agent.tools] : [],
       mcpServers: agent.mcpServers ? [...agent.mcpServers] : [],
       knowledgeIds: agent.knowledgeIds ? [...agent.knowledgeIds] : [],
-      inheritAmbient: agent.inheritAmbient ?? defaultInheritAmbient(agent.mode),
     }
   }
 }
@@ -185,7 +179,6 @@ async function save() {
         mcpServers: agentForm.value.mcpServers,
         knowledgeIds: agentForm.value.knowledgeIds,
         canDelegate: agentForm.value.canDelegate ?? false,
-        inheritAmbient: agentForm.value.inheritAmbient ?? defaultInheritAmbient(agentForm.value.mode),
       })
       toast.success(t('teams.created'))
       isCreating.value = false
@@ -203,7 +196,6 @@ async function save() {
         mcpServers: agentForm.value.mcpServers,
         knowledgeIds: agentForm.value.knowledgeIds,
         canDelegate: agentForm.value.canDelegate ?? false,
-        inheritAmbient: agentForm.value.inheritAmbient ?? defaultInheritAmbient(agentForm.value.mode),
       })
 
       toast.success(t('teams.saved'))
@@ -505,13 +497,6 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
               <span class="expert-collab__desc">{{ expertOneLiner(expert) }}</span>
             </li>
           </ul>
-        </div>
-        <div class="resource-field resource-field--block resource-field--inline" @click="agentForm.inheritAmbient = !agentForm.inheritAmbient">
-          <div class="resource-field__inline-meta">
-            <span class="resource-field__label">{{ $t('teams.inheritAmbient') }}</span>
-            <span class="resource-field__hint">{{ $t('teams.inheritAmbientHint') }}</span>
-          </div>
-          <DqSwitch :model-value="agentForm.inheritAmbient" size="sm" />
         </div>
       </section>
 

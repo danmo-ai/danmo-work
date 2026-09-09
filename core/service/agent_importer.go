@@ -28,10 +28,9 @@ type agentFrontmatter struct {
 	Skills         []string          `yaml:"skills"`
 	Tools          []toolFrontmatter `yaml:"tools"`
 	MCPServers     []string          `yaml:"mcp_servers"`
-	Knowledge      []string          `yaml:"knowledge"`
-	CanDelegate    bool              `yaml:"can_delegate"`
-	InheritAmbient *bool             `yaml:"inherit_ambient"`
-	Metadata       map[string]string `yaml:"metadata"`
+	Knowledge   []string          `yaml:"knowledge"`
+	CanDelegate bool              `yaml:"can_delegate"`
+	Metadata    map[string]string `yaml:"metadata"`
 }
 
 type toolFrontmatter struct {
@@ -107,10 +106,9 @@ func (i *AgentImporter) ParseAgentMD(content string) (*domain.Agent, error) {
 		SkillIDs:       fm.Skills,
 		Tools:          tools,
 		MCPServers:     fm.MCPServers,
-		KnowledgeIDs:   fm.Knowledge,
-		CanDelegate:    fm.CanDelegate,
-		InheritAmbient: fm.InheritAmbient,
-		MarketSource:   marketSrc,
+		KnowledgeIDs: fm.Knowledge,
+		CanDelegate:  fm.CanDelegate,
+		MarketSource: marketSrc,
 	}
 	domain.NormalizeAgentBindings(a)
 	return a, nil

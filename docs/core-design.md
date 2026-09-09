@@ -375,19 +375,19 @@ OpenAI-compat 路径上，模型常把 `write`/`edit` 等内容里的未转义�
 
 **产品名词**：UI 统一称 **连接器**（Connectors）；MCP 仅为协议/实现细节（tool 名仍可 `mcp_*`）。连接器 = 已安装实例（鉴权、开关、动作列表）；连接器目录 = 一键预设。
 
-Agent 可用能力按三层合成；Skill 与连接器共用同一 Ambient 开关。
+Agent 可用能力按三层合成；磁盘技能与 Ambient 连接器均由 Agent `mode` 控制（主专家继承，子专家仅 Bound）。
 
 | 层 | 内容 | 何时生效 |
 |----|------|----------|
 | **Core** | `ask_user`、`memory_*`、`table_*`、`read_skill`、`search_kb`（有 KB 时）；`delegate_agent`（`canDelegate`） | 始终（与绑定无关） |
 | **Bound** | Agent `skillIds`（DB 技能）+ `tools[]`（builtin）+ `mcpServers[]`（连接器 id） | 始终按 Agent 配置 |
-| **Ambient** | 磁盘技能目录 + **已启用且 `ambientMount!=false` 的连接器** | 仅当 `inheritAmbient`（默认：`primary=true`，`subagent=false`） |
+| **Ambient** | 磁盘技能目录 + **已启用且 `ambientMount!=false` 的连接器** | 仅 **主专家**（`mode=primary`）；子专家（`subagent`）不继承 |
 
-`inheritAmbient` 可在 Agent JSON / YAML（`inherit_ambient`）/ Teams UI 覆盖；`null` 表示按 Mode 默认。
+Ambient 由 Agent `mode` 决定：主专家始终继承；子专家仅使用 Bound（`skillIds` / `tools` / `mcpServers`）。
 
 #### 自定义技能目录（Ambient，New Turn 扫描）
 
-每个 New Turn 在构建 system prompt 前实时扫描磁盘技能目录（**不写 SQLite**），按 **项目 → 插件 → Home** 去重后注入 `<available_skills>`（仅 Skill ID + 描述）——**仅 Ambient 开启时**扫描磁盘。
+每个 New Turn 在构建 system prompt 前实时扫描磁盘技能目录（**不写 SQLite**），按 **项目 → 插件 → Home** 去重后注入 `<available_skills>`（仅 Skill ID + 描述）——**仅主专家**扫描磁盘 Ambient 技能。
 
 技能 ID = 相对扫描根目录的路径：`{root}/{id}/SKILL.md`（支持嵌套，如 `team/planner`）。扫描时在 frontmatter `metadata.real_path` 写入技能目录绝对路径，便于排查；不回写磁盘。
 
@@ -419,7 +419,7 @@ Agent 可用能力按三层合成；Skill 与连接器共用同一 Ambient 开�
 | `delegate_agent` | Core + `canDelegate` |
 | 其它 builtin | Bound：`tools[].toolId` |
 | 连接器动作 | Ambient（`ambientMount` 允许时），或 Bound：`mcpServers[]` |
-| 磁盘技能 | Ambient（`inheritAmbient`） |
+| 磁盘技能 | Ambient（主专家） |
 
 ### 7.1.1 外部 API 分层（避免 Tool 元数据膨胀）
 

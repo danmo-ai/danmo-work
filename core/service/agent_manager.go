@@ -169,9 +169,8 @@ func parseAgentMarkdown(content string) (*domain.Agent, error) {
 		Skills         []string          `yaml:"skills"`
 		Tools          []toolFrontmatter `yaml:"tools"`
 		MCPServers     []string          `yaml:"mcp_servers"`
-		Knowledge      []string          `yaml:"knowledge"`
-		CanDelegate    bool              `yaml:"can_delegate"`
-		InheritAmbient *bool             `yaml:"inherit_ambient"`
+		Knowledge   []string          `yaml:"knowledge"`
+		CanDelegate bool              `yaml:"can_delegate"`
 	}
 	if err := yaml.Unmarshal([]byte(strings.TrimSpace(parts[1])), &fm); err != nil {
 		return nil, err
@@ -205,7 +204,6 @@ func parseAgentMarkdown(content string) (*domain.Agent, error) {
 		SystemPrompt: strings.TrimSpace(parts[2]),
 		Steps: fm.Steps, SkillIDs: fm.Skills, Tools: tools, MCPServers: fm.MCPServers,
 		KnowledgeIDs: fm.Knowledge, CanDelegate: fm.CanDelegate,
-		InheritAmbient: fm.InheritAmbient,
 	}
 	domain.NormalizeAgentBindings(&a)
 	return &a, nil
@@ -224,9 +222,8 @@ func writeAgentFile(dir string, a domain.Agent) error {
 		Skills         []string          `yaml:"skills,omitempty"`
 		Tools          []toolFrontmatter `yaml:"tools,omitempty"`
 		MCPServers     []string          `yaml:"mcp_servers,omitempty"`
-		Knowledge      []string          `yaml:"knowledge,omitempty"`
-		CanDelegate    bool              `yaml:"can_delegate,omitempty"`
-		InheritAmbient *bool             `yaml:"inherit_ambient,omitempty"`
+		Knowledge   []string          `yaml:"knowledge,omitempty"`
+		CanDelegate bool              `yaml:"can_delegate,omitempty"`
 	}
 	var tools []toolFrontmatter
 	for _, t := range a.Tools {
@@ -237,7 +234,6 @@ func writeAgentFile(dir string, a domain.Agent) error {
 		Persona: a.Persona, Mode: string(a.Mode), Category: a.Category, Steps: a.Steps,
 		Skills: a.SkillIDs, Tools: tools, MCPServers: a.MCPServers,
 		Knowledge: a.KnowledgeIDs, CanDelegate: a.CanDelegate,
-		InheritAmbient: a.InheritAmbient,
 	})
 
 	var b strings.Builder
