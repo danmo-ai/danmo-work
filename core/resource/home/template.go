@@ -24,9 +24,8 @@ type agentFrontmatter struct {
 	Skills         []string          `yaml:"skills"`
 	Tools          []toolFrontmatter `yaml:"tools"`
 	MCPServers     []string          `yaml:"mcp_servers"`
-	Knowledge      []string          `yaml:"knowledge"`
-	CanDelegate    bool              `yaml:"can_delegate"`
-	InheritAmbient *bool             `yaml:"inherit_ambient"`
+	Knowledge   []string          `yaml:"knowledge"`
+	CanDelegate bool              `yaml:"can_delegate"`
 }
 
 type toolFrontmatter struct {
@@ -129,9 +128,8 @@ func loadAgentTemplatesFromFS(fsys fs.FS, dir string) ([]AgentTemplate, error) {
 			SkillIDs:       fm.Skills,
 			Tools:          tools,
 			MCPServers:     fm.MCPServers,
-			KnowledgeIDs:   fm.Knowledge,
-			CanDelegate:    fm.CanDelegate,
-			InheritAmbient: fm.InheritAmbient,
+			KnowledgeIDs: fm.Knowledge,
+			CanDelegate:  fm.CanDelegate,
 		}
 		domain.NormalizeAgentBindings(&agent)
 		result = append(result, AgentTemplate{Agent: agent, Source: entry.Name()})

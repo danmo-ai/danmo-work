@@ -6,7 +6,6 @@ description: GitHub platform ops via bound MCP (when configured), else gh, else 
 persona: GitHub specialist (MCP → gh → git degrade)
 mode: subagent
 category: coding
-inherit_ambient: false
 steps: 16
 skills:
   - github

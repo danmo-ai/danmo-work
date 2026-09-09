@@ -294,16 +294,20 @@ export default {
     maxStepsFollowGlobal: 'Default ({n})',
     maxStepsHint: '0 follows Settings → Default Max Steps. Override only when this agent needs its own cap.',
     canDelegate: 'Enable expert collaboration',
+<<<<<<< HEAD
     canDelegateHint: 'When on, this lead expert can summon other experts during a task.',
     inheritAmbient: 'Inherit environment capabilities',
     inheritAmbientHint: 'Use local skill folders and all enabled connectors. Off for experts by default; bind specific connector ids under Tools.',
+=======
+    canDelegateHint: 'When on, this lead expert can summon other experts from the team during a task.',
+>>>>>>> origin/main
     builtinToolsLabel: 'Built-in Tools',
     builtinToolsHint: 'Bind runtime built-in tools (e.g. read_file, ask_user) and set their risk level.',
     toolIdPlaceholder: 'e.g. read_file',
     noTools: 'No tools added',
     mcpServersLabel: 'Connectors',
     mcpServerPlaceholder: 'connector id',
-    mcpServerHint: 'Exact connector ids from Connectors. Used when environment inheritance is off. Enable or disable individual actions on the connector itself.',
+    mcpServerHint: 'Exact connector ids from Connectors. Required for experts (subagents); lead experts already mount ambient connectors. Enable or disable individual actions on the connector itself.',
     noMcpServers: 'No connectors bound',
     connectorIdLabel: 'Connector ID',
     addConnector: 'Add Connector',

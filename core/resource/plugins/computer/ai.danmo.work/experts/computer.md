@@ -6,7 +6,6 @@ description: Desktop GUI automation specialist. Operates real application window
 persona: Desktop computer (see → act → verify)
 mode: subagent
 category: research
-inherit_ambient: false
 steps: 24
 skills:
   - computer-use
