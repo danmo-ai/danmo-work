@@ -327,21 +327,15 @@ function onWorkspaceKeydown(e: KeyboardEvent) {
 <template>
   <WorkspaceShell
     :title="$t('navigation.workers')"
-    custom-rail
+    :count="globalAgents.items.length"
+    :count-label="$t('navigation.workers')"
+    :create-label="$t('teams.newAgent')"
     :has-selection="hasSelection"
     @keydown="onWorkspaceKeydown"
     @create="openCreate"
   >
     <template #rail>
       <div class="resource-rail__section">
-        <div class="resource-rail__section-head">
-          <span class="resource-rail__section-title">{{ $t('teams.workerAgent') }}</span>
-          <DqIconButton :aria-label="$t('teams.newAgent')" @click="openCreate">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 5v14M5 12h14" stroke-linecap="round" />
-            </svg>
-          </DqIconButton>
-        </div>
         <DqEmpty v-if="!sortedAgents.length" class="resource-rail__empty" :description="$t('teams.noWorkers')" />
         <div v-else class="resource-rail__scroll">
           <div v-if="primaryAgents.length" class="resource-rail__group">
