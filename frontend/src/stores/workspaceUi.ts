@@ -103,6 +103,10 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   const composerSelectSkillIds = ref<string[] | null>(null)
   const composerSelectSkillToken = ref(0)
 
+  /** One-shot: expand project in left rail and scroll the session into view. */
+  const revealSessionId = ref<string | null>(null)
+  const revealSessionToken = ref(0)
+
   /** Session split-pane workbench host (Office-style left stream | right workbench). */
   const workbenchOpen = ref(false)
   const activeWorkbenchId = ref<WorkbenchId>(readPersistedWorkbenchId())
@@ -325,6 +329,13 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     return ids
   }
 
+  function revealSessionInLeftRail(sessionId: string) {
+    const id = sessionId.trim()
+    if (!id) return
+    revealSessionId.value = id
+    revealSessionToken.value++
+  }
+
   return {
     rightTab,
     changesCount,
@@ -341,6 +352,8 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     composerSelectExpertToken,
     composerSelectSkillIds,
     composerSelectSkillToken,
+    revealSessionId,
+    revealSessionToken,
     workbenchOpen,
     activeWorkbenchId,
     leftRailCollapsed,
@@ -374,5 +387,6 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     consumeComposerSelectExperts,
     requestComposerSelectSkills,
     consumeComposerSelectSkills,
+    revealSessionInLeftRail,
   }
 })

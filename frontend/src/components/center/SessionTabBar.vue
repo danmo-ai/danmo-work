@@ -6,6 +6,7 @@ import { useSessionsStore } from '@/stores/sessions'
 import { useProjectsStore } from '@/stores/projects'
 import { useSessionActivityStore } from '@/stores/sessionActivity'
 import { useOpenSessionTabsStore, COMPOSE_TAB_ID } from '@/stores/openSessionTabs'
+import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 import type { SessionActivityState } from '@/types/session-activity'
 
 const { t } = useI18n()
@@ -14,6 +15,7 @@ const sessions = useSessionsStore()
 const projects = useProjectsStore()
 const activity = useSessionActivityStore()
 const openTabs = useOpenSessionTabsStore()
+const workspaceUi = useWorkspaceUiStore()
 
 const overflowOpen = ref(false)
 const overflowRoot = ref<HTMLElement | null>(null)
@@ -74,6 +76,7 @@ async function activate(id: string) {
   }
   openTabs.open(id)
   await sessions.selectSession(id)
+  workspaceUi.revealSessionInLeftRail(id)
   router.push({ name: 'sessions', params: { id } })
 }
 
@@ -92,6 +95,7 @@ async function onClose(id: string, e?: Event) {
   if (!wasCurrent) return
   if (next) {
     await sessions.selectSession(next)
+    workspaceUi.revealSessionInLeftRail(next)
     router.push({ name: 'sessions', params: { id: next } })
   } else {
     sessions.startCompose(sessions.selectedProjectId ?? projects.sortedProjects[0]?.id ?? null)

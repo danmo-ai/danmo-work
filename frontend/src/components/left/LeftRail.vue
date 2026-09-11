@@ -77,15 +77,20 @@ const expandedProjects = ref<Set<string>>(new Set())
 const expandedSessionProjects = ref<Set<string>>(new Set())
 
 function expandProject(id: string) {
-  expandedProjects.value.add(id)
+  if (expandedProjects.value.has(id)) return
+  expandedProjects.value = new Set([...expandedProjects.value, id])
+}
+
+function expandSessionList(id: string) {
+  if (expandedSessionProjects.value.has(id)) return
+  expandedSessionProjects.value = new Set([...expandedSessionProjects.value, id])
 }
 
 function toggleMoreSessions(id: string) {
-  if (expandedSessionProjects.value.has(id)) {
-    expandedSessionProjects.value.delete(id)
-  } else {
-    expandedSessionProjects.value.add(id)
-  }
+  const next = new Set(expandedSessionProjects.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  expandedSessionProjects.value = next
 }
 
 function visibleSessions(p: Project): Session[] {
@@ -429,6 +434,42 @@ watch(() => projects.projects.length, (len) => {
     projects.sortedProjects.forEach((p) => expandProject(p.id))
   }
 })
+
+function revealSessionInTree(sessionId: string) {
+  const session = sessions.sessions.find((s) => s.id === sessionId)
+  if (!session?.projectId) return
+
+  if (collapsed.value) {
+    workspaceUi.setLeftRailCollapsed(false)
+  }
+  sessionViewMode.value = 'tree'
+  sidebarSearch.value = ''
+  expandProject(session.projectId)
+
+  const list = sessions.sessionsByProject.get(session.projectId) ?? []
+  const idx = list.findIndex((s) => s.id === sessionId)
+  if (idx >= DEFAULT_VISIBLE_TASKS) {
+    expandSessionList(session.projectId)
+  }
+
+  void nextTick(() => {
+    void nextTick(() => {
+      const el = document.querySelector(
+        `.project-tree__session[data-session-id="${CSS.escape(sessionId)}"]`,
+      ) as HTMLElement | null
+      el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    })
+  })
+}
+
+watch(
+  () => workspaceUi.revealSessionToken,
+  () => {
+    const id = workspaceUi.revealSessionId
+    if (!id) return
+    revealSessionInTree(id)
+  },
+)
 </script>
 
 <template>
@@ -614,6 +655,7 @@ watch(() => projects.projects.length, (len) => {
                   <button
                     type="button"
                     class="project-tree__session"
+                    :data-session-id="t_.id"
                     :class="[
                       { 'is-active': sessions.currentSessionId === t_.id && !sessions.composingNew },
                       sessionStatusClass(t_),
@@ -692,6 +734,7 @@ watch(() => projects.projects.length, (len) => {
                     <button
                       type="button"
                       class="project-tree__session"
+                      :data-session-id="t_.id"
                       :class="[
                         { 'is-active': sessions.currentSessionId === t_.id && !sessions.composingNew },
                         sessionStatusClass(t_),
