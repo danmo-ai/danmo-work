@@ -6,7 +6,7 @@ license: MIT
 compatibility: Requires write, edit, read_file, glob, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "2.4"
+  version: "2.5"
   category: creative-writing
 ---
 
@@ -23,8 +23,8 @@ Scaffold one book. **Stop when the tree and bible exist.**
 ## Do
 
 1. `read_skill` `novel-setup/references/init.md`（按需 `project-layout.md`）；过一遍「开书筹备 checklist」。
-2. `search_kb` **至多一次**：题材与平台.
-3. Create `novel/<book-id>/`；`write` bible（含终局储备）、`novel-state.yaml`、`canon/world.md`、`canon/author-lore.md`、`continuity/ledger.md`.
+2. `search_kb` **至多一次**：题材与平台。命中刑侦/探案/社会派 → `craft_lane: crime-human`（查案向可顺带 `qc_profile: mystery`）；灵异/怪谈/悬疑爽**不要**标人味车道。
+3. Create `novel/<book-id>/`；`write` bible（含终局储备）、`novel-state.yaml`、`canon/world.md`、`canon/author-lore.md`、`continuity/ledger.md`. `craft_lane=crime-human` 时把 `style-fingerprint-crime.md` **全部条目**写入指纹「禁语」（含人味 + 去 AI 硬提醒），不要另查人味/文风篇。
 4. Cast 起 `candidate`（`cast-card.md`）；金手指默认写在主角卡。promote 等到卷纲批准.
 5. Templates: bible / state / world / cast-card / author-lore / ledger only.
 6. Gate `--action doctor`. Legacy 无 ledger → merge 后 archive（见 init.md）. Non-UTF-8 text → BLOCK；先跑仓库 `scripts/migrate_novel_encoding.py`，再用 `write`/`edit`/`apply_patch`（禁止 shell 重定向写中文）。

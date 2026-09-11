@@ -6,7 +6,7 @@ license: MIT
 compatibility: Requires write, edit, read_file, grep, glob, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "2.7"
+  version: "2.8"
   category: creative-writing
 ---
 
@@ -28,12 +28,12 @@ Chapter outline → **first draft only**. 扩写 / 审 / 润色 / Commit → `no
 |--------|------|-----------------|
 | 章纲 | `chapter-outline.md` | 节奏与结构 |
 | 批次冻结 | `batch-freeze.md` | — |
-| 写正文（单章） | `chapter-write.md`（含 preflight） | 文风与去 AI 味 |
-| 批量正文首稿 | `batch-draft.md`（冻结批次 + 用户明示 / Workbench） | 文风与去 AI 味 |
-| 开篇 ch1–3 | 上栏 + `opening-chapters.md` | 节奏与结构 |
-| 续写 / 卡文 | `continuation.md`（含卡文四法） | 文风与去 AI 味 |
+| 写正文（单章，ch≥4） | `chapter-write.md`（含 preflight） | 默认「文风与去 AI 味」；`craft_lane=crime-human` →「刑侦人味文风」 |
+| 批量正文首稿 | `batch-draft.md`（冻结批次 + 用户明示 / Workbench） | 同上（批内含 ch1–3 则整批改查「节奏与结构」） |
+| 开篇 ch1–3 | 上栏 + `opening-chapters.md` | **节奏与结构**（人味不占配额） |
+| 续写 / 卡文 | `continuation.md`（含卡文四法） | 同「写正文（单章，ch≥4）」 |
 | 爽点强化 | `chapter-write.md` | 爽点与追读 |
-| 场景/对白质感 | `chapter-write.md` + 按需 `scene-routing.md` | 情绪与场景 或 文风与去 AI 味 |
+| 场景/对白质感 | `chapter-write.md` + 按需 `scene-routing.md` | 情绪与场景；本 turn 已定人味则按 scene-routing 加载人味节 |
 
 写正文：**gate preflight → 只消费 `### CONTEXT` + 本章纲。** 禁止扫树；禁止 `author-lore`。批次冻结按单元章范围默认写入 `frozen_batch`（见 `batch-freeze.md`）。批量首稿用 `preflight --from/--to`（见 `batch-draft.md`）。
 

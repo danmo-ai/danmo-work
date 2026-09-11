@@ -79,6 +79,10 @@ REVISE 两轮仍不过 → **FORCED PASS**：遗留问题打 severity 标签（`
 
 番茄向/免费网文额外检查（ch1–3 blocking，之后 advisory）：开篇 3 句内有冲突、首章末必钩、章纲 `pleasure_point` 与 `hook` 非空且正文兑现；开篇信息过载 / 口号钩 / 水文注水 → 对照 KB「强约束 → 高频雷点」。
 
+### 刑侦人味（仅 `craft_lane=crime-human` — advisory；深审可升 blocking）
+
+对照 KB「刑侦人味文风」Checklist。常见扣分：档案式进场；情绪代办词；旁白认证/「来了。」打点；对话庭审化；无闲笔；死者无生前琐碎；动机无社会性数字；章全过程绷钩无人味。灵异 / 怪谈 / 悬疑爽不要套本条。
+
 ## 发稿前四步自查（定稿前扫一眼）
 
 与 10 维评分并行的轻量清单（不替代 gate）：
@@ -91,6 +95,7 @@ REVISE 两轮仍不过 → **FORCED PASS**：遗留问题打 severity 标签（`
 签约向（advisory）：三观与平台红线见「题材与平台」；创新与独创性优先于同质化跟风——不写商务条款进正文。
 
 Plus **anti-AI P0** from KB「文风与去 AI 味」— always blocking（含量化硬指标四项）。
+`craft_lane=crime-human` 另对照「刑侦人味文风」Checklist（advisory；用户深审或连续 WARNING 可升 blocking）。
 
 ```markdown
 ### VERDICT

@@ -1113,8 +1113,16 @@ def load_cast_relations(
     return out
 
 
+def craft_lane_of(st: dict | None) -> str:
+    if not st:
+        return "default"
+    raw = str(st.get("craft_lane") or "default").strip().lower().replace("_", "-")
+    return "crime-human" if raw == "crime-human" else "default"
+
+
 def build_preflight_context(
-    book_root: Path, contract: dict, ch: int, r: Report, cache: BookCache | None = None
+    book_root: Path, contract: dict, ch: int, r: Report, cache: BookCache | None = None,
+    st: dict | None = None,
 ) -> list[str]:
     lines: list[str] = []
     style = cache.style_brief() if cache is not None else style_fingerprint_brief(book_root)
@@ -1202,6 +1210,14 @@ def build_preflight_context(
     unit = str(contract.get("unit_id") or "").strip()
     beat_line = unit_beat_line(book_root, unit, ch, cache)
     lines.append(f"- 单元功能 ({unit or '?'}): {beat_line or '（未在卷纲解析到本章节拍）'}")
+    lane = craft_lane_of(st)
+    if lane == "crime-human":
+        lines.append(
+            "- craft_lane: crime-human — 非开篇正文/润色 search_kb「刑侦人味文风」；"
+            "ch1–3 仍查「节奏与结构」。勿因 mystery 套灵异。"
+        )
+    else:
+        lines.append("- craft_lane: default")
     lines.append("- 加载纪律: 只消费本 CONTEXT + 本章纲；禁止扫树；禁止 author-lore。")
     return lines
 
@@ -1329,7 +1345,7 @@ def check_preflight(
     debts = open_debt_count(book_root, c, cache)
     if debts > MAX_OPEN_DEBTS:
         r.blocking("reader_debt", f"open foreshadows+reader_debt={debts} exceeds {MAX_OPEN_DEBTS}")
-    r.context_lines = build_preflight_context(book_root, c, ch, r, cache)
+    r.context_lines = build_preflight_context(book_root, c, ch, r, cache, st)
 
 
 def check_precommit(

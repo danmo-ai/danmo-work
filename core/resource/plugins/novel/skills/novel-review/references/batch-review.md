@@ -49,5 +49,5 @@ python3 "${WORK_HOME}/plugins/novel/skills/novel-setup/scripts/novel_gate.py" \
 
 - 同 turn 可多章定稿，但 **Commit 必须章序**，禁止并行或跳章。
 - PASS 不落盘 review 文件。
-- `search_kb` 按步各 ≤1；整批尽量复用已加载的 `review-gates.md`。
+- `search_kb` 按步各 ≤1；整批尽量复用已加载的 `review-gates.md`。审稿查「文风与去 AI 味」；润色仅 `craft_lane=crime-human` 改查人味篇。
 - 写与审分模：本技能不换模型；用户应在写作 turn 之后另开本 turn。

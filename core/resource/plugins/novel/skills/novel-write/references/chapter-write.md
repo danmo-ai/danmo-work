@@ -11,9 +11,9 @@
 1. `exec_shell` gate `--action preflight --chapter N`（`novel-setup/references/gate.md`）。exit ≠ 0 → **停止**。接手旧书另跑 `--action doctor`（批量路径禁止重跑 doctor）。
 2. 读 stdout 的 `### CONTEXT`（风格指纹 / 接钩 / 人物现场 / 三锚点 / 在场角色间关系 / 开放债务 / 本章硬约束 / 单元功能）。**这是本轮唯一额外上下文。**
 3. 读本章 `chapters/chNNN-outline.yaml`（须 `accepted`；`unit_id` 对上卷纲单元）。
-4. 可选：`search_kb` **至多 1** 次（默认「文风与去 AI 味」；章末钩/接钩可换「爽点与追读」）。
-5. **ch001–ch003** → 另 `read_skill` `opening-chapters.md` + KB「节奏与结构」。
-6. beats 含场景标签（对话/打斗/系统/`scene:establish` 等）→ `search_kb` **情绪与场景** 对应条目（见 KB `06`）；**不要**再 `read_skill` 单独场景路由页。
+4. 可选：`search_kb` **至多 1** 次。默认「文风与去 AI 味」；章末钩/接钩可换「爽点与追读」。**ch001–ch003 必须查「节奏与结构」**（覆盖上两项）。`craft_lane=crime-human` 且 ch≥4 →「刑侦人味文风」。禁止只凭 `qc_profile=mystery` 改查人味。
+5. **ch001–ch003** → 另 `read_skill` `opening-chapters.md`。人味开篇提醒见该页短清单，不另占 `search_kb`。
+6. beats 含场景标签 → 本 turn 已选定的那 1 次 KB 只加载命中小节（`scene-routing.md`）。**不要**再 `read_skill` 单独场景路由页，也不要为场景再开第二次 `search_kb`。
 7. 仅当章纲 `continuity_risks` 非空 → 才可 `read_file` 点名旧章。
 
 **禁止：** `canon/author-lore.md`、整本 bible 终局细节、全卷纲、全书 `canon/` 通读、强制 `table_*`。

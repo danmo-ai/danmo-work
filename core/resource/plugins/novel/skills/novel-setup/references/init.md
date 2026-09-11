@@ -32,7 +32,7 @@ If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding
 ## Steps（少交互）
 
 1. `read_skill` → `project-layout.md`（按需再开 `table-schema.md` / templates）.  
-2. `search_kb` **一次**：题材与平台（knowledge_gate）.  
+2. `search_kb` **一次**：题材与平台（knowledge_gate）。刑侦/探案/社会派 → `novel-state.craft_lane: crime-human`（查案向可 `qc_profile: mystery`），并把 `novel-write/assets/templates/style-fingerprint-crime.md` **全部条目**写入 `canon/style-fingerprint.md`「禁语」（或 bible Style card）；**不要**另查人味篇或文风篇。灵异/怪谈/悬疑爽不要标人味车道。  
 3. Create the **standard English tree** under `novel/<book-id>/`:  
    `canon/` (+ `cast/`), `outline/` (+ `volumes/`), `chapters/`, `continuity/`, `reviews/`.  
 4. `write` `book-bible.md`（含终局储备表）and `novel-state.yaml` (stage=`init`). All new text via `write`/`edit`/`apply_patch` — **UTF-8 only**.  

@@ -31,5 +31,5 @@
 - 禁止为走流程扫全书树；禁止 `author-lore`。
 - 风格指纹：区间 preflight 每章 CONTEXT 已注入；若本轮上下文被裁剪未见指纹 → `read_file canon/style-fingerprint.md` 一次即可（整批共用）。
 - ch001–ch003：整批含开篇章时，另 `read_skill` `opening-chapters.md` **一次**（不要每章重复）。
-- `search_kb` 整批 ≤1。
+- `search_kb` 整批 ≤1：含 ch1–3 →「节奏与结构」；否则默认「文风与去 AI 味」，`craft_lane=crime-human` →「刑侦人味文风」。
 - 单章写失败（工具/质量自检）→ 停该章及之后；已落盘首稿保留 `drafted`。

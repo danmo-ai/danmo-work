@@ -12,7 +12,7 @@
 
 **言情 / 古言** — 关系推进、拉扯与错位。风险：人设崩、甜虐无因果。开篇：关系张力先于世界观。QC：`female_emotion`
 
-**悬疑 / 灵异 / 推理 / 刑侦** — 信息公平、线索回收、氛围压迫；男频悬疑爽 = 日常细节 + 信息差 + 反转 + 情绪释放。风险：后期乱加规则、为钩破坏逻辑、伏笔堆太多。开篇：异常事件 + 限制条件；露一藏九。QC：`mystery`（爽向叠加 `male_power`）。**深描 → `11-genre-suspense-investigation`**
+**悬疑 / 灵异 / 推理 / 刑侦** — 信息公平、线索回收、氛围压迫；男频悬疑爽 = 日常细节 + 信息差 + 反转 + 情绪释放。风险：后期乱加规则、为钩破坏逻辑、伏笔堆太多。开篇：异常事件 + 限制条件；露一藏九。QC：`mystery`（爽向叠加 `male_power`）。**情节深描 → `11-genre-suspense-investigation`**。**人味仅刑侦/探案/社会派 → `craft_lane=crime-human` + `13-crime-human-flavor`**（灵异/怪谈/悬疑爽不要套；`mystery ≠` 人味车道）。
 
 **仕途 / 扫黑 / 都市现实** — 真实故事、关系网、小人物情绪、正义兑现；强文字与社会阅历。风险：开篇拖沓、模仿无情感、影射现实。开篇：具体利益冲突 + 卖点一句话进 ch1。QC：`general` 或 `male_power`；查案线叠加 `mystery`。**深描 → `12-genre-urban-politics`**
 
@@ -20,7 +20,7 @@
 
 ## QC Profile
 
-读 `novel-state.yaml` 的 `qc_profile`；默认 `general`。
+读 `novel-state.yaml` 的 `qc_profile`；默认 `general`。人味正文另读 `craft_lane`（`default` | `crime-human`），与 `qc_profile` 独立。
 
 | Profile | 适用 | 优先维度 |
 |---------|------|----------|
@@ -79,11 +79,12 @@
 |------|------|
 | `11-genre-suspense-investigation` | 悬疑、推理、探案、刑侦、灵异、男频悬疑爽、女频刑侦 |
 | `12-genre-urban-politics` | 仕途、权谋、扫黑除恶、都市现实 |
+| `13-crime-human-flavor` | 仅刑侦/探案/社会派正文质感（须 `craft_lane=crime-human`） |
 
 ## Checklist
 
 - [ ] 读者承诺与平台/篇幅匹配；题材切口对齐个人擅长标签（非纯追热点）
 - [ ] `qc_profile` 已写入 novel-state
-- [ ] 悬疑/刑侦/扫黑：已读对应题材深描 KB
+- [ ] 悬疑读 11；扫黑读 12；刑侦/探案标 `craft_lane=crime-human` 并对照人味篇（勿因 mystery 套灵异）
 - [ ] 番茄向：本章 2000–3500 字，章末有具体钩子
 - [ ] 章纲 pleasure_point 与 hook 非空

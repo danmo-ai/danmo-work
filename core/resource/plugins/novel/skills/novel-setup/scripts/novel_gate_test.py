@@ -338,6 +338,18 @@ class GateTests(unittest.TestCase):
         self.assertIn("有限第三人称", blob)
         self.assertIn("禁用「刹那间」", blob)
         self.assertNotIn("参考章", blob)
+        self.assertIn("craft_lane: default", blob)
+
+    def test_preflight_injects_crime_human_lane(self):
+        state = self.root / "novel/demo/novel-state.yaml"
+        state.write_text(
+            state.read_text(encoding="utf-8") + "craft_lane: crime-human\n",
+            encoding="utf-8",
+        )
+        blob = ng.run(str(self.root), "demo", "preflight", 1).format()
+        self.assertIn("craft_lane: crime-human", blob)
+        self.assertIn("刑侦人味文风", blob)
+        self.assertNotIn("craft_lane: default", blob)
 
     def test_preflight_style_falls_back_to_bible(self):
         bible = self.root / "novel/demo/book-bible.md"

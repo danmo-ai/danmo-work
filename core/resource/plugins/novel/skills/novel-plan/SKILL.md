@@ -6,7 +6,7 @@ license: MIT
 compatibility: Requires write, edit, read_file, glob; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "2.4"
+  version: "2.5"
   category: creative-writing
 ---
 
@@ -26,7 +26,7 @@ Lock canon and outlines. **No chapter outlines, no chapter bodies.**
 |--------|------|-----------------|
 | 总纲 | `novel-plan/references/outline.md` + 模板 `book-outline.md`（锁纲 checklist） | 节奏与结构 |
 | 卷纲 | `novel-plan/references/outline.md` + 模板 `volume-outline.md`（锁卷 checklist / 单元卡） | 节奏与结构 |
-| 人设 / 世界观 | templates `world.md` + `cast-card.md` | 人设与群像 |
+| 人设 / 世界观 | templates `world.md` + `cast-card.md` | 人设与群像；仅 `craft_lane=crime-human` 且写反派来路/配角执念时改查人味 |
 | 金手指 | `cast-card.md` 金手指段 | 世界观与金手指 |
 
 新实体先 `candidate`。**卷纲批准时**把本卷点名人物一并 `canon`（一次确认，不逐卡 ask）。终局细节 → `author-lore.md`；unlock 表只在 `book-bible.md`。默认不做 `table_*`。

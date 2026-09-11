@@ -5,6 +5,7 @@ next_action: ""
 last_committed_ch: 0
 last_preflight: ""       # one-line receipt; no separate preflight-log file
 qc_profile: general  # male_power|female_emotion|mystery|general
+craft_lane: default  # default|crime-human — 仅刑侦/探案/社会派；勿因 mystery 标灵异
 continuation_mode: false
 frozen_batch:          # optional; set when batch frozen (no batch-freeze.yaml)
   from: 0

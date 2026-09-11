@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "novel",
-  "version": "2.5.0",
-  "description": "Novel / webnovel writing expert: 8-step pipeline with write≠finalize split (first draft vs expand/review/deslop/commit), ledger continuity + gate CONTEXT, quantitative anti-AI hard checks, 10-dim weighted review gate, volume-close archiving, setup/plan/write/review skills + 12-topic craft KB.",
+  "version": "2.6.0",
+  "description": "Novel / webnovel writing expert: 8-step pipeline with write≠finalize split, ledger continuity + gate CONTEXT, craft_lane routing for crime human-flavor, quantitative anti-AI hard checks, 10-dim weighted review gate, setup/plan/write/review skills + 13-topic craft KB.",
   "author": { "name": "Danmo" },
   "license": "MIT",
   "keywords": ["novel", "writing", "expert", "builtin", "knowledge"]

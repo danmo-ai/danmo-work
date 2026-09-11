@@ -6,7 +6,7 @@ license: MIT
 compatibility: Requires write, edit, read_file, grep, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "2.6"
+  version: "2.7"
   category: creative-writing
 ---
 
@@ -27,9 +27,9 @@ Post-draft lane（可与写作分模）：字数不足先扩写 → 一轮审稿
 | Intent | Load | search_kb（≤1） |
 |--------|------|-----------------|
 | 字数不足/扩写 | `expansion.md` | 扩写与字数控制 |
-| 审稿（单章） | `review-gates.md`（10 维加权 + 发稿前四步自查） | 文风与去 AI 味 |
-| 批量审 / 批量定稿 | `batch-review.md`（按章序扩→审→Commit） | 文风与去 AI 味 |
-| 去 AI 味 | `polish-deslop.md`（先跑 scan-deslop 拿 COUNTS） | 文风与去 AI 味 |
+| 审稿（单章） | `review-gates.md`（10 维加权 + 发稿前四步自查） | 文风与去 AI 味（人味对照用文内清单，不另查） |
+| 批量审 / 批量定稿 | `batch-review.md`（按章序扩→审→Commit） | 同上 |
+| 去 AI 味 | `polish-deslop.md`（先跑 scan-deslop 拿 COUNTS） | 默认「文风与去 AI 味」；`craft_lane=crime-human` →「刑侦人味文风」 |
 | Commit | `continuity-commit.md` | — |
 | 卷收束 | `continuity-commit.md` 卷收束节 + `review-gates.md` Assembly Checklist | — |
 | 定稿串行（扩→审→润→Commit） | 上表按需依次：先 `expansion.md`（仅字数/薄稿需要）→ `review-gates.md` → 可选 `polish-deslop.md` → `continuity-commit.md` | 按步各 ≤1 |
