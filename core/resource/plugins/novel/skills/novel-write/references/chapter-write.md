@@ -29,6 +29,7 @@
 7. 时间线：章间隔、昼夜、旅程时长与上章不矛盾？
 8. POV 知情范围：第一人称不知他人想法；全知换头有场景分隔？
 9. 有无任何与 ledger/章纲矛盾的状态发明？（卫星文件里没有的事实就不存在）
+10. 本章人名是否都来自章纲/cast/CONTEXT？有无临时发明的正式全名或 AI 模板文艺名扎堆？
 
 写入 `novel-state.yaml`：
 
@@ -45,6 +46,7 @@ last_preflight: "[YYYY-MM-DD chNNN] state:writing | contract:accepted | gate:PAS
 
 - `write` `novel/<book-id>/chapters/chNNN.md`（零填充 ≥3 位）。
 - 对齐 CONTEXT + 章纲：`beats` / `forbidden` / POV 知情范围 / `pleasure_point` / `hook.out` / `word_target`。
+- **人名：** 只用章纲 / CONTEXT / cast 已出现的称呼。禁止正文临时发明正式全名；龙套用工称或已立绰号。若必须升格新名 → 停笔，先补章纲点名 + `candidate` 卡，并过「取名反 AI」P0（见 `chapter-outline` 短清单 / KB 人设篇）。
 - Modes：**full**（默认）/ **fast**（仅用户要求）。
 
 ## After draft

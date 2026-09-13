@@ -17,5 +17,6 @@ Use after review PASS, or when user asks only for deslop.
 - Distinct dialogue（遮名测试；刑侦允许低效废话）
 - Concrete 章末钩子；过程人味、尾段收紧
 - 刑侦：闲笔 ≥ 章内可见；死者生前琐碎；无「心里一凛」族
+- 人名：无同批文艺双字扎堆；无正文临时发明正式全名
 
 Do not change plot Canon during polish; if a plot fix is required, return to review/chapter-outline.

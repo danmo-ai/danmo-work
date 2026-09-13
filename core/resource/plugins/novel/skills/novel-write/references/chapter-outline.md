@@ -29,6 +29,15 @@ Book/volume planning stays in `outline/` (`outline.md`) and **stops at 剧情单
 
 A batch of chapter outlines: **连续 3 章 `pleasure_point` 为空必须重排** before freeze or draft.
 
+## 人物取名（章纲硬规则）
+
+章纲 `beats` / `state_deltas` / `scene` 里**新出现的正式姓名**须过「人设与群像 → 人物取名反 AI」（P0 表）。本 turn `search_kb` 仍优先「节奏与结构」；取名规则以下列短清单为准，不另占配额：
+
+- 禁止同批文艺双字同构、同批高度相似名、现代文无故复姓堆砌、寓意说明书名。
+- 龙套默认工称/绰号（老周、辅警小陈）；不要为过场配完整姓名。
+- 需要回访的新角色：章纲点名前后补 `canon/cast/` `candidate` 卡；未 canon 不得进正文（专家硬规则）。
+- 同章新出名有姓角色 ≤3（已在场主角外）。
+
 ## Template fields
 
 Copy `assets/templates/chapter-outline.yaml`. Keep it lean — fill only what this chapter uses; empty optional lists are fine.
@@ -58,7 +67,7 @@ Copy `assets/templates/chapter-outline.yaml`. Keep it lean — fill only what th
 1. Read the volume outline **unit card** covering this chapter (节拍 + 功能 + 阻碍…); if missing or beats don't cover this chapter, stop and send back to `novel-plan`.
 2. **状态对齐（只读小节，不读全文）**：读 ledger `### Cast snapshot` 中本章涉及角色的行（`state_deltas` 的「从X」必须与 snapshot 当前值一致，不得凭空发明）；beats 涉及双人对手戏时，另读相关人物卡的「关系」段（当前关系不对 → 先 Commit 补登或调整 beats）。
 3. Set `unit_id` to that card (`vNN-U#`). Locate this chapter's role in 单元节拍. Push down fields from the unit card.
-4. Draft chapter outline at `chapters/chNNN-outline.yaml` (YAML template); set `status=accepted` when ready to draft (default path — no per-chapter `ask_user`).
+4. Draft chapter outline at `chapters/chNNN-outline.yaml` (YAML template); set `status=accepted` when ready to draft (default path — no per-chapter `ask_user`). **若本章新正式姓名：** 过取名短清单；重要新角色先写 `candidate` 卡。
 5. Optional: `table_upsert` mirror — **默认不做**.
 6. Proceed to `chapter-write.md`（单章）或与 `batch-freeze.md` 同 turn 批量写齐后再 `batch-draft.md`.
 

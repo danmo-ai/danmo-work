@@ -6,7 +6,7 @@ license: MIT
 compatibility: Requires write, edit, read_file, grep, glob, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "2.8"
+  version: "2.9"
   category: creative-writing
 ---
 
@@ -26,7 +26,7 @@ Chapter outline → **first draft only**. 扩写 / 审 / 润色 / Commit → `no
 
 | Intent | Load | search_kb（≤1） |
 |--------|------|-----------------|
-| 章纲 | `chapter-outline.md` | 节奏与结构 |
+| 章纲 | `chapter-outline.md` | 节奏与结构（新名用文内取名短清单；深描见人设篇） |
 | 批次冻结 | `batch-freeze.md` | — |
 | 写正文（单章，ch≥4） | `chapter-write.md`（含 preflight） | 默认「文风与去 AI 味」；`craft_lane=crime-human` →「刑侦人味文风」 |
 | 批量正文首稿 | `batch-draft.md`（冻结批次 + 用户明示 / Workbench） | 同上（批内含 ch1–3 则整批改查「节奏与结构」） |

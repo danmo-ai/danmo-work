@@ -2,6 +2,8 @@
 
 `status`: candidate  # candidate → 卷纲批准时一并 canon。未 canon 不得进正文。
 
+取名自检（见 KB「人设与群像 → 人物取名反 AI」）：时代/阶层依据；与已用名可区分；非说明书寓意；非同批文艺尾字扎堆。
+
 ## 功能
 
 - 角色：protagonist / antagonist / support
