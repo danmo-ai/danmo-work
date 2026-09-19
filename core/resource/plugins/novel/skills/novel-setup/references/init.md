@@ -13,7 +13,7 @@ Do **not** create a half-baked project. Before seeding files, collect via **one*
 
 Optional in the same ask: platform tone (番茄/起点等) as **preference**, not hard rules.
 
-If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding the defaults from KB 题材与平台（章配额 3500–5000、单元内章间必有切口、单元主爽点、黄金三章闭环）so later stages inherit them without re-searching.
+If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding the unit defaults（章配额 3500–5000、单元内章间必有切口、单元主爽点、黄金三章闭环见「节奏与结构」）. 这些不占第二次 `search_kb`。类型差异只来自下面那一次检索。
 
 ## 开书筹备 checklist（写入 bible 前自检）
 
@@ -32,7 +32,7 @@ If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding
 ## Steps（少交互）
 
 1. `read_skill` → `project-layout.md`（按需再开 `table-schema.md` / templates）.  
-2. `search_kb` **一次**：题材与平台（knowledge_gate）。刑侦/探案/社会派 → `novel-state.craft_lane: crime-human`（查案向可 `qc_profile: mystery`），并把 `novel-write/assets/templates/style-fingerprint-crime.md` **全部条目**写入 `canon/style-fingerprint.md`「禁语」（或 bible Style card）；**不要**另查人味篇或文风篇。灵异/怪谈/悬疑爽不要标人味车道。  
+2. `search_kb` **一次**（knowledge_gate），查类型标题：玄幻、仙侠（含武侠）、都市、悬疑（含推理/灵异/刑侦/探案）、现代言情、古代言情、仕途扫黑、系统穿越（含脑洞/快穿）。题材对不上这八个，才查「题材与平台」。刑侦/探案/社会派 → 查的是「悬疑」，命中后写 `novel-state.craft_lane: crime-human`（查案向可 `qc_profile: mystery`），并把 `novel-write/assets/templates/style-fingerprint-crime.md` **全部条目**写入 `canon/style-fingerprint.md`「禁语」（或 bible Style card）；**不要**另查人味篇或文风篇。灵异/怪谈/悬疑爽不要标人味车道。  
 3. Create the **standard English tree** under `novel/<book-id>/`:  
    `canon/` (+ `cast/`), `outline/` (+ `volumes/` + `units/`), `units/`, `continuity/`, `reviews/`. Do not create `chapters/`.  
 4. `write` `book-bible.md`（含终局储备表）and `novel-state.yaml` (stage=`init`). All new text via `write`/`edit`/`apply_patch` — **UTF-8 only**.  
