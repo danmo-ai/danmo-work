@@ -2,7 +2,7 @@
 unit_id: v01-U1          # 必填，须在卷纲单元卡里，如 v01-U1
 chapter_range: [1, 5]   # 含端点，与卷纲章范围一致
 title_working: ""
-word_target: 18000      # 单元总字数，必须等于各章 word_share 之和
+word_target: 12500      # 单元总字数，必须等于各章 word_share 之和（示例：5 章 × 2500）
 status: proposed        # proposed|accepted|drafted|reviewed
 
 function: ""            # 本单元必须完成的一件事
@@ -34,7 +34,7 @@ chapters:
     opens_on: S1
     ends_on: S1
     cut_hook: ""        # 章末切口；末章等于 next_hook.out
-    word_share: 4000    # 单章 3500–5000
+    word_share: 2500    # 单章 2000–3500
 
 state_deltas: []        # "谁: 从X→Y"，单元级
 info_control:

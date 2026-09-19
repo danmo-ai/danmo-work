@@ -2,7 +2,7 @@
 
 写正文：**先跑 gate preflight，只消费它打印的 `### CONTEXT` + 本单元细纲。** 不要为走流程扫全书树。
 
-一轮只写 **一个** 单元，落成 **一份** `units/vNN-U#.md`。章是这份文件里的切口，不是单独文件。
+一轮只写 **一个** 单元，落成 **一份** `units/vNN-U#.md`。章是这份文件里的切口，不是单独文件。一份文件是为了写和读时不要丢掉章与章的衔接和一致性，不是为了把单章写长。
 
 风格指纹随 preflight CONTEXT 注入。本轮上下文未见风格指纹 → `read_file canon/style-fingerprint.md`（无则 bible `## Style card`）。
 
@@ -59,7 +59,7 @@ last_preflight: "[YYYY-MM-DD v01-U1] state:writing | outline:accepted | gate:PAS
 ```
 
 - 标题行 `## 第N章`，N 与细纲章号一致，顺序一致。除第一章外，标题前（跳过空行）必须是单独一行 `---`。第一章前不要分隔线。
-- 对齐 `word_share`（单章 3500–5000）与单元 `word_target`。不要写完场面清单就停。
+- 对齐 `word_share`（单章 2000–3500）与单元 `word_target`。不要写完场面清单就停。除第一章外，章首接住上一章 `cut_hook`。
 - **人名：** 只用细纲 / CONTEXT / cast 已出现的称呼。必须升格新名 → 停笔，先补细纲 + `candidate` 卡。
 
 ## After draft
