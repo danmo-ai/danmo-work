@@ -1,12 +1,12 @@
 # Continuity Commit
 
-Commit = tools landed. Prefer **one** `apply_patch` covering ledger + chapter outline + novel-state.
+Commit = tools landed. Prefer **one** `apply_patch` covering ledger (every chapter in the unit) + 单元细纲 + novel-state.
 
 ## When
 
-After review PASS (and optional polish), before starting the next chapter. PASS 不要求 `reviews/` 文件。
+After review PASS (and optional polish) for the active unit. PASS 不要求 `reviews/` 文件。
 
-**批量定稿**（`batch-review.md`）：同 turn 可连续 Commit 多章，但**每章独立一次 patch + `postcommit --chapter N`**，必须按章号升序，禁止跳章或合并多章为一次 postcommit。
+一次任务提交整单元。ledger 仍为每个章号写一块 `## chNNN`，但不要拆成多次 postcommit。
 
 ## Snapshot（写入 ledger，勿拆多文件）
 
@@ -14,7 +14,7 @@ Update `continuity/ledger.md` in one pass:
 
 1. **Public facts** — new shown_fact / inference from this chapter only  
 2. **Tracking** — cursor, cast snapshot deltas, cannot-rewind  
-3. **Open loops** — plant / advance / pay off（≤5 open；`dangling` = bug）；章纲 `info_control.foreshadowing` 的 FS-id 必须出现在表中  
+3. **Open loops** — plant / advance / pay off（≤5 open；`dangling` = bug）；细纲 `info_control.foreshadowing` 的 FS-id 必须出现在表中  
 4. **Chapter summaries** — append fixed block（五要素齐全，gate 硬检；第 6 行「线索」可选）:
 
 ```markdown
@@ -27,7 +27,7 @@ Update `continuity/ledger.md` in one pass:
 - 线索: thread PLANTED/ADVANCED/RESOLVED（可选）
 ```
 
-章纲每条 `state_deltas` 的「谁」必须出现在 Cast snapshot。
+细纲每条 `state_deltas` 的「谁」必须出现在 Cast snapshot。
 
 **关系回写**：`state_deltas` 涉及关系变化（信任±/站队/债务/秘密共享）时，**同一 patch** 更新相关人物卡「关系」表的「当前」列——关系状态的事实源是人物卡，ledger 不另存；不回写会导致下次 preflight 注入过期的关系行。
 
@@ -35,12 +35,12 @@ Update `continuity/ledger.md` in one pass:
 
 ## Tool actions（少交互）
 
-1. Ensure final text in `chapters/chNNN.md`.  
-2. Set `chapters/chNNN-outline.yaml` `status=reviewed`.  
-3. Patch `continuity/ledger.md` (facts + tracking + loops + summary).  
-4. Update `novel-state.yaml` (`last_committed_ch`, stage, gates).  
-5. Optional: `memory_update` / `table_upsert` — **默认不做**.  
-6. Gate 脚本 `--action postcommit --chapter N`. FAIL → do not claim Commit.
+1. Ensure final text in `units/vNN-U#.md`（章标题与 `---` 仍在）。
+2. Set `outline/units/vNN-U#.yaml` `status=reviewed`.
+3. Patch `continuity/ledger.md`：该单元章范围内每一章一块摘要（事实 + tracking + loops 一并更新）。
+4. Update `novel-state.yaml`（`last_committed_ch` = 章范围末章，`active_unit` 可清空或指向下一单元，gates）。
+5. Optional: `memory_update` / `table_upsert` — **默认不做**.
+6. Gate `--action postcommit --unit vNN-U#`. FAIL → do not claim Commit.
 
 ## 时间线纪律（Commit 前自查）
 
@@ -68,11 +68,11 @@ Update `continuity/ledger.md` in one pass:
 
 - 伏笔无 `open` 超 1 卷未推进、无 `dangling`
 - 线索无无由 ACTIVE；PARKED 有叙事理由且已恢复
-- 全部章 `status=reviewed` 且摘要块齐五要素
-- 全书 `scan-deslop --from 1 --to N` exit 0
+- 全部单元细纲 `status=reviewed` 且范围内摘要块齐五要素
+- 全书已定稿单元 `scan-deslop --unit` exit 0
 - 其余 14 项见 `review-gates.md` Assembly Checklist
 
 ## Resume
 
-Cold start: gate `--action doctor` → `novel-state` → `ledger.md`（**Volume summaries + 当前卷明细**，勿读归档全量）→ next chapter outline.  
+Cold start: gate `--action doctor` → `novel-state` → `ledger.md`（**Volume summaries + 当前卷明细**，勿读归档全量）→ next 单元细纲.  
 If legacy continuity files exist without ledger → merge into `ledger.md` then archive.

@@ -2,12 +2,14 @@
 
 **定稿车道**（`novel-review`）：首稿已由 `novel-write` 落盘后，另开一轮再扩。勿与写作首稿同 turn（便于写作用更好模型）。
 
-Draft 达不到章纲 `word_target` × 0.6（gate precommit advisory）或明显「赶、薄、欠戏剧化」时使用。
-短而「紧、快、完整」的章节**不要硬扩**——找用户确认调整 `word_target` 更合适。
+Draft 达不到单元 `word_target` × 0.8（gate precommit advisory）或某一章明显薄于 `word_share` × 0.7，或明显「赶、薄、欠戏剧化」时使用。
+短而「紧、快、完整」的场面**不要硬扩**——找用户确认调整 `word_share` / `word_target` 更合适。
 
 ## 总规则
 
-- **每章最多用 3 种技术**，在章纲或修订说明里注明用了哪几种。
+- **本单元最多用 3 种技术**，在细纲或修订说明里注明用了哪几种。扩的是场面，不是按章注水。
+- 一切扩写必须服务故事：删掉该段会弱化单元才算有效扩写，否则是注水。
+- 扩写仍改 **同一份** `units/vNN-U#.md`，保持章标题与 `---` 分隔线。不另起章文件。
 - 一切扩写必须服务故事：删掉该段会弱化章节才算有效扩写，否则是注水。
 - 扩写段落仍须有张力（冲突/悬念/新信息至少其一）。
 - 快节奏章节不拖慢：宁改目标字数。
@@ -64,6 +66,6 @@ Draft 达不到章纲 `word_target` × 0.6（gate precommit advisory）或明显
 
 ## 与流程的衔接
 
-1. 扩写前先确认不是结构问题（场景缺失 → 改章纲 beats，回到章纲）。
-2. 扩写仍是改 `chapters/chNNN.md` 同一文件，就地覆盖，不搞版本增殖。
-3. 扩写后重跑 gate `precommit`（字数 advisory 应消失；不得引入新的 deslop blocking）。
+1. 扩写前先确认不是结构问题（场面缺失 → 改单元细纲 `scenes`，回到 `novel-write`）。
+2. 扩写仍是改 `units/vNN-U#.md` 同一文件，就地覆盖，不搞版本增殖。章标题和 `---` 保持。
+3. 扩写后重跑 gate `precommit --unit`（字数 advisory 应消失；不得引入新的 deslop blocking）。

@@ -7,17 +7,14 @@ last_preflight: ""       # one-line receipt; no separate preflight-log file
 qc_profile: general  # male_power|female_emotion|mystery|general
 craft_lane: default  # default|crime-human — 仅刑侦/探案/社会派；勿因 mystery 标灵异
 continuation_mode: false
-frozen_batch:          # optional; set when batch frozen (no batch-freeze.yaml)
-  from: 0
-  to: 0
-  frozen_at: ""
+active_unit: ""          # vNN-U# currently being outlined or drafted
 artifacts:
   book_bible: missing  # missing|in_progress|ready|stale|blocked
   world_canon: missing
   cast_registry: missing
   book_outline: missing
   volume_outline: missing
-  batch_freeze: missing  # missing|ready|frozen — state-only; no continuity/batch-freeze.yaml
+  unit_outline: missing  # missing|in_progress|ready|stale|blocked
 gates:
   knowledge: unknown   # unknown|pass|fail
   asset: unknown

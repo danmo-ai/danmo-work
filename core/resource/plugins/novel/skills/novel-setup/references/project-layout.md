@@ -4,7 +4,7 @@ Canonical tree under the active project workdir. **Directory names are English a
 
 ```text
 novel/<book-id>/
-  novel-state.yaml              # stage / artifacts / gates / frozen_batch / last_preflight / craft_lane
+  novel-state.yaml              # stage / artifacts / gates / active_unit / last_preflight / craft_lane
   book-bible.md                 # 读者承诺 + 唯一终局储备 unlock 表
   canon/
     world.md                    # 世界观四层；稀疏术语可写在本节（不必另建 glossary）
@@ -14,56 +14,45 @@ novel/<book-id>/
     style-fingerprint.md        # optional（续写）
     proposals.md                # optional what-if
   outline/
-    book_outline.md             # 总纲：核心纲/承诺/强设定指针/全书结构钩与双线/分卷表；不复制终局储备（见 bible）
-    volumes/                    # v01.md … 剧情单元卡
-  chapters/
-    ch001-outline.yaml         # 章纲 (YAML only; required before draft)
-    ch001.md                    # prose after draft / Commit
+    book_outline.md             # 总纲
+    volumes/                    # v01.md … 剧情单元卡（粗）
+    units/                      # v01-U1.yaml 单元细纲
+  units/
+    v01-U1.md                   # 单元正文：一份文件，章间单独一行 ---
   continuity/
     ledger.md                   # Public facts + Tracking + Open loops + ## chNNN 摘要
   reviews/
-    ch001-review.md             # 仅 FAIL / 深审；PASS 不落盘
+    v01-U1-review.md            # 仅 FAIL / 深审；PASS 不落盘
   extras/                       # optional non-Canon
   _archive/                     # optional migrated / replaced materials
 ```
 
-## Legacy paths (one-shot migrate)
-
-Older books may still have `continuity/public-lore.md`, `tracking.md`, `chapter_summaries.md`, `foreshadow-tracker.md`, `batch-freeze.yaml`, `canon/glossary.md`, or `chapters/chNNN-contract.yaml`. On cold-start / gate (any action):
-
-- Continuity pair → merge into `ledger.md` + `novel-state.frozen_batch`, then `_archive/`
-- `chNNN-contract.yaml` → rename to `chNNN-outline.yaml` (if both exist, keep outline and archive the contract file)
-
-After migrate, only `chNNN-outline.yaml` is valid. Gate does **not** dual-read legacy names.
-
-## Project-root source briefs (optional)
-
-Author-imported briefs may live at the **project files root** (sibling of `novel/`), e.g. `提纲.md`, `分卷.md`. Treat them as source material: promote into `canon/` / `outline/`; do not treat project-root Chinese filenames as the book layout.
+`chapters/` is not canonical. Gate does not read it. If `chapters/` exists and `units/` has no unit prose, doctor blocks and tells the agent to migrate. This change does not ship a migrator.
 
 ## Rules
 
 - `<book-id>`: short slug (ascii or pinyin), stable for the book.
-- **Prose truth:** `chapters/*.md` after Commit (never `*-outline.yaml`).
-- **Chapter outline truth:** `chapters/chNNN-outline.yaml` only (YAML).
-- **Canon truth:** `canon/*` (+ optional `table_*` index). Files are authoritative; table upserts are optional mirrors.
-- **Outline truth:** book/volume plans under `outline/` only. Volume outlines stop at **剧情单元卡**. Per-chapter planning is **章纲** only (`unit_id` 回指单元).
-- **Continuity truth:** `continuity/ledger.md` (reader facts + tracking + open loops + chapter summaries).
-- **Lore tracks:** `canon/author-lore.md` (author-only) vs `continuity/ledger.md` (reader-known + serial cursor). Do not merge author-lore into the ledger.
-- **终局储备:** unlock table only in `book-bible.md`; details only in `author-lore.md`. Do not duplicate the unlock table in `book_outline.md`.
-- **Proposals / what-if:** stay in `outline/` or `canon/proposals.md` until user confirms → then promote to Canon.
+- **Prose truth:** `units/vNN-U#.md` only. Chapters are headings inside that file (`## 第N章`), separated by a line that is exactly `---`. Scene breaks are blank lines, never a lone `---`.
+- **单元细纲 truth:** `outline/units/vNN-U#.yaml` only (YAML).
+- **Canon truth:** `canon/*`. Files are authoritative; table upserts are optional mirrors.
+- **Outline truth:** book/volume plans under `outline/`. Volume outlines stop at **剧情单元卡**. Scenes and chapter cuts belong in the 单元细纲.
+- **Continuity truth:** `continuity/ledger.md`. Commit still writes one `## chNNN` block per chapter, extracted from the unit file, in one patch.
+- **Lore tracks:** `canon/author-lore.md` vs `continuity/ledger.md`. Do not merge author-lore into the ledger.
+- **终局储备:** unlock table only in `book-bible.md`; details only in `author-lore.md`.
+- **Active unit:** `novel-state.yaml` → `active_unit: vNN-U#`. No `frozen_batch`, no `batch-freeze.yaml`.
 
-## Role map (do not fork)
+## Role map
 
 | Role | Path |
 |------|------|
 | 设定（圣经 / 世界 / 人物） | `book-bible.md` + `canon/`（含 `cast/`） |
 | 作者侧底牌 | `canon/author-lore.md`（写正文不加载） |
-| Book & volume outlines | `outline/` |
-| 章纲 + prose | `chapters/` |
+| Book & volume outlines | `outline/book_outline.md`, `outline/volumes/` |
+| 单元细纲 | `outline/units/vNN-U#.yaml` |
+| 单元正文 | `units/vNN-U#.md` |
 | 读者已知 / 连载状态 / 伏笔 / 章摘要 | `continuity/ledger.md` |
-| Review reports | `reviews/` |
-| Batch freeze | `novel-state.yaml` → `frozen_batch` only |
+| Review reports | `reviews/vNN-U#-review.md` |
 | Non-Canon extras | `extras/` |
 | Replaced migrations | `_archive/` |
 
-Copy blanks from `novel-setup/assets/templates/` (bible, state, `world.md`, `cast-card.md`, `author-lore.md`, `ledger.md`) and sibling skill templates via `read_skill` then `write`.
+Copy blanks from `novel-setup/assets/templates/` (bible, state, `world.md`, `cast-card.md`, `author-lore.md`, `ledger.md`) and `novel-write/assets/templates/unit-outline.yaml` via `read_skill` then `write`.

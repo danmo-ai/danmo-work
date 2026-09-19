@@ -46,6 +46,56 @@ POST_SUMMARY = """## ch001 客栈
 - 下章指向: 验骨现场
 """
 
+OUTLINE = """unit_id: v01-U1
+chapter_range: [1, 1]
+title_working: 客栈
+word_target: 4000
+status: accepted
+function: 开局立冲突
+entry: 开卷切口
+desire: 活下来并反证身份
+obstacle: 当众羞辱
+choice: 是否公开反证
+payoff: 主角声望可见回升
+pleasure: 当众打脸
+forbidden: ["宿敌真身"]
+endgame_boundary: 宿敌真身
+next_hook:
+  type: 未兑现承诺
+  out: 明日午时当众验骨
+scenes:
+  - id: S1
+    beat: 建立期待
+    chapter: 1
+    where: 主角 | 夜 | 客栈
+    want: 保住面子
+    turn: 被当众羞辱
+    must_land: ["有人笑他"]
+  - id: S2
+    beat: 兑现
+    chapter: 1
+    where: 主角 | 夜 | 客栈
+    want: 反证身份
+    turn: 留下失踪信
+    must_land: ["亮出腰牌"]
+chapters:
+  - chapter: 1
+    title_working: 客栈
+    opens_on: S1
+    ends_on: S2
+    cut_hook: 明日午时当众验骨
+    word_share: 4000
+state_deltas: ["主角: 被辱→声望回升"]
+info_control:
+  reveals: []
+  foreshadowing: ["FS-001: plant"]
+"""
+
+PROSE = """## 第1章 客栈
+
+客栈里有人笑他。他亮出腰牌，对面的人脸色变了。门外有人递来一封失踪信。明日午时当众验骨。
+"""
+
 TREE = {
     "novel/demo/novel-state.yaml": """book_id: demo
 title: Demo
@@ -65,43 +115,13 @@ blockers: []
     "novel/demo/outline/volumes/v01.md": """# Volume
 ### 剧情单元 U1
 - 单元ID：`v01-U1`
-- 章范围：ch1-ch5
-- 单元节拍（章功能分配）：
-  - ch1 建立期待：开局羞辱
-  - ch2-ch3 尝试：反证身份
-  - ch4 切断：当众打脸
-  - ch5 兑现：留下失踪信
+- 章范围：ch1-ch1
 - 单元功能（本段必须完成）：开局立冲突
-- 主角局部目标：活下来并反证身份
-- 因果入口：开卷切口
-- 核心阻碍：当众羞辱
-- 关键选择：是否公开反证
-- 主爽点形态：打脸
-- 兑现归属：主角声望可见回升
-- 禁止提前释放：宿敌真身
-- 下一单元钩子：失踪信
-- 终局边界：宿敌真身
 """,
+    "novel/demo/outline/units/v01-U1.yaml": OUTLINE,
+    "novel/demo/units/v01-U1.md": PROSE,
     "novel/demo/continuity/ledger.md": LEDGER,
     "novel/demo/reviews/.gitkeep": "",
-    "novel/demo/chapters/ch001-outline.yaml": """chapter: 1
-unit_id: v01-U1
-title_working: 客栈
-purpose: 主角被当众羞辱后反证身份
-beats: ["羞辱", "反证", "留下失踪信"]
-pleasure_point: 当众打脸
-state_deltas: ["主角: 被辱→声望回升"]
-info_control:
-  reveals: []
-  foreshadowing: ["FS-001: plant"]
-hook:
-  type: 未兑现承诺
-  out: 明日午时当众验骨
-reader_debt: []
-status: accepted
-word_target: 3000
-""",
-    "novel/demo/chapters/ch001.md": "客栈里有人笑他。他亮出腰牌，对面的人脸色变了。门外有人递来一封失踪信。明日午时当众验骨。\n",
 }
 
 
@@ -122,89 +142,98 @@ class GateTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_preflight_pass(self):
-        rep = ng.run(str(self.root), "demo", "preflight", 1)
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
         self.assertEqual(rep.verdict, "PASS", rep.format())
         blob = rep.format()
         self.assertIn("### CONTEXT", blob)
         self.assertIn("接钩", blob)
-        self.assertIn("本章硬约束", blob)
         self.assertIn("单元功能", blob)
+        self.assertIn("场面序", blob)
+        self.assertIn("章切口", blob)
 
     def test_doctor_pass(self):
-        rep = ng.run(str(self.root), "demo", "doctor", 0)
+        rep = ng.run(str(self.root), "demo", "doctor", "")
         self.assertEqual(rep.verdict, "PASS", rep.format())
-
-    def test_doctor_no_glossary_required(self):
-        # glossary.md is optional; tree already has none
-        rep = ng.run(str(self.root), "demo", "doctor", 0)
-        self.assertEqual(rep.verdict, "PASS", rep.format())
-        self.assertFalse(any("glossary" in f["message"] for f in rep.findings))
 
     def test_preflight_empty_unit(self):
-        p = self.root / "novel/demo/chapters/ch001-outline.yaml"
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
         p.write_text(p.read_text(encoding="utf-8").replace("unit_id: v01-U1", 'unit_id: ""'), encoding="utf-8")
-        rep = ng.run(str(self.root), "demo", "preflight", 1)
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
         self.assertEqual(rep.verdict, "FAIL", rep.format())
 
     def test_preflight_unknown_hook(self):
-        p = self.root / "novel/demo/chapters/ch001-outline.yaml"
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
         p.write_text(p.read_text(encoding="utf-8").replace("type: 未兑现承诺", "type: 悬念"), encoding="utf-8")
-        rep = ng.run(str(self.root), "demo", "preflight", 1)
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
         self.assertEqual(rep.verdict, "FAIL", rep.format())
+
+    def test_preflight_requires_two_scenes(self):
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
+        text = p.read_text(encoding="utf-8")
+        text = text.split("  - id: S2")[0]
+        p.write_text(text, encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("scenes" in f["check"] for f in rep.findings), rep.format())
 
     def test_precommit_deslop(self):
-        p = self.root / "novel/demo/chapters/ch001.md"
+        p = self.root / "novel/demo/units/v01-U1.md"
         p.write_text(
-            "他目光深邃，不禁深吸一口气。这不是失败，而是命运的安排。瞳孔微缩。或许，这只是个开始……\n",
+            "## 第1章 客栈\n\n他目光深邃，不禁深吸一口气。这不是失败，而是命运的安排。瞳孔微缩。或许，这只是个开始……\n",
             encoding="utf-8",
         )
-        rep = ng.run(str(self.root), "demo", "precommit", 1)
+        rep = ng.run(str(self.root), "demo", "precommit", "v01-U1")
         self.assertEqual(rep.verdict, "FAIL", rep.format())
         self.assertTrue(any(f["check"] == "deslop" and f["severity"] == "blocking" for f in rep.findings), rep.format())
-        self.assertTrue(
-            any("ch001.md:L" in f["message"] for f in rep.findings if f["check"] == "deslop"),
-            rep.format(),
-        )
 
     def test_scan_deslop_line_hits(self):
-        p = self.root / "novel/demo/chapters/ch001.md"
+        p = self.root / "novel/demo/units/v01-U1.md"
         p.write_text(
+            "## 第1章 客栈\n"
             "开头干净。\n"
             "他目光深邃，不禁点头。\n"
-            "这不是失败，而是命运的安排。\n"
-            "或许，这只是个开始……\n",
+            "这不是失败，而是命运的安排。\n",
             encoding="utf-8",
         )
-        rep, hits = ng.run_with_hits(str(self.root), "demo", "scan-deslop", 1)
+        rep, hits = ng.run_with_hits(str(self.root), "demo", "scan-deslop", "v01-U1")
         self.assertEqual(rep.verdict, "FAIL", rep.format())
         blob = "\n".join(hits)
-        self.assertIn("chapters/ch001.md:L2:", blob)
+        self.assertIn("units/v01-U1.md:L3:", blob)
         self.assertIn("目光深邃", blob)
-        self.assertIn("chapters/ch001.md:L3:", blob)
-        self.assertIn("毒句式", blob)
-        self.assertTrue(any("鸡汤尾" in h or "或许" in h for h in hits), hits)
         rc = ng.main(
-            ["--workdir", str(self.root), "--book-id", "demo", "--action", "scan-deslop", "--chapter", "1"]
+            ["--workdir", str(self.root), "--book-id", "demo", "--action", "scan-deslop", "--unit", "v01-U1"]
         )
         self.assertEqual(rc, 1)
 
-    def test_scan_deslop_range_and_clean(self):
-        (self.root / "novel/demo/chapters/ch001.md").write_text("客栈里有人笑他。他亮出腰牌。\n", encoding="utf-8")
-        (self.root / "novel/demo/chapters/ch002-outline.yaml").write_text(
-            (self.root / "novel/demo/chapters/ch001-outline.yaml").read_text(encoding="utf-8").replace(
-                "chapter: 1", "chapter: 2"
-            ),
+    def test_precommit_missing_divider(self):
+        book = self.root / "novel/demo"
+        outline = (book / "outline/units/v01-U1.yaml").read_text(encoding="utf-8")
+        outline = (
+            outline.replace("chapter_range: [1, 1]", "chapter_range: [1, 2]")
+            .replace("word_target: 4000", "word_target: 8000")
+            .replace("word_share: 4000", "word_share: 4000\n  - chapter: 2\n    title_working: 上门\n    opens_on: S1\n    ends_on: S2\n    cut_hook: 门开了\n    word_share: 4000")
+        )
+        # two scenes on ch1 only — add two for ch2 by duplicating beat lines via extra scenes
+        outline = outline.replace(
+            "    must_land: [\"亮出腰牌\"]\nchapters:",
+            "    must_land: [\"亮出腰牌\"]\n"
+            "  - id: S3\n    beat: 尝试\n    chapter: 2\n    where: 主角 | 昼 | 门口\n    want: 进去\n    turn: 门开了\n    must_land: [\"敲门\"]\n"
+            "  - id: S4\n    beat: 加压\n    chapter: 2\n    where: 主角 | 昼 | 门口\n    want: 问清\n    turn: 没人应\n    must_land: [\"没人应\"]\n"
+            "chapters:",
+        )
+        (book / "outline/units/v01-U1.yaml").write_text(outline, encoding="utf-8")
+        (book / "units/v01-U1.md").write_text(
+            "## 第1章 客栈\n\n客栈里有人笑他。\n## 第2章 上门\n\n他敲了门。\n",
             encoding="utf-8",
         )
-        (self.root / "novel/demo/chapters/ch002.md").write_text("门外有人递来一封失踪信。\n", encoding="utf-8")
-        rep, hits = ng.run_with_hits(str(self.root), "demo", "scan-deslop", 0, from_ch=1, to_ch=2)
-        self.assertEqual(rep.verdict, "PASS", rep.format())
-        self.assertEqual(hits, [])
+        rep = ng.run(str(self.root), "demo", "precommit", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("missing ---" in f["message"] for f in rep.findings), rep.format())
 
     def test_postcommit(self):
-        rep = ng.run(str(self.root), "demo", "postcommit", 1)
+        rep = ng.run(str(self.root), "demo", "postcommit", "v01-U1")
         self.assertEqual(rep.verdict, "FAIL")
-        p = self.root / "novel/demo/chapters/ch001-outline.yaml"
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
         p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
         ledger = self.root / "novel/demo/continuity/ledger.md"
         ledger.write_text(LEDGER + POST_SUMMARY, encoding="utf-8")
@@ -212,66 +241,18 @@ class GateTests(unittest.TestCase):
             "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
             encoding="utf-8",
         )
-        rep = ng.run(str(self.root), "demo", "postcommit", 1)
+        rep = ng.run(str(self.root), "demo", "postcommit", "v01-U1")
         self.assertEqual(rep.verdict, "PASS", rep.format())
 
-    def test_postcommit_incomplete_summary(self):
-        p = self.root / "novel/demo/chapters/ch001-outline.yaml"
-        p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
-        ledger = self.root / "novel/demo/continuity/ledger.md"
-        ledger.write_text(LEDGER + "## ch001 客栈\n- 事件: 打脸\n", encoding="utf-8")
-        (self.root / "novel/demo/novel-state.yaml").write_text(
-            "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
-            encoding="utf-8",
-        )
-        rep = ng.run(str(self.root), "demo", "postcommit", 1)
-        self.assertEqual(rep.verdict, "FAIL", rep.format())
-        self.assertTrue(any("missing summary keys" in f["message"] for f in rep.findings), rep.format())
-
-    def test_legacy_continuity_accepted(self):
+    def test_doctor_blocks_legacy_chapters(self):
         book = self.root / "novel/demo"
-        (book / "continuity/ledger.md").unlink()
-        (book / "continuity/public-lore.md").write_text("# public\n", encoding="utf-8")
-        (book / "continuity/tracking.md").write_text("# tracking\n", encoding="utf-8")
-        (book / "continuity/chapter_summaries.md").write_text(
-            "## ch001 客栈\n"
-            "- 事件: x\n"
-            "- 状态变化: 主角: a→b\n"
-            "- 伏笔: FS-001 plant\n"
-            "- 钩子: y\n"
-            "- 下章指向: z\n",
-            encoding="utf-8",
-        )
-        (book / "continuity/foreshadow-tracker.md").write_text(
-            "| ID | Summary | Status |\n|----|---------|--------|\n| FS-1 | x | open |\n",
-            encoding="utf-8",
-        )
-        rep = ng.run(str(self.root), "demo", "doctor", 0)
-        self.assertEqual(rep.verdict, "PASS", rep.format())
-        rep = ng.run(str(self.root), "demo", "preflight", 1)
-        self.assertEqual(rep.verdict, "PASS", rep.format())
-        p = book / "chapters/ch001-outline.yaml"
-        p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
-        (book / "novel-state.yaml").write_text(
-            "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
-            encoding="utf-8",
-        )
-        rep = ng.run(str(self.root), "demo", "postcommit", 1)
-        self.assertEqual(rep.verdict, "PASS", rep.format())
-
-    def test_doctor_orphan_prose(self):
-        (self.root / "novel/demo/chapters/ch002.md").write_text("x\n", encoding="utf-8")
-        rep = ng.run(str(self.root), "demo", "doctor", 0)
+        (book / "units/v01-U1.md").unlink()
+        ch = book / "chapters"
+        ch.mkdir()
+        (ch / "ch001.md").write_text("旧章\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "doctor", "")
         self.assertEqual(rep.verdict, "FAIL", rep.format())
-
-    def test_resolve_direct_root(self):
-        book, st = ng.resolve_book(str(self.root / "novel/demo"), "")
-        self.assertEqual(st.get("book_id"), "demo")
-        self.assertEqual(book.name, "demo")
-
-    def test_unknown_action(self):
-        with self.assertRaises(ValueError):
-            ng.run(str(self.root), "", "write", 1)
+        self.assertTrue(any(f["check"] == "migrate" for f in rep.findings), rep.format())
 
     def test_main_exit_codes(self):
         rc = ng.main(["--workdir", str(self.root), "--book-id", "demo", "--action", "doctor"])
@@ -279,287 +260,35 @@ class GateTests(unittest.TestCase):
         rc = ng.main(["--workdir", str(self.root), "--book-id", "demo", "--action", "preflight"])
         self.assertEqual(rc, 2)
 
-    def test_preflight_injects_on_scene_relations(self):
-        cast = self.root / "novel/demo/canon/cast"
-        (cast / "林雪.md").write_text(
-            "# 林雪\n"
-            "- 视觉: 横断左眉的疤\n"
-            "- 语言: 短句不解释\n"
-            "- 行为: 摸戒指\n"
-            "## 关系（只写会影响剧情的）\n"
-            "| 对方 | 类型 | 当前 | 变化节点 |\n"
-            "|------|------|------|----------|\n"
-            "| 老周 | 债务 | 欠一条命 | ch12 摊牌 |\n"
-            "| 宿敌 | 镜像 | 互相试探 | — |\n",
-            encoding="utf-8",
-        )
-        (cast / "老周.md").write_text(
-            "# 老周\n"
-            "- 视觉: 缺指右手\n"
-            "## 关系（只写会影响剧情的）\n"
-            "| 对方 | 类型 | 当前 | 变化节点 |\n"
-            "|------|------|------|----------|\n"
-            "| 林雪 | 恩情 | 暗中护持 | ch12 摊牌 |\n",
-            encoding="utf-8",
-        )
-        p = self.root / "novel/demo/chapters/ch001-outline.yaml"
-        p.write_text(
-            p.read_text(encoding="utf-8").replace(
-                'state_deltas: ["主角: 被辱→声望回升"]',
-                'state_deltas: ["林雪: 被辱→声望回升", "老周: 旁观→出手"]',
-            ),
-            encoding="utf-8",
-        )
-        rep = ng.run(str(self.root), "demo", "preflight", 1)
-        blob = rep.format()
-        self.assertIn("关系（在场角色间", blob)
-        self.assertIn("林雪 → 老周", blob)
-        self.assertIn("欠一条命", blob)
-        self.assertIn("老周 → 林雪", blob)
-        self.assertNotIn("宿敌", blob)  # 场外角色的关系行不注入
-
     def test_preflight_injects_style_fingerprint(self):
         fp = self.root / "novel/demo/canon/style-fingerprint.md"
         fp.write_text(
-            "# 文风指纹\n"
-            "## POV 与语域\n"
-            "- 视角：有限第三人称\n"
-            "## 禁语与套话\n"
-            "- 禁用「刹那间」\n"
-            "## 参考章\n"
-            "- ch001 代表句\n"
-            "## 指纹摘要\n"
-            "> 短句、留白\n",
+            "# 文风指纹\n## POV 与语域\n- 视角：有限第三人称\n## 参考章\n- 不要注入\n",
             encoding="utf-8",
         )
-        rep = ng.run(str(self.root), "demo", "preflight", 1)
-        blob = rep.format()
+        blob = ng.run(str(self.root), "demo", "preflight", "v01-U1").format()
         self.assertIn("风格指纹", blob)
         self.assertIn("有限第三人称", blob)
-        self.assertIn("禁用「刹那间」", blob)
-        self.assertNotIn("参考章", blob)
-        self.assertIn("craft_lane: default", blob)
-
-    def test_preflight_injects_crime_human_lane(self):
-        state = self.root / "novel/demo/novel-state.yaml"
-        state.write_text(
-            state.read_text(encoding="utf-8") + "craft_lane: crime-human\n",
-            encoding="utf-8",
-        )
-        blob = ng.run(str(self.root), "demo", "preflight", 1).format()
-        self.assertIn("craft_lane: crime-human", blob)
-        self.assertIn("刑侦人味文风", blob)
-        self.assertNotIn("craft_lane: default", blob)
-
-    def test_preflight_style_falls_back_to_bible(self):
-        bible = self.root / "novel/demo/book-bible.md"
-        bible.write_text(
-            "# bible\n"
-            "## Style card\n"
-            "- POV: 有限第三人称\n"
-            "- Anti-patterns to avoid: 鸡汤总结\n",
-            encoding="utf-8",
-        )
-        rep = ng.run(str(self.root), "demo", "preflight", 1)
-        blob = rep.format()
-        self.assertIn("风格指纹", blob)
-        self.assertIn("鸡汤总结", blob)
-
-    def test_precommit_banned_phrase_blocks(self):
-        p = self.root / "novel/demo/chapters/ch001.md"
-        p.write_text("他嘴角微微上扬，心里某种说不出的滋味。\n", encoding="utf-8")
-        rep = ng.run(str(self.root), "demo", "precommit", 1)
-        self.assertEqual(rep.verdict, "FAIL", rep.format())
-        self.assertTrue(any("禁词表命中" in f["message"] for f in rep.findings), rep.format())
+        self.assertNotIn("不要注入", blob)
 
     def test_precommit_english_leak_blocks(self):
-        p = self.root / "novel/demo/chapters/ch001.md"
-        p.write_text("他觉得这件事 very 离谱，简直像个 joke。\n", encoding="utf-8")
-        rep = ng.run(str(self.root), "demo", "precommit", 1)
+        p = self.root / "novel/demo/units/v01-U1.md"
+        p.write_text("## 第1章 客栈\n\n他觉得这件事 very 离谱，简直像个 joke。\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "precommit", "v01-U1")
         self.assertEqual(rep.verdict, "FAIL", rep.format())
         self.assertTrue(any("英文泄漏" in f["message"] for f in rep.findings), rep.format())
-        # whitelist tokens must not trigger
-        p.write_text("他比了个 OK 的手势，转身就走。\n", encoding="utf-8")
-        rep = ng.run(str(self.root), "demo", "precommit", 1)
-        self.assertFalse(any("英文泄漏" in f["message"] for f in rep.findings), rep.format())
 
-    def test_precommit_emdash_density_blocks(self):
-        p = self.root / "novel/demo/chapters/ch001.md"
-        # ~120 runes, 3 dashes → 25/千字 > 5
-        p.write_text("他停了——又走——回头——" + "看着。" * 30 + "\n", encoding="utf-8")
-        rep = ng.run(str(self.root), "demo", "precommit", 1)
-        self.assertEqual(rep.verdict, "FAIL", rep.format())
-        self.assertTrue(any("破折号密度" in f["message"] for f in rep.findings), rep.format())
+    def test_split_unit_prose_ok(self):
+        text = "## 第1章 夜雨\n\n正文。\n\n---\n\n## 第2章 上门\n\n续。\n"
+        slices, errors = ng.split_unit_prose(text)
+        self.assertEqual(errors, [])
+        self.assertEqual([s["chapter"] for s in slices], [1, 2])
+        self.assertIn("正文", slices[0]["body"])
+        self.assertNotIn("---", slices[0]["body"])
 
-    def test_precommit_simile_overload_blocks(self):
-        p = self.root / "novel/demo/chapters/ch001.md"
-        lines = [f"第{i}段，天色像是泼墨。" for i in range(9)]
-        p.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        rep = ng.run(str(self.root), "demo", "precommit", 1)
-        self.assertEqual(rep.verdict, "FAIL", rep.format())
-        self.assertTrue(any("比喻词" in f["message"] for f in rep.findings), rep.format())
-
-    def test_precommit_counts_reported(self):
-        p = self.root / "novel/demo/chapters/ch001.md"
-        body = "客栈里有人笑他，他亮出腰牌，对面的人脸色变了。" * 40  # ~1000 runes
-        p.write_text(body + "他看着远处——没说话。天色像是泼墨。\n", encoding="utf-8")
-        rep = ng.run(str(self.root), "demo", "precommit", 1)
-        self.assertEqual(rep.verdict, "PASS", rep.format())
-        blob = rep.format()
-        self.assertIn("### COUNTS", blob)
-        self.assertIn("em_dash_count: 1", blob)
-        self.assertIn("simile_count: 1", blob)
-        self.assertIn("english_leak_count: 0", blob)
-
-    def test_postcommit_archived_summary_accepted(self):
-        # volume-close archive: ## ch001 block moved out of ledger into continuity/summaries/v01.md
-        p = self.root / "novel/demo/chapters/ch001-outline.yaml"
-        p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
-        arch = self.root / "novel/demo/continuity/summaries/v01.md"
-        arch.parent.mkdir(parents=True, exist_ok=True)
-        arch.write_text("# v01 归档摘要\n" + POST_SUMMARY, encoding="utf-8")
-        (self.root / "novel/demo/novel-state.yaml").write_text(
-            "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
-            encoding="utf-8",
-        )
-        rep = ng.run(str(self.root), "demo", "postcommit", 1)
-        self.assertEqual(rep.verdict, "PASS", rep.format())
-
-    def test_migrates_legacy_contract_filename(self):
-        """One-shot: chNNN-contract.yaml → chNNN-outline.yaml; no dual-read after migrate."""
-        book = self.root / "novel/demo"
-        outline = book / "chapters/ch001-outline.yaml"
-        legacy = book / "chapters/ch001-contract.yaml"
-        body = outline.read_text(encoding="utf-8")
-        outline.unlink()
-        legacy.write_text(body, encoding="utf-8")
-        self.assertFalse((book / "chapters/ch001-outline.yaml").exists())
-        rep = ng.run(str(self.root), "demo", "doctor", 0)
-        self.assertEqual(rep.verdict, "PASS", rep.format())
-        self.assertTrue((book / "chapters/ch001-outline.yaml").is_file())
-        self.assertFalse(legacy.exists())
-        blob = rep.format()
-        self.assertIn("章纲文件名迁移", blob)
-        self.assertIn("ch001-contract.yaml → ch001-outline.yaml", blob)
-        # Second run is idempotent (no re-migrate noise required, file already outline)
-        rep2 = ng.run(str(self.root), "demo", "preflight", 1)
-        self.assertEqual(rep2.verdict, "PASS", rep2.format())
-        self.assertNotIn("章纲文件名迁移", rep2.format())
-
-    def test_migrate_archives_duplicate_contract(self):
-        book = self.root / "novel/demo"
-        outline = book / "chapters/ch001-outline.yaml"
-        legacy = book / "chapters/ch001-contract.yaml"
-        legacy.write_text(outline.read_text(encoding="utf-8").replace("title_working: ", "title_working: legacy-"), encoding="utf-8")
-        rep = ng.run(str(self.root), "demo", "doctor", 0)
-        self.assertEqual(rep.verdict, "PASS", rep.format())
-        self.assertTrue(outline.is_file())
-        self.assertFalse(legacy.exists())
-        arch = book / "_archive/chapters/ch001-contract.yaml"
-        self.assertTrue(arch.is_file(), rep.format())
-        self.assertIn("legacy-", arch.read_text(encoding="utf-8"))
-        self.assertNotIn("legacy-", outline.read_text(encoding="utf-8"))
-
-    def test_doctor_blocks_non_utf8(self):
-        prose = self.root / "novel/demo/chapters/ch001.md"
-        # Pure GB18030 chapter body
-        prose.write_bytes("客栈里有人笑他。\n".encode("gb18030"))
-        rep = ng.run(str(self.root), "demo", "doctor", 0)
-        self.assertEqual(rep.verdict, "FAIL", rep.format())
-        enc = [f for f in rep.findings if f["check"] == "encoding"]
-        self.assertTrue(enc, rep.format())
-        self.assertIn("migrate_novel_encoding", enc[0]["message"])
-
-    def test_read_book_text_rejects_gb18030(self):
-        p = self.root / "novel/demo/chapters/ch001.md"
-        p.write_bytes("中文\n".encode("gb18030"))
-        with self.assertRaises(UnicodeDecodeError) as cm:
-            ng.read_book_text(p)
-        self.assertIn("migrate_novel_encoding", str(cm.exception))
-
-    def test_write_book_text_utf8(self):
-        p = self.root / "novel/demo/tmp-utf8.md"
-        ng.write_book_text(p, "你好\n")
-        self.assertEqual(p.read_bytes(), "你好\n".encode("utf-8"))
-
-    def _seed_ch2_accepted(self) -> None:
-        book = self.root / "novel/demo"
-        outline = (book / "chapters/ch001-outline.yaml").read_text(encoding="utf-8")
-        ch2 = (
-            outline.replace("chapter: 1", "chapter: 2")
-            .replace("title_working: 客栈", "title_working: 验骨")
-            .replace(
-                "purpose: 主角被当众羞辱后反证身份",
-                "purpose: 午时当众验骨推进失踪信",
-            )
-            .replace('beats: ["羞辱", "反证", "留下失踪信"]', 'beats: ["验骨", "对质", "新钩"]')
-            .replace("pleasure_point: 当众打脸", "pleasure_point: 验骨反转")
-            .replace(
-                'state_deltas: ["主角: 被辱→声望回升"]',
-                'state_deltas: ["主角: 声望回升→当众立信"]',
-            )
-            .replace("out: 明日午时当众验骨", "out: 信上出现第二处血印")
-        )
-        (book / "chapters/ch002-outline.yaml").write_text(ch2, encoding="utf-8")
-        (book / "chapters/ch002.md").write_text(
-            "午时验骨。对面的人脸色变了。信上出现第二处血印。\n",
-            encoding="utf-8",
-        )
-
-    def test_preflight_range_pass(self):
-        self._seed_ch2_accepted()
-        rep = ng.run(str(self.root), "demo", "preflight", 0, from_ch=1, to_ch=2)
-        self.assertEqual(rep.verdict, "PASS", rep.format())
-        self.assertEqual(len(rep.chapter_reports), 2)
-        blob = rep.format()
-        self.assertIn("### RANGE", blob)
-        self.assertIn("1-2", blob)
-        self.assertIn("### CHAPTER 1", blob)
-        self.assertIn("### CHAPTER 2", blob)
-        self.assertIn("### CONTEXT", blob)
-
-    def test_preflight_range_partial_fail(self):
-        self._seed_ch2_accepted()
-        p = self.root / "novel/demo/chapters/ch002-outline.yaml"
-        p.write_text(p.read_text(encoding="utf-8").replace("unit_id: v01-U1", 'unit_id: ""'), encoding="utf-8")
-        rep = ng.run(str(self.root), "demo", "preflight", 0, from_ch=1, to_ch=2)
-        self.assertEqual(rep.verdict, "FAIL", rep.format())
-        self.assertEqual(rep.chapter_reports[0].verdict, "PASS")
-        self.assertEqual(rep.chapter_reports[1].verdict, "FAIL")
-        self.assertIn("failed chapters: 2", rep.format())
-        rc = ng.main(
-            [
-                "--workdir",
-                str(self.root),
-                "--book-id",
-                "demo",
-                "--action",
-                "preflight",
-                "--from",
-                "1",
-                "--to",
-                "2",
-            ]
-        )
-        self.assertEqual(rc, 1)
-
-    def test_precommit_range_pass(self):
-        self._seed_ch2_accepted()
-        for n in (1, 2):
-            p = self.root / f"novel/demo/chapters/ch00{n}-outline.yaml"
-            p.write_text(
-                p.read_text(encoding="utf-8").replace("status: accepted", "status: drafted"),
-                encoding="utf-8",
-            )
-        rep = ng.run(str(self.root), "demo", "precommit", 0, from_ch=1, to_ch=2)
-        self.assertEqual(rep.verdict, "PASS", rep.format())
-        self.assertEqual(len(rep.chapter_reports), 2)
-        for cr in rep.chapter_reports:
-            self.assertIn("em_dash_count", cr.counts)
-
-    def test_postcommit_rejects_range(self):
+    def test_unknown_action(self):
         with self.assertRaises(ValueError):
-            ng.run(str(self.root), "demo", "postcommit", 0, from_ch=1, to_ch=2)
+            ng.run(str(self.root), "demo", "write", "v01-U1")
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ export type GateStatus = 'unknown' | 'pass' | 'fail' | 'skipped'
 export interface NovelExtendedState extends NovelStateSummary {
   qcProfile: string
   continuationMode: boolean
+  activeUnit: string
   frozenBatch: { from: number; to: number } | null
   batchFreezeArtifact: string
   gates: { knowledge: GateStatus; asset: GateStatus; qc: GateStatus }
@@ -56,18 +57,12 @@ export type NovelStageAction =
   | 'contract'
   | 'write'
   | 'continue'
-  | 'dialogue'
-  | 'hook'
-  | 'reversal'
   | 'expand'
   | 'review'
   | 'polish'
   | 'commit'
   | 'review-polish-commit'
-  | 'batch-freeze'
-  | 'batch-write'
   | 'continuation'
-  | 'batch-review'
   | 'preflight'
 
 export type NovelSkillId = 'novel-setup' | 'novel-plan' | 'novel-write' | 'novel-review'
@@ -76,6 +71,8 @@ export interface NovelStagePrefillCtx {
   bookId?: string
   chapter?: number
   chapterPath?: string
+  unitId?: string
+  unitPath?: string
   volume?: number
   batchFrom?: number
   batchTo?: number
@@ -91,6 +88,7 @@ export interface NovelBookPipeline {
   /** Active step among the 8-step rail. */
   step: NovelPipelineStepId
   primaryAction: NovelStageAction | null
+  primaryUnit?: string
   primaryChapter?: number
   gates: { knowledge: GateStatus; asset: GateStatus; qc: GateStatus }
   blockers: string[]
@@ -101,8 +99,8 @@ export interface NovelBookPipeline {
 export interface NovelBookContext {
   bookId: string
   state: NovelExtendedState
-  entries: NovelChapterEntry[]
-  chapterPhases: Record<number, NovelChapterPhase>
+  entries: NovelUnitEntry[]
+  unitPhases: Record<string, NovelChapterPhase>
   castFileCount: number
   hasBookOutline: boolean
   hasVolumeOutline: boolean
@@ -207,6 +205,7 @@ export function parseNovelStateExtended(raw: string): NovelExtendedState {
     ...base,
     qcProfile: yamlScalar(raw, 'qc_profile') || 'general',
     continuationMode: /continuation_mode:\s*true/i.test(raw),
+    activeUnit: yamlScalar(raw, 'active_unit'),
     frozenBatch,
     batchFreezeArtifact,
     gates: parseGateBlock(raw),
@@ -299,7 +298,7 @@ export function inferChapterNextAction(phase: NovelChapterPhase): NovelStageActi
       return 'write'
     case 'drafted':
     case 'review_fail':
-      return 'review-polish-commit'
+      return 'review'
     case 'review_pass':
       return 'commit'
     case 'committed':
@@ -330,11 +329,10 @@ export function buildChapterPhases(
 export function inferBookPipelinePhase(ctx: NovelBookContext): NovelPipelinePhase {
   if (ctx.state.stage === 'idle') return 'idle'
   const art = ctx.state
-  // Prefer artifacts / disk readiness over coarse stage string
   if (!ctx.hasBookOutline && art.stage === 'init') return 'init'
   if (!ctx.hasBookOutline && ctx.castFileCount === 0) return 'init'
   if (!ctx.hasBookOutline) return ctx.castFileCount === 0 ? 'setup' : 'outline'
-  const phases = Object.values(ctx.chapterPhases)
+  const phases = Object.values(ctx.unitPhases)
   if (phases.some((p) => p === 'drafted' || p === 'review_fail' || p === 'review_pass')) {
     return 'review'
   }
@@ -351,24 +349,28 @@ export function inferPipelineStep(ctx: NovelBookContext): NovelPipelineStepId {
   if (!ctx.hasBookOutline) return 'outline'
   if (!ctx.hasVolumeOutline) return 'volume'
 
-  const sorted = [...ctx.entries].sort((a, b) => a.chapter - b.chapter)
+  const sorted = [...ctx.entries].sort(compareUnits)
   for (const e of sorted) {
-    const ph = ctx.chapterPhases[e.chapter] ?? 'empty'
+    const ph = ctx.unitPhases[e.unitId] ?? 'empty'
     if (ph === 'empty' || ph === 'contract_draft') return 'contract'
     if (ph === 'contract_ready') return 'write'
     if (ph === 'drafted' || ph === 'review_fail') return 'review'
     if (ph === 'review_pass') return 'commit'
   }
-  // Has volume but no chapter work yet → next is contract
   if (ctx.entries.length === 0) return 'contract'
   return 'write'
+}
+
+function compareUnits(a: NovelUnitEntry, b: NovelUnitEntry): number {
+  if (a.volume !== b.volume) return a.volume - b.volume
+  return a.index - b.index
 }
 
 export function computeBookPipeline(ctx: NovelBookContext): NovelBookPipeline {
   const phase = inferBookPipelinePhase(ctx)
   const step = inferPipelineStep(ctx)
-  const committed = ctx.state.lastCommittedCh
-  const totalWithContract = ctx.entries.filter((e) => e.contract).length
+  const committed = ctx.entries.filter((e) => ctx.unitPhases[e.unitId] === 'committed').length
+  const totalWithContract = ctx.entries.filter((e) => e.outline || e.prose).length
   const percent =
     totalWithContract > 0 ? Math.min(100, Math.round((committed / totalWithContract) * 100)) : 0
 
@@ -387,7 +389,7 @@ export function computeBookPipeline(ctx: NovelBookContext): NovelBookPipeline {
   }
 
   let primaryAction: NovelStageAction | null = null
-  let primaryChapter: number | undefined
+  let primaryUnit: string | undefined
 
   switch (step) {
     case 'init':
@@ -406,24 +408,18 @@ export function computeBookPipeline(ctx: NovelBookContext): NovelBookPipeline {
     case 'write':
     case 'review':
     case 'commit': {
-      const sorted = [...ctx.entries].sort((a, b) => a.chapter - b.chapter)
+      const sorted = [...ctx.entries].sort(compareUnits)
       for (const e of sorted) {
-        const ph = ctx.chapterPhases[e.chapter] ?? 'empty'
+        const ph = ctx.unitPhases[e.unitId] ?? 'empty'
         const next = inferChapterNextAction(ph)
         if (next) {
           primaryAction = next
-          primaryChapter = e.chapter
+          primaryUnit = e.unitId
           break
         }
       }
       if (!primaryAction) {
-        if (step === 'contract' || step === 'write') {
-          primaryAction = 'contract'
-          primaryChapter = nextChapterNumber(committed, ctx.entries)
-        } else {
-          primaryAction = 'continue'
-          primaryChapter = nextChapterNumber(committed, ctx.entries)
-        }
+        primaryAction = step === 'review' || step === 'commit' ? 'continue' : 'contract'
       }
       break
     }
@@ -433,7 +429,7 @@ export function computeBookPipeline(ctx: NovelBookContext): NovelBookPipeline {
     phase,
     step,
     primaryAction,
-    primaryChapter,
+    primaryUnit,
     gates,
     blockers,
     progress: { committed, totalWithContract, percent },
@@ -441,9 +437,14 @@ export function computeBookPipeline(ctx: NovelBookContext): NovelBookPipeline {
   }
 }
 
-export function canRunAction(action: NovelStageAction, ctx: NovelBookContext, chapter?: number): NovelActionDecision {
+export function canRunAction(
+  action: NovelStageAction,
+  ctx: NovelBookContext,
+  unitId?: string,
+): NovelActionDecision {
   const blockers: string[] = []
-  const ch = chapter ?? ctx.entries.find((e) => ctx.chapterPhases[e.chapter] !== 'committed')?.chapter
+  const pending = [...ctx.entries].sort(compareUnits).find((e) => ctx.unitPhases[e.unitId] !== 'committed')
+  const uid = unitId ?? pending?.unitId ?? ''
 
   if (
     action === 'write' ||
@@ -456,85 +457,48 @@ export function canRunAction(action: NovelStageAction, ctx: NovelBookContext, ch
     if (ctx.castFileCount === 0) blockers.push('blocker.noCast')
   }
 
+  const phaseOf = (id: string) => (id ? ctx.unitPhases[id] : undefined)
+
   if (action === 'write') {
-    if (!chapter && !ch) blockers.push('blocker.noChapter')
-    const target = chapter ?? ch ?? 0
-    const phase = ctx.chapterPhases[target]
-    if (phase !== 'contract_ready' && phase !== 'contract_draft') {
-      if (phase === 'empty') blockers.push('blocker.needContract')
+    if (!uid) blockers.push('blocker.noChapter')
+    const phase = phaseOf(uid)
+    if (phase !== 'contract_ready') {
+      if (phase === 'empty' || phase === 'contract_draft' || !phase) blockers.push('blocker.needContract')
       else if (phase === 'drafted' || phase === 'review_fail' || phase === 'review_pass') {
         blockers.push('blocker.alreadyDrafted')
       } else if (phase === 'committed') blockers.push('blocker.alreadyCommitted')
     }
-    if (
-      ctx.hasVolumeOutline &&
-      !ctx.batchFreezeFrozen &&
-      ctx.entries.filter((e) => !e.prose && e.chapter >= target).length > 1
-    ) {
-      blockers.push('blocker.needBatchFreeze')
-    }
   }
 
-  if (action === 'expand') {
-    const target = chapter ?? ch ?? 0
-    const phase = ctx.chapterPhases[target]
-    if (phase !== 'drafted' && phase !== 'review_fail' && phase !== 'review_pass') {
-      blockers.push('blocker.needDraft')
-    }
-    if (phase === 'committed') blockers.push('blocker.alreadyCommitted')
-  }
-
-  if (action === 'review') {
-    const target = chapter ?? ch ?? 0
-    const phase = ctx.chapterPhases[target]
-    if (phase !== 'drafted' && phase !== 'review_fail') {
+  if (action === 'expand' || action === 'review') {
+    const phase = phaseOf(uid)
+    if (action === 'expand') {
+      if (phase !== 'drafted' && phase !== 'review_fail' && phase !== 'review_pass') {
+        blockers.push('blocker.needDraft')
+      }
+      if (phase === 'committed') blockers.push('blocker.alreadyCommitted')
+    } else if (phase !== 'drafted' && phase !== 'review_fail') {
       blockers.push('blocker.needDraft')
     }
   }
 
   if (action === 'commit' || action === 'polish') {
-    const target = chapter ?? ch ?? 0
-    const phase = ctx.chapterPhases[target]
-    if (phase !== 'review_pass') {
-      blockers.push('blocker.needReviewPass')
-    }
+    const phase = phaseOf(uid)
+    if (phase !== 'review_pass') blockers.push('blocker.needReviewPass')
   }
 
   if (action === 'review-polish-commit') {
-    if (!chapter && !ch) blockers.push('blocker.noChapter')
-    const target = chapter ?? ch ?? 0
-    const phase = ctx.chapterPhases[target]
-    if (phase === 'empty' || phase === 'contract_draft' || phase === 'contract_ready') {
+    if (!uid) blockers.push('blocker.noChapter')
+    const phase = phaseOf(uid)
+    if (phase === 'empty' || phase === 'contract_draft' || phase === 'contract_ready' || !phase) {
       blockers.push('blocker.needDraft')
     }
     if (phase === 'committed') blockers.push('blocker.alreadyCommitted')
   }
 
-  if (action === 'batch-freeze') {
-    if (!ctx.hasVolumeOutline) blockers.push('blocker.needVolumeOutline')
-    if (ctx.batchFreezeFrozen) blockers.push('blocker.batchAlreadyFrozen')
-  }
-
-  if (action === 'batch-write') {
-    if (ctx.castFileCount === 0) blockers.push('blocker.noCast')
-    if (!ctx.batchFreezeFrozen) blockers.push('blocker.needBatchFreeze')
-    const from = ctx.state.frozenBatch?.from ?? 0
-    const to = ctx.state.frozenBatch?.to ?? 0
-    const pending = ctx.entries.filter((e) => {
-      if (from > 0 && to >= from && (e.chapter < from || e.chapter > to)) return false
-      const phase = ctx.chapterPhases[e.chapter]
-      return phase === 'contract_ready' || phase === 'contract_draft'
-    })
-    if (!pending.length) blockers.push('blocker.noChapterToWrite')
-  }
-
-  if (action === 'batch-review') {
-    const drafted = ctx.entries.filter((e) => ctx.chapterPhases[e.chapter] === 'drafted' || ctx.chapterPhases[e.chapter] === 'review_fail')
-    if (!drafted.length) blockers.push('blocker.noDraftToReview')
-  }
-
   return { allowed: blockers.length === 0, blockers }
 }
+
 
 export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
   switch (action) {
@@ -550,7 +514,7 @@ export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
     case 'polish':
     case 'commit':
     case 'review-polish-commit':
-    case 'batch-review':
+    case 'continuation':
       return 'novel-review'
     default:
       return 'novel-write'
@@ -564,8 +528,8 @@ export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
  */
 export function formatLoadProtocol(action: NovelStageAction): string {
   const skillId = novelActionSkillId(action)
-  if (skillId === 'novel-write' && (action === 'write' || action === 'continue' || action === 'preflight' || action === 'batch-write')) {
-    return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；写正文先跑 gate preflight，只消费 ### CONTEXT；落盘后停下（扩写/润色/定稿另轮）。`
+  if (skillId === 'novel-write' && (action === 'write' || action === 'continue' || action === 'preflight')) {
+    return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；写正文先跑 gate preflight --unit，只消费 ### CONTEXT；落盘一份单元正文后停下（扩写/润色/定稿另轮）。`
   }
   if (skillId === 'novel-review') {
     return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；定稿车道（扩写/审/润/Commit），与写作首稿分 turn。`
@@ -921,6 +885,266 @@ export function isNovelContractPath(path: string): boolean {
   return /\/chapters\/ch\d+-outline\.(ya?ml)$/i.test(p)
 }
 
+export interface NovelUnitEntry {
+  unitId: string
+  volume: number
+  index: number
+  label: string
+  chapterFrom: number
+  chapterTo: number
+  outline: NovelFileNode | null
+  prose: NovelFileNode | null
+}
+
+export interface NovelUnitScene {
+  id: string
+  beat: string
+  chapter: number
+}
+
+export interface NovelUnitChapterCut {
+  chapter: number
+  title: string
+  cutHook: string
+  wordShare: string
+}
+
+export interface NovelUnitOutlineFields {
+  unitId: string
+  status: string
+  title: string
+  functionText: string
+  desire: string
+  obstacle: string
+  pleasure: string
+  wordTarget: string
+  hookType: string
+  hookOut: string
+  scenes: NovelUnitScene[]
+  chapters: NovelUnitChapterCut[]
+}
+
+export interface NovelUnitProseSection {
+  chapter: number
+  title: string
+  body: string
+}
+
+export function unitMetaFromName(name: string): { unitId: string; volume: number; index: number } | null {
+  const m = name.match(/^(v(\d+)-U(\d+))(?:\.(?:ya?ml|md))?$/i)
+  if (!m) return null
+  return { unitId: m[1], volume: Number(m[2]), index: Number(m[3]) }
+}
+
+export function isNovelUnitOutlineName(name: string): boolean {
+  return /^v\d+-U\d+\.ya?ml$/i.test(name)
+}
+
+export function isNovelUnitProseName(name: string): boolean {
+  return /^v\d+-U\d+\.md$/i.test(name)
+}
+
+export function novelUnitOutlinePath(bookId: string, unitId: string): string {
+  return `novel/${bookId}/outline/units/${unitId}.yaml`
+}
+
+export function novelUnitProsePath(bookId: string, unitId: string): string {
+  return `novel/${bookId}/units/${unitId}.md`
+}
+
+export function novelUnitReviewPath(bookId: string, unitId: string): string {
+  return `novel/${bookId}/reviews/${unitId}-review.md`
+}
+
+export function novelUnitsDir(bookId: string): string {
+  return `novel/${bookId}/units`
+}
+
+export function novelUnitOutlinesDir(bookId: string): string {
+  return `novel/${bookId}/outline/units`
+}
+
+export function buildUnitEntries(outlineNodes: NovelFileNode[], proseNodes: NovelFileNode[]): NovelUnitEntry[] {
+  const byId = new Map<string, NovelUnitEntry>()
+  const ensure = (name: string): NovelUnitEntry | null => {
+    const meta = unitMetaFromName(name)
+    if (!meta) return null
+    let e = byId.get(meta.unitId)
+    if (!e) {
+      e = {
+        unitId: meta.unitId,
+        volume: meta.volume,
+        index: meta.index,
+        label: meta.unitId,
+        chapterFrom: 0,
+        chapterTo: 0,
+        outline: null,
+        prose: null,
+      }
+      byId.set(meta.unitId, e)
+    }
+    return e
+  }
+  for (const node of outlineNodes) {
+    if (node.isDir || !isNovelUnitOutlineName(node.name)) continue
+    const e = ensure(node.name)
+    if (e && !e.outline) e.outline = node
+  }
+  for (const node of proseNodes) {
+    if (node.isDir || !isNovelUnitProseName(node.name)) continue
+    const e = ensure(node.name)
+    if (e && !e.prose) e.prose = node
+  }
+  return [...byId.values()].sort(compareUnits)
+}
+
+function sectionBlocks(raw: string, section: string): string[][] {
+  const lines = raw.split(/\r?\n/)
+  let on = false
+  const blocks: string[][] = []
+  let cur: string[] | null = null
+  const flush = () => {
+    if (cur && cur.length) blocks.push(cur)
+    cur = null
+  }
+  for (const line of lines) {
+    if (!on) {
+      if (line === `${section}:` || line.startsWith(`${section}:`)) on = true
+      continue
+    }
+    if (/^[A-Za-z_][\w]*:/.test(line)) {
+      flush()
+      break
+    }
+    if (/^\s+-\s+/.test(line)) {
+      flush()
+      cur = [line]
+      continue
+    }
+    if (cur) cur.push(line)
+  }
+  flush()
+  return blocks
+}
+
+function blockField(block: string[], key: string): string {
+  const re = new RegExp(`(?:^|\\s)${key}:\\s*(.*)$`)
+  for (const line of block) {
+    const m = line.match(re)
+    if (m) return m[1].replace(/^["']|["']$/g, '').trim()
+  }
+  return ''
+}
+
+export function parseUnitOutlineYaml(raw: string): NovelUnitOutlineFields {
+  const scenes: NovelUnitScene[] = sectionBlocks(raw, 'scenes').map((block) => ({
+    id: blockField(block, 'id'),
+    beat: blockField(block, 'beat'),
+    chapter: Number.parseInt(blockField(block, 'chapter'), 10) || 0,
+  }))
+  const chapters: NovelUnitChapterCut[] = sectionBlocks(raw, 'chapters').map((block) => ({
+    chapter: Number.parseInt(blockField(block, 'chapter'), 10) || 0,
+    title: blockField(block, 'title_working'),
+    cutHook: blockField(block, 'cut_hook'),
+    wordShare: blockField(block, 'word_share'),
+  }))
+  return {
+    unitId: yamlScalar(raw, 'unit_id'),
+    status: yamlScalar(raw, 'status').toLowerCase() || 'proposed',
+    title: yamlScalar(raw, 'title_working'),
+    functionText: yamlScalar(raw, 'function'),
+    desire: yamlScalar(raw, 'desire'),
+    obstacle: yamlScalar(raw, 'obstacle'),
+    pleasure: yamlScalar(raw, 'pleasure'),
+    wordTarget: yamlScalar(raw, 'word_target'),
+    hookType: yamlNestedScalar(raw, 'next_hook', 'type'),
+    hookOut: yamlNestedScalar(raw, 'next_hook', 'out'),
+    scenes,
+    chapters,
+  }
+}
+
+export function applyUnitOutline(entry: NovelUnitEntry, raw: string): NovelUnitEntry {
+  const parsed = parseUnitOutlineYaml(raw)
+  const from = parsed.chapters[0]?.chapter ?? 0
+  const to = parsed.chapters.length ? parsed.chapters[parsed.chapters.length - 1].chapter : 0
+  const range = raw.match(/chapter_range:\s*\[(\d+)\s*,\s*(\d+)\]/)
+  return {
+    ...entry,
+    chapterFrom: range ? Number(range[1]) : from,
+    chapterTo: range ? Number(range[2]) : to,
+    label: parsed.title ? `${entry.unitId} · ${parsed.title}` : entry.unitId,
+  }
+}
+
+export function inferUnitPhase(
+  entry: NovelUnitEntry,
+  lastCommittedCh: number,
+  outlineRaw?: string,
+  reviewRaw?: string,
+): NovelChapterPhase {
+  const status = outlineRaw ? parseUnitOutlineYaml(outlineRaw).status : ''
+  const verdict = reviewRaw ? parseReviewVerdict(reviewRaw) : null
+  const covered =
+    entry.prose && entry.chapterTo > 0 && entry.chapterTo <= lastCommittedCh
+  if (covered) return 'committed'
+  if (entry.prose) {
+    if (verdict === 'FAIL') return 'review_fail'
+    if (verdict === 'PASS' || status === 'reviewed') return 'review_pass'
+    return 'drafted'
+  }
+  if (entry.outline) {
+    if (status === 'accepted' || status === 'drafted' || status === 'reviewed') return 'contract_ready'
+    return 'contract_draft'
+  }
+  return 'empty'
+}
+
+export function buildUnitPhases(
+  entries: NovelUnitEntry[],
+  lastCommittedCh: number,
+  outlineRaws: Record<string, string> = {},
+  reviewRaws: Record<string, string> = {},
+): Record<string, NovelChapterPhase> {
+  const out: Record<string, NovelChapterPhase> = {}
+  for (const e of entries) {
+    const applied = outlineRaws[e.unitId] ? applyUnitOutline(e, outlineRaws[e.unitId]) : e
+    out[e.unitId] = inferUnitPhase(applied, lastCommittedCh, outlineRaws[e.unitId], reviewRaws[e.unitId])
+  }
+  return out
+}
+
+export function splitUnitChapters(md: string): { chapter: number; title: string }[] {
+  return splitUnitProseSections(md).map((s) => ({ chapter: s.chapter, title: s.title }))
+}
+
+/** Split one unit file on `## 第N章`. A lone `---` is a chapter cut, not a scene break. */
+export function splitUnitProseSections(md: string): NovelUnitProseSection[] {
+  const lines = md.replace(/\r\n/g, '\n').split('\n')
+  const sections: { chapter: number; title: string; lines: string[] }[] = []
+  let cur: { chapter: number; title: string; lines: string[] } | null = null
+  for (const line of lines) {
+    const m = line.match(/^## 第(\d+)章(?:\s+(.*))?$/)
+    if (m) {
+      if (cur) sections.push(cur)
+      cur = { chapter: Number(m[1]), title: (m[2] || '').trim(), lines: [] }
+      continue
+    }
+    if (!cur || line.trim() === '---') continue
+    cur.lines.push(line)
+  }
+  if (cur) sections.push(cur)
+  return sections.map((s) => ({
+    chapter: s.chapter,
+    title: s.title,
+    body: s.lines.join('\n').trim(),
+  }))
+}
+
+export function countPlainChars(text: string): number {
+  return text.replace(/\s+/g, '').length
+}
+
 /** One numbered chapter slot: optional prose (.md) + optional chapter outline (.yaml). */
 export interface NovelChapterEntry {
   chapter: number
@@ -1047,12 +1271,12 @@ export function inferNovelBookNextStep(
 
 export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStagePrefillCtx): string {
   const bookId = (ctx.bookId ?? '').trim() || '<book-id>'
-  const ch = ctx.chapter && ctx.chapter > 0 ? ctx.chapter : 0
-  const chPad = ch > 0 ? String(ch).padStart(3, '0') : 'NNN'
-  const chPath = ctx.chapterPath || `novel/${bookId}/chapters/ch${chPad}.md`
   const root = `novel/${bookId}`
   const vol = ctx.volume && ctx.volume > 0 ? ctx.volume : 0
   const volPad = vol > 0 ? String(vol).padStart(2, '0') : 'NN'
+  const unitId = (ctx.unitId ?? '').trim() || 'vNN-U#'
+  const unitPath = ctx.unitPath || `${root}/units/${unitId}.md`
+  const outlinePath = `${root}/outline/units/${unitId}.yaml`
   // Keep intent + project paths only. Which skill reference / template / KB
   // theme to open lives in the skill Intent→Load table (see formatLoadProtocol).
 
@@ -1066,13 +1290,13 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
     case 'outline':
       return [
         `书目录：${root}/`,
-        `产出总纲 ${root}/outline/book_outline.md（不写章节正文）。`,
-        '卷纲另做；单章任务只进章纲。',
+        `产出总纲 ${root}/outline/book_outline.md（不写单元正文）。`,
+        '卷纲另做；场面和章切口只进单元细纲。',
       ].join('\n')
     case 'volume':
       return [
         `为第 ${vol || 'N'} 卷写卷纲 → ${root}/outline/volumes/v${volPad}.md`,
-        '止于剧情单元卡；不写章纲/正文。写完等我确认（本卷点名人物一并 canon）。',
+        '止于剧情单元卡；不写单元细纲/正文。写完等我确认（本卷点名人物一并 canon）。',
       ].join('\n')
     case 'assets':
       return [
@@ -1086,104 +1310,54 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       ].join('\n')
     case 'contract':
       return [
-        `为第 ${ch || 'N'} 章写章纲 → ${root}/chapters/ch${chPad}-outline.yaml`,
-        '从本卷纲单元卡下推；必填 unit_id。就绪后 status=accepted。',
+        `为单元 ${unitId} 写单元细纲 → ${outlinePath}`,
+        '从本卷纲单元卡下推；场面覆盖章范围，每章至少 2 场。就绪后 status=accepted，并写入 active_unit。',
       ].join('\n')
     case 'write':
       return [
-        `写第 ${ch || 'N'} 章正文首稿到 ${chPath}。`,
-        '先 gate preflight，只消费 ### CONTEXT + 本章纲；落盘正文后停下。',
-        '本轮不要扩写、去 AI 味或 Continuity Commit（另开一轮定稿，便于换模）。',
+        `写单元 ${unitId} 正文首稿，一份文件 ${unitPath}。`,
+        '章与章用单独一行 --- 分隔，标题为 ## 第N章。先 gate preflight --unit，只消费 ### CONTEXT + 本单元细纲；落盘后停下。',
+        '本轮不要扩写、去 AI 味或 Continuity Commit（另开一轮定稿，便于换模）。一轮只写这一个单元。',
       ].join('\n')
     case 'continue':
       return [
-        `接着写下一章首稿（书：${root}/）。`,
-        '补章纲 → gate CONTEXT → 正文落盘后停下；扩写/润色/定稿另开一轮。',
-      ].join('\n')
-    case 'dialogue':
-      return [
-        `加强第 ${ch || 'N'} 章对话（${chPath}）。`,
-        '按章纲 beats 写出可辨声口；落盘到该章正文。',
-      ].join('\n')
-    case 'hook':
-      return [
-        `为第 ${ch || 'N'} 章改写章末悬念钩（${chPath}）。`,
-        '章末 hook 须可执行；写入章纲并落到正文。',
-      ].join('\n')
-    case 'reversal':
-      return [
-        `为第 ${ch || 'N'} 章加一处反转（${chPath}）。`,
-        '须服务章纲 purpose；先改章纲再改正文。',
+        `接着写下个单元的细纲和正文首稿（书：${root}/）。`,
+        'gate preflight --unit → 一份 units/vNN-U#.md 后停下；扩写/润色/定稿另开一轮。',
       ].join('\n')
     case 'expand':
       return [
-        `对 ${chPath} 做字数/厚度扩写并落盘（首稿后定稿车道）。`,
-        '按 expansion 纪律 ≤3 种技术；改完复跑 gate precommit。不改情节 Canon 主线。',
+        `对 ${unitPath} 做字数/厚度扩写并落盘（扩场面，不按章注水）。`,
+        '按 expansion 纪律 ≤3 种技术；改完复跑 gate precommit --unit。保持章标题和 ---。',
       ].join('\n')
     case 'review':
       return [
-        `审阅 ${chPath}。`,
-        '先 gate precommit。PASS：只更新 gates.qc，不写 review 文件。FAIL/深审：写 reviews/ 全文。',
+        `审阅单元 ${unitId}（${unitPath}）。`,
+        '先 gate precommit --unit。PASS：只更新 gates.qc，不写 review 文件。FAIL/深审：写 reviews/' + unitId + '-review.md。',
       ].join('\n')
     case 'polish':
       return [
-        `对 ${chPath} 做去 AI 味润色并落盘。`,
-        'gate scan-deslop 定位后按行号改；不改情节 Canon。',
+        `对 ${unitPath} 做去 AI 味润色并落盘。`,
+        'gate scan-deslop --unit 定位后按行号改；不改情节 Canon。',
       ].join('\n')
     case 'commit':
       return [
-        ch > 0
-          ? `对第 ${ch} 章（${chPath}）做 Continuity Commit。`
-          : `对当前进度做 Continuity Commit（书：${root}/）。`,
-        '一次补丁更新 ledger + 章纲 reviewed + novel-state；再 gate postcommit。',
+        `对单元 ${unitId}（${unitPath}）做 Continuity Commit。`,
+        '一次补丁更新 ledger 里该单元每一章 ## chNNN + 细纲 reviewed + last_committed_ch；再 gate postcommit --unit。',
       ].join('\n')
     case 'review-polish-commit':
       return [
-        ch > 0
-          ? `对第 ${ch} 章（${chPath}）定稿串行：扩写(如需) → 审 → 可选润色 → Commit。`
-          : `对当前章节定稿串行：扩写(如需) → 审 → 可选润色 → Commit（书：${root}/）。`,
-        '这是写作之后的定稿轮（可换经济/质检模型）。PASS 不写 review 文件；FAIL 才落盘。',
+        `对单元 ${unitId}（${unitPath}）定稿串行：扩写(如需) → 审 → 可选润色 → 一次 Commit。`,
+        '这是写作之后的定稿轮（可换经济/质检模型）。PASS 不写 review 文件；FAIL 才落盘。不要按章拆成多次 Commit。',
       ].join('\n')
-    case 'batch-freeze': {
-      const bFrom = ctx.batchFrom && ctx.batchFrom > 0 ? ctx.batchFrom : 1
-      const bTo = ctx.batchTo && ctx.batchTo > 0 ? ctx.batchTo : 8
-      return [
-        `批次冻结（书：${root}/，第 ${bFrom}–${bTo} 章）。`,
-        '按单元章范围写齐章纲（status=accepted）并只更新 novel-state.yaml 的 frozen_batch。',
-        '冻结后下一动作是批量首稿，不是逐章写完即 Commit。',
-      ].join('\n')
-    }
-    case 'batch-write': {
-      const bFrom = ctx.batchFrom && ctx.batchFrom > 0 ? ctx.batchFrom : 1
-      const bTo = ctx.batchTo && ctx.batchTo > 0 ? ctx.batchTo : 8
-      return [
-        `批量正文首稿（书：${root}/，frozen_batch 第 ${bFrom}–${bTo} 章）。`,
-        '一次 gate preflight --from/--to；按章写 chNNN.md → status=drafted；本轮到此停。',
-        '勿扩写/审稿/Commit（另开定稿轮）。接钩用章纲 hook.out 链，不要求上章已 Commit。',
-      ].join('\n')
-    }
     case 'continuation':
       return [
         `续写/接手本书（${root}/）。`,
-        'Frozen_Canon 未确认禁止写正文。',
+        'Frozen_Canon 未确认禁止写正文。旧 chapters/ 需迁成 units/ 后再写。',
       ].join('\n')
-    case 'batch-review': {
-      const bFrom = ctx.batchFrom && ctx.batchFrom > 0 ? ctx.batchFrom : 0
-      const bTo = ctx.batchTo && ctx.batchTo > 0 ? ctx.batchTo : 0
-      const rangeHint =
-        bFrom > 0 && bTo >= bFrom
-          ? `优先区间第 ${bFrom}–${bTo} 章内已 drafted / review_fail 的章`
-          : '最近有正文未定稿的章（drafted / review_fail）'
-      return [
-        `批量审稿定稿（书：${root}/）：${rangeHint}。`,
-        '与写作分 turn。可选 scan-deslop / precommit --from/--to；按章序：扩写(如需)→审→Commit→postcommit。',
-        'PASS 不落盘 reviews/；FAIL 写 reviews/ 并停后续章 Commit。禁止跳章 Commit。',
-      ].join('\n')
-    }
     case 'preflight':
       return [
-        `写前预检（书：${root}/，章 ${ch || 'N'}）。`,
-        'exec_shell gate preflight；回报 ### CONTEXT 与 VERDICT。',
+        `写前预检（书：${root}/，单元 ${unitId}）。`,
+        'exec_shell gate preflight --unit；回报 ### CONTEXT 与 VERDICT。',
       ].join('\n')
     default:
       return ''

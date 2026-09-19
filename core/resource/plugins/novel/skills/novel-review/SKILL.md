@@ -1,7 +1,7 @@
 ---
 name: novel-review
 source: builtin
-description: Post-draft finalize for novels — 字数扩写, review, deslop, and Continuity Commit. Use after a drafted chapter when expanding thin prose, 审稿, 去AI味, batch review, 卷收束, or committing continuity. Not for opening a book or writing first drafts (those stay novel-write / better model).
+description: Post-draft finalize for novels — 字数扩写, review, deslop, and Continuity Commit. Use after a drafted unit when expanding thin prose, 审稿, 去AI味, or committing continuity. Not for opening a book or writing first drafts (those stay novel-write / better model).
 license: MIT
 compatibility: Requires write, edit, read_file, grep, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
@@ -18,7 +18,7 @@ Post-draft lane（可与写作分模）：字数不足先扩写 → 一轮审稿
 
 ## When to load
 
-字数不足扩写 / 审稿 / 去 AI 味（含量化硬检）/ Continuity Commit / 批量审稿定稿 / 卷收束 / 审→润→定 / 扩→审→润→定.
+字数不足扩写 / 审稿 / 去 AI 味（含量化硬检）/ Continuity Commit / 卷收束 / 审→润→定 / 扩→审→润→定. 对象是 **一个单元的一份正文**。
 
 **不要**用本技能写首稿正文（首稿 → `novel-write`）。
 
@@ -27,17 +27,16 @@ Post-draft lane（可与写作分模）：字数不足先扩写 → 一轮审稿
 | Intent | Load | search_kb（≤1） |
 |--------|------|-----------------|
 | 字数不足/扩写 | `expansion.md` | 扩写与字数控制 |
-| 审稿（单章） | `review-gates.md`（10 维加权 + 发稿前四步自查） | 文风与去 AI 味（人味对照用文内清单，不另查） |
-| 批量审 / 批量定稿 | `batch-review.md`（按章序扩→审→Commit） | 同上 |
-| 去 AI 味 | `polish-deslop.md`（先跑 scan-deslop 拿 COUNTS） | 默认「文风与去 AI 味」；`craft_lane=crime-human` →「刑侦人味文风」 |
+| 审本单元 | `review-gates.md`（10 维加权 + 发稿前四步自查） | 文风与去 AI 味（人味对照用文内清单，不另查） |
+| 去 AI 味 | `polish-deslop.md`（先跑 scan-deslop --unit） | 默认「文风与去 AI 味」；`craft_lane=crime-human` →「刑侦人味文风」 |
 | Commit | `continuity-commit.md` | — |
 | 卷收束 | `continuity-commit.md` 卷收束节 + `review-gates.md` Assembly Checklist | — |
 | 定稿串行（扩→审→润→Commit） | 上表按需依次：先 `expansion.md`（仅字数/薄稿需要）→ `review-gates.md` → 可选 `polish-deslop.md` → `continuity-commit.md` | 按步各 ≤1 |
 
-**PASS：不写 `reviews/` 文件**，只更新 `gates.qc`。**FAIL / 深审：写全文六镜 + 10 维评分。** Commit = 一次 patch（ledger 五要素摘要 + Cast snapshot + Open loops + 章纲 `reviewed` + state）+ `postcommit` exit 0.
+**PASS：不写 `reviews/` 文件**，只更新 `gates.qc`。**FAIL / 深审：写 `reviews/vNN-U#-review.md`。** Commit = 一次 patch（ledger 里该单元每一章五要素摘要 + Cast snapshot + Open loops + 细纲 `reviewed` + `last_committed_ch`）+ `postcommit --unit` exit 0.
 反 AI 量化硬检（破折号/英文泄漏/禁词/比喻）exit 0 才可宣称定稿；审稿报告引用 gate `### COUNTS` 四计数。
 
-批量定稿：同 turn 可处理多章，但 **Commit 必须按章号升序**；任一章 FAIL 停后续 Commit（见 `batch-review.md`）。可用 `precommit --from/--to` / `scan-deslop --from/--to` 减进程往返；`postcommit` 仍逐章。
+一轮只定稿一个单元。不要按章拆成多次 Commit。
 
 ## Stop
 
