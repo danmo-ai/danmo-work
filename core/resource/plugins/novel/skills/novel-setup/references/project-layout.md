@@ -18,7 +18,7 @@ novel/<book-id>/
     volumes/                    # v01.md … 剧情单元卡（粗）
     units/                      # v01-U1.yaml 单元细纲
   units/
-    v01-U1.md                   # 单元正文：一份文件，章间单独一行 ---
+    v01-U1.md                   # 单元正文：一份文件，读取时保住章间衔接；章间单独一行 ---
   continuity/
     ledger.md                   # Public facts + Tracking + Open loops + ## chNNN 摘要
   reviews/

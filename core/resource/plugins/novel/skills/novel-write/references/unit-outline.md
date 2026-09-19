@@ -32,7 +32,7 @@ Book/volume planning stays in `outline/` and **stops at 剧情单元卡**. The u
 - 每章至少 2 场。`must_land` 是可在正文落地的动作或对白事实，禁止口号。
 - `beat` 只许：建立期待、尝试、加压、决断、兑现、余波。节拍覆盖章范围，但是单元上的功能段。
 - `chapters[]` 只记切口：从哪场到哪场、`cut_hook`、`word_share`。
-- 单章 `word_share` 3500–5000。`word_target` 等于各章之和。常见单元 1.2 万–2.5 万。
+- 单章 `word_share` 2000–3500。`word_target` 等于各章之和。一份正文是为了读取时保住章间衔接，不靠加长单章。
 - 删掉「连续 3 章爽点为空必须重排」。相邻单元主爽点不连续雷同，查卷纲锁卷 checklist，不在本文件重排。
 
 ## 人物取名

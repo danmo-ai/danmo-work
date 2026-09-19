@@ -13,7 +13,7 @@ Do **not** create a half-baked project. Before seeding files, collect via **one*
 
 Optional in the same ask: platform tone (番茄/起点等) as **preference**, not hard rules.
 
-If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding the unit defaults（章配额 3500–5000、单元内章间必有切口、单元主爽点、黄金三章闭环见「节奏与结构」）. 这些不占第二次 `search_kb`。类型差异只来自下面那一次检索。
+If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding the unit defaults（章配额 2000–3500、单元正文一份文件以保住章间衔接、单元主爽点、黄金三章闭环见「节奏与结构」）. 这些不占第二次 `search_kb`。类型差异只来自下面那一次检索。
 
 ## 开书筹备 checklist（写入 bible 前自检）
 
