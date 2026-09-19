@@ -32,13 +32,13 @@ Suggested collections (names are conventions — be consistent within a book):
 
 `id`, `book_id`, `kind` (`goldfinger|item|power`), `name`, `cost`, `limits`, `last_uses`, `notes`
 
-## `chapter_outlines`
+## `unit_outlines`
 
-`id`, `book_id`, `chapter`, `unit_id`, `purpose`, `beats`, `forbidden`, `hook`, `pov`, `status`, `file`
+`id`, `book_id`, `unit_id`, `chapter_range`, `function`, `pleasure`, `status`, `file`
 
-Mirror/index only. Authoritative chapter-outline body is always
-`novel/<book-id>/chapters/chNNN-outline.yaml`. Prefer `file: chapters/chNNN-outline.yaml`.
-If an older project still has table `chapter_contracts`, rename/recreate as `chapter_outlines` when convenient (optional mirror).
+Mirror/index only. Authoritative unit-outline body is always
+`novel/<book-id>/outline/units/vNN-U#.yaml`. Prefer `file: outline/units/vNN-U#.yaml`.
+If an older project still has table `chapter_contracts` or `chapter_outlines`, rename/recreate as `unit_outlines` when convenient (optional mirror).
 
 ## `continuity_issues`
 

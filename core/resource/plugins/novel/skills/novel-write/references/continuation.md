@@ -38,7 +38,7 @@
 
 ## 后续流程
 
-复用 `novel-write/references/batch-freeze.md` → `chapter-outline.md` → `chapter-write.md`；首稿落盘后**换轮**再走 `novel-review`（`expansion.md` 如需 → `review-gates.md` → `polish-deslop.md` → `continuity-commit.md`）。
+复用 `novel-write/references/unit-outline.md` → `unit-write.md`；首稿落盘后**换轮**再走 `novel-review`（`expansion.md` 如需 → `review-gates.md` → `polish-deslop.md` → `continuity-commit.md`）。
 
 ## Human stops
 

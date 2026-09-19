@@ -3,10 +3,10 @@
 ## Policy
 
 - **Exactly one** review round per draft cycle before Commit.
-- Run gate `--action precommit` **before** claiming PASS. Script FAIL → `qc_gate` FAIL。批量可用 `precommit --from A --to B`（见 `batch-review.md`）；单章语义不变。
+- Run gate `--action precommit` **before** claiming PASS. Script FAIL → `qc_gate` FAIL。
 - Writers own fixes; review diagnoses。
 - 审稿报告必须引用 gate `### COUNTS` 四计数（em_dash / ai_vocab / english_leak / simile）。
-- **批量定稿** → `batch-review.md`（与写作 turn 分开；Commit 按章序）。
+- **单元定稿** → `unit-review.md`（与写作 turn 分开；Commit 按单元）。
 
 ## Happy path（PASS — 不落盘 review 文件）
 
@@ -35,7 +35,7 @@
 | Show vs Tell | 10% | 情绪经身体/动作/对话呈现；闪回 ≤2 段 |
 | Pacing & Rhythm | 10% | 句长段长有变化；信息密度高低交替；无中部塌陷/高潮仓促 |
 | Sensory & World | 5% | 每场景 ≥3 种感官且 ≥1 非视觉；契诃夫之枪纪律 |
-| Language & Anti-AI | 10% | gate 四计数在阈值内；无禁词/毒句式；四字格 ≤2/段；**新名无 AI 模板感**（全员文艺双字/同批相似/说明书寓意 → 扣分，见「人设与群像 → 取名反 AI」） |
+| Language & Anti-AI | 10% | gate 四计数在阈值内；无禁词/毒句式；四字格 ≤2/段；**新名无 AI 模板感**（全员文艺双字/同批相似/说明书寓意 → 扣分，见「人设与群像 → 人物取名反 AI」） |
 | Continuity | 5% | 承接上章 hook.out；身体状态/时间线/伏笔与 ledger 一致；POV 无信息泄漏 |
 
 **门限：**
@@ -132,7 +132,7 @@ em_dash_count: n | ai_vocab_count: n | english_leak_count: n | simile_count: n�
 5. 角色声音可区分（遮名测试抽查 3 章）
 6. 契诃夫之枪：重点描写的物件全部兑现
 7. 首章钩子仍成立；结尾与开篇形成回响
-8. 全文反 AI 复扫（`scan-deslop --from 1 --to N`）exit 0
+8. 全文反 AI 复扫（逐单元 `scan-deslop --unit vNN-U#`）exit 0
 9. 场景经济性：无"无事发生的过渡章"
 10. 世界规则一致性：无未登记的规则例外
 11. hook 系统：每章 hook-out 均被下章 hook-in 承接

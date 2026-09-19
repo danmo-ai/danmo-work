@@ -278,6 +278,91 @@ class GateTests(unittest.TestCase):
         self.assertEqual(rep.verdict, "FAIL", rep.format())
         self.assertTrue(any("英文泄漏" in f["message"] for f in rep.findings), rep.format())
 
+    def test_precommit_english_whitelist_passes(self):
+        p = self.root / "novel/demo/units/v01-U1.md"
+        p.write_text("## 第1章 客栈\n\n他看了一眼 GPS，转身走进 KTV。OK，就这么办。\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "precommit", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertFalse(any("英文泄漏" in f["message"] for f in rep.findings), rep.format())
+
+    def test_precommit_emdash_density_blocks(self):
+        p = self.root / "novel/demo/units/v01-U1.md"
+        # 6 em-dashes in ~50 runes → 120/千字 > 5
+        p.write_text("## 第1章 客栈\n\n他——她——门——灯——影——风——都静了。\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "precommit", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("破折号密度" in f["message"] for f in rep.findings), rep.format())
+
+    def test_precommit_simile_over_limit_blocks(self):
+        p = self.root / "novel/demo/units/v01-U1.md"
+        body = "。".join(f"第{i}句像是梦" for i in range(10))
+        p.write_text(f"## 第1章 客栈\n\n{body}。\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "precommit", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("比喻词" in f["message"] for f in rep.findings), rep.format())
+
+    def test_postcommit_missing_summary_keys(self):
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
+        p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
+        ledger = self.root / "novel/demo/continuity/ledger.md"
+        ledger.write_text(LEDGER + "## ch001 客栈\n- 事件: 打脸\n", encoding="utf-8")
+        (self.root / "novel/demo/novel-state.yaml").write_text(
+            "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "postcommit", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("missing summary keys" in f["message"] for f in rep.findings), rep.format())
+
+    def test_cast_snapshot_mismatch_blocks(self):
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
+        p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
+        ledger = self.root / "novel/demo/continuity/ledger.md"
+        ledger.write_text(LEDGER.replace("| 主角 |", "| 路人甲 |") + POST_SUMMARY, encoding="utf-8")
+        (self.root / "novel/demo/novel-state.yaml").write_text(
+            "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "postcommit", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("Cast snapshot" in f["message"] for f in rep.findings), rep.format())
+
+    def test_style_fingerprint_truncated(self):
+        fp = self.root / "novel/demo/canon/style-fingerprint.md"
+        fp.write_text("# 文风指纹\n" + "长" * 600 + "\n", encoding="utf-8")
+        brief = ng.style_fingerprint_brief(self.root / "novel/demo")
+        self.assertLessEqual(len(brief), 480 + 20, f"brief too long: {len(brief)}")
+
+    def test_doctor_invalid_qc_profile(self):
+        (self.root / "novel/demo/novel-state.yaml").write_text(
+            "book_id: demo\nstage: writing\nqc_profile: banana\n",
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "doctor", "")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("qc_profile" in f["message"] for f in rep.findings), rep.format())
+
+    def test_doctor_invalid_craft_lane(self):
+        (self.root / "novel/demo/novel-state.yaml").write_text(
+            "book_id: demo\nstage: writing\ncraft_lane: banana\n",
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "doctor", "")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("craft_lane" in f["message"] for f in rep.findings), rep.format())
+
+    def test_candidate_in_scene_blocks(self):
+        cast = self.root / "novel/demo/canon/cast/林雪.md"
+        cast.write_text("# 林雪\n\n`status`: candidate\n", encoding="utf-8")
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
+        p.write_text(
+            p.read_text(encoding="utf-8").replace("want: 保住面子", "want: 保住面子\n    who: 林雪"),
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("candidate" in f["message"] for f in rep.findings), rep.format())
+
     def test_split_unit_prose_ok(self):
         text = "## 第1章 夜雨\n\n正文。\n\n---\n\n## 第2章 上门\n\n续。\n"
         slices, errors = ng.split_unit_prose(text)
@@ -289,6 +374,71 @@ class GateTests(unittest.TestCase):
     def test_unknown_action(self):
         with self.assertRaises(ValueError):
             ng.run(str(self.root), "demo", "write", "v01-U1")
+
+    def test_yaml_fallback_parses_unit_outline(self):
+        data = ng._load_yaml_map_fallback(OUTLINE)
+        self.assertEqual([s["id"] for s in data["scenes"]], ["S1", "S2"])
+        self.assertEqual(data["scenes"][0]["beat"], "建立期待")
+        self.assertEqual(data["scenes"][1]["must_land"], ["亮出腰牌"])
+        self.assertEqual(data["chapters"][0]["word_share"], 4000)
+        self.assertEqual(data["next_hook"]["out"], "明日午时当众验骨")
+        self.assertEqual(data["state_deltas"], ["主角: 被辱→声望回升"])
+        self.assertEqual(data["info_control"]["foreshadowing"], ["FS-001: plant"])
+        self.assertEqual(data["forbidden"], ["宿敌真身"])
+
+    def test_yaml_fallback_nested_list_block_and_comment(self):
+        text = """unit_id: v01-U1  # 注释里的: 冒号不能吃掉值
+scenes:
+  - id: S1
+    must_land:
+      - 发现
+      - 报案
+    beat: 建立期待
+  - id: S2
+    beat: 兑现
+note: |
+  第一行
+  第二行: 保留冒号
+"""
+        data = ng._load_yaml_map_fallback(text)
+        self.assertEqual(data["unit_id"], "v01-U1")
+        self.assertEqual(data["scenes"][0]["must_land"], ["发现", "报案"])
+        self.assertEqual(data["scenes"][0]["beat"], "建立期待")
+        self.assertEqual(data["scenes"][1]["id"], "S2")
+        self.assertIn("第二行: 保留冒号", data["note"])
+
+    def test_kb_cites_resolve(self):
+        errors = ng.plugin_kb_cite_errors()
+        self.assertEqual(errors, [], "\n".join(errors))
+
+    def test_kb_cite_unknown_title_and_section(self):
+        bad = ng.kb_cite_errors({
+            "knowledge/a.md": "# 节奏与结构\n\n见「不存在的篇」。\n见「节奏与结构 → 没有这节」。\n",
+        })
+        self.assertEqual(len(bad), 2, bad)
+        ok = ng.kb_cite_errors({
+            "knowledge/a.md": "# 节奏与结构\n\n## 矛盾链（平 → 爽）\n\n见「矛盾链」。见「节奏与结构 → 矛盾链」。\n",
+            "knowledge/b.md": "# 悬疑\n\n改查「节奏与结构」。才查「节奏与结构」。\n",
+        })
+        self.assertEqual(ok, [], ok)
+
+    def test_preflight_without_pyyaml(self):
+        import builtins
+
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "yaml":
+                raise ImportError("no yaml")
+            return real_import(name, *args, **kwargs)
+
+        builtins.__import__ = fake_import
+        sys.modules.pop("yaml", None)
+        try:
+            rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        finally:
+            builtins.__import__ = real_import
+        self.assertEqual(rep.verdict, "PASS", rep.format())
 
 
 if __name__ == "__main__":

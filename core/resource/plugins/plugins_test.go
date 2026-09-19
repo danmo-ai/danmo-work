@@ -258,6 +258,11 @@ func TestNovelGatePythonScript(t *testing.T) {
 	}
 	cmd := exec.Command(py, "-m", "unittest", "novel_gate_test")
 	cmd.Dir = dir
+	root, err := filepath.Abs("novel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd.Env = append(os.Environ(), "NOVEL_PLUGIN_ROOT="+root)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("python unittest: %v\n%s", err, out)

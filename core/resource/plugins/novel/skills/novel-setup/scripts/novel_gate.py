@@ -55,9 +55,6 @@ ENGLISH_WHITELIST = {
     "GPS", "AI", "ID", "TV", "KTV", "DNA", "IQ", "EQ", "UFO", "CBD", "LED",
     "USB", "PDF", "PPT", "VS", "SPA", "KPI", "NBA", "CBA", "SUV", "MV", "BGM",
 }
-CH_FILE_RE = re.compile(r"^ch(\d+)\.md$")
-CH_OUTLINE_RE = re.compile(r"^ch(\d+)-outline\.yaml$")
-CH_CONTRACT_LEGACY_RE = re.compile(r"^ch(\d+)-contract\.yaml$")  # one-shot migrate only
 UNIT_ID_RE = re.compile(r"^v\d+-U\d+$")
 CHAPTER_HEAD_RE = re.compile(r"^## 第(\d+)章(?:\s+(.*?))?\s*$")
 BEAT_NAMES = {"建立期待", "尝试", "加压", "决断", "兑现", "余波"}
@@ -104,6 +101,142 @@ def _parse_flow_list(raw: str) -> list[str]:
     return [_unquote(raw)] if raw else []
 
 
+def _strip_inline_comment(raw: str) -> str:
+    """Drop a # comment that is not inside quotes. Block scalars are not passed here."""
+    quote = None
+    for idx, ch in enumerate(raw):
+        if quote:
+            if ch == quote:
+                quote = None
+            continue
+        if ch in "\"'":
+            quote = ch
+            continue
+        if ch == "#" and (idx == 0 or raw[idx - 1].isspace()):
+            return raw[:idx]
+    return raw
+
+
+def _peek_yaml_line(lines: list[str], start: int) -> tuple[int, str] | tuple[None, None]:
+    j = start
+    while j < len(lines):
+        raw = _strip_inline_comment(lines[j])
+        if raw.strip():
+            return len(raw) - len(raw.lstrip(" ")), raw.strip()
+        j += 1
+    return None, None
+
+
+def _read_block_scalar(lines: list[str], start: int, parent_indent: int) -> tuple[str, int]:
+    buf: list[str] = []
+    i = start
+    while i < len(lines):
+        raw = lines[i]
+        if raw.strip():
+            ind = len(raw) - len(raw.lstrip(" "))
+            if ind <= parent_indent:
+                break
+        buf.append(raw)
+        i += 1
+    filled = [row for row in buf if row.strip()]
+    cut = min((len(row) - len(row.lstrip(" ")) for row in filled), default=0)
+    text = "\n".join(row[cut:] if len(row) >= cut else row.lstrip(" ") for row in buf)
+    return text.strip("\n"), i
+
+
+def _is_yaml_map_item(item: str) -> bool:
+    if not item or item[0] in "\"'[{":
+        return False
+    key, sep, _rest = item.partition(":")
+    if not sep:
+        return False
+    key = key.strip()
+    return bool(key) and " " not in key
+
+
+def _load_yaml_map_fallback(text: str) -> dict:
+    """Indentation parser for unit outlines when PyYAML is absent.
+
+    Covers the shape we emit: nested maps, lists of maps, nested lists,
+    flow lists (including quoted colons), and | / > block scalars.
+    Not a general YAML parser.
+    """
+    root: dict = {}
+    # (indent of keys that belong in this map, map)
+    stack: list[tuple[int, dict]] = [(-1, root)]
+    # (indent of the "-" lines, parent map, key)
+    lists: list[tuple[int, dict, str]] = []
+    lines = text.splitlines()
+    i = 0
+
+    def pop_to(indent: int) -> None:
+        while len(stack) > 1 and indent < stack[-1][0]:
+            stack.pop()
+        while lists and indent < lists[-1][0]:
+            lists.pop()
+
+    while i < len(lines):
+        raw = _strip_inline_comment(lines[i])
+        i += 1
+        if not raw.strip():
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        line = raw.strip()
+        pop_to(indent)
+        cur = stack[-1][1]
+
+        if line.startswith("- "):
+            if not lists or indent != lists[-1][0]:
+                continue
+            _item_indent, parent, key = lists[-1]
+            bucket = parent.get(key)
+            if not isinstance(bucket, list):
+                bucket = []
+                parent[key] = bucket
+            item = line[2:].strip()
+            if _is_yaml_map_item(item):
+                k, _, v = item.partition(":")
+                k, v = k.strip(), v.strip()
+                entry: dict = {}
+                bucket.append(entry)
+                if v in ("|", ">", "|-", ">-", "|+", ">+"):
+                    body, i = _read_block_scalar(lines, i, indent)
+                    entry[k] = body
+                elif v == "":
+                    entry[k] = {}
+                else:
+                    entry[k] = _yaml_scalar(v)
+                stack.append((indent + 2, entry))
+            else:
+                bucket.append(_yaml_scalar(item))
+            continue
+
+        if ":" not in line:
+            continue
+        key, _, rest = line.partition(":")
+        key, rest = key.strip(), rest.strip()
+        if not key:
+            continue
+        if rest == "":
+            nxt_indent, nxt_line = _peek_yaml_line(lines, i)
+            if nxt_line and nxt_line.startswith("- ") and nxt_indent is not None and nxt_indent > indent:
+                cur[key] = []
+                lists.append((nxt_indent, cur, key))
+                continue
+            child = {}
+            cur[key] = child
+            stack.append((indent + 2, child))
+            continue
+        if rest.startswith("[") and rest.endswith("]"):
+            cur[key] = _parse_flow_list(rest)
+        elif rest in ("|", ">", "|-", ">-", "|+", ">+"):
+            body, i = _read_block_scalar(lines, i, indent)
+            cur[key] = body
+        else:
+            cur[key] = _yaml_scalar(rest)
+    return root
+
+
 def load_yaml_map(text: str) -> dict:
     try:
         import yaml  # type: ignore
@@ -111,51 +244,14 @@ def load_yaml_map(text: str) -> dict:
         data = yaml.safe_load(text)
         return data if isinstance(data, dict) else {}
     except Exception:
-        pass
-    root: dict = {}
-    stack: list[tuple[int, dict]] = [(0, root)]
-    pending_list_key: str | None = None
-    pending_list_indent = 0
-    for raw in text.splitlines():
-        if "#" in raw:
-            hash_i = raw.find("#")
-            if hash_i == 0 or (hash_i > 0 and raw[hash_i - 1].isspace()):
-                raw = raw[:hash_i]
-        if not raw.strip():
-            continue
-        indent = len(raw) - len(raw.lstrip(" "))
-        line = raw.strip()
-        while stack and indent < stack[-1][0]:
-            stack.pop()
-            pending_list_key = None
-        cur = stack[-1][1]
-        if line.startswith("- ") and pending_list_key is not None and indent >= pending_list_indent:
-            cur.setdefault(pending_list_key, [])
-            if not isinstance(cur[pending_list_key], list):
-                cur[pending_list_key] = []
-            cur[pending_list_key].append(_unquote(line[2:]))
-            continue
-        if ":" not in line:
-            continue
-        key, _, rest = line.partition(":")
-        key, rest = key.strip(), rest.strip()
-        if rest == "":
-            nxt: dict = {}
-            cur[key] = nxt
-            stack.append((indent + 2, nxt))
-            pending_list_key = key
-            pending_list_indent = indent + 2
-            continue
-        pending_list_key = None
-        if rest.startswith("["):
-            cur[key] = _parse_flow_list(rest)
-        else:
-            val = _unquote(rest)
-            if re.fullmatch(r"-?\d+", val):
-                cur[key] = int(val)
-            else:
-                cur[key] = val
-    return root
+        return _load_yaml_map_fallback(text)
+
+
+def _yaml_scalar(v: str):
+    v = _unquote(v)
+    if re.fullmatch(r"-?\d+", v):
+        return int(v)
+    return v
 
 
 def unit_outline_rel(unit_id: str) -> str:
@@ -803,6 +899,8 @@ def count_open_foreshadows(tracker: str) -> int:
 
 
 def unit_listed(outline_root: Path, unit_id: str, cache: BookCache | None = None) -> bool:
+    """True only when a volume outline has a structured row for this unit.
+    Plain text mention of the id is not enough."""
     unit_id = unit_id.strip()
     if not unit_id:
         return False
@@ -819,7 +917,8 @@ def unit_listed(outline_root: Path, unit_id: str, cache: BookCache | None = None
     else:
         return False
     for path, text in texts:
-        if unit_id in text:
+        # Structured row: | U1 | ... | v01-U1 | ... or - 单元ID：`v01-U1`
+        if re.search(r"^\s*[-*]?\s*(?:\|[^|\n]*){0,3}[^\n]*" + re.escape(unit_id) + r"(?![\w-])", text, re.M):
             return True
         if u_short and VOLUME_UNIT_ROW.search(text) and f"| {u_short} |" in text:
             base = path.stem
@@ -863,24 +962,6 @@ def open_debt_count(book_root: Path, contract: dict, cache: BookCache | None = N
     return n
 
 
-def list_chapter_nums(book_root: Path, kind: str) -> list[int]:
-    d = book_root / "chapters"
-    if not d.is_dir():
-        return []
-    out = []
-    for e in d.iterdir():
-        if e.is_dir():
-            continue
-        n = parse_chapter_num(e.name)
-        if n is None:
-            continue
-        if kind == "md" and CH_FILE_RE.match(e.name):
-            out.append(n)
-        elif kind == "contract" and CH_OUTLINE_RE.match(e.name):
-            out.append(n)
-    return out
-
-
 def summary_source_text(book_root: Path) -> tuple[str, str]:
     """Return (text, rel) for chapter summary blocks — ledger preferred."""
     ledger = ledger_path(book_root)
@@ -906,13 +987,6 @@ def archived_summary_text(book_root: Path, ch: int) -> str:
         if has_summary(text, ch):
             return text
     return ""
-
-
-def hook_of(contract: dict) -> tuple[str, str]:
-    hook = contract.get("hook") or {}
-    if not isinstance(hook, dict):
-        return "", ""
-    return str(hook.get("type") or "").strip(), str(hook.get("out") or "").strip()
 
 
 SUMMARY_KEYS = ("事件", "状态变化", "伏笔", "钩子", "下章指向")
@@ -1001,29 +1075,6 @@ def foreshadow_ids_from_contract(contract: dict) -> list[str]:
     return found
 
 
-def previous_hook_out(book_root: Path, ch: int, cache: BookCache | None = None) -> str:
-    if ch <= 1:
-        return ""
-    prev = ch - 1
-    try:
-        c, _ = load_contract(book_root, prev)
-        _, hout = hook_of(c)
-        if hout:
-            return hout
-    except OSError:
-        pass
-    if cache is not None:
-        text, _ = cache.summary_source()
-    else:
-        text, _ = summary_source_text(book_root)
-    block = extract_chapter_summary_block(text, prev)
-    m = re.search(r"[-*]\s*下章指向\s*[：:]\s*(.+)", block)
-    if m:
-        return m.group(1).strip()
-    m = re.search(r"[-*]\s*钩子\s*[：:]\s*(.+)", block)
-    return m.group(1).strip() if m else ""
-
-
 def unit_beat_line(book_root: Path, unit_id: str, ch: int, cache: BookCache | None = None) -> str:
     unit_id = (unit_id or "").strip()
     if not unit_id:
@@ -1096,19 +1147,13 @@ def _match_cast_file(
     name: str,
     text_map: dict[str, str] | None = None,
 ) -> tuple[Path, str] | tuple[None, None]:
-    """Find the cast file for a character: exact filename (stem) match first,
-    then fall back to content match (aliases). Content-first matching is wrong:
-    another character's card may mention this name in its 关系 table."""
+    """Find the cast file for a character. Exact filename (stem) match only.
+    Content matching is unsafe: another character's card may mention this name
+    in its 关系 table, so a fuzzy fallback can inject the wrong card."""
     for path in files:
         if path.stem == name:
             text = text_map.get(path.as_posix()) if text_map is not None else read_book_text(path)
             assert text is not None
-            return path, text
-    for path in files:
-        text = text_map.get(path.as_posix()) if text_map is not None else read_book_text(path)
-        assert text is not None
-        first = text.splitlines()[0] if text.splitlines() else ""
-        if name in text or name in path.stem or name in first:
             return path, text
     return None, None
 
@@ -1201,6 +1246,19 @@ def craft_lane_of(st: dict | None) -> str:
     return "crime-human" if raw == "crime-human" else "default"
 
 
+QC_PROFILES = {"male_power", "female_emotion", "mystery", "general"}
+CRAFT_LANES = {"default", "crime-human"}
+
+
+def validate_state_fields(st: dict, r: Report) -> None:
+    qc = str(st.get("qc_profile") or "").strip()
+    if qc and qc not in QC_PROFILES:
+        r.blocking("state", f"qc_profile={qc} not in {sorted(QC_PROFILES)}")
+    lane = str(st.get("craft_lane") or "").strip()
+    if lane and lane not in CRAFT_LANES:
+        r.blocking("state", f"craft_lane={lane} not in {sorted(CRAFT_LANES)}")
+
+
 def previous_unit_hook(book_root: Path, unit: dict, cache: BookCache | None = None) -> str:
     start, _end = chapter_range_of(unit)
     if start <= 1:
@@ -1235,6 +1293,7 @@ def _scene_blob(unit: dict) -> str:
         parts.append(str(s.get("want") or ""))
         parts.append(str(s.get("turn") or ""))
         parts.append(str(s.get("where") or ""))
+        parts.append(str(s.get("who") or ""))
         landed = s.get("must_land") or []
         if isinstance(landed, list):
             parts.extend(str(x) for x in landed)
@@ -1316,6 +1375,18 @@ def build_preflight_context(
         stem = path.stem
         if stem in blob and stem not in who:
             who.append(stem)
+    # candidate cards must not appear in the scene blob (正文点名)
+    cast_dir = book_root / "canon" / "cast"
+    if cast_dir.is_dir():
+        for path in cast_dir.glob("*.md"):
+            text = read_book_text(path)
+            if "status`: candidate" in text or "status: candidate" in text:
+                stem = path.stem
+                if stem in blob:
+                    r.blocking(
+                        "cast",
+                        f"candidate card {stem} appears in unit outline scenes — promote to canon first",
+                    )
     snap = cast_snapshot_rows(ledger_text)
     lines.append("- 人物现场（Cast snapshot）:")
     if snap:
@@ -1396,6 +1467,7 @@ def check_doctor(book_root: Path, st: dict, r: Report) -> None:
     for d in ("canon", "canon/cast", "outline", "outline/volumes", "outline/units", "units", "continuity", "reviews"):
         if not file_exists(book_root, d):
             r.blocking("layout", "missing directory " + d + "/")
+    validate_state_fields(st, r)
     legacy = legacy_chapters_message(book_root)
     if legacy:
         r.blocking("migrate", legacy)
@@ -1461,6 +1533,7 @@ def check_preflight(
     if not file_exists(book_root, "novel-state.yaml"):
         r.blocking("state", "missing novel-state.yaml")
         return
+    validate_state_fields(st, r)
     legacy = legacy_chapters_message(book_root)
     if legacy:
         r.blocking("migrate", legacy)
@@ -1628,29 +1701,11 @@ def check_scan_deslop(book_root: Path, unit_id: str, r: Report) -> list[str]:
     return out
 
 
-def resolve_chapters(action: str, chapter: int, from_ch: int, to_ch: int) -> list[int]:
-    """Resolve --chapter or --from/--to for ranged actions."""
-    if chapter > 0:
-        return [chapter]
-    if from_ch > 0 and to_ch > 0:
-        if to_ch < from_ch:
-            raise ValueError(f"--to {to_ch} < --from {from_ch}")
-        return list(range(from_ch, to_ch + 1))
-    raise ValueError(f"{action} requires --chapter N or --from A --to B")
-
-
-def resolve_scan_chapters(chapter: int, from_ch: int, to_ch: int) -> list[int]:
-    return resolve_chapters("scan-deslop", chapter, from_ch, to_ch)
-
-
 def run_with_hits(
     workdir: str,
     book_id: str,
     action: str,
     unit: str = "",
-    chapter: int = 0,
-    from_ch: int = 0,
-    to_ch: int = 0,
 ) -> tuple[Report, list[str]]:
     action = (action or "").strip().lower()
     if action not in {"preflight", "precommit", "postcommit", "doctor", "scan-deslop"}:
@@ -1688,11 +1743,8 @@ def run(
     book_id: str,
     action: str,
     unit: str = "",
-    chapter: int = 0,
-    from_ch: int = 0,
-    to_ch: int = 0,
 ) -> Report:
-    rep, _ = run_with_hits(workdir, book_id, action, unit, chapter, from_ch, to_ch)
+    rep, _ = run_with_hits(workdir, book_id, action, unit)
     return rep
 
 
@@ -1737,6 +1789,120 @@ def style_fingerprint_brief(book_root: Path) -> str:
             break
         kept.append(ln)
     return "\n".join(kept).strip()
+
+
+_CITE_BLOCK = re.compile(r"(?:见|改查|才查)((?:\s*「[^」]+」)+)")
+_CITE_QUOTE = re.compile(r"「([^」]+)」")
+_MD_HEADING = re.compile(r"^#{1,3}\s+(.+?)\s*$")
+
+
+def _strip_heading_note(title: str) -> str:
+    title = re.sub(r"（[^）]*）", "", title)
+    title = re.sub(r"\([^)]*\)", "", title)
+    return re.sub(r"\s+", "", title)
+
+
+def _md_lines_outside_fences(text: str) -> list[str]:
+    out: list[str] = []
+    fence = False
+    for line in text.splitlines():
+        if line.strip().startswith("```"):
+            fence = not fence
+            continue
+        if not fence:
+            out.append(line)
+    return out
+
+
+def _is_knowledge_path(path: str) -> bool:
+    norm = path.replace("\\", "/")
+    return norm.startswith("knowledge/") or "/knowledge/" in norm
+
+
+def _section_matches(section: str, headings: list[str]) -> bool:
+    want = _strip_heading_note(section)
+    if len(want) < 2:
+        return False
+    for heading in headings:
+        key = _strip_heading_note(heading)
+        if key == want or key.startswith(want):
+            return True
+    return False
+
+
+def kb_cite_errors(files: dict[str, str]) -> list[str]:
+    """Dangling 见/改查/才查 citations against knowledge H1 titles.
+
+    `「标题」` must be a knowledge article title. `「标题 → 小节」` must
+    name a heading in that article. A quote that is not a title may still
+    be a heading in the same file. Parenthetical heading notes are ignored.
+    """
+    articles: dict[str, list[str]] = {}
+    for path, text in files.items():
+        if not _is_knowledge_path(path):
+            continue
+        headings: list[str] = []
+        title = ""
+        for line in _md_lines_outside_fences(text):
+            match = _MD_HEADING.match(line)
+            if not match:
+                continue
+            heading = match.group(1).strip()
+            headings.append(heading)
+            if line.startswith("# ") and not title:
+                title = heading
+        if title:
+            articles[title] = headings
+
+    errors: list[str] = []
+    for path in sorted(files):
+        lines = _md_lines_outside_fences(files[path])
+        own = [m.group(1).strip() for line in lines if (m := _MD_HEADING.match(line))]
+        body = "\n".join(lines)
+        for block in _CITE_BLOCK.finditer(body):
+            for quote in _CITE_QUOTE.findall(block.group(1)):
+                message = _cite_error(quote, articles, own)
+                if message:
+                    errors.append(f"{path}: {message}")
+    return errors
+
+
+def _cite_error(quote: str, articles: dict[str, list[str]], own: list[str]) -> str:
+    if "→" in quote:
+        title, _, section = quote.partition("→")
+    elif "->" in quote:
+        title, _, section = quote.partition("->")
+    else:
+        title, section = quote, ""
+    title, section = title.strip(), section.strip()
+    if title in articles:
+        if section and not _section_matches(section, articles[title]):
+            return f"「{quote}」 section not in 「{title}」"
+        return ""
+    if not section and _section_matches(title, own):
+        return ""
+    return f"「{quote}」 is not a knowledge title"
+
+
+def plugin_root() -> Path:
+    raw = os.environ.get("NOVEL_PLUGIN_ROOT", "").strip()
+    if raw:
+        return Path(raw)
+    return Path(__file__).resolve().parents[3]
+
+
+def plugin_kb_cite_errors() -> list[str]:
+    root = plugin_root()
+    files: dict[str, str] = {}
+    for rel in ("ai.danmo.work/knowledge", "ai.danmo.work/experts", "skills"):
+        folder = root / rel
+        if not folder.is_dir():
+            continue
+        for path in folder.rglob("*.md"):
+            files[path.relative_to(root).as_posix()] = path.read_text(encoding="utf-8")
+    if not any(_is_knowledge_path(path) for path in files):
+        raise FileNotFoundError(f"knowledge dir missing under {root}")
+    return kb_cite_errors(files)
 
 
 def main(argv: list[str] | None = None) -> int:
