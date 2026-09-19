@@ -28,7 +28,7 @@ Scaffold one book. **Stop when the tree and bible exist.**
 4. Cast 起 `candidate`（`cast-card.md`）；金手指默认写在主角卡。promote 等到卷纲批准.
 5. Templates: bible / state / world / cast-card / author-lore / ledger only.
 6. Gate `--action doctor`. Legacy 无 ledger → merge 后 archive（见 init.md）. Non-UTF-8 text → BLOCK；先跑仓库 `scripts/migrate_novel_encoding.py`，再用 `write`/`edit`/`apply_patch`（禁止 shell 重定向写中文）。
-7. 提示存稿习惯（非强制）：连载前尽量备 3–5 章缓冲。
+7. 提示存稿习惯（非强制）：连载前尽量备一个单元的缓冲。
 
 ## Stop
 

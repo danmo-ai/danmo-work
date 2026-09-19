@@ -13,7 +13,7 @@ Do **not** create a half-baked project. Before seeding files, collect via **one*
 
 Optional in the same ask: platform tone (番茄/起点等) as **preference**, not hard rules.
 
-If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding the defaults from KB 题材与平台（章字数 2000–3500、断章必钩、3–5 章一爽点、黄金三章闭环）so later stages inherit them without re-searching.
+If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding the defaults from KB 题材与平台（章配额 3500–5000、单元内章间必有切口、单元主爽点、黄金三章闭环）so later stages inherit them without re-searching.
 
 ## 开书筹备 checklist（写入 bible 前自检）
 
@@ -34,7 +34,7 @@ If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding
 1. `read_skill` → `project-layout.md`（按需再开 `table-schema.md` / templates）.  
 2. `search_kb` **一次**：题材与平台（knowledge_gate）。刑侦/探案/社会派 → `novel-state.craft_lane: crime-human`（查案向可 `qc_profile: mystery`），并把 `novel-write/assets/templates/style-fingerprint-crime.md` **全部条目**写入 `canon/style-fingerprint.md`「禁语」（或 bible Style card）；**不要**另查人味篇或文风篇。灵异/怪谈/悬疑爽不要标人味车道。  
 3. Create the **standard English tree** under `novel/<book-id>/`:  
-   `canon/` (+ `cast/`), `outline/` (+ `volumes/`), `chapters/`, `continuity/`, `reviews/`.  
+   `canon/` (+ `cast/`), `outline/` (+ `volumes/` + `units/`), `units/`, `continuity/`, `reviews/`. Do not create `chapters/`.  
 4. `write` `book-bible.md`（含终局储备表）and `novel-state.yaml` (stage=`init`). All new text via `write`/`edit`/`apply_patch` — **UTF-8 only**.  
 5. Seed `canon/world.md` + `canon/author-lore.md` from templates。人物卡用 `cast-card.md`，先 `candidate`。金手指默认写入主角卡。术语稀少时写在 `world.md`.  
 6. Seed `continuity/ledger.md`（可空表，不可缺文件）.  
@@ -57,4 +57,4 @@ If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding
 
 If cold-start finds `public-lore.md` / `tracking.md` / `chapter_summaries.md` without `ledger.md`, merge into `continuity/ledger.md` then move old files to `_archive/`.
 
-Gate also one-shot renames `chapters/chNNN-contract.yaml` → `chNNN-outline.yaml` (any gate action; idempotent). Do not keep dual filenames.
+If `chapters/` exists and `units/` has no prose, stop. Tell the user an agent must migrate old chapter files into `units/vNN-U#.md`. Do not read `chapters/` as canon.

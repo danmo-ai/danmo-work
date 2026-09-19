@@ -4,11 +4,11 @@
 
 1. **总纲** — 核心纲、读者承诺、强设定指针、全书结构钩/双线、分卷结构表、主线伏笔、结局方向（终局储备 unlock **只在** `book-bible.md`，总纲链过去即可）；模板 `book-outline.md` 文首有**锁纲 checklist**
 2. **卷纲** — 卷目标（含结构钩/双线）、冲突与起终, 终局边界, 节奏锚点, **剧情单元卡（一段章）**, 情绪/人物弧, 反转, 伏笔；模板 `volume-outline.md` 文首有**锁卷 checklist**
-3. **章纲** — 下一技能 `novel-write`（`chapter-outline.md`）；YAML under `chapters/`；必填 `unit_id`
+3. **单元细纲** — 下一技能 `novel-write`（`unit-outline.md`）；YAML `outline/units/vNN-U#.yaml`
 
-卷纲写到「一段章」的剧情单元为止。禁止在 `outline/` 写单章任务/爽点/钩子文案。
+卷纲写到「一段章」的剧情单元为止。禁止在卷纲写场面、单章任务、爽点文案。
 
-剧情单元用 **单元卡**（模板 `volume-outline.md`）：必填单元ID、章范围、**单元节拍**、单元功能、因果入口、主角局部目标（欲望）、核心阻碍、关键选择、主爽点形态、兑现归属、禁止提前释放、下一单元钩子（短线结构钩）、终局边界；可选 **推进线**（事业/感情/双）。节拍须覆盖该单元章范围（建立期待→尝试→加压→决断→兑现→余波，可按题材删并）。缺卡、关键字段空、或节拍未覆盖章范围 → **不要进入章纲**：章纲的 `unit_id` / `purpose` / `beats` / `pleasure_point` 必须能指回某个单元卡 + 锚点。
+剧情单元用 **单元卡**（模板 `volume-outline.md`）：必填单元ID、章范围、**单元节拍**、单元功能、因果入口、主角局部目标（欲望）、核心阻碍、关键选择、主爽点形态、兑现归属、禁止提前释放、下一单元钩子（短线结构钩）、终局边界；可选 **推进线**（事业/感情/双）。节拍须覆盖该单元章范围（建立期待→尝试→加压→决断→兑现→余波，可按题材删并）。缺卡、关键字段空、或节拍未覆盖章范围 → **不要进入单元细纲**。
 
 ## Rules
 
@@ -18,9 +18,9 @@
 - **规划「情绪/人物弧」与单元卡关键选择前，先读本卷点名人物卡**（四件套/矛盾/弧光/关系表）——卷纲的人物走向必须与卡的弧光、关系现状兼容；卷纲批准时一并核对。
 - `search_kb` **至多一次**「节奏与结构」before locking volume shape. 终局细节只写 `canon/author-lore.md`；unlock 卷号只维护在圣经。
 - After user OK on volume outline, update `novel-state.yaml` (`stage: outline`, artifacts).
-- Do not batch-write chapters until asset_gate: core cast + world skeleton are `canon`.
-- **Next stage:** `novel-write` 章纲；批量写正文前再走 `batch-freeze.md`（只更新 `novel-state.frozen_batch`）。
-- Per-chapter planning belongs in **章纲** only. Never under `outline/`.
+- Do not write unit prose until asset_gate: core cast + world skeleton are `canon`.
+- **Next stage:** `novel-write` 单元细纲，然后一份 `units/vNN-U#.md`。
+- 场面与章切口只进单元细纲。卷纲不写。
 
 ## 总纲 / 卷纲防崩检查
 
@@ -33,10 +33,10 @@
 | 结构钩 | 全书长线在总纲；本卷长/短在卷纲；短线单元下钩；设了必兑 | 总纲「结构钩」→ 卷纲「结构钩」→ 单元「下一单元钩子」 |
 | 体量 | 分卷表能覆盖 Length target（新手宜按 ≥30 万字练控场估算） | 总纲分卷表 + 体量备注 |
 
-缺单元卡、关键字段空、或节拍未覆盖章范围 → **不要进入章纲**。
+缺单元卡、关键字段空、或节拍未覆盖章范围 → **不要进入单元细纲**。
 
 ## Outputs
 
 - `novel/<book-id>/outline/book_outline.md` — 结构/卷地图（不复制终局储备表）
-- `outline/volumes/vXX.md` — 单元卡；章纲 `unit_id` = `vXX-U#`
-- 章纲：交给 `novel-write`（文件权威；table 镜像可选）
+- `outline/volumes/vXX.md` — 单元卡；单元细纲 `unit_id` = `vXX-U#`
+- 单元细纲：交给 `novel-write`（`outline/units/vXX-U#.yaml`）

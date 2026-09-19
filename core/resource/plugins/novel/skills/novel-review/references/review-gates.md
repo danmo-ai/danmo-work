@@ -12,9 +12,9 @@
 
 1. 字数不足 / 明显薄稿 → 先 `expansion.md`，再跑（或复跑）precommit；紧而完整的短章改 `word_target`，不硬扩。
 2. precommit PASS、无 P0 craft 问题、且量化评分 ≥85 时：
-   - **不要**写 `reviews/chNNN-review.md`。
+   - **不要**写 `reviews/vNN-U#-review.md`。
    - 更新 `novel-state.yaml`：`gates.qc: pass`，清掉本章相关 `blockers`。
-   - 章纲保持 `drafted`（或本轮直接进入 Commit 时再改 `reviewed`）。
+   - 细纲保持 `drafted`（或本轮直接进入 Commit 时再改 `reviewed`）。
 3. 可选短润色 → `polish-deslop.md`；然后 `continuity-commit.md`。
 
 用户点「深审」或发现 P0 → 走 FAIL / 六镜全文（必须落盘）。
@@ -57,7 +57,7 @@ REVISE 两轮仍不过 → **FORCED PASS**：遗留问题打 severity 标签（`
 
 ## FAIL / 深审 — 六镜全文
 
-仅 FAIL 或用户深审时 `write` `reviews/chNNN-review.md`：
+仅 FAIL 或用户深审时 `write` `reviews/vNN-U#-review.md`：
 
 | Lens | Blocking if… |
 |------|----------------|

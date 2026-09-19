@@ -13,36 +13,34 @@ import NovelReader from '@/components/novel/NovelReader.vue'
 import NovelInspector from '@/components/novel/NovelInspector.vue'
 import type { DeskPrimary } from '@/components/novel/NovelInspector.vue'
 import {
-  buildChapterPhases,
   buildConstrainedPrefill,
+  buildUnitPhases,
   canRunAction,
-  chapterNumFromName,
   computeBookPipeline,
+  countPlainChars,
   inferChapterNextAction,
   isBookOutlineName,
-  isNovelChapterPath,
-  isNovelContractPath,
   mergeVolumeOutlineFiles,
   novelActionSkillId,
-  novelCanonDir,
   novelCastDir,
-  novelChapterFilePath,
   novelOutlineDir,
+  novelUnitOutlinePath,
+  novelUnitProsePath,
   nextVolumeNumber,
-  parseContractYaml,
   setupDocLabel,
+  splitUnitProseSections,
   volumeNumFromName,
-  type NovelChapterEntry,
   type NovelChapterPhase,
   type NovelFileNode,
   type NovelStageAction,
+  type NovelUnitEntry,
 } from '@/types/novel-workbench'
 
 type View = 'shelf' | 'book'
 type TreeSel = {
-  kind: 'book' | 'volume' | 'setup' | 'chapter' | 'dossier'
+  kind: 'book' | 'volume' | 'setup' | 'unit' | 'dossier'
   name?: string
-  n?: number
+  highlight?: number
 }
 
 const { t } = useI18n()
@@ -58,8 +56,8 @@ const readPath = ref<string | null>(null)
 const readTitle = ref('')
 const readContent = ref('')
 const readLoading = ref(false)
-const readPane = ref<'contract' | 'prose' | null>(null)
-const readChapterNum = ref<number | null>(null)
+const readPane = ref<'outline' | 'prose' | null>(null)
+const readUnitId = ref<string | null>(null)
 const treeOpen = ref<string[]>(['outline', 'prose', 'dossier'])
 const setupOpen = ref<string[]>(['world', 'cast'])
 const treeSel = ref<TreeSel>({ kind: 'book' })
@@ -69,7 +67,7 @@ const {
   books,
   selectedBookId,
   activeBookId,
-  chapterEntries,
+  unitEntries,
   continuityFiles,
   outlineFiles,
   volumeFiles,
@@ -77,9 +75,9 @@ const {
   canonFiles,
   castFiles,
   extendedState,
-  contractRaws,
+  outlineRaws,
   reviewRaws,
-  batchFreezeFrozen,
+  proseRaws,
   bookState,
   bookOutlineRows,
   volumeUnitRows,
@@ -88,7 +86,7 @@ const {
   openBook: loaderOpenBook,
   clearBook,
   nodePath,
-  chapterNodePath,
+  unitNodePath,
   volumeNodePath,
 } = loader
 
@@ -114,33 +112,33 @@ const castDocs = computed(() => castFiles.value.filter((n) => !n.isDir))
 const bookContext = computed(() => {
   const bookId = selectedBookId.value
   if (!bookId || !extendedState.value) return null
-  const chapterPhases = buildChapterPhases(
-    chapterEntries.value,
+  const unitPhases = buildUnitPhases(
+    unitEntries.value,
     extendedState.value.lastCommittedCh,
-    contractRaws.value,
+    outlineRaws.value,
     reviewRaws.value,
   )
   return {
     bookId,
     state: extendedState.value,
-    entries: chapterEntries.value,
-    chapterPhases,
+    entries: unitEntries.value,
+    unitPhases,
     castFileCount: castFiles.value.length,
     hasBookOutline: Boolean(bookOutlineFile.value),
     hasVolumeOutline: visibleVolumeFiles.value.length > 0,
     hasBatchFreezeFile: false,
-    batchFreezeFrozen: batchFreezeFrozen.value,
+    batchFreezeFrozen: false,
   }
 })
 
 const pipeline = computed(() => (bookContext.value ? computeBookPipeline(bookContext.value) : null))
 
-const chapterPhases = computed(
-  (): Record<number, NovelChapterPhase> => bookContext.value?.chapterPhases ?? {},
+const unitPhases = computed(
+  (): Record<string, NovelChapterPhase> => bookContext.value?.unitPhases ?? {},
 )
 
-const treeChapters = computed(() =>
-  chapterEntries.value.filter((e) => Boolean(e.contract || e.prose)),
+const treeUnits = computed(() =>
+  unitEntries.value.filter((e) => Boolean(e.outline || e.prose)),
 )
 
 const nextVolume = computed(() => nextVolumeNumber(visibleVolumeFiles.value))
@@ -156,22 +154,7 @@ const setupShowsGoldfinger = computed(() => {
   return name === 'book-bible.md' || name === 'world.md' || name.includes('goldfinger')
 })
 
-const deskBatchFreezeAllowed = computed(() => {
-  if (!bookContext.value) return false
-  return canRunAction('batch-freeze', bookContext.value).allowed
-})
-
-const deskBatchWriteAllowed = computed(() => {
-  if (!bookContext.value) return false
-  return canRunAction('batch-write', bookContext.value).allowed
-})
-
-const deskBatchReviewAllowed = computed(() => {
-  if (!bookContext.value) return false
-  return canRunAction('batch-review', bookContext.value).allowed
-})
-
-function primaryActionLabel(action: NovelStageAction, chapter?: number): string {
+function primaryActionLabel(action: NovelStageAction): string {
   switch (action) {
     case 'init':
       return t('novelWorkbench.actionInit')
@@ -179,30 +162,18 @@ function primaryActionLabel(action: NovelStageAction, chapter?: number): string 
       return t('novelWorkbench.actionOutline')
     case 'assets':
       return t('novelWorkbench.actionAssets')
-    case 'batch-freeze':
-      return t('novelWorkbench.actionBatchFreeze')
-    case 'batch-write':
-      return t('novelWorkbench.actionBatchWrite')
-    case 'batch-review':
-      return t('novelWorkbench.actionBatchReview')
     case 'continuation':
       return t('novelWorkbench.actionContinuation')
     case 'contract':
-      return t('novelWorkbench.actionContract', { n: chapter ?? 'N' })
+      return t('novelWorkbench.actionContract')
     case 'write':
-      return t('novelWorkbench.actionWrite', { n: chapter ?? 'N' })
+      return t('novelWorkbench.actionWrite')
     case 'continue':
       return t('novelWorkbench.actionContinue')
-    case 'dialogue':
-      return t('novelWorkbench.actionDialogue')
-    case 'hook':
-      return t('novelWorkbench.actionHook')
-    case 'reversal':
-      return t('novelWorkbench.actionReversal')
     case 'expand':
       return t('novelWorkbench.actionExpand')
     case 'volume':
-      return t('novelWorkbench.actionVolumeOutline', { n: chapter && chapter > 0 ? chapter : 'N' })
+      return t('novelWorkbench.actionVolumeOutline', { n: nextVolume.value })
     case 'review':
       return t('novelWorkbench.actionReview')
     case 'polish':
@@ -213,14 +184,16 @@ function primaryActionLabel(action: NovelStageAction, chapter?: number): string 
       return t('novelWorkbench.actionReviewPolishCommit')
     case 'goldfinger':
       return t('novelWorkbench.actionGoldfinger')
+    case 'preflight':
+      return t('novelWorkbench.actionPreflight')
     default:
       return action
   }
 }
 
-function isActionAllowed(action: NovelStageAction, chapter?: number): boolean {
+function isActionAllowed(action: NovelStageAction, unitId?: string): boolean {
   if (!bookContext.value) return action === 'init'
-  return canRunAction(action, bookContext.value, chapter).allowed
+  return canRunAction(action, bookContext.value, unitId).allowed
 }
 
 function blockerText(key: string): string {
@@ -235,81 +208,58 @@ function blockerText(key: string): string {
 
 const deskPrimaryFromPipeline = computed((): DeskPrimary | null => {
   const pipe = pipeline.value
-  if (!pipe?.primaryAction || treeSel.value.kind === 'chapter') return null
+  if (!pipe?.primaryAction || treeSel.value.kind === 'unit') return null
   return {
     action: pipe.primaryAction,
-    chapter: pipe.primaryChapter,
-    label: primaryActionLabel(pipe.primaryAction, pipe.primaryChapter),
-    allowed: isActionAllowed(pipe.primaryAction, pipe.primaryChapter),
+    unitId: pipe.primaryUnit,
+    label: primaryActionLabel(pipe.primaryAction),
+    allowed: isActionAllowed(pipe.primaryAction, pipe.primaryUnit),
   }
 })
 
-const chapterDeskPrimary = computed((): DeskPrimary | null => {
-  if (treeSel.value.kind !== 'chapter' || treeSel.value.n == null || !bookContext.value) return null
-  const n = treeSel.value.n
-  const phase = bookContext.value.chapterPhases[n]
-
-  if (readingIsContract.value) {
-    if (phase === 'empty' || phase === 'contract_draft' || phase === 'contract_ready') {
-      return {
-        action: 'contract',
-        chapter: n,
-        label: t('novelWorkbench.actionAskContract'),
-        allowed: true,
-      }
-    }
-    return null
-  }
-
-  if (!readingIsProse.value) return null
-
-  const chapterAction = inferChapterNextAction(phase)
-  if (chapterAction) {
+const unitDeskPrimary = computed((): DeskPrimary | null => {
+  if (treeSel.value.kind !== 'unit' || !treeSel.value.name || !bookContext.value) return null
+  const id = treeSel.value.name
+  const phase = bookContext.value.unitPhases[id] ?? 'empty'
+  const next = inferChapterNextAction(phase)
+  if (next) {
     return {
-      action: chapterAction,
-      chapter: n,
-      label: primaryActionLabel(chapterAction, n),
-      allowed: isActionAllowed(chapterAction, n),
+      action: next,
+      unitId: id,
+      label: primaryActionLabel(next),
+      allowed: next === 'contract' || isActionAllowed(next, id),
     }
   }
-
   const pipe = pipeline.value
-  if (pipe?.primaryAction === 'continue' && phase === 'committed') {
-    const lastCh = bookContext.value.state.lastCommittedCh
-    if (n === lastCh) {
-      return {
-        action: 'continue',
-        chapter: pipe.primaryChapter,
-        label: primaryActionLabel('continue'),
-        allowed: true,
-      }
+  if (pipe?.primaryAction === 'continue' && phase === 'committed' && pipe.primaryUnit) {
+    return {
+      action: 'continue',
+      unitId: pipe.primaryUnit,
+      label: primaryActionLabel('continue'),
+      allowed: true,
     }
   }
   return null
 })
 
 const focusPrimary = computed(() =>
-  treeSel.value.kind === 'chapter' ? chapterDeskPrimary.value : deskPrimaryFromPipeline.value,
+  treeSel.value.kind === 'unit' ? unitDeskPrimary.value : deskPrimaryFromPipeline.value,
 )
 
 const moreActions = computed(() => {
-  const ch = readingChapter.value
-  if (ch == null || !readingIsProse.value || !readingEntry.value?.prose) return []
-  const primary = chapterDeskPrimary.value?.action
+  const entry = readingEntry.value
+  if (!entry || !readingIsProse.value || !entry.prose) return []
+  const primary = unitDeskPrimary.value?.action
   const items: DeskPrimary[] = []
   const push = (action: NovelStageAction, label: string) => {
     if (primary === action) return
     items.push({
       action,
-      chapter: ch,
+      unitId: entry.unitId,
       label,
-      allowed: isActionAllowed(action, ch),
+      allowed: isActionAllowed(action, entry.unitId),
     })
   }
-  push('write', t('novelWorkbench.actionAskRewrite'))
-  push('dialogue', t('novelWorkbench.actionDialogue'))
-  push('hook', t('novelWorkbench.actionHook'))
-  push('reversal', t('novelWorkbench.actionReversal'))
   push('expand', t('novelWorkbench.actionExpand'))
   push('review', t('novelWorkbench.actionReview'))
   push('polish', t('novelWorkbench.actionPolish'))
@@ -322,7 +272,7 @@ const inspectorBlockers = computed(() => {
   if (!primary || !bookContext.value || primary.action === 'init') {
     return (pipeline.value?.blockers ?? []).map(blockerText)
   }
-  return canRunAction(primary.action, bookContext.value, primary.chapter).blockers.map(blockerText)
+  return canRunAction(primary.action, bookContext.value, primary.unitId).blockers.map(blockerText)
 })
 
 const SETUP_DOC_KEYS = new Set(['bible', 'world', 'glossary', 'reveal', 'rules', 'platform', 'goldfinger'])
@@ -333,10 +283,15 @@ function setupDocTitle(name: string): string {
   return id
 }
 
-function chapterTreeName(entry: NovelChapterEntry): string {
-  const title = parseContractYaml(contractRaws.value[entry.chapter] || '').title.trim()
-  if (title) return t('novelWorkbench.chapterTitle', { n: entry.chapter, title })
-  return t('novelWorkbench.chapterN', { n: entry.chapter })
+function unitRowLabel(entry: NovelUnitEntry): string {
+  if (entry.chapterFrom > 0 && entry.chapterTo >= entry.chapterFrom) {
+    return t('novelWorkbench.unitRow', {
+      n: entry.index,
+      from: entry.chapterFrom,
+      to: entry.chapterTo,
+    })
+  }
+  return entry.unitId
 }
 
 function volumeLabel(name: string): string {
@@ -356,45 +311,38 @@ const deskCrumb = computed(() => {
   if (treeSel.value.kind === 'dossier') {
     return `${t('novelWorkbench.dossier')} / ${treeSel.value.name || ''}`
   }
-  if (treeSel.value.kind === 'chapter' && treeSel.value.n != null) {
-    const e = chapterEntries.value.find((x) => x.chapter === treeSel.value.n)
-    return `${t('novelWorkbench.folderProse')} / ${e ? chapterTreeName(e) : t('novelWorkbench.chapterN', { n: treeSel.value.n })}`
+  if (treeSel.value.kind === 'unit' && treeSel.value.name) {
+    const e = unitEntries.value.find((x) => x.unitId === treeSel.value.name)
+    return `${t('novelWorkbench.folderProse')} / ${e ? unitRowLabel(e) : treeSel.value.name}`
   }
   return ''
 })
 
-const readingChapter = computed(() => {
-  if (readChapterNum.value != null) return readChapterNum.value
-  if (!readPath.value) return null
-  if (!isNovelChapterPath(readPath.value) && !isNovelContractPath(readPath.value)) return null
-  return chapterNumFromName(readTitle.value) ?? chapterNumFromName(readPath.value)
+const readingEntry = computed((): NovelUnitEntry | null => {
+  const id = treeSel.value.kind === 'unit' ? treeSel.value.name || readUnitId.value : readUnitId.value
+  if (!id) return null
+  return unitEntries.value.find((e) => e.unitId === id) ?? null
 })
 
-const readingEntry = computed((): NovelChapterEntry | null => {
-  const ch = readingChapter.value
-  if (ch == null) return null
-  return chapterEntries.value.find((e) => e.chapter === ch) ?? null
-})
-
-const readingIsContract = computed(() => readPane.value === 'contract')
+const readingIsOutline = computed(() => readPane.value === 'outline')
 const readingIsProse = computed(() => readPane.value === 'prose')
 
-const readingChapterIndex = computed(() => {
-  const ch = readingChapter.value
-  if (ch == null) return -1
-  return chapterEntries.value.findIndex((e) => e.chapter === ch)
+const readingUnitIndex = computed(() => {
+  const id = readingEntry.value?.unitId
+  if (!id) return -1
+  return unitEntries.value.findIndex((e) => e.unitId === id)
 })
 
-const prevChapterEntry = computed((): NovelChapterEntry | null => {
-  const i = readingChapterIndex.value
+const prevUnitEntry = computed((): NovelUnitEntry | null => {
+  const i = readingUnitIndex.value
   if (i <= 0) return null
-  return chapterEntries.value[i - 1] ?? null
+  return unitEntries.value[i - 1] ?? null
 })
 
-const nextChapterEntry = computed((): NovelChapterEntry | null => {
-  const i = readingChapterIndex.value
-  if (i < 0 || i >= chapterEntries.value.length - 1) return null
-  return chapterEntries.value[i + 1] ?? null
+const nextUnitEntry = computed((): NovelUnitEntry | null => {
+  const i = readingUnitIndex.value
+  if (i < 0 || i >= unitEntries.value.length - 1) return null
+  return unitEntries.value[i + 1] ?? null
 })
 
 const currentVolumeUnits = computed(() => {
@@ -402,22 +350,49 @@ const currentVolumeUnits = computed(() => {
   return volumeUnitRows.value[treeSel.value.name] ?? []
 })
 
-const currentContractRaw = computed(() => {
-  const ch = readingChapter.value
-  if (ch == null) return ''
-  return contractRaws.value[ch] || ''
+const currentOutlineRaw = computed(() => {
+  const id = readingEntry.value?.unitId
+  if (!id) return ''
+  return outlineRaws.value[id] || ''
 })
 
-const currentChapterPhase = computed((): NovelChapterPhase | null => {
-  const ch = readingChapter.value
-  if (ch == null) return null
-  return chapterPhases.value[ch] ?? null
+const currentUnitPhase = computed((): NovelChapterPhase | null => {
+  const id = readingEntry.value?.unitId
+  if (!id) return null
+  return unitPhases.value[id] ?? null
 })
+
+const currentProse = computed(() => {
+  const id = readingEntry.value?.unitId
+  if (!id) return ''
+  if (readingIsProse.value && readContent.value) return readContent.value
+  return proseRaws.value[id] || ''
+})
+
+const chapterChips = computed(() => {
+  if (!readingIsProse.value) return []
+  return splitUnitProseSections(currentProse.value).map((s) => ({ chapter: s.chapter, title: s.title }))
+})
+
+const chapterChars = computed(() => {
+  const out: Record<number, number> = {}
+  for (const s of splitUnitProseSections(currentProse.value)) {
+    out[s.chapter] = countPlainChars(s.body)
+  }
+  return out
+})
+
+const proseChars = computed(() =>
+  Object.values(chapterChars.value).reduce((sum, n) => sum + n, 0),
+)
 
 const readHtml = computed(() => {
   if (!readContent.value) return ''
-  if (/\.ya?ml$/i.test(readPath.value || '')) {
+  if (/\.ya?ml$/i.test(readPath.value || '') || readingIsOutline.value) {
     return `<pre class="novel-wb__pre">${escapeHtml(readContent.value)}</pre>`
+  }
+  if (readingIsProse.value && treeSel.value.kind === 'unit') {
+    return renderUnitSections(readContent.value, treeSel.value.highlight)
   }
   return renderMarkdown(readContent.value)
 })
@@ -427,6 +402,21 @@ function escapeHtml(s: string) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+}
+
+function renderUnitSections(md: string, highlight?: number): string {
+  const sections = splitUnitProseSections(md)
+  if (!sections.length) return renderMarkdown(md)
+  return sections
+    .map((s, i) => {
+      const title = s.title
+        ? `${t('novelWorkbench.chapterN', { n: s.chapter })} ${escapeHtml(s.title)}`
+        : t('novelWorkbench.chapterN', { n: s.chapter })
+      const on = highlight === s.chapter ? ' novel-unit-ch--on' : ''
+      const hr = i > 0 ? '<hr class="novel-unit-cut" />' : ''
+      return `${hr}<section id="unit-ch-${s.chapter}" class="novel-unit-ch${on}"><h2>${title}</h2>${renderMarkdown(s.body)}</section>`
+    })
+    .join('\n')
 }
 
 watch(
@@ -453,20 +443,12 @@ watch(
   },
 )
 
-async function openRead(path: string, title: string, pane?: 'contract' | 'prose') {
+async function openRead(path: string, title: string, pane?: 'outline' | 'prose') {
   readPath.value = path
   readTitle.value = title
   readContent.value = ''
-  readChapterNum.value = chapterNumFromName(title) ?? chapterNumFromName(path)
-  if (pane) {
-    readPane.value = pane
-  } else if (isNovelContractPath(path)) {
-    readPane.value = 'contract'
-  } else if (isNovelChapterPath(path)) {
-    readPane.value = 'prose'
-  } else {
-    readPane.value = null
-  }
+  if (pane) readPane.value = pane
+  else if (treeSel.value.kind !== 'unit') readPane.value = null
   view.value = 'book'
   readLoading.value = true
   try {
@@ -479,45 +461,38 @@ async function openRead(path: string, title: string, pane?: 'contract' | 'prose'
   }
 }
 
-function openChapterDoc(kind: 'contract' | 'prose') {
+function openUnitDoc(kind: 'outline' | 'prose') {
   const bookId = selectedBookId.value
   const entry = readingEntry.value
-  const ch = readingChapter.value
-  if (!bookId || ch == null) return
+  if (!bookId || !entry) return
   readPane.value = kind
-  readChapterNum.value = ch
+  readUnitId.value = entry.unitId
 
-  if (kind === 'contract') {
-    if (entry?.contract) {
-      void openRead(chapterNodePath(bookId, entry.contract), entry.contract.name, 'contract')
+  if (kind === 'outline') {
+    if (entry.outline) {
+      void openRead(unitNodePath(bookId, entry.outline, 'outline'), entry.outline.name, 'outline')
       return
     }
-    readPath.value = null
-    readTitle.value = t('novelWorkbench.badgeContract')
+    readPath.value = novelUnitOutlinePath(bookId, entry.unitId)
+    readTitle.value = `${entry.unitId}.yaml`
     readContent.value = ''
     return
   }
 
-  if (entry?.prose) {
-    void openRead(chapterNodePath(bookId, entry.prose), entry.prose.name, 'prose')
+  if (entry.prose) {
+    void openRead(unitNodePath(bookId, entry.prose, 'prose'), entry.prose.name, 'prose')
     return
   }
-  readPath.value = novelChapterFilePath(bookId, ch)
-  readTitle.value = `ch${String(ch).padStart(3, '0')}.md`
+  readPath.value = novelUnitProsePath(bookId, entry.unitId)
+  readTitle.value = `${entry.unitId}.md`
   readContent.value = ''
   view.value = 'book'
-}
-
-function openChapterFromList(chapter: number, kind: 'contract' | 'prose') {
-  readChapterNum.value = chapter
-  readPane.value = kind
-  openChapterDoc(kind)
 }
 
 async function selectBookOutline() {
   treeSel.value = { kind: 'book' }
   readPane.value = null
-  readChapterNum.value = null
+  readUnitId.value = null
   const bookId = selectedBookId.value
   const f = bookOutlineFile.value
   if (bookId && f) {
@@ -534,14 +509,14 @@ async function selectVolume(node: NovelFileNode) {
   if (!bookId) return
   treeSel.value = { kind: 'volume', name: node.name }
   readPane.value = null
-  readChapterNum.value = null
+  readUnitId.value = null
   await openRead(volumeNodePath(bookId, node), node.name)
 }
 
 async function selectSetupDoc(path: string, name: string) {
   treeSel.value = { kind: 'setup', name }
   readPane.value = null
-  readChapterNum.value = null
+  readUnitId.value = null
   await openRead(path, name)
 }
 
@@ -550,33 +525,40 @@ async function selectDossier(path: string, name: string) {
   if (!bookId) return
   treeSel.value = { kind: 'dossier', name }
   readPane.value = null
-  readChapterNum.value = null
+  readUnitId.value = null
   const full = path.includes('/') ? path : `novel/${bookId}/continuity/${name}`
-  // Prefer actual node path from continuity/reviews lists
   const hit =
     continuityFiles.value.find((f) => f.name === name) ||
     reviewFiles.value.find((f) => f.name === name)
   await openRead(hit?.path || full, name)
 }
 
-function selectChapter(n: number, pane: 'contract' | 'prose' = 'prose') {
-  treeSel.value = { kind: 'chapter', n }
-  openChapterFromList(n, pane)
+function selectUnit(unitId: string) {
+  const entry = unitEntries.value.find((e) => e.unitId === unitId)
+  treeSel.value = { kind: 'unit', name: unitId }
+  readUnitId.value = unitId
+  openUnitDoc(entry?.prose ? 'prose' : 'outline')
 }
 
-function goAdjacentChapter(dir: -1 | 1) {
-  const entry = dir < 0 ? prevChapterEntry.value : nextChapterEntry.value
+function goAdjacentUnit(dir: -1 | 1) {
+  const entry = dir < 0 ? prevUnitEntry.value : nextUnitEntry.value
   if (!entry) return
-  const kind =
-    readPane.value === 'contract' || readPane.value === 'prose' ? readPane.value : 'prose'
-  selectChapter(entry.chapter, kind)
+  const kind = readPane.value === 'outline' || readPane.value === 'prose' ? readPane.value : 'prose'
+  treeSel.value = { kind: 'unit', name: entry.unitId }
+  readUnitId.value = entry.unitId
+  openUnitDoc(kind)
+}
+
+function highlightChapter(n: number) {
+  if (treeSel.value.kind !== 'unit') return
+  treeSel.value = { ...treeSel.value, highlight: n }
 }
 
 async function openBook(bookId: string) {
   focusMode.value = false
   view.value = 'book'
   await loaderOpenBook(bookId)
-  treeOpen.value = chapterEntries.value.some((e) => Boolean(e.prose))
+  treeOpen.value = unitEntries.value.some((e) => Boolean(e.prose))
     ? ['prose', 'dossier']
     : ['outline', 'prose', 'dossier']
   setupOpen.value = ['world', 'cast']
@@ -590,18 +572,13 @@ function backToShelf() {
   void loadShelf()
 }
 
-function runAction(
-  action: NovelStageAction,
-  chapter?: number,
-  chapterPath?: string,
-  volume?: number,
-) {
+function runAction(action: NovelStageAction, unitId?: string, volume?: number) {
   const bookId = selectedBookId.value ?? undefined
   const ctx = bookContext.value
   const pipe = pipeline.value
 
   if (ctx && pipe && action !== 'init') {
-    const decision = canRunAction(action, ctx, chapter)
+    const decision = canRunAction(action, ctx, unitId)
     if (!decision.allowed) {
       toast.warning(
         decision.blockers.map(blockerText).join(' · ') || t('novelWorkbench.actionBlocked'),
@@ -610,14 +587,19 @@ function runAction(
     }
   }
 
-  const batchFrom = pipe?.frozenBatch?.from ?? 1
-  const batchTo = pipe?.frozenBatch?.to ?? Math.max(8, (chapter ?? 0) + 7)
+  const entry = unitId ? unitEntries.value.find((e) => e.unitId === unitId) : undefined
+  const unitPath =
+    entry?.prose
+      ? unitNodePath(bookId || '', entry.prose, 'prose')
+      : bookId && unitId
+        ? novelUnitProsePath(bookId, unitId)
+        : undefined
 
   let text = buildConstrainedPrefill(
     action,
-    { bookId, chapter, chapterPath, volume, batchFrom, batchTo },
+    { bookId, unitId, unitPath, volume },
     pipe && action !== 'init' ? pipe : undefined,
-    ctx && action !== 'init' ? canRunAction(action, ctx, chapter).blockers : [],
+    ctx && action !== 'init' ? canRunAction(action, ctx, unitId).blockers : [],
   )
 
   if (!canDelegate.value) {
@@ -632,23 +614,17 @@ function runAction(
 
 function onInspectorAction(
   action: NovelStageAction,
-  chapter?: number,
-  opts?: { volume?: number; chapterPath?: boolean },
+  unitId?: string,
+  opts?: { volume?: number },
 ) {
-  const bookId = selectedBookId.value
-  let chapterPath: string | undefined
-  if (opts?.chapterPath && bookId && chapter != null) {
-    chapterPath = readPath.value || novelChapterFilePath(bookId, chapter)
-  }
-  runAction(action, chapter, chapterPath, opts?.volume)
+  runAction(action, unitId, opts?.volume)
 }
 
 function runFocusPrimary() {
   const primary = focusPrimary.value
   if (!primary?.allowed) return
-  onInspectorAction(primary.action, primary.chapter, {
+  onInspectorAction(primary.action, primary.unitId, {
     volume: primary.action === 'volume' ? nextVolume.value : undefined,
-    chapterPath: treeSel.value.kind === 'chapter',
   })
 }
 
@@ -664,7 +640,7 @@ async function onRefresh() {
   const sel = { ...treeSel.value }
   await loaderOpenBook(selectedBookId.value)
   treeSel.value = sel
-  if (pane === 'contract' || pane === 'prose') openChapterDoc(pane)
+  if ((pane === 'outline' || pane === 'prose') && sel.kind === 'unit') openUnitDoc(pane)
   else if (path) await openRead(path, title)
 }
 
@@ -722,9 +698,8 @@ async function openLedger(node: NovelFileNode) {
           :visible-volume-files="visibleVolumeFiles"
           :world-docs="worldDocs"
           :cast-docs="castDocs"
-          :tree-chapters="treeChapters"
-          :chapter-phases="chapterPhases"
-          :contract-raws="contractRaws"
+          :tree-units="treeUnits"
+          :unit-phases="unitPhases"
           :continuity-files="continuityFiles"
           :review-files="reviewFiles"
           :next-volume="nextVolume"
@@ -733,9 +708,9 @@ async function openLedger(node: NovelFileNode) {
           @select-book-outline="selectBookOutline"
           @select-volume="selectVolume"
           @select-setup="selectSetupDoc"
-          @select-chapter="selectChapter"
+          @select-unit="selectUnit"
           @select-dossier="selectDossier"
-          @add-volume="runAction('volume', undefined, undefined, nextVolume)"
+          @add-volume="runAction('volume', undefined, nextVolume)"
         />
 
         <NovelReader
@@ -745,40 +720,43 @@ async function openLedger(node: NovelFileNode) {
           :read-loading="readLoading"
           :read-content="readContent"
           :tree-kind="treeSel.kind"
-          :reading-is-contract="readingIsContract"
+          :reading-is-outline="readingIsOutline"
           :reading-is-prose="readingIsProse"
           :reading-entry="readingEntry"
+          :chapter-chips="chapterChips"
+          :highlight-chapter="treeSel.highlight ?? null"
           :has-book-outline="Boolean(bookOutlineFile)"
           :book-outline-rows="bookOutlineRows"
           :volume-units="currentVolumeUnits"
-          :prev-chapter="prevChapterEntry"
-          :next-chapter="nextChapterEntry"
-          @open-contract="openChapterDoc('contract')"
-          @open-prose="openChapterDoc('prose')"
-          @prev-chapter="goAdjacentChapter(-1)"
-          @next-chapter="goAdjacentChapter(1)"
+          :prev-unit="prevUnitEntry"
+          :next-unit="nextUnitEntry"
+          @open-outline="openUnitDoc('outline')"
+          @open-prose="openUnitDoc('prose')"
+          @prev-unit="goAdjacentUnit(-1)"
+          @next-unit="goAdjacentUnit(1)"
+          @highlight-chapter="highlightChapter"
         />
 
         <NovelInspector
           v-show="!focusMode"
           :pipeline="pipeline"
           :tree-kind="treeSel.kind"
-          :reading-is-contract="readingIsContract"
+          :reading-is-outline="readingIsOutline"
           :reading-is-prose="readingIsProse"
-          :reading-chapter="readingChapter"
-          :contract-raw="currentContractRaw"
-          :chapter-phase="currentChapterPhase"
+          :unit-id="readingEntry?.unitId ?? null"
+          :outline-raw="currentOutlineRaw"
+          :unit-phase="currentUnitPhase"
+          :highlight-chapter="treeSel.highlight ?? null"
+          :prose-chars="proseChars"
+          :chapter-chars="chapterChars"
           :cast-docs="castDocs"
           :continuity-files="continuityFiles"
           :desk-primary="deskPrimaryFromPipeline"
-          :chapter-primary="chapterDeskPrimary"
+          :unit-primary="unitDeskPrimary"
           :more-actions="moreActions"
           :blockers="inspectorBlockers"
           :setup-shows-goldfinger="setupShowsGoldfinger"
           :has-book-outline="Boolean(bookOutlineFile)"
-          :desk-batch-freeze-allowed="deskBatchFreezeAllowed"
-          :desk-batch-write-allowed="deskBatchWriteAllowed"
-          :desk-batch-review-allowed="deskBatchReviewAllowed"
           :selected-volume-num="selectedVolumeNum"
           :next-volume="nextVolume"
           @action="onInspectorAction"

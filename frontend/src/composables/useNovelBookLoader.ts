@@ -1,32 +1,32 @@
 import { ref, type Ref } from 'vue'
 import { asArray, fetchJSON } from '@/api/client'
 import {
-  buildChapterEntries,
+  applyUnitOutline,
+  buildUnitEntries,
+  buildUnitPhases,
   isBookOutlineName,
-  isNovelContractName,
   mergeVolumeOutlineFiles,
   novelActiveBookPath,
-  novelBatchFreezePath,
   novelBookDir,
   novelCanonDir,
   novelCastDir,
-  novelChapterReviewPath,
-  novelChaptersDir,
   novelContinuityDir,
   novelOutlineDir,
   novelReviewsDir,
   novelStatePath,
+  novelUnitOutlinesDir,
+  novelUnitReviewPath,
+  novelUnitsDir,
   novelVolumesDir,
-  parseBatchFreezeYaml,
   parseBookOutlineVolumeRows,
   parseNovelStateExtended,
   parseVolumeUnitRows,
   sortWorkbenchDocNodes,
   type BookOutlineVolumeRow,
-  type NovelChapterEntry,
   type NovelExtendedState,
   type NovelFileNode,
   type NovelStateSummary,
+  type NovelUnitEntry,
   type VolumeUnitRow,
 } from '@/types/novel-workbench'
 
@@ -36,10 +36,11 @@ function nodePath(bookId: string, dir: string, node: NovelFileNode): string {
   return `${dir}/${node.name}`
 }
 
-function chapterNodePath(bookId: string, node: NovelFileNode): string {
+function unitNodePath(bookId: string, node: NovelFileNode, kind: 'outline' | 'prose'): string {
   const p = (node.path || '').replace(/\\/g, '/')
   if (p) return p
-  return `${novelChaptersDir(bookId)}/${node.name}`
+  const dir = kind === 'outline' ? novelUnitOutlinesDir(bookId) : novelUnitsDir(bookId)
+  return `${dir}/${node.name}`
 }
 
 function volumeNodePath(
@@ -59,7 +60,7 @@ export type ShelfBookRow = {
   id: string
   path: string
   state: NovelStateSummary | null
-  /** Soft chapter progress when chapter dir was listed. */
+  /** Committed units / units that have an outline or prose file. */
   progress: { committed: number; total: number } | null
 }
 
@@ -68,7 +69,7 @@ export function useNovelBookLoader(projectId: Ref<string | null | undefined>) {
   const books = ref<ShelfBookRow[]>([])
   const selectedBookId = ref<string | null>(null)
   const activeBookId = ref<string | null>(null)
-  const chapterEntries = ref<NovelChapterEntry[]>([])
+  const unitEntries = ref<NovelUnitEntry[]>([])
   const continuityFiles = ref<NovelFileNode[]>([])
   const outlineFiles = ref<NovelFileNode[]>([])
   const volumeFiles = ref<NovelFileNode[]>([])
@@ -76,9 +77,9 @@ export function useNovelBookLoader(projectId: Ref<string | null | undefined>) {
   const canonFiles = ref<NovelFileNode[]>([])
   const castFiles = ref<NovelFileNode[]>([])
   const extendedState = ref<NovelExtendedState | null>(null)
-  const contractRaws = ref<Record<number, string>>({})
-  const reviewRaws = ref<Record<number, string>>({})
-  const batchFreezeFrozen = ref(false)
+  const outlineRaws = ref<Record<string, string>>({})
+  const reviewRaws = ref<Record<string, string>>({})
+  const proseRaws = ref<Record<string, string>>({})
   const bookState = ref<NovelStateSummary | null>(null)
   const bookOutlineRows = ref<BookOutlineVolumeRow[]>([])
   const volumeUnitRows = ref<Record<string, VolumeUnitRow[]>>({})
@@ -119,42 +120,39 @@ export function useNovelBookLoader(projectId: Ref<string | null | undefined>) {
     }
   }
 
-  async function loadBatchFreezeStatus(bookId: string) {
-    if (extendedState.value?.batchFreezeArtifact === 'frozen') {
-      batchFreezeFrozen.value = true
-      return
-    }
-    try {
-      const raw = await readFile(novelBatchFreezePath(bookId))
-      batchFreezeFrozen.value = parseBatchFreezeYaml(raw).status === 'frozen'
-    } catch {
-      batchFreezeFrozen.value = Boolean(extendedState.value?.frozenBatch?.from)
-    }
-  }
-
-  async function loadChapterMeta(bookId: string, entries: NovelChapterEntry[]) {
-    const contracts: Record<number, string> = {}
-    const reviews: Record<number, string> = {}
+  async function loadUnitMeta(bookId: string, entries: NovelUnitEntry[]) {
+    const outlines: Record<string, string> = {}
+    const reviews: Record<string, string> = {}
+    const proses: Record<string, string> = {}
     await Promise.all(
       entries.map(async (e) => {
-        if (e.contract) {
+        if (e.outline) {
           try {
-            contracts[e.chapter] = await readFile(chapterNodePath(bookId, e.contract))
+            outlines[e.unitId] = await readFile(unitNodePath(bookId, e.outline, 'outline'))
           } catch {
             /* ignore */
           }
         }
         if (e.prose) {
           try {
-            reviews[e.chapter] = await readFile(novelChapterReviewPath(bookId, e.chapter))
+            proses[e.unitId] = await readFile(unitNodePath(bookId, e.prose, 'prose'))
+          } catch {
+            /* ignore */
+          }
+          try {
+            reviews[e.unitId] = await readFile(novelUnitReviewPath(bookId, e.unitId))
           } catch {
             /* ignore */
           }
         }
       }),
     )
-    contractRaws.value = contracts
+    outlineRaws.value = outlines
     reviewRaws.value = reviews
+    proseRaws.value = proses
+    unitEntries.value = entries.map((e) =>
+      outlines[e.unitId] ? applyUnitOutline(e, outlines[e.unitId]) : e,
+    )
   }
 
   async function loadOutlinePreviews(bookId: string) {
@@ -203,14 +201,29 @@ export function useNovelBookLoader(projectId: Ref<string | null | undefined>) {
   ): Promise<{ committed: number; total: number } | null> {
     if (!state) return null
     try {
-      const chNodes = await listDirSoft(novelChaptersDir(bookId))
-      const outNodes = await listDirSoft(novelOutlineDir(bookId))
-      const entries = buildChapterEntries(chNodes, outNodes)
-      const withContract = entries.filter((e) => Boolean(e.contract || e.prose)).length
-      const total = Math.max(withContract, state.lastCommittedCh)
-      return { committed: state.lastCommittedCh, total }
+      const [outlineNodes, proseNodes] = await Promise.all([
+        listDirSoft(novelUnitOutlinesDir(bookId)),
+        listDirSoft(novelUnitsDir(bookId)),
+      ])
+      const entries = buildUnitEntries(outlineNodes, proseNodes)
+      const raws: Record<string, string> = {}
+      await Promise.all(
+        entries.map(async (e) => {
+          if (!e.outline) return
+          try {
+            raws[e.unitId] = await readFile(unitNodePath(bookId, e.outline, 'outline'))
+          } catch {
+            /* ignore */
+          }
+        }),
+      )
+      const applied = entries.map((e) => (raws[e.unitId] ? applyUnitOutline(e, raws[e.unitId]) : e))
+      const phases = buildUnitPhases(applied, state.lastCommittedCh, raws, {})
+      const total = applied.filter((e) => e.outline || e.prose).length
+      const committed = applied.filter((e) => phases[e.unitId] === 'committed').length
+      return { committed, total }
     } catch {
-      return { committed: state.lastCommittedCh, total: Math.max(state.lastCommittedCh, 1) }
+      return { committed: 0, total: 0 }
     }
   }
 
@@ -267,9 +280,10 @@ export function useNovelBookLoader(projectId: Ref<string | null | undefined>) {
     loading.value = true
     try {
       bookState.value = await loadState(bookId)
-      const [chNodes, contNodes, outNodes, volNodes, revNodes, canonNodes, castNodes] =
+      const [outlineUnitNodes, proseNodes, contNodes, outNodes, volNodes, revNodes, canonNodes, castNodes] =
         await Promise.all([
-          listDirSoft(novelChaptersDir(bookId)),
+          listDirSoft(novelUnitOutlinesDir(bookId)),
+          listDirSoft(novelUnitsDir(bookId)),
           listDirSoft(novelContinuityDir(bookId)),
           listDirSoft(novelOutlineDir(bookId)),
           listDirSoft(novelVolumesDir(bookId)),
@@ -277,19 +291,17 @@ export function useNovelBookLoader(projectId: Ref<string | null | undefined>) {
           listDirSoft(novelCanonDir(bookId)),
           listDirSoft(novelCastDir(bookId)),
         ])
-      chapterEntries.value = buildChapterEntries(chNodes, outNodes)
       continuityFiles.value = sortWorkbenchDocNodes(contNodes)
-      outlineFiles.value = sortWorkbenchDocNodes(outNodes).filter((n) => !isNovelContractName(n.name))
+      outlineFiles.value = sortWorkbenchDocNodes(outNodes)
       volumeFiles.value = sortWorkbenchDocNodes(volNodes)
       reviewFiles.value = sortWorkbenchDocNodes(revNodes)
       canonFiles.value = sortWorkbenchDocNodes(canonNodes)
       castFiles.value = sortWorkbenchDocNodes(castNodes)
-      await loadBatchFreezeStatus(bookId)
-      await loadChapterMeta(bookId, chapterEntries.value)
+      await loadUnitMeta(bookId, buildUnitEntries(outlineUnitNodes, proseNodes))
       await loadOutlinePreviews(bookId)
       void persistActiveBook(bookId)
     } catch {
-      chapterEntries.value = []
+      unitEntries.value = []
       continuityFiles.value = []
       outlineFiles.value = []
       volumeFiles.value = []
@@ -297,9 +309,9 @@ export function useNovelBookLoader(projectId: Ref<string | null | undefined>) {
       canonFiles.value = []
       castFiles.value = []
       extendedState.value = null
-      contractRaws.value = {}
+      outlineRaws.value = {}
       reviewRaws.value = {}
-      batchFreezeFrozen.value = false
+      proseRaws.value = {}
       bookState.value = null
       bookOutlineRows.value = []
       volumeUnitRows.value = {}
@@ -310,7 +322,7 @@ export function useNovelBookLoader(projectId: Ref<string | null | undefined>) {
 
   function clearBook() {
     selectedBookId.value = null
-    chapterEntries.value = []
+    unitEntries.value = []
     continuityFiles.value = []
     outlineFiles.value = []
     volumeFiles.value = []
@@ -318,9 +330,9 @@ export function useNovelBookLoader(projectId: Ref<string | null | undefined>) {
     canonFiles.value = []
     castFiles.value = []
     extendedState.value = null
-    contractRaws.value = {}
+    outlineRaws.value = {}
     reviewRaws.value = {}
-    batchFreezeFrozen.value = false
+    proseRaws.value = {}
     bookState.value = null
     bookOutlineRows.value = []
     volumeUnitRows.value = {}
@@ -331,7 +343,7 @@ export function useNovelBookLoader(projectId: Ref<string | null | undefined>) {
     books,
     selectedBookId,
     activeBookId,
-    chapterEntries,
+    unitEntries,
     continuityFiles,
     outlineFiles,
     volumeFiles,
@@ -339,9 +351,9 @@ export function useNovelBookLoader(projectId: Ref<string | null | undefined>) {
     canonFiles,
     castFiles,
     extendedState,
-    contractRaws,
+    outlineRaws,
     reviewRaws,
-    batchFreezeFrozen,
+    proseRaws,
     bookState,
     bookOutlineRows,
     volumeUnitRows,
@@ -352,7 +364,7 @@ export function useNovelBookLoader(projectId: Ref<string | null | undefined>) {
     openBook,
     clearBook,
     nodePath,
-    chapterNodePath,
+    unitNodePath,
     volumeNodePath: (bookId: string, node: NovelFileNode) =>
       volumeNodePath(bookId, node, volumeFiles.value),
   }

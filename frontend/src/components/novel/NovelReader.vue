@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type {
   BookOutlineVolumeRow,
-  NovelChapterEntry,
+  NovelUnitEntry,
   VolumeUnitRow,
 } from '@/types/novel-workbench'
 
@@ -13,38 +13,61 @@ const props = defineProps<{
   readHtml: string
   readLoading: boolean
   readContent: string
-  treeKind: 'book' | 'volume' | 'setup' | 'chapter' | 'dossier'
-  readingIsContract: boolean
+  treeKind: 'book' | 'volume' | 'setup' | 'unit' | 'dossier'
+  readingIsOutline: boolean
   readingIsProse: boolean
-  readingEntry: NovelChapterEntry | null
+  readingEntry: NovelUnitEntry | null
+  chapterChips: { chapter: number; title: string }[]
+  highlightChapter: number | null
   hasBookOutline: boolean
   bookOutlineRows: BookOutlineVolumeRow[]
   volumeUnits: VolumeUnitRow[]
-  prevChapter: NovelChapterEntry | null
-  nextChapter: NovelChapterEntry | null
+  prevUnit: NovelUnitEntry | null
+  nextUnit: NovelUnitEntry | null
 }>()
 
 const emit = defineEmits<{
-  'open-contract': []
+  'open-outline': []
   'open-prose': []
-  'prev-chapter': []
-  'next-chapter': []
+  'prev-unit': []
+  'next-unit': []
+  'highlight-chapter': [n: number]
 }>()
 
 const { t } = useI18n()
+const bodyEl = ref<HTMLElement | null>(null)
 
-const emptyMessage = computed(() => {
+function emptyMessage(): string {
   if (props.treeKind === 'book' && !props.hasBookOutline) return t('novelWorkbench.noBookOutline')
   if (props.treeKind === 'volume' && !props.readContent) return t('novelWorkbench.volumeUnitsEmpty')
   if (props.readingIsProse && !props.readingEntry?.prose) return t('novelWorkbench.noProseYet')
-  if (props.readingIsContract && !props.readingEntry?.contract) return t('novelWorkbench.noContractYet')
+  if (props.readingIsOutline && !props.readingEntry?.outline) return t('novelWorkbench.noContractYet')
   return ''
-})
+}
 
-const showUnits =
-  computed(() => props.treeKind === 'book' && props.bookOutlineRows.length > 0)
-const showVolumeUnits =
-  computed(() => props.treeKind === 'volume' && props.volumeUnits.length > 0)
+function unitNavLabel(entry: NovelUnitEntry | null, fallback: string): string {
+  if (!entry) return fallback
+  if (entry.chapterFrom > 0 && entry.chapterTo >= entry.chapterFrom) {
+    return t('novelWorkbench.unitRow', {
+      n: entry.index,
+      from: entry.chapterFrom,
+      to: entry.chapterTo,
+    })
+  }
+  return entry.unitId
+}
+
+function chipLabel(chip: { chapter: number; title: string }): string {
+  return chip.title
+    ? t('novelWorkbench.chapterTitle', { n: chip.chapter, title: chip.title })
+    : t('novelWorkbench.chapterN', { n: chip.chapter })
+}
+
+async function onChip(n: number) {
+  emit('highlight-chapter', n)
+  await nextTick()
+  bodyEl.value?.querySelector(`#unit-ch-${n}`)?.scrollIntoView({ block: 'start' })
+}
 </script>
 
 <template>
@@ -55,42 +78,40 @@ const showVolumeUnits =
         <div class="novel-reader__file">{{ readTitle }}</div>
       </div>
       <div
-        v-if="treeKind === 'chapter'"
+        v-if="treeKind === 'unit'"
         class="novel-reader__nav"
-        :aria-label="t('novelWorkbench.chapterNav')"
+        :aria-label="t('novelWorkbench.unitNav')"
       >
         <button
           type="button"
           class="novel-wb-link"
-          :disabled="!prevChapter"
-          :title="prevChapter ? t('novelWorkbench.prevChapter', { n: prevChapter.chapter }) : t('novelWorkbench.prevChapterNone')"
-          @click="emit('prev-chapter')"
+          :disabled="!prevUnit"
+          @click="emit('prev-unit')"
         >
-          ← {{ prevChapter ? t('novelWorkbench.chapterN', { n: prevChapter.chapter }) : t('novelWorkbench.prevChapterNone') }}
+          ← {{ unitNavLabel(prevUnit, t('novelWorkbench.prevUnitNone')) }}
         </button>
         <button
           type="button"
           class="novel-wb-link"
-          :disabled="!nextChapter"
-          :title="nextChapter ? t('novelWorkbench.nextChapter', { n: nextChapter.chapter }) : t('novelWorkbench.nextChapterNone')"
-          @click="emit('next-chapter')"
+          :disabled="!nextUnit"
+          @click="emit('next-unit')"
         >
-          {{ nextChapter ? t('novelWorkbench.chapterN', { n: nextChapter.chapter }) : t('novelWorkbench.nextChapterNone') }} →
+          {{ unitNavLabel(nextUnit, t('novelWorkbench.nextUnitNone')) }} →
         </button>
       </div>
     </div>
 
-    <div v-if="treeKind === 'chapter'" class="novel-reader__tabs" role="tablist">
+    <div v-if="treeKind === 'unit'" class="novel-reader__tabs" role="tablist">
       <button
         type="button"
         role="tab"
         class="novel-reader__tab"
         :class="{
-          'novel-reader__tab--active': readingIsContract,
-          'novel-reader__tab--missing': !readingEntry?.contract,
+          'novel-reader__tab--active': readingIsOutline,
+          'novel-reader__tab--missing': !readingEntry?.outline,
         }"
-        :aria-selected="readingIsContract"
-        @click="emit('open-contract')"
+        :aria-selected="readingIsOutline"
+        @click="emit('open-outline')"
       >
         {{ t('novelWorkbench.badgeContract') }}
       </button>
@@ -109,7 +130,20 @@ const showVolumeUnits =
       </button>
     </div>
 
-    <div v-if="showUnits" class="novel-reader__summary">
+    <div v-if="treeKind === 'unit' && readingIsProse && chapterChips.length" class="novel-reader__chips">
+      <button
+        v-for="chip in chapterChips"
+        :key="chip.chapter"
+        type="button"
+        class="novel-reader__chip"
+        :class="{ 'novel-reader__chip--on': highlightChapter === chip.chapter }"
+        @click="onChip(chip.chapter)"
+      >
+        {{ chipLabel(chip) }}
+      </button>
+    </div>
+
+    <div v-if="treeKind === 'book' && bookOutlineRows.length" class="novel-reader__summary">
       <div class="novel-reader__summary-title">{{ t('novelWorkbench.volumeSummary') }}</div>
       <ul class="novel-reader__summary-list">
         <li v-for="(row, i) in bookOutlineRows" :key="i">
@@ -119,7 +153,7 @@ const showVolumeUnits =
       </ul>
     </div>
 
-    <div v-if="showVolumeUnits" class="novel-reader__summary">
+    <div v-if="treeKind === 'volume' && volumeUnits.length" class="novel-reader__summary">
       <div class="novel-reader__summary-title">{{ t('novelWorkbench.unitSummary') }}</div>
       <ul class="novel-reader__summary-list">
         <li v-for="(u, i) in volumeUnits" :key="i">
@@ -131,8 +165,8 @@ const showVolumeUnits =
     </div>
 
     <div v-if="readLoading" class="novel-reader__empty">{{ t('novelWorkbench.loading') }}</div>
-    <div v-else-if="emptyMessage" class="novel-reader__empty">{{ emptyMessage }}</div>
-    <div v-else class="novel-reader__body" v-html="readHtml" />
+    <div v-else-if="emptyMessage()" class="novel-reader__empty">{{ emptyMessage() }}</div>
+    <div v-else ref="bodyEl" class="novel-reader__body" v-html="readHtml" />
   </section>
 </template>
 
@@ -211,6 +245,32 @@ const showVolumeUnits =
   opacity: 0.55;
 }
 
+.novel-reader__chips {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 14px 8px;
+}
+
+.novel-reader__chip {
+  margin: 0;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--dq-border-subtle, #000) 40%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.novel-reader__chip--on {
+  border-color: color-mix(in srgb, var(--dq-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--dq-accent) 14%, transparent);
+  font-weight: 650;
+}
+
 .novel-reader__summary {
   flex-shrink: 0;
   margin: 0 14px 8px;
@@ -263,6 +323,18 @@ const showVolumeUnits =
 
 .novel-reader__body :deep(p) {
   margin: 0.55em 0;
+}
+
+.novel-reader__body :deep(.novel-unit-cut) {
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--dq-border-subtle, #000) 55%, transparent);
+  margin: 1.6rem 0 0.4rem;
+}
+
+.novel-reader__body :deep(.novel-unit-ch--on) {
+  background: color-mix(in srgb, var(--dq-accent) 7%, transparent);
+  border-radius: 8px;
+  padding: 4px 8px;
 }
 
 .novel-reader__body :deep(pre),

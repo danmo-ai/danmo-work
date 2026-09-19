@@ -2,47 +2,48 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  parseContractYaml,
+  parseUnitOutlineYaml,
   type GateStatus,
   type NovelBookPipeline,
   type NovelChapterPhase,
   type NovelFileNode,
   type NovelPipelinePhase,
   type NovelStageAction,
+  type NovelUnitOutlineFields,
 } from '@/types/novel-workbench'
 
 export type DeskPrimary = {
   action: NovelStageAction
-  chapter?: number
+  unitId?: string
   label: string
   allowed: boolean
 }
 
 const props = defineProps<{
   pipeline: NovelBookPipeline | null
-  treeKind: 'book' | 'volume' | 'setup' | 'chapter' | 'dossier'
-  readingIsContract: boolean
+  treeKind: 'book' | 'volume' | 'setup' | 'unit' | 'dossier'
+  readingIsOutline: boolean
   readingIsProse: boolean
-  readingChapter: number | null
-  contractRaw: string
-  chapterPhase: NovelChapterPhase | null
+  unitId: string | null
+  outlineRaw: string
+  unitPhase: NovelChapterPhase | null
+  highlightChapter: number | null
+  proseChars: number
+  chapterChars: Record<number, number>
   castDocs: NovelFileNode[]
   continuityFiles: NovelFileNode[]
   deskPrimary: DeskPrimary | null
-  chapterPrimary: DeskPrimary | null
-  moreActions: { action: NovelStageAction; label: string; allowed: boolean; chapter?: number }[]
+  unitPrimary: DeskPrimary | null
+  moreActions: { action: NovelStageAction; label: string; allowed: boolean; unitId?: string }[]
   blockers: string[]
   setupShowsGoldfinger: boolean
   hasBookOutline: boolean
-  deskBatchFreezeAllowed: boolean
-  deskBatchWriteAllowed: boolean
-  deskBatchReviewAllowed: boolean
   selectedVolumeNum: number
   nextVolume: number
 }>()
 
 const emit = defineEmits<{
-  action: [action: NovelStageAction, chapter?: number, opts?: { volume?: number; chapterPath?: boolean }]
+  action: [action: NovelStageAction, unitId?: string, opts?: { volume?: number }]
   'open-cast': [node: NovelFileNode]
   'open-ledger': [node: NovelFileNode]
 }>()
@@ -53,9 +54,16 @@ const tab = ref<'overview' | 'contract' | 'canon' | 'actions'>('actions')
 watch(
   () => props.treeKind,
   (kind) => {
-    if (kind === 'chapter') tab.value = props.readingIsContract ? 'contract' : 'actions'
+    if (kind === 'unit') tab.value = props.readingIsOutline ? 'contract' : 'actions'
     else if (kind === 'setup') tab.value = 'canon'
     else tab.value = 'overview'
+  },
+)
+
+watch(
+  () => props.highlightChapter,
+  (n) => {
+    if (n != null && props.treeKind === 'unit') tab.value = 'contract'
   },
 )
 
@@ -116,30 +124,28 @@ function phaseLabel(phase: NovelChapterPhase): string {
   return t(`novelWorkbench.${map[phase]}`)
 }
 
-const contract = computed(() => parseContractYaml(props.contractRaw || ''))
+const unit = computed((): NovelUnitOutlineFields => parseUnitOutlineYaml(props.outlineRaw || ''))
 
-const contractFields = computed(() => {
-  const c = contract.value
+const unitRows = computed(() => {
+  const u = unit.value
   const rows: { key: string; label: string; value: string }[] = []
   const push = (key: string, label: string, value: string) => {
     if (value.trim()) rows.push({ key, label, value })
   }
-  push('title', t('novelWorkbench.contractFieldTitle'), c.title)
-  push('unit', t('novelWorkbench.contractFieldUnit'), c.unitId)
-  push('status', t('novelWorkbench.contractFieldStatus'), c.status)
-  push('scene', t('novelWorkbench.contractFieldScene'), c.scene)
-  push('purpose', t('novelWorkbench.contractFieldPurpose'), c.purpose)
-  push('pleasure', t('novelWorkbench.contractFieldPleasure'), c.pleasurePoint)
-  push('payoff', t('novelWorkbench.contractFieldPayoff'), c.microPayoff)
-  push('emotion', t('novelWorkbench.contractFieldEmotion'), c.emotionLine)
-  push('hookType', t('novelWorkbench.contractFieldHookType'), c.hookType)
-  push('hookOut', t('novelWorkbench.contractFieldHookOut'), c.hookOut)
-  push('words', t('novelWorkbench.contractFieldWords'), c.wordTarget)
+  push('function', t('novelWorkbench.unitFieldFunction'), u.functionText)
+  push('desire', t('novelWorkbench.unitFieldDesire'), u.desire)
+  push('obstacle', t('novelWorkbench.unitFieldObstacle'), u.obstacle)
+  push('pleasure', t('novelWorkbench.unitFieldPleasure'), u.pleasure)
+  const target = u.wordTarget.trim()
+  const words = target
+    ? t('novelWorkbench.unitWords', { actual: props.proseChars, target })
+    : String(props.proseChars || '')
+  push('words', t('novelWorkbench.unitFieldWords'), words)
   return rows
 })
 
 const primary = computed(() => {
-  if (props.treeKind === 'chapter') return props.chapterPrimary
+  if (props.treeKind === 'unit') return props.unitPrimary
   return props.deskPrimary
 })
 
@@ -151,24 +157,10 @@ function runPrimary() {
   const p = primary.value
   if (!p?.allowed) return
   if (p.action === 'volume') {
-    emit('action', p.action, p.chapter, { volume: props.nextVolume })
+    emit('action', p.action, p.unitId, { volume: props.nextVolume })
     return
   }
-  const proseActions: NovelStageAction[] = [
-    'write',
-    'expand',
-    'review',
-    'polish',
-    'commit',
-    'review-polish-commit',
-    'dialogue',
-    'hook',
-    'reversal',
-    'continue',
-  ]
-  emit('action', p.action, p.chapter, {
-    chapterPath: Boolean(p.chapter != null && proseActions.includes(p.action) && p.action !== 'continue'),
-  })
+  emit('action', p.action, p.unitId)
 }
 </script>
 
@@ -189,7 +181,7 @@ function runPrimary() {
         role="tab"
         class="novel-insp__tab"
         :class="{ 'novel-insp__tab--on': tab === 'contract' }"
-        :disabled="treeKind !== 'chapter'"
+        :disabled="treeKind !== 'unit'"
         @click="tab = 'contract'"
       >
         {{ t('novelWorkbench.inspContract') }}
@@ -244,21 +236,44 @@ function runPrimary() {
             </li>
           </ul>
         </div>
-        <div v-if="chapterPhase" class="novel-insp__block">
+        <div v-if="unitPhase" class="novel-insp__block">
           <div class="novel-insp__label">{{ t('novelWorkbench.chapterPhase') }}</div>
-          <div class="novel-insp__value">{{ phaseLabel(chapterPhase) }}</div>
+          <div class="novel-insp__value">{{ phaseLabel(unitPhase) }}</div>
         </div>
       </template>
 
       <template v-else-if="tab === 'contract'">
-        <div v-if="!contractRaw" class="novel-insp__empty">{{ t('novelWorkbench.noContractYet') }}</div>
-        <dl v-else-if="contractFields.length" class="novel-insp__fields">
-          <template v-for="f in contractFields" :key="f.key">
-            <dt>{{ f.label }}</dt>
-            <dd>{{ f.value }}</dd>
-          </template>
-        </dl>
-        <pre v-else class="novel-insp__raw">{{ contractRaw }}</pre>
+        <div v-if="!outlineRaw" class="novel-insp__empty">{{ t('novelWorkbench.noContractYet') }}</div>
+        <template v-else>
+          <dl v-if="unitRows.length" class="novel-insp__fields">
+            <template v-for="f in unitRows" :key="f.key">
+              <dt>{{ f.label }}</dt>
+              <dd>{{ f.value }}</dd>
+            </template>
+          </dl>
+          <div v-if="unit.scenes.length" class="novel-insp__block">
+            <div class="novel-insp__label">{{ t('novelWorkbench.unitScenes') }}</div>
+            <ul class="novel-insp__cuts">
+              <li v-for="s in unit.scenes" :key="s.id">
+                {{ s.id }} · {{ s.beat }} · {{ t('novelWorkbench.chapterN', { n: s.chapter }) }}
+              </li>
+            </ul>
+          </div>
+          <div v-if="unit.chapters.length" class="novel-insp__block">
+            <div class="novel-insp__label">{{ t('novelWorkbench.unitCuts') }}</div>
+            <ul class="novel-insp__cuts">
+              <li
+                v-for="c in unit.chapters"
+                :key="c.chapter"
+                :class="{ 'novel-insp__cut--on': highlightChapter === c.chapter }"
+              >
+                <span>{{ t('novelWorkbench.chapterN', { n: c.chapter }) }}</span>
+                <span v-if="c.cutHook"> · {{ c.cutHook }}</span>
+                <span v-if="c.wordShare"> · {{ chapterChars[c.chapter] || 0 }}/{{ c.wordShare }}</span>
+              </li>
+            </ul>
+          </div>
+        </template>
       </template>
 
       <template v-else-if="tab === 'canon'">
@@ -316,30 +331,6 @@ function runPrimary() {
           <button type="button" class="novel-wb-btn novel-wb-btn--ghost" @click="emit('action', 'assets')">
             {{ t('novelWorkbench.actionAssets') }}
           </button>
-          <button
-            v-if="deskBatchFreezeAllowed"
-            type="button"
-            class="novel-wb-btn novel-wb-btn--ghost"
-            @click="emit('action', 'batch-freeze')"
-          >
-            {{ t('novelWorkbench.actionBatchFreeze') }}
-          </button>
-          <button
-            v-if="deskBatchWriteAllowed"
-            type="button"
-            class="novel-wb-btn novel-wb-btn--ghost"
-            @click="emit('action', 'batch-write')"
-          >
-            {{ t('novelWorkbench.actionBatchWrite') }}
-          </button>
-          <button
-            v-if="deskBatchReviewAllowed"
-            type="button"
-            class="novel-wb-btn novel-wb-btn--ghost"
-            @click="emit('action', 'batch-review')"
-          >
-            {{ t('novelWorkbench.actionBatchReview') }}
-          </button>
         </div>
 
         <div v-else-if="treeKind === 'volume'" class="novel-insp__more-stack">
@@ -348,30 +339,6 @@ function runPrimary() {
           </button>
           <button type="button" class="novel-wb-btn novel-wb-btn--ghost" @click="emit('action', 'outline')">
             {{ hasBookOutline ? t('novelWorkbench.actionReviseBookOutline') : t('novelWorkbench.actionOutline') }}
-          </button>
-          <button
-            v-if="deskBatchFreezeAllowed"
-            type="button"
-            class="novel-wb-btn novel-wb-btn--ghost"
-            @click="emit('action', 'batch-freeze')"
-          >
-            {{ t('novelWorkbench.actionBatchFreeze') }}
-          </button>
-          <button
-            v-if="deskBatchWriteAllowed"
-            type="button"
-            class="novel-wb-btn novel-wb-btn--ghost"
-            @click="emit('action', 'batch-write')"
-          >
-            {{ t('novelWorkbench.actionBatchWrite') }}
-          </button>
-          <button
-            v-if="deskBatchReviewAllowed"
-            type="button"
-            class="novel-wb-btn novel-wb-btn--ghost"
-            @click="emit('action', 'batch-review')"
-          >
-            {{ t('novelWorkbench.actionBatchReview') }}
           </button>
         </div>
 
@@ -392,7 +359,7 @@ function runPrimary() {
           </button>
         </div>
 
-        <details v-if="treeKind === 'chapter' && moreActions.length" class="novel-insp__more">
+        <details v-if="treeKind === 'unit' && moreActions.length" class="novel-insp__more">
           <summary>{{ t('novelWorkbench.moreActions') }}</summary>
           <div class="novel-insp__more-stack">
             <button
@@ -401,7 +368,7 @@ function runPrimary() {
               type="button"
               class="novel-wb-btn novel-wb-btn--ghost"
               :disabled="!a.allowed"
-              @click="emit('action', a.action, a.chapter, { chapterPath: true })"
+              @click="emit('action', a.action, a.unitId)"
             >
               {{ a.label }}
             </button>
@@ -612,5 +579,18 @@ function runPrimary() {
   opacity: 0.5;
   line-height: 1.35;
   cursor: help;
+}
+
+.novel-insp__cuts {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: var(--dq-font-size-caption);
+  line-height: 1.45;
+}
+
+.novel-insp__cut--on {
+  background: color-mix(in srgb, var(--dq-accent) 14%, transparent);
+  border-radius: 4px;
+  font-weight: 650;
 }
 </style>

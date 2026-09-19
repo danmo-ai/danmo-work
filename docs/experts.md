@@ -92,8 +92,8 @@ delegate_agent(agent_id="<id>", goal="...")
 当环境中存在 `novel` 专家时：
 
 1. 主专家选 **Team**（或开启协作）。
-2. Composer `@` / 专家图标选中「Novel Writing」，描述本章目标后发送。
-3. 专家按阶段技能走：`novel-setup` 立项 → `novel-plan` 设定/总纲/卷纲 → `novel-write` 章纲/**正文首稿** → `novel-review` **扩写 / 审稿 / 润色 / Commit**（与写作分 turn，便于写作用更好模型）。  
+2. Composer `@` / 专家图标选中「Novel Writing」，描述本单元目标后发送。
+3. 专家按阶段技能走：`novel-setup` 立项 → `novel-plan` 设定/总纲/卷纲 → `novel-write` 单元细纲/**一份单元正文** → `novel-review` **扩写 / 审本单元 / 润色 / 一次 Commit**（与写作分 turn，便于写作用更好模型）。  
    Continuity 账本为 `continuity/ledger.md`；换阶段时用户自行切换 Composer 模型。
 4. 技法检索走知识库 `kb-novel-craft`（节奏与结构、爽点与追读、文风与去 AI 味等）；本书设定用项目文件 + `table_*`。
 
@@ -127,18 +127,18 @@ delegate_agent(agent_id="<id>", goal="...")
 
 小说工作台是 **流程控制台**（不是纯文件浏览器）：
 
-1. **流程轨（8 步）**：立项 → 设定 → 总纲 → 卷纲 → 章纲 → 正文 → 审稿 → 定稿  
-2. **门禁点**：`knowledge` / `asset` / `qc`（读 `novel-state.yaml` 的 `gates` + 磁盘启发式）  
-3. **主 CTA**：引擎计算下一合法动作，注入 Composer + 选中 `novel`  
-4. **章状态机**：无章纲 → 章纲草案 → 待写 → 待审 → 审未过/待提交 → 已提交  
-5. **多模型**：写作首稿与「扩写 / 润色 / 定稿」分 turn；用户在 Composer **自行**切换模型；工作台不自动换模  
+1. **流程轨（8 步）**：立项 → 设定 → 总纲 → 卷纲 → 单元细纲 → 单元正文 → 审稿 → 定稿
+2. **门禁点**：`knowledge` / `asset` / `qc`（读 `novel-state.yaml` 的 `gates` + 磁盘启发式）
+3. **主 CTA**：引擎计算下一合法动作，注入 Composer + 选中 `novel`
+4. **单元状态机**：待细纲 → 待写 → 待审 → 待定稿 → 已定稿
+5. **多模型**：写作首稿与「扩写 / 润色 / 定稿」分 turn；用户在 Composer **自行**切换模型；工作台不自动换模
 
-技能流水线：`novel-setup` → `novel-plan` → `novel-write`（首稿）→ `novel-review`（扩写·审·润·Commit）。批次冻结只写 `novel-state.frozen_batch`。写正文消费 gate `### CONTEXT`；PASS 审稿不落盘。
+技能流水线：`novel-setup` → `novel-plan` → `novel-write`（单元首稿，一份文件）→ `novel-review`（扩写·审·润·一次 Commit）。写正文消费 gate `### CONTEXT`；PASS 审稿不落盘。
 
-动作 Prefill Composer（可勾选 `novel` chip）：**技能 + 意图/流程 + 书/章路径**，末尾附带 **工作台约束块**；不硬编码 skill reference 路径（由技能 Intent→Load 表决定）。**不跳转** Files。书落在 `novel/<book-id>/`（`canon/`、`outline/`、`chapters/`、`continuity/ledger.md`、`reviews/`；章纲=`chapters/chNNN-outline.yaml`）。
+动作 Prefill Composer（可勾选 `novel` chip）：**技能 + 意图/流程 + 书/单元路径**。书落在 `novel/<book-id>/`（`canon/`、`outline/units/`、`units/`、`continuity/ledger.md`、`reviews/`）。章是 `units/vNN-U#.md` 里的 `## 第N章`，中间一行 `---`。
 
 | 门禁 | UI 推断 | Agent 真执行 |
 |------|---------|--------------|
-| asset | `canon/cast/` 有文件 | 读上场人物卡（table 镜像可选） |
-| qc | review `### VERDICT` | `review-gates.md`（PASS 短 stub） |
-| batch | `novel-state` `artifacts.batch_freeze=frozen` | `novel-write/references/batch-freeze.md` |
+| asset | `canon/cast/` 有文件 | 读上场人物卡 |
+| qc | review `### VERDICT` | `review-gates.md`（PASS 不落盘） |
+| unit | `active_unit` + `outline/units/*.yaml` | `novel-write/references/unit-outline.md` |

@@ -5,11 +5,10 @@ import {
   novelBiblePath,
   novelCanonDir,
   novelCastDir,
-  parseContractYaml,
   setupDocLabel,
-  type NovelChapterEntry,
   type NovelChapterPhase,
   type NovelFileNode,
+  type NovelUnitEntry,
   isChapterPhasePending,
 } from '@/types/novel-workbench'
 
@@ -17,14 +16,13 @@ const props = defineProps<{
   bookId: string
   treeOpen: string[]
   setupOpen: string[]
-  treeSel: { kind: 'book' | 'volume' | 'setup' | 'chapter' | 'dossier'; name?: string; n?: number }
+  treeSel: { kind: 'book' | 'volume' | 'setup' | 'unit' | 'dossier'; name?: string; n?: number }
   bookOutlineSelected: boolean
   visibleVolumeFiles: NovelFileNode[]
   worldDocs: NovelFileNode[]
   castDocs: NovelFileNode[]
-  treeChapters: NovelChapterEntry[]
-  chapterPhases: Record<number, NovelChapterPhase>
-  contractRaws: Record<number, string>
+  treeUnits: NovelUnitEntry[]
+  unitPhases: Record<string, NovelChapterPhase>
   continuityFiles: NovelFileNode[]
   reviewFiles: NovelFileNode[]
   nextVolume: number
@@ -36,7 +34,7 @@ const emit = defineEmits<{
   'select-book-outline': []
   'select-volume': [node: NovelFileNode]
   'select-setup': [path: string, name: string]
-  'select-chapter': [n: number, pane: 'contract' | 'prose']
+  'select-unit': [unitId: string]
   'select-dossier': [path: string, name: string]
   'add-volume': []
 }>()
@@ -69,18 +67,39 @@ function phaseLabel(phase: NovelChapterPhase): string {
   return t(`novelWorkbench.${map[phase]}`)
 }
 
-function chapterTreeName(entry: NovelChapterEntry): string {
-  const title = parseContractYaml(props.contractRaws[entry.chapter] || '').title.trim()
-  if (title) return t('novelWorkbench.chapterTitle', { n: entry.chapter, title })
-  return t('novelWorkbench.chapterN', { n: entry.chapter })
+function unitRowLabel(entry: NovelUnitEntry): string {
+  if (entry.chapterFrom > 0 && entry.chapterTo >= entry.chapterFrom) {
+    return t('novelWorkbench.unitRow', {
+      n: entry.index,
+      from: entry.chapterFrom,
+      to: entry.chapterTo,
+    })
+  }
+  return `U${entry.index}`
 }
 
-const filteredChapters = computed(() => {
-  if (!pendingOnly.value) return props.treeChapters
-  return props.treeChapters.filter((e) => {
-    const phase = props.chapterPhases[e.chapter] ?? 'empty'
+function volumeHeading(volume: number): string {
+  return `v${String(volume).padStart(2, '0')}`
+}
+
+const filteredUnits = computed(() => {
+  if (!pendingOnly.value) return props.treeUnits
+  return props.treeUnits.filter((e) => {
+    const phase = props.unitPhases[e.unitId] ?? 'empty'
     return isChapterPhasePending(phase)
   })
+})
+
+const groupedUnits = computed(() => {
+  const map = new Map<number, NovelUnitEntry[]>()
+  for (const e of filteredUnits.value) {
+    const list = map.get(e.volume) ?? []
+    list.push(e)
+    map.set(e.volume, list)
+  }
+  return [...map.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([volume, units]) => ({ volume, units }))
 })
 
 const dossierFiles = computed(() => [
@@ -167,9 +186,9 @@ const setupOpenModel = computed({
       <DqCollapseItem name="prose">
         <template #title>
           <span>{{ t('novelWorkbench.folderProse') }}</span>
-          <span class="novel-binder__count">{{ treeChapters.length }}</span>
+          <span class="novel-binder__count">{{ treeUnits.length }}</span>
         </template>
-        <div v-if="treeChapters.length" class="novel-binder__filter">
+        <div v-if="treeUnits.length" class="novel-binder__filter">
           <button
             type="button"
             class="novel-binder__filter-btn"
@@ -178,32 +197,35 @@ const setupOpenModel = computed({
           >
             {{
               pendingOnly
-                ? t('novelWorkbench.showAllChapters', { n: treeChapters.length })
+                ? t('novelWorkbench.showAllChapters', { n: treeUnits.length })
                 : t('novelWorkbench.showFocusChapters')
             }}
           </button>
         </div>
-        <button
-          v-for="entry in filteredChapters"
-          :key="entry.chapter"
-          type="button"
-          class="novel-binder__item novel-binder__item--chapter"
-          :class="{
-            'novel-binder__item--on': treeSel.kind === 'chapter' && treeSel.n === entry.chapter,
-            'novel-binder__item--dim': !entry.prose,
-          }"
-          @click="emit('select-chapter', entry.chapter, entry.prose ? 'prose' : 'contract')"
-        >
-          <span class="novel-binder__chapter-name">{{ chapterTreeName(entry) }}</span>
-          <span
-            class="novel-binder__phase"
-            :class="'novel-binder__phase--' + (chapterPhases[entry.chapter] || 'empty')"
+        <div v-for="group in groupedUnits" :key="group.volume" class="novel-binder__vol">
+          <div class="novel-binder__vol-label">{{ volumeHeading(group.volume) }}</div>
+          <button
+            v-for="entry in group.units"
+            :key="entry.unitId"
+            type="button"
+            class="novel-binder__item novel-binder__item--chapter"
+            :class="{
+              'novel-binder__item--on': treeSel.kind === 'unit' && treeSel.name === entry.unitId,
+              'novel-binder__item--dim': !entry.prose,
+            }"
+            @click="emit('select-unit', entry.unitId)"
           >
-            {{ phaseLabel(chapterPhases[entry.chapter] || 'empty') }}
-          </span>
-        </button>
-        <p v-if="!filteredChapters.length" class="novel-binder__hint">
-          {{ treeChapters.length ? t('novelWorkbench.noPendingChapters') : t('novelWorkbench.noChapters') }}
+            <span class="novel-binder__chapter-name">{{ unitRowLabel(entry) }}</span>
+            <span
+              class="novel-binder__phase"
+              :class="'novel-binder__phase--' + (unitPhases[entry.unitId] || 'empty')"
+            >
+              {{ phaseLabel(unitPhases[entry.unitId] || 'empty') }}
+            </span>
+          </button>
+        </div>
+        <p v-if="!filteredUnits.length" class="novel-binder__hint">
+          {{ treeUnits.length ? t('novelWorkbench.noPendingChapters') : t('novelWorkbench.noChapters') }}
         </p>
       </DqCollapseItem>
 
@@ -373,5 +395,13 @@ const setupOpenModel = computed({
 
 .novel-binder__filter-btn--on {
   font-weight: 650;
+}
+
+.novel-binder__vol-label {
+  padding: 6px 12px 2px 20px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  opacity: 0.5;
 }
 </style>

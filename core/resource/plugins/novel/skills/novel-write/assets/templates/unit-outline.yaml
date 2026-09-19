@@ -1,0 +1,49 @@
+# 单元细纲：一个剧情单元一份。场面是写作骨架，章只是切口。
+unit_id: v01-U1          # 必填，须在卷纲单元卡里，如 v01-U1
+chapter_range: [1, 5]   # 含端点，与卷纲章范围一致
+title_working: ""
+word_target: 18000      # 单元总字数，必须等于各章 word_share 之和
+status: proposed        # proposed|accepted|drafted|reviewed
+
+function: ""            # 本单元必须完成的一件事
+entry: ""               # 因果入口；U1 写开卷切口
+desire: ""              # 主角局部目标
+obstacle: ""            # 得不到的具体原因
+choice: ""              # 关键选择：谁、在哪、代价
+payoff: ""              # 主兑现，收益可见归谁
+pleasure: ""            # 单元主爽点（番茄向必填；不要求每章一条）
+forbidden: []
+endgame_boundary: ""
+next_hook:
+  type: ""              # 信息缺口|未兑现承诺|高代价选择|身份反转|关系临界|倒计时|未完成动作|突然揭示|回声/意象
+  out: ""               # 单元末具体事件 = 末章切口
+
+# 一场 = 一个可写场面，不是一章。每章至少 2 场。
+scenes:
+  - id: S1
+    beat: 建立期待      # 建立期待|尝试|加压|决断|兑现|余波
+    chapter: 1
+    where: ""           # pov | time | location
+    want: ""
+    turn: ""
+    must_land: []       # 1–3 个可落地的动作/对白事实，禁止口号
+
+chapters:
+  - chapter: 1
+    title_working: ""
+    opens_on: S1
+    ends_on: S1
+    cut_hook: ""        # 章末切口；末章等于 next_hook.out
+    word_share: 4000    # 单章 3500–5000
+
+state_deltas: []        # "谁: 从X→Y"，单元级
+info_control:
+  reveals: []
+  foreshadowing: []     # "FS-001: plant|advance|payoff"
+constraint_checks:
+  goldfinger_ratio_ok: true
+  timeline_monotonic: true
+  active_plot_lines_le_3: true
+  endgame_reserve_ok: true
+  agency_settled: true
+continuity_risks: []
