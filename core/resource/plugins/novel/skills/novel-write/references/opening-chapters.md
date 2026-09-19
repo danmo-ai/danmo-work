@@ -75,4 +75,4 @@ beats 含 `scene:establish` / `scene:transition` / 地点切换时 → `search_k
 ## Handoff
 
 - 写完后走 `review-gates.md`；ch1–3 番茄向项为 **blocking**。PASS 不落盘 review。
-- 定稿后 ch004 起按普通 `chapter-write.md`，不必再加载本文（除非用户重写前三章）。
+- 定稿后 ch004 起按普通单元正文流程（`unit-write.md`），不必再加载本文（除非用户重写前三章）。
