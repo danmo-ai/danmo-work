@@ -113,8 +113,13 @@ function yamlScalar(raw: string, key: string): string {
   const m = raw.match(re)
   if (!m) return ''
   let v = (m[1] ?? '').trim()
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-    v = v.slice(1, -1)
+  if (v.startsWith('"') || v.startsWith("'")) {
+    const q = v[0]
+    const end = v.indexOf(q, 1)
+    v = end > 0 ? v.slice(1, end) : v.slice(1)
+  } else {
+    const hash = v.search(/\s+#/)
+    if (hash >= 0) v = v.slice(0, hash).trim()
   }
   if (v === '""' || v === "''") return ''
   return v

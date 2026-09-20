@@ -51,6 +51,18 @@ assert.equal(summary.title, '星际旅店')
 assert.equal(summary.stage, 'writing')
 assert.equal(summary.lastCommittedCh, 5)
 
+const commented = `
+title: "女警她脑子里有个刑侦泰斗"
+stage: writing  # 迁移批注释不该进书架
+last_committed_ch: 33  # 很长的定稿说明
+qc_profile: mystery  # 刑侦
+`
+const commentedState = parseNovelStateYaml(commented)
+assert.equal(commentedState.title, '女警她脑子里有个刑侦泰斗')
+assert.equal(commentedState.stage, 'writing')
+assert.equal(commentedState.lastCommittedCh, 33)
+assert.equal(parseNovelStateExtended(commented).qcProfile, 'mystery')
+
 const ext = parseNovelStateExtended(yaml)
 assert.equal(ext.qcProfile, 'male_power')
 assert.equal(ext.activeUnit, 'v01-U1')
