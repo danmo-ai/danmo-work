@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import novel_gate as ng  # noqa: E402
 
-LEDGER = """# Continuity ledger
+FACTS = """# Continuity facts
 ## Public facts
 | Kind | Fact | First seen | Notes |
 |------|------|------------|-------|
@@ -38,12 +38,25 @@ LEDGER = """# Continuity ledger
 ## Chapter summaries
 """
 
+# Legacy ledger body (same shape as facts) for fallback coverage.
+LEDGER = FACTS.replace("# Continuity facts", "# Continuity ledger")
+
 POST_SUMMARY = """## ch001 客栈
 - 事件: 当众打脸并留下失踪信
 - 状态变化: 主角: 被辱→声望回升
 - 伏笔: FS-001 plant 失踪信
 - 钩子: 明日午时当众验骨
 - 下章指向: 验骨现场
+"""
+
+LOCKED_TERMS = """locked_until:
+  v5:
+    - "方子衡"
+compliance:
+  - "看守所内自杀"
+aliases:
+  "方子衡":
+    - "方主任"
 """
 
 OUTLINE = """unit_id: v01-U1
@@ -111,6 +124,7 @@ blockers: []
     "novel/demo/book-bible.md": "# bible\n",
     "novel/demo/canon/world.md": "# world\n",
     "novel/demo/canon/author-lore.md": "# author lore\n终局: 宿敌真身 v5\n",
+    "novel/demo/canon/locked-terms.yaml": LOCKED_TERMS,
     "novel/demo/canon/cast/.gitkeep": "",
     "novel/demo/outline/volumes/v01.md": """# Volume
 ### 剧情单元 U1
@@ -120,7 +134,8 @@ blockers: []
 """,
     "novel/demo/outline/units/v01-U1.yaml": OUTLINE,
     "novel/demo/units/v01-U1.md": PROSE,
-    "novel/demo/continuity/ledger.md": LEDGER,
+    "novel/demo/continuity/facts.md": FACTS,
+    "novel/demo/continuity/commits/.gitkeep": "",
     "novel/demo/reviews/.gitkeep": "",
 }
 
@@ -235,14 +250,30 @@ class GateTests(unittest.TestCase):
         self.assertEqual(rep.verdict, "FAIL")
         p = self.root / "novel/demo/outline/units/v01-U1.yaml"
         p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
-        ledger = self.root / "novel/demo/continuity/ledger.md"
-        ledger.write_text(LEDGER + POST_SUMMARY, encoding="utf-8")
+        facts = self.root / "novel/demo/continuity/facts.md"
+        facts.write_text(FACTS + POST_SUMMARY, encoding="utf-8")
         (self.root / "novel/demo/novel-state.yaml").write_text(
             "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
             encoding="utf-8",
         )
         rep = ng.run(str(self.root), "demo", "postcommit", "v01-U1")
         self.assertEqual(rep.verdict, "PASS", rep.format())
+
+    def test_postcommit_legacy_ledger_fallback(self):
+        """Old books with only ledger.md still pass postcommit."""
+        facts = self.root / "novel/demo/continuity/facts.md"
+        facts.unlink()
+        ledger = self.root / "novel/demo/continuity/ledger.md"
+        ledger.write_text(LEDGER + POST_SUMMARY, encoding="utf-8")
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
+        p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
+        (self.root / "novel/demo/novel-state.yaml").write_text(
+            "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "postcommit", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertEqual(ng.ledger_path(self.root / "novel/demo").name, "ledger.md")
 
     def test_doctor_blocks_legacy_chapters(self):
         book = self.root / "novel/demo"
@@ -304,8 +335,8 @@ class GateTests(unittest.TestCase):
     def test_postcommit_missing_summary_keys(self):
         p = self.root / "novel/demo/outline/units/v01-U1.yaml"
         p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
-        ledger = self.root / "novel/demo/continuity/ledger.md"
-        ledger.write_text(LEDGER + "## ch001 客栈\n- 事件: 打脸\n", encoding="utf-8")
+        facts = self.root / "novel/demo/continuity/facts.md"
+        facts.write_text(FACTS + "## ch001 客栈\n- 事件: 打脸\n", encoding="utf-8")
         (self.root / "novel/demo/novel-state.yaml").write_text(
             "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
             encoding="utf-8",
@@ -317,8 +348,8 @@ class GateTests(unittest.TestCase):
     def test_cast_snapshot_mismatch_blocks(self):
         p = self.root / "novel/demo/outline/units/v01-U1.yaml"
         p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
-        ledger = self.root / "novel/demo/continuity/ledger.md"
-        ledger.write_text(LEDGER.replace("| 主角 |", "| 路人甲 |") + POST_SUMMARY, encoding="utf-8")
+        facts = self.root / "novel/demo/continuity/facts.md"
+        facts.write_text(FACTS.replace("| 主角 |", "| 路人甲 |") + POST_SUMMARY, encoding="utf-8")
         (self.root / "novel/demo/novel-state.yaml").write_text(
             "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
             encoding="utf-8",
@@ -326,6 +357,40 @@ class GateTests(unittest.TestCase):
         rep = ng.run(str(self.root), "demo", "postcommit", "v01-U1")
         self.assertEqual(rep.verdict, "FAIL", rep.format())
         self.assertTrue(any("Cast snapshot" in f["message"] for f in rep.findings), rep.format())
+
+    def test_precommit_lock_terms_blocks(self):
+        p = self.root / "novel/demo/units/v01-U1.md"
+        p.write_text("## 第1章 客栈\n\n方子衡走进来，客栈里有人笑他。明日午时当众验骨。\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "precommit", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any(f["check"] == "lock_terms" for f in rep.findings), rep.format())
+
+    def test_precommit_lock_alias_only_while_base_locked(self):
+        book = self.root / "novel/demo"
+        prose = book / "units/v01-U1.md"
+        prose.write_text("## 第1章 客栈\n\n方主任走进来。明日午时当众验骨。\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "precommit", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any(f["check"] == "lock_terms" for f in rep.findings), rep.format())
+        # Unlock: move book to v05 unit — aliases must not fire once base is unlocked.
+        outline = (book / "outline/units/v01-U1.yaml").read_text(encoding="utf-8")
+        (book / "outline/units/v05-U1.yaml").write_text(
+            outline.replace("unit_id: v01-U1", "unit_id: v05-U1"), encoding="utf-8"
+        )
+        (book / "units/v05-U1.md").write_text(prose.read_text(encoding="utf-8"), encoding="utf-8")
+        (book / "outline/volumes/v05.md").write_text(
+            "# Volume\n| U1 | ch1-ch1 | 功能 | 禁 | 信息缺口 |\n- 单元ID：`v05-U1`\n",
+            encoding="utf-8",
+        )
+        rep2 = ng.run(str(self.root), "demo", "precommit", "v05-U1")
+        self.assertFalse(any(f["check"] == "lock_terms" for f in rep2.findings), rep2.format())
+
+    def test_precommit_word_floor_blocks(self):
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
+        p.write_text(p.read_text(encoding="utf-8") + "\nword_floor: 5000\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "precommit", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any(f["check"] == "word_floor" for f in rep.findings), rep.format())
 
     def test_style_fingerprint_truncated(self):
         fp = self.root / "novel/demo/canon/style-fingerprint.md"

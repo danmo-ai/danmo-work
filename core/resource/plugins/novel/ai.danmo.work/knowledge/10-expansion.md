@@ -2,10 +2,12 @@
 
 字数不达标是症状不是病：先分「赶/薄/欠戏剧化」还是「紧/快/完整」。
 
+**字数 floor 前置硬检。** 单元细纲 `word_floor`（= 章数 × 2000）/ `word_ceiling`（= 章数 × 3500）在 precommit 硬检：低于 floor 即 BLOCKING，不靠后验补救。写首稿时就对照 floor，不要写完再扩。
+
 ## 判断
 
 - **赶、薄、欠戏剧化** → 扩写（技术见 `novel-review/references/expansion.md`，每章 ≤3 种；首稿后另开一轮，勿与写作同 turn）。
-- **紧、快、完整但短** → 调整章纲 `word_target`（找用户确认），不要注水。
+- **紧、快、完整但短** → 调整细纲 `word_target` / `word_floor`（找用户确认），不要注水。
 
 ## 七技术速查
 

@@ -928,11 +928,112 @@ def unit_listed(outline_root: Path, unit_id: str, cache: BookCache | None = None
 
 
 def ledger_path(book_root: Path) -> Path:
+    """v3: prefer continuity/facts.md; fall back to legacy ledger.md."""
+    facts = book_root / "continuity/facts.md"
+    if facts.is_file():
+        return facts
     return book_root / "continuity/ledger.md"
 
 
+def locked_terms_path(book_root: Path) -> Path:
+    return book_root / "canon/locked-terms.yaml"
+
+
+def load_locked_terms(book_root: Path) -> tuple[dict, list, dict]:
+    """v3: parse canon/locked-terms.yaml defensively.
+    Returns (locked_until_map, compliance_terms, alias_map)."""
+    p = locked_terms_path(book_root)
+    if not p.is_file():
+        return {}, [], {}
+    try:
+        text = read_book_text(p)
+        data = load_yaml_map(text)
+    except Exception:
+        return {}, [], {}
+    locked = data.get("locked_until") or {}
+    compliance = nonempty_list(data.get("compliance"))
+    aliases = data.get("aliases") or {}
+    return locked, compliance, aliases
+
+
+def scan_locked_terms(book_root: Path, prose: str, current_volume: str) -> list:
+    """Scan prose for locked terms. Returns [(term, reason, count)].
+    A term under locked_until for a volume later than current_volume is locked.
+    compliance terms are always locked.
+    Aliases are scanned only when their base term is currently locked
+    (still in locked_until for a later volume, or listed under compliance)."""
+    locked, compliance, aliases = load_locked_terms(book_root)
+    try:
+        cur_num = int(re.sub(r"\D", "", current_volume or ""))
+    except ValueError:
+        cur_num = 0
+    to_check = []
+    active_bases: set[str] = set()
+    for vol_tag, terms in locked.items():
+        try:
+            vol_num = int(re.sub(r"\D", "", str(vol_tag)))
+        except ValueError:
+            continue
+        if vol_num > cur_num:
+            for t in nonempty_list(terms):
+                to_check.append((t, f"locked until {vol_tag}"))
+                active_bases.add(t)
+    for t in compliance:
+        to_check.append((t, "compliance"))
+        active_bases.add(t)
+    for base, alist in (aliases or {}).items():
+        if base not in active_bases:
+            continue
+        for a in nonempty_list(alist):
+            to_check.append((a, f"alias of {base}"))
+    hits = []
+    seen = set()
+    for term, reason in to_check:
+        if not term or term in seen:
+            continue
+        seen.add(term)
+        count = prose.count(term)
+        if count > 0:
+            hits.append((term, reason, count))
+    return hits
+
+
+def apply_lock_and_scale_checks(
+    book_root: Path, unit_id: str, u: dict, prose: str, r: Report
+) -> None:
+    """Hard checks for lock_terms / word_floor / unit_size (precommit + postcommit)."""
+    current_volume = unit_id.split("-")[0] if "-" in unit_id else ""
+    lock_hits = scan_locked_terms(book_root, prose, current_volume)
+    if lock_hits:
+        detail = "; ".join(f"{t}({why})x{n}" for t, why, n in lock_hits)
+        r.blocking("lock_terms", f"locked terms leaked in prose: {detail}")
+
+    unit_runes = rune_count(prose)
+    floor = int(u.get("word_floor") or 0)
+    ceiling = int(u.get("word_ceiling") or 0)
+    if floor and unit_runes < floor:
+        r.blocking(
+            "word_floor",
+            f"unit runes={unit_runes} below word_floor={floor} (expand before Commit)",
+        )
+    if ceiling and unit_runes > ceiling:
+        r.advisory(
+            "word_ceiling",
+            f"unit runes={unit_runes} above word_ceiling={ceiling} (consider splitting unit)",
+        )
+
+    a, b = chapter_range_of(u)
+    if a > 0 and b >= a:
+        n_ch = b - a + 1
+        if n_ch > 10:
+            r.blocking(
+                "unit_size",
+                f"unit has {n_ch} chapters (hard cap 10; split into two units)",
+            )
+
+
 def has_reader_continuity(book_root: Path) -> bool:
-    """Prefer ledger.md; accept legacy public-lore + tracking pair."""
+    """Prefer facts.md (v3); fall back to ledger.md / legacy public-lore+tracking."""
     if ledger_path(book_root).is_file():
         return True
     return file_exists(book_root, "continuity/public-lore.md") and file_exists(
@@ -1456,6 +1557,27 @@ def build_preflight_context(
         )
     else:
         lines.append("- craft_lane: default")
+    # v3: inject locked-term list for current volume (no truth, just terms)
+    try:
+        cur_vol = uid.split("-")[0] if "-" in uid else ""
+        locked_map, compliance, _ = load_locked_terms(book_root)
+        locked_terms_list = []
+        for vol_tag, terms in locked_map.items():
+            try:
+                vn = int(re.sub(r"\D", "", str(vol_tag)))
+                cv = int(re.sub(r"\D", "", cur_vol))
+            except ValueError:
+                continue
+            if vn > cv:
+                locked_terms_list.extend(nonempty_list(terms))
+        if locked_terms_list or compliance:
+            lines.append("- 本单元锁词（precommit 硬扫描；正文不得出现字面）:")
+            if locked_terms_list:
+                lines.append("  未解锁: " + " / ".join(locked_terms_list[:20]))
+            if compliance:
+                lines.append("  永久合规: " + " / ".join(compliance[:15]))
+    except Exception:
+        pass
     lines.append("- 加载纪律: 只消费本 CONTEXT + 本单元细纲；禁止扫树；禁止 author-lore；禁止 chapters/。")
     return lines
 
@@ -1491,10 +1613,13 @@ def check_doctor(book_root: Path, st: dict, r: Report) -> None:
         if writing_stage(str(st.get("stage") or "")):
             r.blocking(
                 "lore-tracks",
-                "missing continuity/ledger.md (or legacy public-lore.md + tracking.md)",
+                "missing continuity/facts.md (or legacy ledger.md / public-lore+tracking)",
             )
         else:
-            r.advisory("lore-tracks", "missing continuity/ledger.md — seed at setup")
+            r.advisory(
+                "lore-tracks",
+                "missing continuity/facts.md — seed at setup (legacy ledger.md also accepted)",
+            )
     outlines = set(list_unit_ids(book_root, "outline"))
     proses = set(list_unit_ids(book_root, "prose"))
     for uid in sorted(outlines):
@@ -1541,7 +1666,7 @@ def check_preflight(
     if not has_reader_continuity(book_root):
         r.blocking(
             "lore-tracks",
-            "missing continuity/ledger.md (or legacy public-lore + tracking) — draft from ledger only",
+            "missing continuity/facts.md (or legacy ledger.md / public-lore+tracking) — draft from facts only",
         )
     if file_exists(book_root, "canon/author-lore.md"):
         r.advisory("lore-tracks", "do not load canon/author-lore.md into the draft context")
@@ -1613,6 +1738,7 @@ def check_precommit(
     debts = open_debt_count(book_root, u, cache)
     if debts > MAX_OPEN_DEBTS:
         r.blocking("reader_debt", f"open foreshadows+reader_debt={debts} exceeds {MAX_OPEN_DEBTS}")
+    apply_lock_and_scale_checks(book_root, unit_id, u, prose, r)
 
 
 def check_postcommit(book_root: Path, st: dict, unit_id: str, r: Report) -> None:
@@ -1627,7 +1753,10 @@ def check_postcommit(book_root: Path, st: dict, unit_id: str, r: Report) -> None
         r.blocking("prose", f"{unit_prose_rel(unit_id)} missing")
     text, src = summary_source_text(book_root)
     if not src:
-        r.blocking("commit", "missing continuity/ledger.md (or legacy chapter_summaries.md)")
+        r.blocking(
+            "commit",
+            "missing continuity/facts.md (or legacy ledger.md / chapter_summaries.md)",
+        )
         return
     a, b = chapter_range_of(u)
     if a <= 0:
@@ -1664,7 +1793,7 @@ def check_postcommit(book_root: Path, st: dict, unit_id: str, r: Report) -> None
             if not any(w in n or n in w for n in names):
                 r.blocking(
                     "commit",
-                    f"state_deltas who={w} not found in ledger Cast snapshot after Commit",
+                    f"state_deltas who={w} not found in Cast snapshot after Commit",
                 )
     fs_ids = foreshadow_ids_from_contract(u)
     if fs_ids and ledger_text:
@@ -1673,7 +1802,7 @@ def check_postcommit(book_root: Path, st: dict, unit_id: str, r: Report) -> None
             if fs not in loop_ids:
                 r.blocking(
                     "commit",
-                    f"foreshadowing {fs} not found in ledger Open loops after Commit",
+                    f"foreshadowing {fs} not found in Open loops after Commit",
                 )
     last = int(st.get("last_committed_ch") or 0)
     if last < b:
@@ -1681,7 +1810,14 @@ def check_postcommit(book_root: Path, st: dict, unit_id: str, r: Report) -> None
     if not has_reader_continuity(book_root):
         r.blocking(
             "lore-tracks",
-            "Commit must refresh continuity/ledger.md (or legacy public-lore + tracking)",
+            "Commit must refresh continuity/facts.md (or legacy ledger.md)",
+        )
+
+    # Re-check lock/scale as safety net (primary hard gate is precommit).
+    prose_rel = unit_prose_rel(unit_id)
+    if file_exists(book_root, prose_rel):
+        apply_lock_and_scale_checks(
+            book_root, unit_id, u, read_text(book_root, prose_rel), r
         )
 
 

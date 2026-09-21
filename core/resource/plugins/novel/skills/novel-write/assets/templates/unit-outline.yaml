@@ -1,49 +1,55 @@
-# 单元细纲：一个剧情单元一份。场面是写作骨架，章只是切口。
-unit_id: v01-U1          # 必填，须在卷纲单元卡里，如 v01-U1
-chapter_range: [1, 5]   # 含端点，与卷纲章范围一致
+# 单元细纲：一个剧情单元一份。**本文件是单元级唯一事实源。**
+# 卷纲只索引（unit_id/章范围/一句话功能/本单元禁碰/钩子类型），不重复本文件字段。
+# 场面是写作骨架，章只是切口。
+unit_id: v01-U1              # 必填，须在卷纲单元索引表里，如 v01-U1
+chapter_range: [1, 5]       # 含端点，与卷纲索引表章范围一致
 title_working: ""
-word_target: 12500      # 单元总字数，必须等于各章 word_share 之和（示例：5 章 × 2500）
-status: proposed        # proposed|accepted|drafted|reviewed
+word_target: 12500           # 单元总字数，必须等于各章 word_share 之和
+word_floor: 10000            # 单元字数地板（precommit 硬检）；默认 = 章数 × word_floor_per_ch
+word_ceiling: 14000          # 单元字数天花板；默认 = 章数 × word_ceiling_per_ch
+status: proposed             # proposed|accepted|drafted|reviewed
 
-function: ""            # 本单元必须完成的一件事
-entry: ""               # 因果入口；U1 写开卷切口
-desire: ""              # 主角局部目标
-obstacle: ""            # 得不到的具体原因
-choice: ""              # 关键选择：谁、在哪、代价
-payoff: ""              # 主兑现，收益可见归谁
-pleasure: ""            # 单元主爽点（番茄向必填；不要求每章一条）
-forbidden: []
-endgame_boundary: ""
+# 单元级合同（卷纲不重复这些字段）
+function: ""                 # 本单元必须完成的一件事
+entry: ""                    # 因果入口；U1 写开卷切口；由上一单元 next_hook 引出
+desire: ""                   # 主角局部目标（保住/拿到/证明什么）
+obstacle: ""                 # 得不到的具体原因（敌意/限制/误判/资源缺口）
+choice: ""                   # 关键选择：谁、在哪、代价（主角不可替代的判断）
+payoff: ""                   # 主兑现，收益可见归谁
+pleasure: ""                 # 单元主爽点形态（番茄向必填；不要求每章一条；连续3单元不雷同）
+forbidden: []                # 本单元不得出现的词/事件/真相
+endgame_boundary: ""         # 本单元终局边界（对照 bible unlock 卷 + locked-terms.yaml）
 next_hook:
-  type: ""              # 信息缺口|未兑现承诺|高代价选择|身份反转|关系临界|倒计时|未完成动作|突然揭示|回声/意象
-  out: ""               # 单元末具体事件 = 末章切口
+  type: ""                   # 信息缺口|未兑现承诺|高代价选择|身份反转|关系临界|倒计时|未完成动作|突然揭示|回声/意象
+  out: ""                    # 单元末具体事件 = 末章切口
 
 # 一场 = 一个可写场面，不是一章。每章至少 2 场。
 scenes:
   - id: S1
-    beat: 建立期待      # 建立期待|尝试|加压|决断|兑现|余波
+    beat: 建立期待            # 建立期待|尝试|加压|决断|兑现|余波
     chapter: 1
-    where: ""           # pov | time | location
+    where: ""                 # pov | time | location
     want: ""
     turn: ""
-    must_land: []       # 1–3 个可落地的动作/对白事实，禁止口号
+    must_land: []             # 1–3 个可落地的动作/对白事实，禁止口号
 
 chapters:
   - chapter: 1
     title_working: ""
     opens_on: S1
     ends_on: S1
-    cut_hook: ""        # 章末切口；末章等于 next_hook.out
-    word_share: 2500    # 单章 2000–3500
+    cut_hook: ""              # 章末切口；末章等于 next_hook.out
+    word_share: 2500          # 单章目标字数 2000–3500
 
-state_deltas: []        # "谁: 从X→Y"，单元级
+state_deltas: []              # "谁: 从X→Y"，单元级（关系质态变化同步回写 cast 卡，不写编年史）
 info_control:
-  reveals: []
-  foreshadowing: []     # "FS-001: plant|advance|payoff"
+  reveals: []                # 本单元新揭示给读者的事实
+  foreshadowing: []          # "FS-001: plant|advance|payoff"
 constraint_checks:
   goldfinger_ratio_ok: true
   timeline_monotonic: true
   active_plot_lines_le_3: true
   endgame_reserve_ok: true
   agency_settled: true
+  unit_size_within_bounds: true   # 章数在 unit_scale 范围内（3–8，硬上限10）
 continuity_risks: []
