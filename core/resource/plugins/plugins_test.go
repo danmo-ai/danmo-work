@@ -98,8 +98,10 @@ func TestNovelPluginPacksSkillAndCraftKB(t *testing.T) {
 		"novel/skills/novel-setup/assets/templates/book-bible.md",
 		"novel/skills/novel-setup/assets/templates/novel-state.yaml",
 		"novel/skills/novel-setup/assets/templates/author-lore.md",
+		"novel/skills/novel-setup/assets/templates/facts.md",
+		"novel/skills/novel-setup/assets/templates/locked-terms.yaml",
 		"novel/skills/novel-setup/assets/templates/ledger.md",
-		"novel/skills/novel-write/assets/templates/chapter-outline.yaml",
+		"novel/skills/novel-write/assets/templates/unit-outline.yaml",
 		"novel/skills/novel-write/assets/templates/style-fingerprint.md",
 		"novel/skills/novel-plan/assets/templates/book-outline.md",
 		"novel/skills/novel-plan/assets/templates/volume-outline.md",
@@ -111,12 +113,15 @@ func TestNovelPluginPacksSkillAndCraftKB(t *testing.T) {
 			t.Fatalf("%s: %v", p, err)
 		}
 	}
-	outline, err := fs.ReadFile(FS, "novel/skills/novel-write/assets/templates/chapter-outline.yaml")
+	outline, err := fs.ReadFile(FS, "novel/skills/novel-write/assets/templates/unit-outline.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(outline), "unit_id:") {
-		t.Fatal("chapter-outline.yaml must require unit_id")
+		t.Fatal("unit-outline.yaml must require unit_id")
+	}
+	if !strings.Contains(string(outline), "word_floor:") {
+		t.Fatal("unit-outline.yaml must declare word_floor")
 	}
 	cast, err := fs.ReadFile(FS, "novel/skills/novel-setup/assets/templates/cast-card.md")
 	if err != nil {

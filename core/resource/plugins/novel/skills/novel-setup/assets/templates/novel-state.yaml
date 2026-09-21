@@ -8,6 +8,14 @@ qc_profile: general  # male_power|female_emotion|mystery|general
 craft_lane: default  # default|crime-human — 仅刑侦/探案/社会派；勿因 mystery 标灵异
 continuation_mode: false
 active_unit: ""          # vNN-U# currently being outlined or drafted
+
+# 单元规模默认值（可被单元细纲 word_floor/word_ceiling 覆盖）
+unit_scale:
+  default_chapters: [3, 8]     # 默认单元 3–8 章
+  max_chapters: 10             # 硬上限：单单元不得 >10 章
+  word_floor_per_ch: 2000      # 单章字数地板（runes，precommit 硬检）
+  word_ceiling_per_ch: 3500    # 单章字数天花板
+
 artifacts:
   book_bible: missing  # missing|in_progress|ready|stale|blocked
   world_canon: missing
@@ -15,9 +23,13 @@ artifacts:
   book_outline: missing
   volume_outline: missing
   unit_outline: missing  # missing|in_progress|ready|stale|blocked
+  locked_terms: missing
+  continuity_facts: missing  # 原 ledger.md
 gates:
   knowledge: unknown   # unknown|pass|fail
   asset: unknown
   qc: unknown
+  lock_terms: unknown   # precommit 锁词扫描
+  word_floor: unknown   # 字数地板硬检
 blockers: []
 notes: ""

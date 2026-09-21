@@ -37,9 +37,10 @@ If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding
    `canon/` (+ `cast/`), `outline/` (+ `volumes/` + `units/`), `units/`, `continuity/`, `reviews/`. Do not create `chapters/`.  
 4. `write` `book-bible.md`（含终局储备表）and `novel-state.yaml` (stage=`init`). All new text via `write`/`edit`/`apply_patch` — **UTF-8 only**.  
 5. Seed `canon/world.md` + `canon/author-lore.md` from templates。人物卡用 `cast-card.md`，先 `candidate`。金手指默认写入主角卡。术语稀少时写在 `world.md`.  
-6. Seed `continuity/ledger.md`（可空表，不可缺文件）.  
-7. `memory_update` project: promise, genre, taboos, 终局储备卷号（不要把 author-lore 细节写入 memory）.  
-8. Gate 脚本 `--action doctor` once; fix blocking layout holes. Stop for human confirmation before mass outlining if bible is still thin.
+6. Seed `canon/locked-terms.yaml`（可先空 `locked_until` / `compliance`，不可缺文件）.  
+7. Seed `continuity/facts.md`（可空表，不可缺文件）+ 空目录 `continuity/commits/`. **不要**再以 `ledger.md` 作为新书种子（旧书兼容见 Legacy）.  
+8. `memory_update` project: promise, genre, taboos, 终局储备卷号（不要把 author-lore 细节写入 memory）.  
+9. Gate 脚本 `--action doctor` once; fix blocking layout holes. Stop for human confirmation before mass outlining if bible is still thin.
 
 **默认不做：** `table_*` 镜像。
 
@@ -49,12 +50,12 @@ If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding
 - `novel-state.yaml` points at next action  
 - Bible has framing + promise + 终局储备表（可待定，不可缺表）  
 - `canon/world.md` 四层骨架已落盘  
-- `canon/author-lore.md` + `continuity/ledger.md` 已落盘  
+- `canon/author-lore.md` + `canon/locked-terms.yaml` + `continuity/facts.md` + `continuity/commits/` 已落盘  
 - Gate 脚本 doctor 无 blocking layout holes
 - 开书筹备 checklist 五项已有答案（可写在 bible 备注）
 
 ## Legacy migrate
 
-If cold-start finds `public-lore.md` / `tracking.md` / `chapter_summaries.md` without `ledger.md`, merge into `continuity/ledger.md` then move old files to `_archive/`.
+If cold-start finds `ledger.md` / `public-lore.md` / `tracking.md` / `chapter_summaries.md` without `facts.md`, split/merge into `continuity/facts.md`（读者事实）+ `continuity/commits/`（执行日志）then move old files to `_archive/`.
 
 If `chapters/` exists and `units/` has no prose, stop. Tell the user an agent must migrate old chapter files into `units/vNN-U#.md`. Do not read `chapters/` as canon.

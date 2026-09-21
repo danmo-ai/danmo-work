@@ -4,7 +4,7 @@
 
 ## CP1 — 反向解析（DNA）
 
-1. 扫描已有正文、大纲、`canon/`（**跳过 `author-lore.md` 直到 Frozen_Canon 确认**）、`reviews/`（若有）。continuity 读取顺序：ledger `## Volume summaries`（各卷总结块）→ ledger 当前卷 `## chNNN` 明细 → 需要更多细节时才开 `continuity/summaries/vNN.md` 归档（**禁止全量通读归档**）。
+1. 扫描已有正文、大纲、`canon/`（**跳过 `author-lore.md` 直到 Frozen_Canon 确认**）、`reviews/`（若有）。continuity 读取顺序：`facts.md` `## Volume summaries`（各卷总结块）→ `facts.md` 当前卷 `## chNNN` 明细 → 需要更多细节时才开 `continuity/summaries/vNN.md` 归档（**禁止全量通读归档**）。旧书若仍只有 `ledger.md`，按同样小节读取。
 2. `write` `canon/style-fingerprint.md`（模板 `style-fingerprint.md`）：句式、禁语、POV、对话占比、章末习惯。
 3. 提取作品 DNA：读者承诺、主冲突、金手指边界、活跃伏笔、人物状态快照。
 4. `novel-state.yaml` 设 `continuation_mode: true`；`stage: writing`（尚无正文则 `setup`）。禁止自造 `continuation` 阶段。
@@ -17,18 +17,18 @@
 
 在已有总纲/卷纲/单元细纲前提下仍写不动时，按序尝试（**禁止水文凑字**）：
 
-1. **复盘大纲与单元细纲** — 拉总纲/卷纲单元卡 + 当前单元场面序，查漏补缺。
+1. **复盘大纲与单元细纲** — 拉总纲/卷纲单元索引 + 当前单元 yaml 场面序，查漏补缺。
 2. **加快进度、精简情节** — 主动跳出卡死的故事区域；越卡越要砍冗余，禁止无关痛痒注水。
 3. **换地图 / 换支线** — 给主角新场景或抬高矛盾（复仇后逃亡、新对手入场）。
 4. **拆配角线 / 未解伏笔** — 从配角独立目标或已埋包袱续写，丰满主线。
 
-无大纲导致的卡文：先回 `novel-plan` 补单元卡，再写单元细纲；下一本勿裸写。情绪/身体耗尽：允许休息 1–2 天再写，勿硬注水。灵感枯竭：翻立项素材或短开头积累（见 KB 节奏矛盾链 / 人设动机链）。
+无大纲导致的卡文：先回 `novel-plan` 补卷纲单元索引，再写单元细纲；下一本勿裸写。情绪/身体耗尽：允许休息 1–2 天再写，勿硬注水。灵感枯竭：翻立项素材或短开头积累（见 KB 节奏矛盾链 / 人设动机链）。
 
 习惯建议：稳定连载尽量 **存稿 3–5 章**，卡文不等于断更。
 
 ## CP3 — Frozen_Canon 确认
 
-1. `write` `continuity/frozen-canon.md`：不可改动的设定、已发生事实、文风指纹引用。从 `ledger.md`（或 legacy public-lore）+ 已 Commit 正文提取；author-lore 只用于核对「未解锁底牌不得写入 Frozen 公开层」。
+1. `write` `continuity/frozen-canon.md`：不可改动的设定、已发生事实、文风指纹引用。从 `continuity/facts.md`（或 legacy `ledger.md` / public-lore）+ 已 Commit 正文提取；author-lore 只用于核对「未解锁底牌不得写入 Frozen 公开层」。
 2. **未经 `ask_user` 确认 Frozen_Canon → 禁止进入批次冻结与正文**。
 3. 确认后 `memory_update` project checkpoint。
 
