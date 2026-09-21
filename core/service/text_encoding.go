@@ -16,6 +16,22 @@ var (
 	bomUTF16BE = []byte{0xFE, 0xFF}
 )
 
+// trimTrailingIncompleteUTF8 drops a truncated multi-byte sequence at the end.
+// Used when callers read a size-capped prefix of a UTF-8 file: the cut often
+// lands mid-rune, which would otherwise fail utf8.Valid and fall through to
+// GB18030 — turning early Chinese fields into mojibake.
+func trimTrailingIncompleteUTF8(data []byte) []byte {
+	if len(data) == 0 || utf8.Valid(data) {
+		return data
+	}
+	for n := 1; n <= 3 && n <= len(data); n++ {
+		if utf8.Valid(data[:len(data)-n]) {
+			return data[:len(data)-n]
+		}
+	}
+	return data
+}
+
 // decodeProjectTextBytes decodes project file bytes for API/UI display.
 // Mirrors agent tool decode: UTF-8 / BOM / UTF-16 / GB18030 → UTF-8 string.
 // Does not rewrite the file; WriteFileContent still persists UTF-8.
@@ -31,6 +47,7 @@ func decodeProjectTextBytes(data []byte) (string, error) {
 	if bytes.HasPrefix(data, bomUTF8) {
 		data = data[len(bomUTF8):]
 	}
+	data = trimTrailingIncompleteUTF8(data)
 	if utf8.Valid(data) {
 		return string(data), nil
 	}

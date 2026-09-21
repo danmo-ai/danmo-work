@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type {
-  BookOutlineVolumeRow,
-  NovelUnitEntry,
-  VolumeUnitRow,
+import { toast } from '@/utils/feedback'
+import {
+  formatChapterPlain,
+  formatUnitProsePlain,
+  type BookOutlineVolumeRow,
+  type NovelUnitEntry,
+  type NovelUnitProseSection,
+  type VolumeUnitRow,
 } from '@/types/novel-workbench'
 
 const props = defineProps<{
@@ -18,6 +22,7 @@ const props = defineProps<{
   readingIsProse: boolean
   readingEntry: NovelUnitEntry | null
   chapterChips: { chapter: number; title: string }[]
+  chapterSections: NovelUnitProseSection[]
   highlightChapter: number | null
   hasBookOutline: boolean
   bookOutlineRows: BookOutlineVolumeRow[]
@@ -36,6 +41,21 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const bodyEl = ref<HTMLElement | null>(null)
+const copyFlash = ref<'chapter' | 'unit' | number | null>(null)
+let copyFlashTimer: ReturnType<typeof setTimeout> | null = null
+
+const canCopyProse = computed(
+  () => props.treeKind === 'unit' && props.readingIsProse && props.chapterSections.length > 0,
+)
+
+const activeChapter = computed(() => {
+  if (!canCopyProse.value) return null
+  if (props.highlightChapter != null) {
+    const hit = props.chapterSections.find((s) => s.chapter === props.highlightChapter)
+    if (hit) return hit
+  }
+  return props.chapterSections[0] ?? null
+})
 
 function emptyMessage(): string {
   if (props.treeKind === 'book' && !props.hasBookOutline) return t('novelWorkbench.noBookOutline')
@@ -63,10 +83,86 @@ function chipLabel(chip: { chapter: number; title: string }): string {
     : t('novelWorkbench.chapterN', { n: chip.chapter })
 }
 
+async function writeClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    /* fall through */
+  }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
+}
+
+function flashCopy(kind: 'chapter' | 'unit' | number) {
+  copyFlash.value = kind
+  if (copyFlashTimer) clearTimeout(copyFlashTimer)
+  copyFlashTimer = setTimeout(() => {
+    copyFlash.value = null
+  }, 1400)
+}
+
+async function copyText(text: string, kind: 'chapter' | 'unit' | number) {
+  const ok = await writeClipboard(text)
+  if (!ok) {
+    toast.error(t('novelWorkbench.copyFailed'))
+    return
+  }
+  flashCopy(kind)
+  toast.success(
+    kind === 'unit' ? t('novelWorkbench.copyUnitDone') : t('novelWorkbench.copyChapterDone'),
+  )
+}
+
+async function copyActiveChapter() {
+  const section = activeChapter.value
+  if (!section) return
+  if (props.highlightChapter !== section.chapter) {
+    emit('highlight-chapter', section.chapter)
+  }
+  await copyText(formatChapterPlain(section), 'chapter')
+}
+
+async function copyUnit() {
+  if (!props.chapterSections.length) return
+  await copyText(formatUnitProsePlain(props.chapterSections), 'unit')
+}
+
+async function copyChapter(n: number) {
+  const section = props.chapterSections.find((s) => s.chapter === n)
+  if (!section) return
+  emit('highlight-chapter', n)
+  await copyText(formatChapterPlain(section), n)
+}
+
 async function onChip(n: number) {
   emit('highlight-chapter', n)
   await nextTick()
   bodyEl.value?.querySelector(`#unit-ch-${n}`)?.scrollIntoView({ block: 'start' })
+}
+
+function onBodyClick(ev: MouseEvent) {
+  const target = ev.target as HTMLElement | null
+  const btn = target?.closest?.('[data-copy-chapter]') as HTMLElement | null
+  if (!btn) return
+  ev.preventDefault()
+  const n = Number(btn.getAttribute('data-copy-chapter'))
+  if (!Number.isFinite(n)) return
+  void copyChapter(n)
 }
 </script>
 
@@ -77,27 +173,58 @@ async function onChip(n: number) {
         <div class="novel-reader__crumb">{{ crumb }}</div>
         <div class="novel-reader__file">{{ readTitle }}</div>
       </div>
-      <div
-        v-if="treeKind === 'unit'"
-        class="novel-reader__nav"
-        :aria-label="t('novelWorkbench.unitNav')"
-      >
-        <button
-          type="button"
-          class="novel-wb-link"
-          :disabled="!prevUnit"
-          @click="emit('prev-unit')"
+      <div class="novel-reader__bar-actions">
+        <div
+          v-if="canCopyProse"
+          class="novel-reader__copy"
         >
-          ← {{ unitNavLabel(prevUnit, t('novelWorkbench.prevUnitNone')) }}
-        </button>
-        <button
-          type="button"
-          class="novel-wb-link"
-          :disabled="!nextUnit"
-          @click="emit('next-unit')"
+          <button
+            type="button"
+            class="novel-wb-link"
+            :disabled="!activeChapter"
+            :title="
+              activeChapter
+                ? t('novelWorkbench.copyChapterTip', { n: activeChapter.chapter })
+                : undefined
+            "
+            @click="copyActiveChapter"
+          >
+            {{
+              copyFlash === 'chapter' || (activeChapter && copyFlash === activeChapter.chapter)
+                ? t('novelWorkbench.copied')
+                : t('novelWorkbench.copyChapter')
+            }}
+          </button>
+          <button
+            type="button"
+            class="novel-wb-link"
+            @click="copyUnit"
+          >
+            {{ copyFlash === 'unit' ? t('novelWorkbench.copied') : t('novelWorkbench.copyUnit') }}
+          </button>
+        </div>
+        <div
+          v-if="treeKind === 'unit'"
+          class="novel-reader__nav"
+          :aria-label="t('novelWorkbench.unitNav')"
         >
-          {{ unitNavLabel(nextUnit, t('novelWorkbench.nextUnitNone')) }} →
-        </button>
+          <button
+            type="button"
+            class="novel-wb-link"
+            :disabled="!prevUnit"
+            @click="emit('prev-unit')"
+          >
+            ← {{ unitNavLabel(prevUnit, t('novelWorkbench.prevUnitNone')) }}
+          </button>
+          <button
+            type="button"
+            class="novel-wb-link"
+            :disabled="!nextUnit"
+            @click="emit('next-unit')"
+          >
+            {{ unitNavLabel(nextUnit, t('novelWorkbench.nextUnitNone')) }} →
+          </button>
+        </div>
       </div>
     </div>
 
@@ -131,16 +258,29 @@ async function onChip(n: number) {
     </div>
 
     <div v-if="treeKind === 'unit' && readingIsProse && chapterChips.length" class="novel-reader__chips">
-      <button
+      <div
         v-for="chip in chapterChips"
         :key="chip.chapter"
-        type="button"
-        class="novel-reader__chip"
-        :class="{ 'novel-reader__chip--on': highlightChapter === chip.chapter }"
-        @click="onChip(chip.chapter)"
+        class="novel-reader__chip-wrap"
       >
-        {{ chipLabel(chip) }}
-      </button>
+        <button
+          type="button"
+          class="novel-reader__chip"
+          :class="{ 'novel-reader__chip--on': highlightChapter === chip.chapter }"
+          @click="onChip(chip.chapter)"
+        >
+          {{ chipLabel(chip) }}
+        </button>
+        <button
+          type="button"
+          class="novel-reader__chip-copy"
+          :class="{ 'novel-reader__chip-copy--on': copyFlash === chip.chapter }"
+          :title="t('novelWorkbench.copyChapterTip', { n: chip.chapter })"
+          @click="copyChapter(chip.chapter)"
+        >
+          {{ copyFlash === chip.chapter ? t('novelWorkbench.copiedShort') : t('novelWorkbench.copyShort') }}
+        </button>
+      </div>
     </div>
 
     <div v-if="treeKind === 'book' && bookOutlineRows.length" class="novel-reader__summary">
@@ -166,7 +306,13 @@ async function onChip(n: number) {
 
     <div v-if="readLoading" class="novel-reader__empty">{{ t('novelWorkbench.loading') }}</div>
     <div v-else-if="emptyMessage()" class="novel-reader__empty">{{ emptyMessage() }}</div>
-    <div v-else ref="bodyEl" class="novel-reader__body" v-html="readHtml" />
+    <div
+      v-else
+      ref="bodyEl"
+      class="novel-reader__body"
+      @click="onBodyClick"
+      v-html="readHtml"
+    />
   </section>
 </template>
 
@@ -210,6 +356,16 @@ async function onChip(n: number) {
   white-space: nowrap;
 }
 
+.novel-reader__bar-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.novel-reader__copy,
 .novel-reader__nav {
   display: flex;
   flex-shrink: 0;
@@ -253,22 +409,54 @@ async function onChip(n: number) {
   padding: 0 14px 8px;
 }
 
+.novel-reader__chip-wrap {
+  display: inline-flex;
+  align-items: stretch;
+  max-width: 100%;
+}
+
 .novel-reader__chip {
   margin: 0;
   padding: 2px 8px;
   border: 1px solid color-mix(in srgb, var(--dq-border-subtle, #000) 40%, transparent);
-  border-radius: 999px;
+  border-right: none;
+  border-radius: 999px 0 0 999px;
   background: transparent;
   color: inherit;
   font: inherit;
   font-size: 11px;
   cursor: pointer;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .novel-reader__chip--on {
   border-color: color-mix(in srgb, var(--dq-accent) 55%, transparent);
   background: color-mix(in srgb, var(--dq-accent) 14%, transparent);
   font-weight: 650;
+}
+
+.novel-reader__chip-copy {
+  margin: 0;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--dq-border-subtle, #000) 40%, transparent);
+  border-radius: 0 999px 999px 0;
+  background: color-mix(in srgb, var(--dq-border-subtle, #000) 6%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0.78;
+}
+
+.novel-reader__chip-wrap:hover .novel-reader__chip-copy,
+.novel-reader__chip--on + .novel-reader__chip-copy,
+.novel-reader__chip-copy--on {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--dq-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
 }
 
 .novel-reader__summary {
@@ -329,6 +517,40 @@ async function onChip(n: number) {
   border: none;
   border-top: 1px solid color-mix(in srgb, var(--dq-border-subtle, #000) 55%, transparent);
   margin: 1.6rem 0 0.4rem;
+}
+
+.novel-reader__body :deep(.novel-unit-ch__head) {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 1.1em 0 0.45em;
+}
+
+.novel-reader__body :deep(.novel-unit-ch__head h2) {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.novel-reader__body :deep(.novel-unit-ch__copy) {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--dq-border-subtle, #000) 45%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dq-glass-popover-bg, #fff) 70%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.novel-reader__body :deep(.novel-unit-ch:hover .novel-unit-ch__copy),
+.novel-reader__body :deep(.novel-unit-ch--on .novel-unit-ch__copy) {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--dq-accent) 45%, transparent);
 }
 
 .novel-reader__body :deep(.novel-unit-ch--on) {

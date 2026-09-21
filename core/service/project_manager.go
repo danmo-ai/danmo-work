@@ -322,7 +322,7 @@ func (m *ProjectManager) ReadFileContent(ctx context.Context, projectID, subPath
 	}
 	defer f.Close()
 
-	const maxSize = 1 << 20
+	const maxSize = 8 << 20
 	var data []byte
 	if info.Size() > maxSize {
 		lr := io.LimitReader(f, maxSize)

@@ -369,14 +369,19 @@ const currentProse = computed(() => {
   return proseRaws.value[id] || ''
 })
 
+const chapterSections = computed(() => {
+  if (!readingIsProse.value) return []
+  return splitUnitProseSections(currentProse.value)
+})
+
 const chapterChips = computed(() => {
   if (!readingIsProse.value) return []
-  return splitUnitProseSections(currentProse.value).map((s) => ({ chapter: s.chapter, title: s.title }))
+  return chapterSections.value.map((s) => ({ chapter: s.chapter, title: s.title }))
 })
 
 const chapterChars = computed(() => {
   const out: Record<number, number> = {}
-  for (const s of splitUnitProseSections(currentProse.value)) {
+  for (const s of chapterSections.value) {
     out[s.chapter] = countPlainChars(s.body)
   }
   return out
@@ -407,6 +412,7 @@ function escapeHtml(s: string) {
 function renderUnitSections(md: string, highlight?: number): string {
   const sections = splitUnitProseSections(md)
   if (!sections.length) return renderMarkdown(md)
+  const copyLabel = escapeHtml(t('novelWorkbench.copyShort'))
   return sections
     .map((s, i) => {
       const title = s.title
@@ -414,7 +420,8 @@ function renderUnitSections(md: string, highlight?: number): string {
         : t('novelWorkbench.chapterN', { n: s.chapter })
       const on = highlight === s.chapter ? ' novel-unit-ch--on' : ''
       const hr = i > 0 ? '<hr class="novel-unit-cut" />' : ''
-      return `${hr}<section id="unit-ch-${s.chapter}" class="novel-unit-ch${on}"><h2>${title}</h2>${renderMarkdown(s.body)}</section>`
+      const copy = `<button type="button" class="novel-unit-ch__copy" data-copy-chapter="${s.chapter}">${copyLabel}</button>`
+      return `${hr}<section id="unit-ch-${s.chapter}" class="novel-unit-ch${on}"><div class="novel-unit-ch__head"><h2>${title}</h2>${copy}</div>${renderMarkdown(s.body)}</section>`
     })
     .join('\n')
 }
@@ -724,6 +731,7 @@ async function openLedger(node: NovelFileNode) {
           :reading-is-prose="readingIsProse"
           :reading-entry="readingEntry"
           :chapter-chips="chapterChips"
+          :chapter-sections="chapterSections"
           :highlight-chapter="treeSel.highlight ?? null"
           :has-book-outline="Boolean(bookOutlineFile)"
           :book-outline-rows="bookOutlineRows"
