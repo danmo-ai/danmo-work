@@ -28,6 +28,8 @@ import {
   parseVolumeUnitRows,
   setupDocLabel,
   splitUnitProseSections,
+  formatChapterPlain,
+  formatUnitProsePlain,
   volumeNumFromName,
 } from '../src/types/novel-workbench.ts'
 
@@ -280,6 +282,8 @@ assert.ok(sections[0].body.includes('乙'))
 assert.ok(!sections[0].body.includes('---'))
 assert.equal(sections[1].title, '上门')
 assert.ok(countPlainChars(sections[1].body) > 0)
+assert.equal(formatChapterPlain(sections[0]), '第1章 夜雨\n\n甲\n\n乙\n')
+assert.ok(formatUnitProsePlain(sections).includes('\n---\n\n第2章 上门\n'))
 
 assert.equal(nextVolumeNumber([]), 1)
 assert.equal(volumeNumFromName('v12-补.md'), 12)

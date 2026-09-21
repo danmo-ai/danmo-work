@@ -935,6 +935,20 @@ export interface NovelUnitProseSection {
   body: string
 }
 
+/** Plain text for pasting one chapter (title + body, no markdown heading markers). */
+export function formatChapterPlain(section: NovelUnitProseSection): string {
+  const head = section.title.trim()
+    ? `第${section.chapter}章 ${section.title.trim()}`
+    : `第${section.chapter}章`
+  const body = section.body.replace(/\r\n/g, '\n').trim()
+  return body ? `${head}\n\n${body}\n` : `${head}\n`
+}
+
+/** Plain text for pasting a whole unit; chapters joined with a lone --- line. */
+export function formatUnitProsePlain(sections: NovelUnitProseSection[]): string {
+  return sections.map(formatChapterPlain).join('\n---\n\n')
+}
+
 export function unitMetaFromName(name: string): { unitId: string; volume: number; index: number } | null {
   const m = name.match(/^(v(\d+)-U(\d+))(?:\.(?:ya?ml|md))?$/i)
   if (!m) return null
