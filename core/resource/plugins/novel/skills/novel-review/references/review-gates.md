@@ -3,15 +3,15 @@
 ## Policy
 
 - **Exactly one** review round per draft cycle before Commit.
-- Run gate `--action precommit` **before** claiming PASS. Script FAIL → `qc_gate` FAIL。
+- Run gate `--action qc-pack`（含 precommit + scan-deslop）**before** claiming PASS. Script FAIL → `qc_gate` FAIL。
 - Writers own fixes; review diagnoses。
 - 审稿报告必须引用 gate `### COUNTS` 四计数（em_dash / ai_vocab / english_leak / simile）。
 - **单元定稿** → `unit-review.md`（与写作 turn 分开；Commit 按单元）。
 
 ## Happy path（PASS — 不落盘 review 文件）
 
-1. 字数不足 / 明显薄稿 → 先 `expansion.md`，再跑（或复跑）precommit；紧而完整的短章改 `word_target`，不硬扩。
-2. precommit PASS、无 P0 craft 问题、且量化评分 ≥85 时：
+1. `expand_needed: yes` / 明显薄稿 → 先 `expansion.md`，再复跑 qc-pack；紧而完整的短章改 `word_target`，不硬扩。
+2. qc-pack PASS、无 P0 craft 问题、且量化评分 ≥85 时：
    - **不要**写 `reviews/vNN-U#-review.md`。
    - 更新 `novel-state.yaml`：`gates.qc: pass`，清掉本章相关 `blockers`。
    - 细纲保持 `drafted`（或本轮直接进入 Commit 时再改 `reviewed`）。
@@ -132,7 +132,7 @@ em_dash_count: n | ai_vocab_count: n | english_leak_count: n | simile_count: n�
 5. 角色声音可区分（遮名测试抽查 3 章）
 6. 契诃夫之枪：重点描写的物件全部兑现
 7. 首章钩子仍成立；结尾与开篇形成回响
-8. 全文反 AI 复扫（逐单元 `scan-deslop --unit vNN-U#`）exit 0
+8. 全文反 AI 复扫（逐单元 `qc-pack --unit vNN-U#`）exit 0
 9. 场景经济性：无"无事发生的过渡章"
 10. 世界规则一致性：无未登记的规则例外
 11. hook 系统：每章 hook-out 均被下章 hook-in 承接

@@ -67,4 +67,4 @@ Draft 达不到单元 `word_target` × 0.8（gate precommit advisory）或某一
 
 1. 扩写前先确认不是结构问题（场面缺失 → 改单元细纲 `scenes`，回到 `novel-write`）。
 2. 扩写仍是改 `units/vNN-U#.md` 同一文件，就地覆盖，不搞版本增殖。章标题和 `---` 保持。
-3. 扩写后重跑 gate `precommit --unit`（字数 advisory 应消失；不得引入新的 deslop blocking）。
+3. 扩写后重跑 gate `qc-pack --unit`（`expand_needed` 应变 no；不得引入新的 deslop blocking）。

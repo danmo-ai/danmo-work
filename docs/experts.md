@@ -93,9 +93,9 @@ delegate_agent(agent_id="<id>", goal="...")
 
 1. 主专家选 **Team**（或开启协作）。
 2. Composer `@` / 专家图标选中「Novel Writing」，描述本单元目标后发送。
-3. 专家按阶段技能走：`novel-setup` 立项 → `novel-plan` 设定/总纲/卷纲 → `novel-write` 单元细纲/**一份单元正文** → `novel-review` **扩写 / 审本单元 / 润色 / 一次 Commit**（与写作分 turn，便于写作用更好模型）。  
-   Continuity 账本为 `continuity/ledger.md`；换阶段时用户自行切换 Composer 模型。
-4. 技法检索走知识库 `kb-novel-craft`（节奏与结构、爽点与追读、文风与去 AI 味等）；本书设定用项目文件 + `table_*`。
+3. 专家按五阶段走：`novel-setup` 立项（gate `init` 建树）→ `novel-plan` 规划一轮（人物卡 + 总纲 + 卷纲；人批准卷纲后 gate `accept-volume` 提升人物、种细纲头）→ `novel-write` 一批细纲（≤4 个，`lint-units`）/ 写单元（`preflight` CONTEXT → **一份正文**）→ `novel-review` 定稿一轮（`qc-pack` → 审 → 一次 Commit → `postcommit`）。写作与定稿分 turn，便于写作用更好模型。  
+   账本：`continuity/facts.md`（事实 / 游标）+ `continuity/summaries/vNN.md`（章摘要）+ `continuity/commits/`；换阶段时用户自行切换 Composer 模型。
+4. 技法检索走知识库 `kb-novel-craft`（共性篇 + 题材专有篇；`novel-state.genre` 决定 preflight 注入哪一篇题材文，`craft_lane=crime-human` 追加「刑侦人味文风」）；本书设定用项目文件。
 
 详细 SOP 见各技能的 `references/`（应用内 `read_skill`）。
 
@@ -121,24 +121,26 @@ delegate_agent(agent_id="<id>", goal="...")
 
 会话顶栏右侧有 **工作台** 图标（也可 Composer 输入 `/novel`）。打开后与 Office 相同布局：
 
-- **左**：事件流  
-- **右**：工作台宿主（当前仅「小说」；以后可扩展其它工作台）  
+- **左**：书 → 卷 → 单元队列（每个单元一行：状态点 + `unit_id` + 章范围 + 一句话功能）  
+- **中**：按当前选择切换视图：卷索引表 / 单元细纲卡 / 正文 / **人物墙**（按 `role` 分组的卡 + 三锚点 + 关系表）/ **关系图**  
+- **右**：**单一主按钮** + 三行注入预览（题材文 / 单元卡 / on_stage 人物）  
 - **底**：Composer 通栏  
 
 小说工作台是 **流程控制台**（不是纯文件浏览器）：
 
-1. **流程轨（8 步）**：立项 → 设定 → 总纲 → 卷纲 → 单元细纲 → 单元正文 → 审稿 → 定稿
-2. **门禁点**：`knowledge` / `asset` / `qc`（读 `novel-state.yaml` 的 `gates` + 磁盘启发式）
-3. **主 CTA**：引擎计算下一合法动作，注入 Composer + 选中 `novel`
-4. **单元状态机**：待细纲 → 待写 → 待审 → 待定稿 → 已定稿
-5. **多模型**：写作首稿与「扩写 / 润色 / 定稿」分 turn；用户在 Composer **自行**切换模型；工作台不自动换模
+1. **三阶段模型**：`planning`（无 canon 卷纲 → 规划一轮）→ `outlining`（卷纲已批准、仍有 `proposed` 细纲 → 一批细纲）→ `units`（逐单元 写 → 定稿）；本卷全部 `reviewed` 后回到 `planning` 出下一卷卷纲，或 `idle`
+2. **`selectPrimaryAction`**：从 `novel-state.yaml` + 磁盘（`outline/volumes/*.md`、`outline/units/*.yaml` 的 `status`、`units/*.md`、`canon/cast/*.md` 的 `status`/`role`）推出唯一下一步；没有第二个 CTA
+3. **单元状态机**：`proposed` → `accepted` → `drafted` → `reviewed`（对应 待细纲 → 待写 → 待定稿 → 已定稿）
+4. **多模型**：写单元与定稿分 turn；用户在 Composer **自行**切换模型；工作台不自动换模
 
-技能流水线：`novel-setup` → `novel-plan` → `novel-write`（单元首稿，一份文件）→ `novel-review`（扩写·审·润·一次 Commit）。写正文消费 gate `### CONTEXT`；PASS 审稿不落盘。
+技能流水线：`novel-setup`（init）→ `novel-plan`（人物 + 总纲 + 卷纲 → 人批准 → `accept-volume`）→ `novel-write`（一批细纲 `lint-units` / 写单元 `preflight`）→ `novel-review`（`qc-pack` → 审 → 一次 Commit → `postcommit`）。写正文只消费 gate `### CONTEXT`；PASS 审稿不落盘。
 
-动作 Prefill Composer（可勾选 `novel` chip）：**技能 + 意图/流程 + 书/单元路径**。书落在 `novel/<book-id>/`（`canon/`、`outline/units/`、`units/`、`continuity/ledger.md`、`reviews/`）。章是 `units/vNN-U#.md` 里的 `## 第N章`，中间一行 `---`。
+动作 Prefill Composer（可勾选 `novel` chip）：**技能 + 意图/流程 + 书/卷/单元路径**。书落在 `novel/<book-id>/`（`canon/cast/<stem>.md`、`outline/volumes/vNN.md`、`outline/units/`、`units/`、`continuity/facts.md`、`continuity/summaries/`、`reviews/`）。章是 `units/vNN-U#.md` 里的 `## 第N章`，中间一行 `---`。
 
-| 门禁 | UI 推断 | Agent 真执行 |
+| 阶段 | UI 推断 | Agent 真执行 |
 |------|---------|--------------|
-| asset | `canon/cast/` 有文件 | 读上场人物卡 |
-| qc | review `### VERDICT` | `review-gates.md`（PASS 不落盘） |
-| unit | `active_unit` + `outline/units/*.yaml` | `novel-write/references/unit-outline.md` |
+| planning | 无 `outline/volumes/vNN.md` 或「本卷人物」含 `candidate` | `novel-plan` → 人批准 → gate `accept-volume --volume vNN` |
+| outlining | 有 `status: proposed` 细纲 | `novel-write/references/unit-outline.md` → gate `lint-units --volume vNN` |
+| units · 写 | 第一个 `accepted` 且无正文 | gate `preflight --unit` → 一份正文 |
+| units · 定稿 | 第一个 `drafted` | gate `qc-pack --unit` → 审 → Commit → `postcommit --unit` |
+| 人物墙 / 关系图 | 解析 `canon/cast/*.md` 头部与「关系」表 | 只读投影；关系两列由 Commit 回写 |
