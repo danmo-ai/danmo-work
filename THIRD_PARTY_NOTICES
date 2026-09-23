@@ -53,6 +53,19 @@ Selective adaptations (not a verbatim skill import) into the Novel Writing plugi
 
 Novel-specific gate rules (禁词表、一级词、鸡汤尾、英文泄漏、破折号密度) remain original Danmo Work content.
 
+## Novel craft distill — selective MIT adaptations
+
+Selective adaptations (rewritten, not verbatim) into
+`core/resource/plugins/novel/skills/novel-craft-distill/`:
+
+| Upstream | License | What was taken |
+|----------|---------|----------------|
+| [Shiaoming123/works-dna-extractor](https://github.com/Shiaoming123/works-dna-extractor) | MIT | Methods-layer framing: narrative / language / emotional systems, generation controls, evidence + anti-overfit posture (canon/character archives omitted) |
+| [qyh9527/writing-style-distiller-skill](https://github.com/qyh9527/writing-style-distiller-skill) | MIT | `control_scope` craft≠plot boundary; POV discipline; plot-leak quality checks |
+| [mol632991-png/distill-novels](https://github.com/mol632991-png/distill-novels) | MIT | Dimension labels for style / narrative / dialogue / pacing as executable dials (worldbuilding/plot/characters omitted) |
+| [woanderingboy/novel-writing-pipeline](https://github.com/woanderingboy/novel-writing-pipeline) | MIT | Fingerprint **stats fields** method (counts only; no body dump) → `scripts/fingerprint_stats.py` |
+| [Lyrainit/NovelDistiller](https://github.com/Lyrainit/NovelDistiller) | MIT | Long-text chunk → sample → compress → portrait **flow** as skill steps (no Web UI / crawler) |
+
 ## Notes
 
 - Each adapted `SKILL.md` also carries an in-file “Adapted from …” notice and

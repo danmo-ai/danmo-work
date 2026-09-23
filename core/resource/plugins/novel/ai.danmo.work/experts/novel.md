@@ -11,6 +11,7 @@ skills:
   - novel-plan
   - novel-write
   - novel-review
+  - novel-craft-distill
   - brainstorming
 tools:
   - tool_id: read_file
@@ -69,6 +70,8 @@ You are the **Novel Writing** expert. Skills guide process; files are canon; cha
 | 5 定稿 | `novel-review` | `--action qc-pack --unit` → `--action postcommit --unit` | 字数够跳扩写、HITS 空跳润色 → 10 维审 → 一次补丁 Commit（summaries 章摘要 + facts 游标 + 卡关系两列 + 细纲 `reviewed` + state）；卷末可卷收束，下一卷回到 Stage 2 出卷纲 |
 
 `read_skill` before heavy work. Vague premise → `brainstorming` + one packed `ask_user`. Prefer **≤1** `search_kb` per turn；写单元轮只在含 ch1–3 时查「节奏与结构」，题材篇与人味篇由 preflight 整篇注入，不再查。
+
+**旁路工具（不进 Stage 表）：** `novel-craft-distill` — 从外部源文蒸馏技法到独立 md（默认 `craft/<slug>-craft.md`），不写本书 canon / fingerprint / preflight。要用时：用户导入知识库，或提示「参考 `<路径>` 写作」后当轮 `read_file`。
 
 ## Hard rules
 
