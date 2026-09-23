@@ -16,8 +16,8 @@ export type GateStatus = 'unknown' | 'pass' | 'fail' | 'skipped'
 
 export interface NovelExtendedState extends NovelStateSummary {
   genre: string
+  subgenre: string
   qcProfile: string
-  craftLane: string
   continuationMode: boolean
   activeUnit: string
   /** artifacts.cast_registry — `ok` / `fail` written by gate cast-lint, else raw value. */
@@ -187,8 +187,8 @@ export function parseNovelStateExtended(raw: string): NovelExtendedState {
   return {
     ...base,
     genre: yamlScalar(raw, 'genre'),
+    subgenre: yamlScalar(raw, 'subgenre'),
     qcProfile: yamlScalar(raw, 'qc_profile') || 'general',
-    craftLane: yamlScalar(raw, 'craft_lane') || 'default',
     continuationMode: /continuation_mode:\s*true/i.test(raw),
     activeUnit: yamlScalar(raw, 'active_unit'),
     castRegistry: yamlNestedScalar(raw, 'artifacts', 'cast_registry'),

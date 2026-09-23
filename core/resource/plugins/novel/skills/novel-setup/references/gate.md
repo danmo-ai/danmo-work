@@ -24,12 +24,12 @@ python3 "$G" --workdir . --book-id <slug> --action migrate
 
 | Action | Stage | Notes |
 |--------|-------|-------|
-| `init` | 立项 | 一次建树（canon/cast、outline/volumes、outline/units、units、continuity/summaries、continuity/commits、reviews）并拷模板（state / bible / world / author-lore / locked-terms / facts / style-fingerprint / book-outline）。已存在文件不覆盖。模型只填圣经、`genre`、`qc_profile`、`craft_lane`。 |
-| `doctor` | 任何时候 | Layout + UTF-8 + state 字段（`genre` 在八题材内；非悬疑不得 `crime-human`）。`chapters/` 有文件而 `units/` 无正文 → BLOCK。旧结构（facts 里有 `## chNNN`、细纲无 `on_stage`、卡无 `role`）→ ADVISORY `[migrate]`。 |
+| `init` | 立项 | 一次建树（canon/cast、outline/volumes、outline/units、units、continuity/summaries、continuity/commits、reviews）并拷模板（state / bible / world / author-lore / locked-terms / facts / style-fingerprint / book-outline）。已存在文件不覆盖。模型只填圣经、`genre`、`subgenre`、`qc_profile`。 |
+| `doctor` | 任何时候 | Layout + UTF-8 + state 字段（`genre` 在八题材内；`subgenre` 须属于该题材）。`chapters/` 有文件而 `units/` 无正文 → BLOCK。旧结构（facts 里有 `## chNNN`、细纲无 `on_stage`、卡无 `role`、仍有 `craft_lane`）→ ADVISORY `[migrate]`。 |
 | `cast-lint` | 规划 / 补卡后 | 每张卡 `status` / `role` 键值行；关系表「对方」须是某张卡的 stem；A→B 有行而 B→A 无行 → blocking（质态可不同）；质态空 → warning；canon 卡缺最小必填 → warning。结果写 state `artifacts.cast_registry: ok/fail`。 |
 | `accept-volume` | 卷纲批准后 | `--volume vNN`。校验单元索引（章范围连续、九类钩、功能非空、≤10 章）与「本卷人物」；把本卷人物 `candidate → canon`；按索引每行种 `outline/units/vNN-U#.yaml` 头（`unit_id` / `chapter_range` / `function` / `next_hook.type` / `status: proposed` / 按 `unit_scale` 预填 `word_*`）。已存在的 YAML 不覆盖。 |
 | `lint-units` | 一批细纲写完 | `--volume vNN`。一次校验本卷全部细纲：shape（章连续、每章 ≥2 场、`word_share` 之和、节拍/钩子枚举）+ 卷纲对准（章范围 / 钩子类型 blocking，`function` 只 warning，终局边界）+ `on_stage ⊆ 本卷人物`、无 `candidate`、`pov ∈ on_stage`。`### UNITS` 逐单元 PASS/FAIL。`proposed` 且无场面 = 待细纲，不报错。 |
-| `preflight` | 写正文前 | `--unit vNN-U#`。exit ≠ 0 不写。`### CONTEXT` 依次：风格指纹 → 题材专有文全文（`genre`；`crime-human` 接「刑侦人味文风」）→ 卷纲索引行 → 单元卡（YAML 渲染）→ 上一单元钩子 → `on_stage` 人物（snapshot 行 + 三锚点 + 1 条台词；`pov` 加「不知」；双方在场的关系行）→ 开放债务 ≤8 → 锁词 → 加载纪律。asset 门：`on_stage` 全 canon 且存在 canon protagonist。 |
+| `preflight` | 写正文前 | `--unit vNN-U#`。exit ≠ 0 不写。`### CONTEXT` 依次：风格指纹 → 题材专有文全文（`genre`；`subgenre=刑侦探案` 再接子类专有文「刑侦人味文风」）→ 卷纲索引行 → 单元卡（YAML 渲染）→ 上一单元钩子 → `on_stage` 人物（snapshot 行 + 三锚点 + 1 条台词；`pov` 加「不知」；双方在场的关系行）→ 开放债务 ≤8 → 锁词 → 加载纪律。asset 门：`on_stage` 全 canon 且存在 canon protagonist。 |
 | `qc-pack` | 定稿轮 | `--unit`。precommit + scan-deslop 一份 stdout：`### LENGTH`（runes vs floor/ceiling/target，`expand_needed` / `polish_needed`）、`### HITS`（行号）、`### COUNTS` 四计数、锁词命中。字数够则跳扩写，HITS 空则跳润色。 |
 | `precommit` / `scan-deslop` | 保留 | 供单独调用；规则与 `qc-pack` 相同。 |
 | `postcommit` | Commit 后 | `--unit`。到 `continuity/summaries/vNN.md` 核对每章 `## chNNN` 五要素（块仍在 facts → 过但提示 migrate）；`state_deltas` 的谁在 Cast snapshot；FS-id 在 Open loops；关系变化未回写卡「最近变化点」→ warning；`last_committed_ch` ≥ 范围末章。 |

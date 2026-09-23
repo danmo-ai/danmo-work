@@ -34,7 +34,7 @@ metadata:
 |--------|------|-----------------|--------|
 | 规划一轮（默认） | `novel-plan/references/outline.md` + 模板 `book-outline.md` / `volume-outline.md` / `cast-card.md` | 节奏与结构 | 写完 `--action cast-lint`；批准后 `--action accept-volume --volume vNN` |
 | 下一卷卷纲 | `outline.md` + `volume-outline.md`（锁卷 checklist / 单元索引 / 本卷人物） | 节奏与结构 | 批准后 `accept-volume --volume vNN` |
-| 补人物卡 / 改关系 | `cast-card.md`（卡首 `role` 定完整度；关系表只写质态+节点，对方写 stem，**两边都要有行**） | 人设与群像（含取名反 AI）；仅 `craft_lane=crime-human` 且写反派来路/配角执念时改查「刑侦人味文风」 | `--action cast-lint` |
+| 补人物卡 / 改关系 | `cast-card.md`（卡首 `role` 定完整度；关系表只写质态+节点，对方写 stem，**两边都要有行**） | 人设与群像（含取名反 AI）；仅 `subgenre=刑侦探案` 且写反派来路/配角执念时改查「刑侦人味文风」 | `--action cast-lint` |
 | 金手指 | `cast-card.md` 「金手指」段（主角卡） | 世界观与金手指 | — |
 
 **规划一轮顺序：** 人物卡 → 总纲 → 本卷卷纲，三样同一 turn 写完；`cast-lint` exit 0（对边存在 / stem 存在 / `role` 合法）后再 `ask_user` 一次请人批准卷纲。批准 → `accept-volume`：本卷人物全部 `candidate → canon`，按索引每行种 `outline/units/vNN-U#.yaml` 头（`status: proposed`）。不要逐张卡改状态，不要手写细纲头。

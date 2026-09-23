@@ -33,6 +33,8 @@ def legacy_structure_notes(book_root: Path, st: dict) -> list[str]:
             notes.append(f"{lp.name} still holds {len(blocks)} ## chNNN blocks — move to continuity/summaries/vNN.md")
     if not str(st.get("genre") or "").strip() and writing_stage(str(st.get("stage") or "")):
         notes.append("novel-state.yaml has no genre")
+    if "craft_lane" in st:
+        notes.append("novel-state.yaml still has craft_lane")
     for uid in list_unit_ids(book_root, "outline"):
         try:
             u, _ = load_unit(book_root, uid)

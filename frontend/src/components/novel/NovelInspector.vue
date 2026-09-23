@@ -16,7 +16,7 @@ export type DeskAction = {
 
 export type InjectionPreview = {
   genre: string
-  lane: string
+  subgenre: string
   unitId: string
   onStage: string[]
   pov: string
@@ -53,8 +53,8 @@ function phaseLabel(phase: NovelUnitPhase): string {
 
 const genreLine = computed(() => {
   const g = props.injection?.genre || t('novelWorkbench.injectionNone')
-  const lane = props.injection?.lane
-  return lane ? `${g} · ${lane}` : g
+  const sub = props.injection?.subgenre
+  return sub ? `${g} · ${sub}` : g
 })
 
 const unitLine = computed(() => props.injection?.unitId || t('novelWorkbench.injectionNone'))

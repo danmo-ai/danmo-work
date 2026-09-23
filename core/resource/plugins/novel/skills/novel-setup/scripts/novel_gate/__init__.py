@@ -37,13 +37,12 @@ from .common import (
     write_book_text,
 )
 from .context import (
-    CRAFT_LANES,
     GENRES,
     QC_PROFILES,
     STYLE_MAX_RUNES,
+    SUBGENRES,
     build_preflight_context,
     check_preflight,
-    craft_lane_of,
     genre_articles,
     kb_cite_errors,
     knowledge_article,
@@ -51,6 +50,7 @@ from .context import (
     plugin_root,
     render_unit_card,
     style_fingerprint_brief,
+    subgenre_of,
     validate_state_fields,
 )
 from .deslop import (

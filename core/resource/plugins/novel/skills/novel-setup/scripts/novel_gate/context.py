@@ -53,20 +53,23 @@ from .outline import (
 
 STYLE_MAX_RUNES = 480  # context hook: keep the injected style brief tiny
 QC_PROFILES = {"male_power", "female_emotion", "mystery", "general"}
-CRAFT_LANES = {"default", "crime-human"}
 GENRES = ("玄幻", "仙侠", "都市", "悬疑", "现代言情", "古代言情", "仕途扫黑", "系统穿越")
-CRIME_LANE_ARTICLE = "刑侦人味文风"
+# Closed set from knowledge「题材与平台」. One subgenre per genre.
+SUBGENRES: dict[str, tuple[str, ...]] = {
+    "玄幻": ("传统玄幻", "玄幻脑洞", "西方奇幻"),
+    "仙侠": ("古典仙侠", "凡人修仙", "洪荒神话", "武侠", "现代修真"),
+    "都市": ("都市日常", "战神赘婿", "都市高武", "都市种田", "娱乐圈"),
+    "悬疑": ("刑侦探案", "规则怪谈", "悬疑灵异", "悬疑脑洞", "女频悬疑"),
+    "现代言情": ("青春甜宠", "豪门总裁", "职场婚恋", "年代", "种田", "现言脑洞", "星光璀璨"),
+    "古代言情": ("宫斗宅斗", "古风世情", "古言脑洞", "玄幻言情", "民国言情"),
+    "仕途扫黑": ("官场", "扫黑"),
+    "系统穿越": ("都市脑洞", "玄幻系统", "历史脑洞", "科幻末世", "快穿", "游戏", "诸天无限", "悬疑副本"),
+}
+CRIME_FLAVOR_ARTICLE = "刑侦人味文风"
 KB_REL = "ai.danmo.work/knowledge"
 
 
 # --- state ---
-
-
-def craft_lane_of(st: dict | None) -> str:
-    if not st:
-        return "default"
-    raw = str(st.get("craft_lane") or "default").strip().lower().replace("_", "-")
-    return "crime-human" if raw == "crime-human" else "default"
 
 
 def genre_of(st: dict | None) -> str:
@@ -75,18 +78,24 @@ def genre_of(st: dict | None) -> str:
     return str(st.get("genre") or "").strip()
 
 
+def subgenre_of(st: dict | None) -> str:
+    if not st:
+        return ""
+    return str(st.get("subgenre") or "").strip()
+
+
 def validate_state_fields(st: dict, r: Report) -> None:
     qc = str(st.get("qc_profile") or "").strip()
     if qc and qc not in QC_PROFILES:
         r.blocking("state", f"qc_profile={qc} not in {sorted(QC_PROFILES)}")
-    lane = str(st.get("craft_lane") or "").strip()
-    if lane and lane not in CRAFT_LANES:
-        r.blocking("state", f"craft_lane={lane} not in {sorted(CRAFT_LANES)}")
     genre = genre_of(st)
     if genre and genre not in GENRES:
         r.blocking("state", f"genre={genre} not in {list(GENRES)}")
-    if craft_lane_of(st) == "crime-human" and genre and genre != "悬疑":
-        r.blocking("state", f"craft_lane=crime-human requires genre=悬疑 (got {genre})")
+    sub = subgenre_of(st)
+    if sub:
+        allowed = SUBGENRES.get(genre, ())
+        if sub not in allowed:
+            r.blocking("state", f"subgenre={sub} not in genre={genre or '（空）'} {list(allowed)}")
 
 
 # --- knowledge base ---
@@ -124,17 +133,17 @@ def knowledge_article(title: str) -> str:
 
 
 def genre_articles(st: dict | None) -> list[tuple[str, str]]:
-    """[(title, text)] to inject: the genre article, plus 刑侦人味文风 on crime-human."""
+    """[(title, text)] to inject: the genre article, plus 刑侦人味文风 when subgenre is 刑侦探案."""
     out: list[tuple[str, str]] = []
     genre = genre_of(st)
     if genre in GENRES:
         text = knowledge_article(genre)
         if text:
             out.append((genre, text))
-    if genre == "悬疑" and craft_lane_of(st) == "crime-human":
-        text = knowledge_article(CRIME_LANE_ARTICLE)
+    if genre == "悬疑" and subgenre_of(st) == "刑侦探案":
+        text = knowledge_article(CRIME_FLAVOR_ARTICLE)
         if text:
-            out.append((CRIME_LANE_ARTICLE, text))
+            out.append((CRIME_FLAVOR_ARTICLE, text))
     return out
 
 
@@ -305,10 +314,11 @@ def build_preflight_context(
     # 2. genre article(s), whole text
     articles = genre_articles(st)
     genre = genre_of(st)
-    lane = craft_lane_of(st)
+    sub = subgenre_of(st)
     if articles:
         for title, text in articles:
-            lines.append(f"- 题材专有文「{title}」（整篇；写作只对照本篇 + 下方单元卡）:")
+            kind = "子类专有文" if title == CRIME_FLAVOR_ARTICLE else "题材专有文"
+            lines.append(f"- {kind}「{title}」（整篇；写作只对照本篇 + 下方单元卡）:")
             for ln in text.splitlines():
                 lines.append(f"  {ln}")
     elif genre:
@@ -317,7 +327,7 @@ def build_preflight_context(
     else:
         lines.append("- 题材专有文: （novel-state.genre 未填，未注入题材篇）")
         r.advisory("genre", "novel-state.yaml genre empty — set one of " + " / ".join(GENRES))
-    lines.append(f"- genre: {genre or '（空）'}  craft_lane: {lane}")
+    lines.append(f"- genre: {genre or '（空）'}  subgenre: {sub or '（空）'}")
     # 3. volume index row
     lines.append(_volume_index_line(volume_row, unit))
     # 4. unit card

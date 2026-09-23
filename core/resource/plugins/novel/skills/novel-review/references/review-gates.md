@@ -83,7 +83,7 @@ REVISE 两轮仍不过 → **FORCED PASS**：遗留问题打 severity 标签（`
 
 对照 KB「人设与群像 → 人物取名反 AI」。常见扣分：全员文艺双字同构；同批萧X/凌X 三连；现代文无故复姓；正文临时发明正式全名；龙套滥配全名。
 
-### 刑侦人味（仅 `craft_lane=crime-human` — advisory；深审可升 blocking）
+### 刑侦人味（仅 `subgenre=刑侦探案` — advisory；深审可升 blocking）
 
 对照 KB「刑侦人味文风」Checklist。常见扣分：档案式进场；情绪代办词；旁白认证/「来了。」打点；对话庭审化；无闲笔；死者无生前琐碎；动机无社会性数字；章全过程绷钩无人味。灵异 / 怪谈 / 悬疑爽不要套本条。
 
@@ -99,7 +99,7 @@ REVISE 两轮仍不过 → **FORCED PASS**：遗留问题打 severity 标签（`
 签约向（advisory）：三观与平台红线见「题材与平台」；创新与独创性优先于同质化跟风——不写商务条款进正文。
 
 Plus **anti-AI P0** from KB「文风与去 AI 味」— always blocking（含量化硬指标四项）。
-`craft_lane=crime-human` 另对照「刑侦人味文风」Checklist（advisory；用户深审或连续 WARNING 可升 blocking）。
+`subgenre=刑侦探案` 另对照「刑侦人味文风」Checklist（advisory；用户深审或连续 WARNING 可升 blocking）。
 
 ```markdown
 ### VERDICT

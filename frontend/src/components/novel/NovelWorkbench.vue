@@ -234,10 +234,9 @@ const injectionPreview = computed((): InjectionPreview | null => {
   const d = pipeline.value?.primary
   const unitId = selectedUnitId.value ?? d?.unitId ?? ''
   const outline = unitId ? ctx.unitOutlines[unitId] : undefined
-  const lane = ctx.state.craftLane && ctx.state.craftLane !== 'default' ? ctx.state.craftLane : ''
   return {
     genre: ctx.state.genre || '',
-    lane,
+    subgenre: ctx.state.subgenre || '',
     unitId: d?.action === 'write' || d?.action === 'finalize' || d?.action === 'contract-one' || selectedUnitId.value ? unitId : '',
     onStage: outline?.onStage ?? [],
     pov: outline?.pov ?? '',

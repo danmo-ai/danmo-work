@@ -2,6 +2,7 @@
 
 - facts.md `## chNNN` blocks → continuity/summaries/vNN.md (facts keeps one index row per volume)
 - novel-state.yaml without `genre` → guessed once + blocker「确认 genre」
+- `craft_lane` removed; `crime-human` on 悬疑 (or unset genre) becomes `subgenre: 刑侦探案`
 - unit outlines without on_stage / pov → on_stage prefilled from state_deltas 谁; pov left empty (warning)
 - cast cards without `role` → protagonist when the card says so, else recurring (warning)
 - volume outlines without 「本卷人物」 → union of the volume's unit on_stage
@@ -22,7 +23,7 @@ from .common import (
     set_state_scalar,
     write_book_text,
 )
-from .context import GENRES, craft_lane_of
+from .context import GENRES
 from .ledger import ledger_path, split_chapter_summary_blocks, summaries_rel
 from .outline import (
     chapter_range_of,
@@ -103,7 +104,7 @@ def guess_genre(book_root: Path, st: dict) -> str:
     for g in GENRES:
         if re.search(rf"(题材|类型|genre)[^\n]{{0,12}}{re.escape(g)}", text):
             return g
-    if craft_lane_of(st) == "crime-human":
+    if str(st.get("craft_lane") or "").strip().lower().replace("_", "-") == "crime-human":
         return "悬疑"
     qc = str(st.get("qc_profile") or "").strip()
     if qc == "mystery":
@@ -233,10 +234,39 @@ def migrate_volumes(book_root: Path, per_vol: dict[str, list[str]], changes: lis
         changes.append(f"{volume_outline_rel(path.stem)}: 本卷人物 added ({len(stems)} stems)")
 
 
+def migrate_lane(book_root: Path, st: dict, r: Report, changes: list[str]) -> None:
+    """Drop legacy craft_lane. crime-human on a 悬疑 (or unset) book becomes subgenre 刑侦探案."""
+    sp = book_root / "novel-state.yaml"
+    if not sp.is_file() or "craft_lane" not in st:
+        return
+    text = read_book_text(sp)
+    lane = str(st.get("craft_lane") or "").strip().lower().replace("_", "-")
+    if lane == "crime-human":
+        genre = str(st.get("genre") or "").strip()
+        if not genre or genre == "悬疑":
+            if not genre:
+                text = set_state_scalar(text, "genre", "悬疑")
+                st["genre"] = "悬疑"
+                changes.append("novel-state.yaml: genre=悬疑 (from craft_lane)")
+            if not str(st.get("subgenre") or "").strip():
+                text = set_state_scalar(text, "subgenre", "刑侦探案")
+                st["subgenre"] = "刑侦探案"
+                changes.append("novel-state.yaml: subgenre=刑侦探案 (from craft_lane)")
+        else:
+            r.advisory("migrate", f"craft_lane dropped; genre={genre} left unchanged")
+    text2 = re.sub(r"^craft_lane\s*:.*\n", "", text, count=1, flags=re.M)
+    if text2 == text:
+        return
+    write_book_text(sp, text2)
+    st.pop("craft_lane", None)
+    changes.append("novel-state.yaml: removed craft_lane")
+
+
 def run_migrate(book_root: Path, st: dict, r: Report) -> list[str]:
     changes: list[str] = []
     migrate_summaries(book_root, r, changes)
     migrate_state(book_root, st, r, changes)
+    migrate_lane(book_root, st, r, changes)
     per_vol = migrate_units(book_root, r, changes)
     migrate_cast(book_root, r, changes)
     migrate_volumes(book_root, per_vol, changes)

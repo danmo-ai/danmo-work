@@ -107,7 +107,7 @@
 
 ## 刑侦加严（advisory）
 
-仅 `craft_lane=crime-human`：可再压破折号（目标 ≤2/千字）与单句打点，并禁情绪代办词——细则见「刑侦人味文风」第十二节。比喻 / tic / 「不是 X 而是 Y」仍只认本篇 + `novel_gate.py`。定稿 blocking 不因人味加严项单独 FAIL。
+仅 `subgenre=刑侦探案`：可再压破折号（目标 ≤2/千字）与单句打点，并禁情绪代办词——细则见「刑侦人味文风」第十二节。比喻 / tic / 「不是 X 而是 Y」仍只认本篇 + `novel_gate.py`。定稿 blocking 不因人味加严项单独 FAIL。
 
 ## 番茄向加严（advisory）
 
@@ -130,7 +130,7 @@
 - [ ] 章末是事件钩子不是鸡汤
 - [ ] 做过文字减法；无明显出戏（语域/人设/说明书对白）
 - [ ] 未声称「已去 AI」却未改文件
-- [ ] `craft_lane=crime-human`：已对照「刑侦人味文风」Checklist
+- [ ] `subgenre=刑侦探案`：已对照「刑侦人味文风」Checklist
 
 ## 来源
 

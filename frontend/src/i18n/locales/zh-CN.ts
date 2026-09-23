@@ -1716,7 +1716,7 @@ export default {
     jumpToUnit: '{from} 已定稿，下一步是 {to}',
     jumpToVolume: '{from} 已定稿，下一步是第 {n} 卷卷纲',
     injectionTitle: '本轮注入',
-    injectionGenre: '题材',
+    injectionGenre: '题材 · 子类',
     injectionUnit: '单元',
     injectionCast: '上场',
     injectionNone: '—',

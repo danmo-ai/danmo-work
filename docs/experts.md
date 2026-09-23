@@ -95,7 +95,7 @@ delegate_agent(agent_id="<id>", goal="...")
 2. Composer `@` / 专家图标选中「Novel Writing」，描述本单元目标后发送。
 3. 专家按五阶段走：`novel-setup` 立项（gate `init` 建树）→ `novel-plan` 规划一轮（人物卡 + 总纲 + 卷纲；人批准卷纲后 gate `accept-volume` 提升人物、种细纲头）→ `novel-write` 一批细纲（≤4 个，`lint-units`）/ 写单元（`preflight` CONTEXT → **一份正文**）→ `novel-review` 定稿一轮（`qc-pack` → 审 → 一次 Commit → `postcommit`）。写作与定稿分 turn，便于写作用更好模型。  
    账本：`continuity/facts.md`（事实 / 游标）+ `continuity/summaries/vNN.md`（章摘要）+ `continuity/commits/`；换阶段时用户自行切换 Composer 模型。
-4. 技法检索走知识库 `kb-novel-craft`（共性篇 + 题材专有篇；`novel-state.genre` 决定 preflight 注入哪一篇题材文，`craft_lane=crime-human` 追加「刑侦人味文风」）；本书设定用项目文件。
+4. 技法检索走知识库 `kb-novel-craft`（共性篇 + 题材专有篇；`novel-state.genre` 决定 preflight 注入哪一篇题材文，`genre=悬疑` 且 `subgenre=刑侦探案` 再追加「刑侦人味文风」）；本书设定用项目文件。
 
 详细 SOP 见各技能的 `references/`（应用内 `read_skill`）。
 

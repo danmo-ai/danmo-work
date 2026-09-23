@@ -1719,7 +1719,7 @@ export default {
     jumpToUnit: '{from} is finalized; next is {to}',
     jumpToVolume: '{from} is finalized; next is volume {n}',
     injectionTitle: 'This turn injects',
-    injectionGenre: 'Genre',
+    injectionGenre: 'Genre · subgenre',
     injectionUnit: 'Unit',
     injectionCast: 'On stage',
     injectionNone: '—',

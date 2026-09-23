@@ -22,7 +22,7 @@
 
 ## 写正文加载
 
-允许：**只有** gate preflight 打印的 `### CONTEXT`。它依次含：风格指纹 / 题材专有文全文（`genre`；`crime-human` 再接「刑侦人味文风」）/ 卷纲索引行 / 渲染后的单元卡 / 上一单元钩子 / `on_stage` 人物（snapshot 行 + 三锚点 + 1 条台词；`pov` 加「不知」一行；双方在场的关系行）/ 开放债务 ≤8 条 / 锁词清单。**模型不读 facts 全文、不读人物卡、不再通读细纲 YAML**——脚本抽取，模型只消费抽取结果。从账本抽出的只有三块：`on_stage` 人物的 snapshot 行、≤8 条 open loops、上一单元钩子（优先上一单元 YAML 的 `next_hook.out`，缺了才取该卷 summaries 上一章的「钩子」行）。伤口 / 弧光 / 关系编年史 / 章摘要 / 卷总结 / 共性 KB 不进。`on_stage` 为空 → CONTEXT 写「未列上场人物」并 warning（不再按名字扫场面文本猜上场，也不灌 snapshot 前几行）。
+允许：**只有** gate preflight 打印的 `### CONTEXT`。它依次含：风格指纹 / 题材专有文全文（`genre`；`subgenre=刑侦探案` 再接「刑侦人味文风」）/ 卷纲索引行 / 渲染后的单元卡 / 上一单元钩子 / `on_stage` 人物（snapshot 行 + 三锚点 + 1 条台词；`pov` 加「不知」一行；双方在场的关系行）/ 开放债务 ≤8 条 / 锁词清单。**模型不读 facts 全文、不读人物卡、不再通读细纲 YAML**——脚本抽取，模型只消费抽取结果。从账本抽出的只有三块：`on_stage` 人物的 snapshot 行、≤8 条 open loops、上一单元钩子（优先上一单元 YAML 的 `next_hook.out`，缺了才取该卷 summaries 上一章的「钩子」行）。伤口 / 弧光 / 关系编年史 / 章摘要 / 卷总结 / 共性 KB 不进。`on_stage` 为空 → CONTEXT 写「未列上场人物」并 warning（不再按名字扫场面文本猜上场，也不灌 snapshot 前几行）。
 
 **风格指纹**随 preflight CONTEXT 注入：`canon/style-fingerprint.md`（无则退回 bible `## Style card`）由脚本压缩 ≤480 字拼进 CONTEXT 顶部。上下文被裁剪导致本轮未见指纹时，按专家规则 `read_file` 补读该文件（不要扫树）。**角色卡不全量进 CONTEXT**：只按细纲 `on_stage` 注入三锚点 + 1 条台词。
 

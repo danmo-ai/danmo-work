@@ -9,7 +9,7 @@
 ## Preflight
 
 1. `exec_shell` gate `--action preflight --unit vNN-U#`（`novel-setup/references/gate.md`）。exit ≠ 0 → **停止**（常见：`on_stage` 含 `candidate` / 不在本卷人物 / 无 canon protagonist / 细纲未 `accepted` / 钩子类型与卷纲不一致）。接手旧书另跑 `--action doctor`。
-2. 读 stdout 的 `### CONTEXT`，依次：风格指纹 → **题材专有文全文**（`genre`；`crime-human` 接「刑侦人味文风」）→ 卷纲索引行 → **单元卡**（function / entry / desire / obstacle / choice / payoff / pleasure / forbidden / reveals / foreshadowing / state_deltas / on_stage / pov / 场面序 / 章切口 / next_hook.out）→ 接钩 → **人物**（仅 `on_stage`：snapshot 行 + 三锚点 + 1 条台词；`pov` 加「不知」；在场关系行）→ 开放债务 → 锁词 → 加载纪律。**这是本轮唯一额外上下文。**
+2. 读 stdout 的 `### CONTEXT`，依次：风格指纹 → **题材专有文全文**（`genre`；`subgenre=刑侦探案` 再接子类专有文「刑侦人味文风」）→ 卷纲索引行 → **单元卡**（function / entry / desire / obstacle / choice / payoff / pleasure / forbidden / reveals / foreshadowing / state_deltas / on_stage / pov / 场面序 / 章切口 / next_hook.out）→ 接钩 → **人物**（仅 `on_stage`：snapshot 行 + 三锚点 + 1 条台词；`pov` 加「不知」；在场关系行）→ 开放债务 → 锁词 → 加载纪律。**这是本轮唯一额外上下文。**
 3. 可选：`search_kb` **至多 1** 次，且只在单元含 ch1–3 时查「节奏与结构」并 `read_skill` `opening-chapters.md` **一次**。其余情况**不查**：题材篇与人味篇已在 CONTEXT 里。
 4. 场面 `beat` 含场景标签时，用 `scene-routing.md` 决定是否把那一次 KB 用在「情绪与场景」。不要开第二次 `search_kb`。
 5. 仅当细纲 `continuity_risks` 非空 → 才可 `read_file` 点名旧单元正文。

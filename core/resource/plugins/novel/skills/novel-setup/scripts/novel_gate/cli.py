@@ -69,7 +69,7 @@ def run_with_hits(
             r.section("CREATED", [f"root: {info['root']}"] + [f"+ {p}" for p in info["copied"]] + [f"= {p} (kept)" for p in info["kept"]])
             r.context_lines = [
                 "- 下一步: 填 book-bible.md（读者承诺、Style card）、canon/world.md；",
-                "  novel-state.yaml 定 genre / qc_profile / craft_lane；然后 novel-plan 一轮出人物卡 + 总纲 + 第 1 卷卷纲。",
+                "  novel-state.yaml 定 genre / subgenre / qc_profile；然后 novel-plan 一轮出人物卡 + 总纲 + 第 1 卷卷纲。",
             ]
         r.finalize()
         return r, hit_lines

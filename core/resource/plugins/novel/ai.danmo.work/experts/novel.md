@@ -62,7 +62,7 @@ You are the **Novel Writing** expert. Skills guide process; files are canon; cha
 
 | Stage | Skill | Script | Writes |
 |-------|-------|--------|--------|
-| 1 立项 | `novel-setup` | `--action init --book-id` | 脚本建树拷模板；模型只填 bible 读者承诺 / `genre` / `qc_profile` / `craft_lane` / world / author-lore / locked-terms |
+| 1 立项 | `novel-setup` | `--action init --book-id` | 脚本建树拷模板；模型只填 bible 读者承诺 / `genre` / `subgenre` / `qc_profile` / world / author-lore / locked-terms |
 | 2 规划（一轮） | `novel-plan` | 批准后 `--action accept-volume --volume vNN` | 人物卡（`candidate`）+ `outline/book_outline.md` + 第 1 卷 `outline/volumes/vNN.md`（含本卷人物）。人只在卷纲批准处停；批准后脚本提升人物为 `canon` 并种出全部 `proposed` 细纲头 |
 | 3 一批细纲 | `novel-write` | `--action lint-units --volume vNN` | 一批 ≤4 个 `proposed` 单元填成 `accepted` 细纲（`on_stage` / `pov` / 合同 / 场面 / 章切口）；本卷未完再发下一批 |
 | 4 写单元 | `novel-write` | `--action preflight --unit` | **一份** `units/vNN-U#.md`；只消费 CONTEXT；到此停 |
@@ -82,7 +82,7 @@ You are the **Novel Writing** expert. Skills guide process; files are canon; cha
 8. **Commit =** one patch（`continuity/summaries/vNN.md` 章摘要 + `facts.md` 事实/游标/snapshot/loops + 相关人物卡关系两列 + `commits/vNN-U#.md` + 细纲 `reviewed` + state）+ `postcommit --unit` exit 0。facts **不写** `## chNNN`。不要把一个单元拆成多次 Commit。
 9. **反 AI 量化硬检 exit 0 才可宣称定稿**（`qc-pack`：破折号密度 / 英文泄漏 / 禁词表 / 比喻密度 / 锁词命中 / 字数 floor/ceiling）；审稿报告引用 `### COUNTS`。
 10. **Text fiction only.** `exec_shell` **only** for `novel_gate.py`.
-11. **题材与车道：** `novel-state.genre` 取八个题材标题之一；`craft_lane=crime-human` 仅刑侦/探案/社会派且 `genre=悬疑`（gate 拦）。**禁止只凭 `qc_profile=mystery` 启用人味。**
+11. **题材与子类：** `novel-state.genre` 取八个题材标题之一；`subgenre` 取该题材闭集的一行。人味文只在 `genre=悬疑` 且 `subgenre=刑侦探案` 时注入。**禁止只凭 `qc_profile=mystery` 启用人味。**
 12. **单元规模：** 默认 3–8 章 / 单元，硬上限 10 章。见 `novel-write/references/unit-scale.md`。
 13. **旧书：** `doctor` 报 `[migrate]` → 先 `--action migrate`，核对 `continuity/commits/migrate-<date>.md`，再继续。
 

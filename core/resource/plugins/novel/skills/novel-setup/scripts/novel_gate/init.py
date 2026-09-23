@@ -1,5 +1,5 @@
 """init: build the book tree once and copy templates, so the model only fills the bible,
-`genre`, `qc_profile`, `craft_lane` (plan §7)."""
+`genre`, `subgenre`, `qc_profile` (plan §7)."""
 from __future__ import annotations
 
 import re
@@ -70,7 +70,7 @@ def init_book(workdir: str, book_id: str, r: Report, title: str = "", genre: str
             text = set_state_scalar(text, "book_id", f'"{book_id}"')
             text = set_state_scalar(text, "title", f'"{title}"' if title else '""')
             text = set_state_scalar(text, "stage", "setup")
-            text = set_state_scalar(text, "next_action", '"填 book-bible.md 读者承诺；定 genre / qc_profile / craft_lane；跑 novel-plan"')
+            text = set_state_scalar(text, "next_action", '"填 book-bible.md 读者承诺；定 genre / subgenre / qc_profile；跑 novel-plan"')
             if genre:
                 text = set_state_scalar(text, "genre", genre)
         write_book_text(dst, text)

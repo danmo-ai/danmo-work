@@ -28,7 +28,7 @@ metadata:
 |----|------|------|-----------------|
 | 扩写 | `expand_needed: yes` 或 `word_floor` blocking | `expansion.md` | 扩写与字数控制 |
 | 审本单元 | 总是 | `review-gates.md`（10 维加权 + 发稿前四步自查） | 文风与去 AI 味 |
-| 去 AI 味 | `HITS` 非空或审稿 P0 | `polish-deslop.md`（用 qc-pack 的 HITS 行号，不再单跑 scan-deslop） | 同上；`craft_lane=crime-human` 人味对照用 CONTEXT 里已注入的人味篇，不另查 |
+| 去 AI 味 | `HITS` 非空或审稿 P0 | `polish-deslop.md`（用 qc-pack 的 HITS 行号，不再单跑 scan-deslop） | 同上；`subgenre=刑侦探案` 人味对照用 CONTEXT 里已注入的人味篇，不另查 |
 | Commit | 审 PASS | `continuity-commit.md` + `commit-log.md` | — |
 | 卷收束 | 卷末单元 Commit 后，人确认 | `continuity-commit.md` 卷收束节 + `review-gates.md` Assembly Checklist | — |
 

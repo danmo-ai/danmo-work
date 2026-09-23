@@ -35,7 +35,7 @@ metadata:
 
 **细纲必填新字段：** `on_stage`（本单元开口或被写到的 canon stem，⊆ 卷纲「本卷人物」）、`pov`（默认 POV stem，∈ `on_stage`）；场面可选 `who` / `pov`。卷纲已定的 `unit_id` / 章范围 / `function` / `next_hook.type` 不改（`function` 改了只 warning，以卷纲为准）。
 
-**写正文只消费 CONTEXT。** preflight 已注入：风格指纹、题材专有文全文（`crime-human` 接人味篇）、卷纲索引行、渲染后的单元卡、上一钩、`on_stage` 人物（snapshot + 三锚点 + 1 条台词；`pov` 加「不知」）、开放债务、锁词。不再通读 YAML，不读人物卡，不查题材篇 / 人味篇。
+**写正文只消费 CONTEXT。** preflight 已注入：风格指纹、题材专有文全文（`subgenre=刑侦探案` 再接人味篇）、卷纲索引行、渲染后的单元卡、上一钩、`on_stage` 人物（snapshot + 三锚点 + 1 条台词；`pov` 加「不知」）、开放债务、锁词。不再通读 YAML，不读人物卡，不查题材篇 / 人味篇。
 
 ## Hard stops
 

@@ -211,8 +211,8 @@ title: Demo
 stage: writing
 last_committed_ch: 0
 genre: 玄幻
+subgenre: 传统玄幻
 qc_profile: male_power
-craft_lane: default
 artifacts:
   cast_registry: missing
 gates:
@@ -541,14 +541,14 @@ class GateTests(unittest.TestCase):
         self.assertEqual(rep.verdict, "FAIL", rep.format())
         self.assertTrue(any("qc_profile" in f["message"] for f in rep.findings), rep.format())
 
-    def test_doctor_invalid_craft_lane(self):
+    def test_doctor_invalid_subgenre(self):
         (self.root / "novel/demo/novel-state.yaml").write_text(
-            "book_id: demo\nstage: writing\ncraft_lane: banana\n",
+            "book_id: demo\nstage: writing\ngenre: 玄幻\nsubgenre: banana\n",
             encoding="utf-8",
         )
         rep = ng.run(str(self.root), "demo", "doctor", "")
         self.assertEqual(rep.verdict, "FAIL", rep.format())
-        self.assertTrue(any("craft_lane" in f["message"] for f in rep.findings), rep.format())
+        self.assertTrue(any("subgenre=" in f["message"] for f in rep.findings), rep.format())
 
     def _book(self) -> Path:
         return self.root / "novel/demo"
@@ -598,20 +598,32 @@ class GateTests(unittest.TestCase):
         self.assertNotIn("被冤", blob)
         self.assertNotIn("伤口", blob)
 
-    def test_preflight_crime_lane_adds_flavor_article(self):
+    def test_preflight_crime_subgenre_adds_flavor_article(self):
         self._edit("novel-state.yaml", "genre: 玄幻", "genre: 悬疑")
-        self._edit("novel-state.yaml", "craft_lane: default", "craft_lane: crime-human")
+        self._edit("novel-state.yaml", "subgenre: 传统玄幻", "subgenre: 刑侦探案")
         rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
         self.assertEqual(rep.verdict, "PASS", rep.format())
         blob = "\n".join(rep.context_lines)
         self.assertIn("题材专有文「悬疑」", blob)
-        self.assertIn("题材专有文「刑侦人味文风」", blob)
+        self.assertIn("子类专有文「刑侦人味文风」", blob)
 
-    def test_crime_lane_requires_suspense_genre(self):
-        self._edit("novel-state.yaml", "craft_lane: default", "craft_lane: crime-human")
+    def test_crime_subgenre_requires_suspense_genre(self):
+        self._edit("novel-state.yaml", "subgenre: 传统玄幻", "subgenre: 刑侦探案")
         rep = ng.run(str(self.root), "demo", "doctor", "")
         self.assertEqual(rep.verdict, "FAIL", rep.format())
-        self.assertTrue(any("crime-human requires genre=悬疑" in f["message"] for f in rep.findings), rep.format())
+        self.assertTrue(any("subgenre=刑侦探案 not in genre=玄幻" in f["message"] for f in rep.findings), rep.format())
+
+    def test_migrate_drops_craft_lane(self):
+        book = self._book()
+        state = (book / "novel-state.yaml").read_text(encoding="utf-8")
+        state = state.replace("genre: 玄幻\nsubgenre: 传统玄幻\n", "genre: 悬疑\ncraft_lane: crime-human\n")
+        (book / "novel-state.yaml").write_text(state, encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "migrate", "")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        migrated = (book / "novel-state.yaml").read_text(encoding="utf-8")
+        self.assertNotIn("craft_lane", migrated)
+        self.assertIn("subgenre: 刑侦探案", migrated)
+        self.assertIn("genre: 悬疑", migrated)
 
     def test_preflight_empty_on_stage_has_no_snapshot_rows(self):
         self._edit("outline/units/v01-U1.yaml", "on_stage: [zhu-jue, lin-xue]\npov: zhu-jue\n", "on_stage: []\n")

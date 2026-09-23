@@ -4,7 +4,7 @@ Canonical tree under the active project workdir. **Directory names are English a
 
 ```text
 novel/<book-id>/
-  novel-state.yaml              # stage / artifacts / gates / active_unit / last_preflight / craft_lane
+  novel-state.yaml              # stage / artifacts / gates / active_unit / last_preflight / genre / subgenre
   book-bible.md                 # 读者承诺 + 唯一终局储备 unlock 表（只写卷号，不写真相）
   canon/
     world.md                    # 世界观四层；金手指规则
