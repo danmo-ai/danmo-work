@@ -7,8 +7,13 @@ from dataclasses import dataclass
 
 from .common import Report, last_runes, rune_count
 
+# P0 毒句式：网文常见 tic + 翻案腔变体（后者借鉴 lieflat 实测：不是/而是 0.70/千字）。
+# 不收「不是 A，是 B」（对白误杀高）、「表面/看似」（叙事正当用法多）——见 KB 05 P1。
 TOXIC = [
     re.compile(r"不是.{1,20}而是"),
+    re.compile(r"并非.{1,20}而是"),
+    re.compile(r"不在于.{1,20}而在于"),
+    re.compile(r"与其说.{1,20}不如说"),
     re.compile(r"带着一丝|带着一抹"),
     re.compile(r"声音不大[，,]却带着"),
     re.compile(r"(他|她)知道|终于明白"),

@@ -36,6 +36,23 @@ Adapted skills in this product:
 | `document-writing` | `markdown-html/skills/md-document` |
 | `playable-slides` | `markdown-html/skills/md-slides` |
 
+## larashero3-dotcom/lieflat-less-ai-tone (MIT)
+
+- Repository: https://github.com/larashero3-dotcom/lieflat-less-ai-tone
+- Also distributed via: https://github.com/larashero3-dotcom/writing-dna-skill (`skills/lieflat-less-ai-tone/`)
+- Copyright: shiujan and contributors
+- License: MIT
+
+Selective adaptations (not a verbatim skill import) into the Novel Writing plugin:
+
+| Danmo asset | What was taken |
+|-------------|----------------|
+| `novel_gate/deslop.py` toxic patterns | Extra 翻案腔 variants (`并非…而是` / `不在于…而在于` / `与其说…不如说`) |
+| `kb-novel-craft`「文风与去 AI 味」 | P1 叙述层翻译腔 + 「勿过度去 AI」边界表 |
+| `novel-review` `polish-deslop.md` | Pointers to the above |
+
+Novel-specific gate rules (禁词表、一级词、鸡汤尾、英文泄漏、破折号密度) remain original Danmo Work content.
+
 ## Notes
 
 - Each adapted `SKILL.md` also carries an in-file “Adapted from …” notice and
