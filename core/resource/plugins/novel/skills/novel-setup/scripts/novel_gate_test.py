@@ -316,6 +316,23 @@ class GateTests(unittest.TestCase):
         )
         self.assertEqual(rc, 1)
 
+    def test_scan_deslop_fan_an_variants(self):
+        """lieflat-style 翻案腔 extensions: 并非/不在于/与其说 (gate P0)."""
+        p = self.root / "novel/demo/units/v01-U1.md"
+        cases = [
+            ("真正的壁垒并非技术，而是认知。", "并非"),
+            ("关键不在于人手，而在于方向。", "不在于"),
+            ("与其说他赢了，不如说对手让了。", "与其说"),
+        ]
+        for prose, needle in cases:
+            with self.subTest(needle=needle):
+                p.write_text(f"## 第1章 客栈\n开头干净。\n{prose}\n", encoding="utf-8")
+                rep, hits = ng.run_with_hits(str(self.root), "demo", "scan-deslop", "v01-U1")
+                self.assertEqual(rep.verdict, "FAIL", rep.format())
+                blob = "\n".join(hits)
+                self.assertIn("毒句式", blob)
+                self.assertTrue(any(needle in h for h in hits), hits)
+
     def test_precommit_missing_divider(self):
         book = self.root / "novel/demo"
         outline = (book / "outline/units/v01-U1.yaml").read_text(encoding="utf-8")
