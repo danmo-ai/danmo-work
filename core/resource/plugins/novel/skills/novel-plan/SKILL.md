@@ -34,8 +34,10 @@ Lock canon and outlines. **No 单元细纲, no unit prose.**
 |--------|------|-----------------|
 | 总纲 | `novel-plan/references/outline.md` + 模板 `book-outline.md`（锁纲 checklist） | 节奏与结构 |
 | 卷纲 | `novel-plan/references/outline.md` + 模板 `volume-outline.md`（锁卷 checklist / **单元索引表**） | 节奏与结构 |
-| 人设 / 世界观 | templates `world.md` + `cast-card.md`（关系表只写质态+节点） | 人设与群像（含取名反 AI）；仅 `craft_lane=crime-human` 且写反派来路/配角执念时改查人味 |
-| 金手指 | `cast-card.md` 金手指段 | 世界观与金手指 |
+| 人设 / 世界观 | templates `world.md` + `cast-card.md`（卡首 `role` 定完整度；关系表只写质态+节点，对方写 stem） | 人设与群像（含取名反 AI）；仅 `craft_lane=crime-human` 且写反派来路/配角执念时改查人味 |
+| 金手指 | `cast-card.md` 「金手指」段（主角卡） | 世界观与金手指 |
+
+人物卡最小必填：`protagonist` / `volume_antagonist` = 四件套 + 矛盾弧光 + 知识边界 + 三锚点 + 语言习惯 + 台词 3 条；`recurring` = 欲望 + 相交点 + 功能六型 1 + 锚 1 + 口头禅 + 台词 1 条。龙套用工称不建卡。文件名 stem 与卷纲「本卷人物」、细纲 `on_stage` 一致。
 
 新实体先 `candidate`。**卷纲批准时**把本卷点名人物一并 `canon`（一次确认，不逐卡 ask）。终局细节 → `author-lore.md`；unlock 表只在 `book-bible.md`；新解锁的词同步从 `locked-terms.yaml` 移除。默认不做 `table_*`。
 

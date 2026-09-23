@@ -33,7 +33,7 @@ Scaffold one book. **Stop when the tree and bible exist.**
    - **`continuity/commits/`**（空目录；每单元一个执行日志文件）
    - **`continuity/summaries/`**（空目录；卷收束归档用）
    - `craft_lane=crime-human` 时把 `style-fingerprint-crime.md` 全部条目写入指纹「禁语」。
-4. Cast 起 `candidate`（`cast-card.md`，关系表只写质态+节点，不写编年史）；金手指默认写在主角卡。promote 等到卷纲批准。
+4. Cast 起 `candidate`（`cast-card.md`）。卡首两行 `` `status` `` / `` `role` `` 用键值格式；`role` 三选一：`protagonist` / `volume_antagonist` / `recurring`。完整度按 role：主角与卷对手填满四件套、矛盾弧光、知识边界、三锚点、语言习惯、三条台词；`recurring` 只填欲望、相交点、功能六型选一、一条锚、口头禅、一条台词。金手指段写在主角卡。关系表只写质态+节点，对方写 stem。龙套不建卡。promote 由 `accept-volume` 在卷纲批准时批量执行。
 5. Templates: bible / state / world / cast-card / author-lore / facts / locked-terms only.
 6. Gate `--action doctor`. Legacy 无 facts → merge 后 archive。Non-UTF-8 text → BLOCK；先跑仓库 `scripts/migrate_novel_encoding.py`，再用 `write`/`edit`/`apply_patch`。
 7. 提示存稿习惯（非强制）：连载前尽量备一个单元的缓冲。
