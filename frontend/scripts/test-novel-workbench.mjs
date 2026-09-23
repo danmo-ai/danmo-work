@@ -9,8 +9,12 @@ import {
   computeBookPipeline,
   countPlainChars,
   formatLoadProtocol,
-  inferChapterNextAction,
+  castLintIssues,
+  inferBookPipelinePhase,
   inferUnitPhase,
+  parseCastCard,
+  parseVolumeCast,
+  selectPrimaryAction,
   isNovelUnitOutlineName,
   isNovelUnitProseName,
   isVolumeOutlineName,
@@ -112,6 +116,7 @@ assert.equal(parsed.pleasure, '反杀')
 assert.equal(parsed.wordTarget, '8000')
 assert.equal(parsed.hookType, '未兑现承诺')
 assert.equal(parsed.hookOut, '明日验骨')
+assert.deepEqual(parsed.onStage, [])
 assert.equal(parsed.scenes.length, 2)
 assert.equal(parsed.scenes[0].id, 'S1')
 assert.equal(parsed.scenes[0].chapter, 1)
@@ -134,13 +139,13 @@ assert.equal(isNovelUnitOutlineName('ch001-outline.yaml'), false)
 const u1 = applyUnitOutline(built[0], outlineRaw)
 assert.equal(u1.chapterFrom, 1)
 assert.equal(u1.chapterTo, 2)
-assert.equal(inferUnitPhase(u1, 5, outlineRaw, '### VERDICT\nPASS'), 'committed')
-assert.equal(inferUnitPhase({ ...u1, prose: null }, 0, outlineRaw), 'contract_ready')
+const reviewed = outlineRaw.replace('status: accepted', 'status: reviewed')
+assert.equal(inferUnitPhase(u1, 5, reviewed, '### VERDICT\nPASS'), 'finalized')
+assert.equal(inferUnitPhase(u1, 5, outlineRaw, '### VERDICT\nPASS'), 'drafted')
+assert.equal(inferUnitPhase({ ...u1, prose: null }, 0, outlineRaw), 'ready')
+assert.equal(inferUnitPhase({ ...u1, prose: null }, 0, 'unit_id: v01-U1\nstatus: proposed\nchapter_range: [1, 2]\n'), 'pending_outline')
 assert.equal(inferUnitPhase({ ...u1, prose: u1.prose }, 0, outlineRaw.replace('accepted', 'drafted')), 'drafted')
-assert.equal(inferChapterNextAction('contract_ready'), 'write')
-assert.equal(inferChapterNextAction('drafted'), 'review')
-assert.equal(inferChapterNextAction('review_fail'), 'review')
-assert.equal(inferChapterNextAction('review_pass'), 'commit')
+assert.equal(inferUnitPhase(u1, 0, outlineRaw, '### VERDICT\nFAIL'), 'review_fail')
 
 const phases = buildUnitPhases(
   built,
@@ -151,43 +156,213 @@ const phases = buildUnitPhases(
 assert.equal(phases['v01-U1'], 'drafted')
 assert.equal(phases['v01-U2'], 'drafted')
 
-const ctx = {
-  bookId: 'star-inn',
-  state: ext,
-  entries: [u1, { ...built[1], chapterFrom: 3, chapterTo: 5 }],
-  unitPhases: { 'v01-U1': 'committed', 'v01-U2': 'contract_ready' },
-  castFileCount: 0,
-  hasBookOutline: true,
-  hasVolumeOutline: true,
-  hasBatchFreezeFile: false,
-  batchFreezeFrozen: false,
+function unitEntry(id, phase) {
+  const meta = id.match(/v(\d+)-U(\d+)/)
+  const hasProse = phase === 'drafted' || phase === 'review_fail' || phase === 'finalized'
+  return {
+    unitId: id,
+    volume: Number(meta[1]),
+    index: Number(meta[2]),
+    label: id,
+    chapterFrom: 1,
+    chapterTo: 3,
+    outline: { name: `${id}.yaml`, path: '', isDir: false },
+    prose: hasProse ? { name: `${id}.md`, path: '', isDir: false } : null,
+  }
 }
-const pipe = computeBookPipeline(ctx)
-assert.equal(pipe.progress.committed, 1)
-assert.equal(pipe.progress.totalWithContract, 2)
-assert.equal(pipe.primaryUnit, 'v01-U2')
-assert.equal(pipe.primaryAction, 'write')
 
-const writeBlocked = canRunAction('write', ctx, 'v01-U2')
+const clean = { ...ext, blockers: [] }
+function book(partial) {
+  return {
+    bookId: 'star-inn',
+    state: clean,
+    entries: [],
+    unitPhases: {},
+    unitOutlines: {},
+    volumes: [{ volume: 1, fileName: 'v01.md', cast: ['lin'], rows: [] }],
+    cast: [],
+    hasBookOutline: true,
+    legacy: false,
+    ...partial,
+  }
+}
+
+const linCard = `# 林雪
+\`status\`: canon
+\`role\`: protagonist
+
+## 功能
+- 退场：仍在场
+
+## 四件套（protagonist / volume_antagonist 必填）
+- 欲望（此刻要什么，可观察）：活下去
+
+## 知识边界
+- 不知：凶手是谁
+
+## 三锚点（气质锁定）
+- **视觉**：左耳银钉
+- **语言**：短句
+- **行为**：摸戒指
+
+## 语言习惯
+- 口头禅（≤2）：行吧
+
+## 台词样例
+- 压力下：你先说。
+- 日常：喝茶。
+- 掩饰 / 说谎：没什么。
+
+## 关系
+| 对方 | 类型 | 当前质态 | 最近变化点 | 下一预期节点 |
+|------|------|----------|------------|--------------|
+| zhou | 对手 | 猜疑 | v01-U1 | 摊牌 |
+`
+const lin = parseCastCard(linCard, 'lin')
+assert.equal(lin.status, 'canon')
+assert.equal(lin.role, 'protagonist')
+assert.equal(lin.visualAnchor, '左耳银钉')
+assert.equal(lin.catchphrase, '行吧')
+assert.equal(lin.dialogue.pressure, '你先说。')
+assert.equal(lin.unknown, '凶手是谁')
+assert.deepEqual(lin.missing, [])
+assert.equal(lin.relations[0].target, 'zhou')
+assert.equal(lin.relations[0].current, '猜疑')
+
+const recurring = parseCastCard(`# 周
+\`status\`: candidate
+\`role\`: recurring
+## 功能
+- 与主角相交点（recurring 必填）：
+- 退场：
+## 三锚点
+- **视觉**：
+`, 'zhou')
+assert.ok(recurring.missing.includes('欲望'))
+assert.ok(recurring.missing.includes('口头禅'))
+assert.ok(recurring.missing.includes('退场'))
+
+const zhou = parseCastCard(`# 周
+\`status\`: canon
+\`role\`: recurring
+## 功能
+- 欲望（此刻要什么）：自保
+- 与主角相交点（recurring 必填）：搭档
+- 退场：仍在场
+## 三锚点
+- **视觉**：旧风衣
+## 语言习惯
+- 口头禅（≤2）：得了
+## 台词样例
+- 压力下：别问。
+## 关系
+| 对方 | 类型 | 当前质态 | 最近变化点 | 下一预期节点 |
+| lin | 搭档 | 信任 | v01-U1 | |
+`, 'zhou')
+assert.deepEqual(castLintIssues([lin, zhou]), [])
+assert.ok(castLintIssues([lin]).some((x) => x.startsWith('cast.unknownStem:')))
+assert.ok(castLintIssues([lin, { ...zhou, relations: [] }]).some((x) => x.startsWith('cast.missingBackEdge:')))
+
+assert.deepEqual(
+  parseVolumeCast(`## 本卷人物（stem；批准即 canon）\n- lin\n- \`zhou\`\n\n## 情绪与人物弧\n- 别人`),
+  ['lin', 'zhou'],
+)
+const indexRows = parseVolumeUnitRows(`## 单元索引（只索引，不展开）\n\n| unit_id | 章范围 | 一句话功能 | 本单元终局边界（禁碰） | 下一单元钩子类型 |\n|---------|--------|------------|------------------------|------------------|\n| U1 | ch1-ch3 | 立冲突 | 禁终局 | 信息缺口 |\n`, 1)
+assert.equal(indexRows[0].id, 'v01-U1')
+assert.equal(indexRows[0].purpose, '立冲突')
+assert.equal(indexRows[0].endgameBoundary, '禁终局')
+assert.equal(indexRows[0].hookType, '信息缺口')
+
+const planning = selectPrimaryAction(book({ volumes: [] }))
+assert.equal(inferBookPipelinePhase(book({ volumes: [] })), 'planning')
+assert.equal(planning.action, 'plan')
+assert.equal(planning.volume, 1)
+
+const approve = selectPrimaryAction(book({ entries: [] }))
+assert.equal(approve.action, 'plan')
+assert.equal(approve.volume, 1)
+
+const proposedIds = ['v01-U1', 'v01-U2', 'v01-U3', 'v01-U4', 'v01-U5']
+const outlining = book({
+  entries: proposedIds.map((id) => unitEntry(id, 'pending_outline')),
+  unitPhases: Object.fromEntries(proposedIds.map((id) => [id, 'pending_outline'])),
+})
+assert.equal(inferBookPipelinePhase(outlining), 'outlining')
+const batch = selectPrimaryAction(outlining, 'v01-U5')
+assert.equal(batch.action, 'outline-batch')
+assert.deepEqual(batch.batchUnits, proposedIds.slice(0, 4))
+
+const readyBook = book({
+  entries: [unitEntry('v01-U1', 'ready')],
+  unitPhases: { 'v01-U1': 'ready' },
+  unitOutlines: { 'v01-U1': { ...parsed, onStage: ['lin'], pov: 'lin' } },
+  cast: [lin],
+})
+assert.equal(inferBookPipelinePhase(readyBook), 'units')
+const writeDecision = selectPrimaryAction(readyBook, 'v01-U1')
+assert.equal(writeDecision.action, 'write')
+assert.equal(writeDecision.unitId, 'v01-U1')
+assert.equal(writeDecision.allowed, true)
+
+const noCast = selectPrimaryAction({ ...readyBook, cast: [] }, 'v01-U1')
+assert.equal(noCast.allowed, false)
+assert.ok(noCast.blockers.includes('blocker.noCast'))
+
+const candidate = selectPrimaryAction({
+  ...readyBook,
+  cast: [{ ...lin, status: 'candidate' }],
+}, 'v01-U1')
+assert.ok(candidate.blockers.includes('blocker.noProtagonist'))
+assert.ok(candidate.blockers.includes('blocker.candidateOnStage:lin'))
+
+const outside = selectPrimaryAction({
+  ...readyBook,
+  volumes: [{ volume: 1, fileName: 'v01.md', cast: ['other'], rows: [] }],
+}, 'v01-U1')
+assert.ok(outside.blockers.includes('blocker.castOutsideVolume:lin'))
+
+const draftedBook = book({
+  entries: [unitEntry('v01-U1', 'drafted'), unitEntry('v01-U2', 'ready')],
+  unitPhases: { 'v01-U1': 'drafted', 'v01-U2': 'ready' },
+  cast: [lin],
+})
+assert.equal(selectPrimaryAction(draftedBook, 'v01-U1').action, 'finalize')
+assert.equal(selectPrimaryAction(draftedBook, 'v01-U1').unitId, 'v01-U1')
+
+const jumped = book({
+  entries: [unitEntry('v01-U1', 'finalized'), unitEntry('v01-U2', 'ready')],
+  unitPhases: { 'v01-U1': 'finalized', 'v01-U2': 'ready' },
+  unitOutlines: { 'v01-U2': { ...parsed, unitId: 'v01-U2', onStage: ['lin'] } },
+  cast: [lin],
+})
+assert.equal(selectPrimaryAction(jumped, 'v01-U1').action, 'write')
+assert.equal(selectPrimaryAction(jumped, 'v01-U1').unitId, 'v01-U2')
+
+const done = book({
+  entries: [unitEntry('v01-U1', 'finalized')],
+  unitPhases: { 'v01-U1': 'finalized' },
+})
+assert.equal(inferBookPipelinePhase(done), 'planning')
+assert.equal(selectPrimaryAction(done).action, 'next-volume')
+assert.equal(selectPrimaryAction(done).volume, 2)
+assert.equal(selectPrimaryAction({ ...done, legacy: true }).action, 'migrate')
+
+const pipe = computeBookPipeline(jumped, 'v01-U1')
+assert.equal(pipe.phase, 'units')
+assert.equal(pipe.progress.finalized, 1)
+assert.equal(pipe.progress.outlined, 2)
+assert.equal(pipe.progress.total, 2)
+assert.equal(pipe.primary.action, 'write')
+assert.equal(pipe.gates.asset, 'pass')
+assert.equal(computeBookPipeline(book({ volumes: [], cast: [{ ...lin, status: 'candidate' }] })).gates.asset, 'unknown')
+
+const writeBlocked = canRunAction('write', { ...readyBook, cast: [] }, 'v01-U1')
 assert.equal(writeBlocked.allowed, false)
 assert.ok(writeBlocked.blockers.includes('blocker.noCast'))
-
-const writeOk = canRunAction('write', { ...ctx, castFileCount: 2 }, 'v01-U2')
-assert.equal(writeOk.allowed, true)
-
-const reviewOk = canRunAction('review', {
-  ...ctx,
-  castFileCount: 2,
-  unitPhases: { 'v01-U1': 'committed', 'v01-U2': 'drafted' },
-}, 'v01-U2')
-assert.equal(reviewOk.allowed, true)
-
-const commitBlocked = canRunAction('commit', {
-  ...ctx,
-  castFileCount: 2,
-  unitPhases: { 'v01-U2': 'drafted' },
-}, 'v01-U2')
-assert.ok(commitBlocked.blockers.includes('blocker.needReviewPass'))
+assert.equal(canRunAction('write', readyBook, 'v01-U1').allowed, true)
+assert.equal(canRunAction('review', draftedBook, 'v01-U1').allowed, true)
+assert.ok(canRunAction('expand', readyBook, 'v01-U1').blockers.includes('blocker.needDraft'))
+assert.ok(canRunAction('finalize', { ...draftedBook, unitPhases: { 'v01-U1': 'finalized' } }, 'v01-U1').blockers.includes('blocker.alreadyFinalized'))
 
 const constrained = buildConstrainedPrefill('write', {
   bookId: 'star-inn',
@@ -202,28 +377,30 @@ assert.ok(!constrained.includes('chapter-write.md'))
 assert.ok(constrained.includes('delegate_agent.goal'))
 
 assert.equal(novelActionSkillId('init'), 'novel-setup')
+assert.equal(novelActionSkillId('migrate'), 'novel-setup')
+assert.equal(novelActionSkillId('plan'), 'novel-plan')
 assert.equal(novelActionSkillId('write'), 'novel-write')
+assert.equal(novelActionSkillId('outline-batch'), 'novel-write')
+assert.equal(novelActionSkillId('finalize'), 'novel-review')
 assert.equal(novelActionSkillId('review'), 'novel-review')
-assert.equal(novelActionSkillId('commit'), 'novel-review')
 assert.ok(formatLoadProtocol('write').includes('gate preflight --unit'))
+assert.ok(formatLoadProtocol('outline-batch').includes('lint-units'))
+assert.ok(formatLoadProtocol('finalize').includes('qc-pack'))
 assert.ok(!formatLoadProtocol('write').includes('chapter-write.md'))
 
 const stages = [
   'init',
-  'outline',
-  'volume',
-  'assets',
-  'goldfinger',
-  'contract',
+  'migrate',
+  'plan',
+  'next-volume',
+  'outline-batch',
+  'contract-one',
   'write',
-  'continue',
+  'finalize',
   'expand',
   'review',
   'polish',
-  'commit',
-  'review-polish-commit',
-  'continuation',
-  'preflight',
+  'cast-fix',
 ]
 for (const action of stages) {
   const text = buildNovelStagePrefill(/** @type {any} */ (action), {
@@ -245,10 +422,13 @@ for (const action of stages) {
   assert.ok(!constrainedText.includes('/assets/templates/'), action)
 }
 
-const contractPrefill = buildNovelStagePrefill('contract', { bookId: 'star-inn', unitId: 'v01-U1' })
-assert.ok(contractPrefill.includes('单元细纲'))
+const contractPrefill = buildNovelStagePrefill('contract-one', { bookId: 'star-inn', unitId: 'v01-U1' })
+assert.ok(contractPrefill.includes('细纲'))
 assert.ok(contractPrefill.includes('outline/units/v01-U1.yaml'))
-assert.ok(contractPrefill.includes('active_unit'))
+assert.ok(contractPrefill.includes('lint-units'))
+const planPrefill = buildNovelStagePrefill('plan', { bookId: 'star-inn', volume: 1, volumeOutlineExists: true })
+assert.ok(planPrefill.includes('accept-volume'))
+assert.ok(!planPrefill.includes('kb-novel'))
 assert.equal(novelUnitOutlinePath('star-inn', 'v01-U1'), 'novel/star-inn/outline/units/v01-U1.yaml')
 assert.equal(novelUnitProsePath('star-inn', 'v01-U1'), 'novel/star-inn/units/v01-U1.md')
 
@@ -257,9 +437,7 @@ assert.ok(writePrefill.includes('units/v01-U1.md'))
 assert.ok(writePrefill.includes('preflight --unit'))
 assert.ok(writePrefill.includes('---'))
 assert.ok(writePrefill.includes('停下'))
-
-const preflightPrefill = buildNovelStagePrefill('preflight', { bookId: 'star-inn', unitId: 'v01-U1' })
-assert.ok(preflightPrefill.includes('preflight --unit'))
+assert.ok(writePrefill.includes('### CONTEXT'))
 
 const md = `## 第1章 夜雨
 

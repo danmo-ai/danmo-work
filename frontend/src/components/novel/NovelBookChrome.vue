@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { GateStatus, NovelBookPipeline, NovelPipelineStepId } from '@/types/novel-workbench'
+import type { GateStatus, NovelBookPipeline, NovelPipelinePhase } from '@/types/novel-workbench'
 
 const props = defineProps<{
   title: string
@@ -18,19 +18,17 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-function stepperLabel(id: NovelPipelineStepId | string): string {
-  const map: Record<string, string> = {
-    init: 'stepperInit',
-    setup: 'stepperSetup',
-    outline: 'stepperBookOutline',
-    volume: 'stepperVolume',
-    contract: 'stepperContract',
-    write: 'stepperWriting',
-    review: 'stepperReview',
-    commit: 'stepperCommit',
-    idle: 'stepperWriting',
+function phaseLabel(phase: NovelPipelinePhase): string {
+  switch (phase) {
+    case 'planning':
+      return t('novelWorkbench.phasePlanning')
+    case 'outlining':
+      return t('novelWorkbench.phaseOutlining')
+    case 'units':
+      return t('novelWorkbench.phaseUnits')
+    default:
+      return t('novelWorkbench.phaseIdle')
   }
-  return t(`novelWorkbench.${map[id] ?? 'stepperWriting'}`)
 }
 
 function gateLabel(status: GateStatus | string): string {
@@ -46,10 +44,7 @@ function gateLabel(status: GateStatus | string): string {
   }
 }
 
-const stepLabel = computed(() =>
-  props.pipeline ? stepperLabel(props.pipeline.step) : '',
-)
-
+const label = computed(() => (props.pipeline ? phaseLabel(props.pipeline.phase) : ''))
 const progressPct = computed(() => props.pipeline?.progress.percent ?? 0)
 </script>
 
@@ -60,16 +55,23 @@ const progressPct = computed(() => props.pipeline?.progress.percent ?? 0)
     </button>
     <div class="novel-chrome__main">
       <span class="novel-chrome__title">{{ title }}</span>
-      <div v-if="pipeline" class="novel-chrome__progress" :title="stepLabel">
-        <span class="novel-chrome__step">{{ stepLabel }}</span>
+      <div v-if="pipeline" class="novel-chrome__progress">
+        <span class="novel-chrome__step">{{ label }}</span>
         <div class="novel-chrome__bar" role="progressbar" :aria-valuenow="progressPct" aria-valuemin="0" aria-valuemax="100">
           <div class="novel-chrome__bar-fill" :style="{ width: `${progressPct}%` }" />
         </div>
         <span class="novel-chrome__pct">
           {{
-            t('novelWorkbench.progressLabel', {
-              committed: pipeline.progress.committed,
-              total: pipeline.progress.totalWithContract || pipeline.progress.committed || 0,
+            t('novelWorkbench.progressFinalized', {
+              done: pipeline.progress.finalized,
+              total: pipeline.progress.total,
+            })
+          }}
+          ·
+          {{
+            t('novelWorkbench.progressOutlined', {
+              done: pipeline.progress.outlined,
+              total: pipeline.progress.total,
             })
           }}
         </span>
