@@ -1,7 +1,9 @@
 # Continuity Commit
 
-Commit = tools landed. Prefer **one** `apply_patch` covering：
-- `continuity/facts.md`（每章摘要 + cast snapshot + open loops）
+Commit = tools landed. 定稿轮里 **一次** `apply_patch` 覆盖：
+- `continuity/summaries/vNN.md`（本单元每章一个 `## chNNN` 块）
+- `continuity/facts.md`（公开事实 + cursor + Cast snapshot + Open loops；**不写章摘要**）
+- 相关人物卡 `canon/cast/<stem>.md` 关系表两列（仅当 `state_deltas` 涉及关系质态）
 - `continuity/commits/vNN-U#.md`（本单元执行日志）
 - 单元细纲 `status=reviewed`
 - `novel-state.yaml`
@@ -12,16 +14,18 @@ After review PASS (and optional polish) for the active unit. PASS 不要求 `rev
 
 一次任务提交整单元。**不要**拆成多次 postcommit。
 
-## Snapshot 分层
+## 分层：谁写哪里
 
-### 1. 写入 `continuity/facts.md`（读者事实，不写执行日志）
+| 文件 | 写什么 | 不写什么 |
+|------|--------|----------|
+| `continuity/summaries/vNN.md` | 每章 `## chNNN` 块（五要素）；卷收束时末尾追加 `### vNN 卷总结` | 执行日志、事实表 |
+| `continuity/facts.md` | Public facts 新增 / 升级；cursor；Cast snapshot 增量；Open loops；每卷一行 `vNN → continuity/summaries/vNN.md` 索引 | `## chNNN` 块（旧书跑 `--action migrate` 拆出） |
+| `canon/cast/<stem>.md` | 「当前质态」「最近变化点（含本单元 id）」两列 | 编年史、逐章流水 |
+| `continuity/commits/vNN-U#.md` | gate 结果、四计数、锁词、字数、扩写 / deslop 处置、偏离登记 | 读者事实 |
 
-Update `continuity/facts.md` in one pass:
+### 1. `continuity/summaries/vNN.md`
 
-1. **Public facts** — new shown_fact / inference from this chapter only
-2. **Tracking** — cursor, cast snapshot deltas, cannot-rewind
-3. **Open loops** — plant / advance / pay off（≤5 open；`dangling` = bug）；细纲 `info_control.foreshadowing` 的 FS-id 必须出现在表中
-4. **Chapter summaries** — append fixed block（五要素齐全，gate 硬检；第 6 行「线索」可选）:
+新卷第一次 Commit 时新建（首行 `# Chapter summaries — vNN`），同时在 `facts.md` 的 `## Chapter summaries` 节加一行索引。之后每单元把章范围内每一章追加一块（按章号顺序，锚点用上一章块首行）：
 
 ```markdown
 ## chNNN {{title}}
@@ -33,17 +37,28 @@ Update `continuity/facts.md` in one pass:
 - 线索: thread PLANTED/ADVANCED/RESOLVED（可选）
 ```
 
-细纲每条 `state_deltas` 的「谁」必须出现在 Cast snapshot。
+五要素为 gate `postcommit` 硬检；第 6 行可选。
 
-**关系回写**：`state_deltas` 涉及关系质态变化（信任±/站队/债务/秘密共享）时，**同一 patch** 更新相关人物卡「关系」表的「当前质态」与「最近变化点」两列——关系状态的事实源是人物卡，facts 不另存。**不写编年史**，只改质态一句话 + 单元级节点。
+### 2. `continuity/facts.md`
 
-### 2. 写入 `continuity/commits/vNN-U#.md`（执行日志）
+1. **Public facts** — new shown_fact / inference from this chapter only
+2. **Tracking** — cursor（`last_committed_ch` / 当前卷单元 / next action），Cast snapshot 增量，cannot-rewind
+3. **Open loops** — plant / advance / pay off（≤5 open；`dangling` = bug）；细纲 `info_control.foreshadowing` 的 FS-id 必须出现在表中
 
-本单元做了什么、gate 结果、四计数、锁词扫描、扩写技术 → 全部写这里，**不进 facts.md**。
+细纲每条 `state_deltas` 的「谁」必须出现在 Cast snapshot（gate 硬检）。Snapshot「关系质态」列只做写作用的压缩游标：从变化的那条卡关系边抄一句，不在这里新编。
+
+### 3. 人物卡关系回写
+
+`state_deltas` 涉及关系质态变化（信任±/站队/债务/秘密共享）时，**同一 patch** 更新**两张**相关卡「关系」表的「当前质态」与「最近变化点」两列；「最近变化点」须含本单元 id（如 `v01-U4 同盟成形`）。两边质态可以不同。关系状态的事实源是人物卡，facts 不另存。**不写编年史**。
+
+gate `postcommit`：`state_deltas` 文本含关系词而对应卡「最近变化点」无本单元 id → warning。
+
+### 4. `continuity/commits/vNN-U#.md`（执行日志）
+
 模板见 `commit-log.md`。结构：
 
 - 本单元 commit 时间、unit_id、章范围
-- gate 结果（preflight/precommit/postcommit 的 VERDICT 摘要）
+- gate 结果（preflight / qc-pack / postcommit 的 VERDICT 摘要）
 - 四计数（em_dash / ai_vocab / english_leak / simile）
 - 锁词扫描结果（命中数 / 未命中）
 - 字数实测（单元 runes / 各章 runes vs floor/ceiling）
@@ -54,17 +69,17 @@ Update `continuity/facts.md` in one pass:
 
 **facts.md 不重复这些**。facts 只回答"读者现在知道什么"，commits 回答"我们这一轮做了什么"。
 
-**Patch 锚点规范**：摘要块追加到 `## Chapter summaries` 节末尾，锚点用上一章块首行（`## chNNN-1 …` 起 5–7 行）作为上文；Open loops / Cast snapshot 用整行替换。
-
 ## Tool actions（少交互）
 
 1. Ensure final text in `units/vNN-U#.md`（章标题与 `---` 仍在）。
 2. Set `outline/units/vNN-U#.yaml` `status=reviewed`.
-3. Patch `continuity/facts.md`：该单元章范围内每一章一块摘要（事实 + tracking + loops 一并更新）。
-4. Write `continuity/commits/vNN-U#.md`：本单元执行日志（按 `commit-log.md` 模板）。
-5. Update `novel-state.yaml`（`last_committed_ch` = 章范围末章，`active_unit` 可清空或指向下一单元，gates）。
-6. Optional: `memory_update` / `table_upsert` — **默认不做**.
-7. Gate `--action postcommit --unit vNN-U#`. FAIL → do not claim Commit.
+3. Append `## chNNN` blocks to `continuity/summaries/vNN.md`（新卷则新建 + facts 索引行）。
+4. Patch `continuity/facts.md`：事实 + cursor + snapshot + loops。
+5. Patch 相关人物卡关系两列（若有关系变化）。
+6. Write `continuity/commits/vNN-U#.md`。
+7. Update `novel-state.yaml`（`last_committed_ch` = 章范围末章，`active_unit` 指向下一单元或清空，gates）。
+8. Optional: `memory_update` / `table_upsert` — **默认不做**.
+9. Gate `--action postcommit --unit vNN-U#`. FAIL → do not claim Commit.
 
 ## 时间线纪律（Commit 前自查）
 
@@ -73,30 +88,30 @@ Update `continuity/facts.md` in one pass:
 | 常见错误 | 如何抓 | 如何修 |
 |----------|--------|--------|
 | 到达太快 | 对照地图距离与交通方式 | 加过渡章或改距离设定 |
-| 事件顺序矛盾 | facts 摘要块顺序 vs 正文 | 改后发生章节的措辞 |
+| 事件顺序矛盾 | summaries 摘要块顺序 vs 正文 | 改后发生章节的措辞 |
 | 昼夜错位 | 上章深夜、下章同场正午无间隔说明 | 补时间间隔句 |
 | 伤愈太快 | Cast snapshot 伤势栏 vs 正文行动 | 保留伤势代价或加 healing 设定 |
 | 分身两地 | 同角色同时间两个地点 | 以 facts 位置栏为准改正文 |
 
-## 卷收束（体积治理，人工确认后执行）
+## 卷收束（人工确认后执行）
 
 卷末章 Commit 完成后提示用户：「可做卷收束」。用户确认后：
 
-1. 全卷通读 + 对 facts.md 做 6 项核验（伏笔/线索/时间线/人物状态/世界规则/钩子链）。
-2. 写 `### vNN 卷总结`（500–800 字：事件主线 / 人物状态 / 带入下卷的线索 / 未回收伏笔+预期回收卷）进 facts.md `## Volume summaries`。
-3. 该卷 `## chNNN` 明细块**移入** `continuity/summaries/vNN.md` 归档（facts 只留卷总结）。
-4. `reviews/backpatch.md` 队列清零或显式延期（FORCED PASS 遗留须处理）。
-5. gate `postcommit` 对已归档章节仍然有效（自动查归档）。
+1. 全卷通读 + 对 facts.md / summaries/vNN.md 做 6 项核验（伏笔/线索/时间线/人物状态/世界规则/钩子链）。
+2. 在 `continuity/summaries/vNN.md` **末尾**追加 `### vNN 卷总结`（500–800 字：事件主线 / 人物状态 / 带入下卷的线索 / 未回收伏笔+预期回收卷）。章块不搬动。
+3. `reviews/backpatch.md` 队列清零或显式延期（FORCED PASS 遗留须处理）。
+4. 下一卷卷纲由 `novel-plan` 出；批准后 `--action accept-volume --volume vNN+1`。
 
 ## 组装门（全书/卷交付前）
 
 - 伏笔无 `open` 超 1 卷未推进、无 `dangling`
 - 线索无无由 ACTIVE；PARKED 有叙事理由且已恢复
 - 全部单元细纲 `status=reviewed` 且范围内摘要块齐五要素
-- 全书已定稿单元 `scan-deslop --unit` exit 0
+- 全书已定稿单元 `qc-pack --unit` exit 0
 - 其余 14 项见 `review-gates.md` Assembly Checklist
 
 ## Resume
 
-Cold start: gate `--action doctor` → `novel-state` → `continuity/facts.md`（**Volume summaries + 当前卷明细**，勿读归档全量）→ next 单元细纲.
+Cold start: gate `--action doctor` → `novel-state` → `continuity/facts.md`（事实 + cursor + snapshot + loops；勿通读 `summaries/`）→ 当前卷 `summaries/vNN.md` 只看上一章块 → next 单元细纲.
+doctor ADVISORY 出现 `[migrate]` → 先跑 `--action migrate`（章摘要拆卷、补 genre / on_stage / role / 本卷人物），核对 `continuity/commits/migrate-<date>.md`。
 If legacy `ledger.md` exists without `facts.md` → migrate: split into `facts.md` (facts) + `commits/` (per-unit logs).

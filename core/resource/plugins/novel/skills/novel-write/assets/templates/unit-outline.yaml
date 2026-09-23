@@ -1,16 +1,21 @@
 # 单元细纲：一个剧情单元一份。**本文件是单元级唯一事实源。**
-# 卷纲只索引（unit_id/章范围/一句话功能/本单元禁碰/钩子类型），不重复本文件字段。
-# 场面是写作骨架，章只是切口。
+# 卷纲分配（unit_id/章范围/一句话功能/终局边界/钩子类型），细纲落笔；两层不合并，本文件不重复卷级判断。
+# 头部（unit_id/chapter_range/function/next_hook.type/status/word_*）由 `accept-volume` 按卷纲索引行种下。
+# 场面是写作骨架，章只是切口。写正文只消费 preflight 渲染出的「单元卡」，不再通读本文件。
 unit_id: v01-U1              # 必填，须在卷纲单元索引表里，如 v01-U1
-chapter_range: [1, 5]       # 含端点，与卷纲索引表章范围一致
+chapter_range: [1, 5]       # 含端点，与卷纲索引表章范围一致（不一致 blocking）
 title_working: ""
 word_target: 12500           # 单元总字数，必须等于各章 word_share 之和
 word_floor: 10000            # 单元字数地板（precommit 硬检）；默认 = 章数 × word_floor_per_ch
 word_ceiling: 14000          # 单元字数天花板；默认 = 章数 × word_ceiling_per_ch
 status: proposed             # proposed|accepted|drafted|reviewed
 
+# 上场人物（stem = canon/cast/<stem>.md 文件名）
+on_stage: []                 # 本单元开口或被写到的 canon stem；须 ⊆ 卷纲「本卷人物」；含 candidate → blocking
+pov: ""                      # 本单元默认 POV stem（须在 on_stage 内）；场面可用 pov 覆盖；preflight 给他注入「不知」
+
 # 单元级合同（卷纲不重复这些字段）
-function: ""                 # 本单元必须完成的一件事
+function: ""                 # 本单元必须完成的一件事；来自卷纲索引，改动只 warning（以卷纲为准）
 entry: ""                    # 因果入口；U1 写开卷切口；由上一单元 next_hook 引出
 desire: ""                   # 主角局部目标（保住/拿到/证明什么）
 obstacle: ""                 # 得不到的具体原因（敌意/限制/误判/资源缺口）
@@ -20,15 +25,17 @@ pleasure: ""                 # 单元主爽点形态（番茄向必填；不要�
 forbidden: []                # 本单元不得出现的词/事件/真相
 endgame_boundary: ""         # 本单元终局边界（对照 bible unlock 卷 + locked-terms.yaml）
 next_hook:
-  type: ""                   # 信息缺口|未兑现承诺|高代价选择|身份反转|关系临界|倒计时|未完成动作|突然揭示|回声/意象
-  out: ""                    # 单元末具体事件 = 末章切口
+  type: ""                   # 来自卷纲索引；九类之一；不一致 blocking
+  out: ""                    # 单元末具体事件 = 末章切口（只在细纲写）
 
 # 一场 = 一个可写场面，不是一章。每章至少 2 场。
 scenes:
   - id: S1
     beat: 建立期待            # 建立期待|尝试|加压|决断|兑现|余波
     chapter: 1
-    where: ""                 # pov | time | location
+    where: ""                 # time | location
+    pov: ""                   # 可选，覆盖单元级 pov（须在 on_stage 内）
+    who: []                   # 可选，本场在场子集（⊆ on_stage）
     want: ""
     turn: ""
     must_land: []             # 1–3 个可落地的动作/对白事实，禁止口号
