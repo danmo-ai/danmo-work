@@ -10,7 +10,7 @@
 
 ## 流程
 
-1. 可选 `scan-deslop --unit vNN-U#`，再 `precommit --unit`。
+1. `qc-pack --unit vNN-U#`（一次输出 precommit + scan-deslop：`### COUNTS` / `### HITS` / `expand_needed` / `polish_needed`）。
 2. 总字数 &lt; `word_target` × 0.8，或某章薄于 `word_share` × 0.7 → 先 `expansion.md`（扩场面，不注水）。
 3. 审：`review-gates.md`。PASS 不写 review 文件。FAIL / 深审写 `reviews/vNN-U#-review.md` 并停。
 4. 可选润色后，`continuity-commit.md`：一次补丁覆盖该单元全部 `## chNNN`，细纲 `status=reviewed`，`last_committed_ch` 推到章范围末章。

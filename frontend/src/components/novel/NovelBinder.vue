@@ -4,45 +4,47 @@ import { useI18n } from 'vue-i18n'
 import {
   novelBiblePath,
   novelCanonDir,
-  novelCastDir,
   setupDocLabel,
-  type NovelChapterPhase,
+  volumeId,
+  volumeNumFromName,
+  isUnitPhasePending,
   type NovelFileNode,
   type NovelUnitEntry,
-  isChapterPhasePending,
+  type NovelUnitPhase,
+  type NovelVolumeInfo,
 } from '@/types/novel-workbench'
 
 const props = defineProps<{
   bookId: string
-  treeOpen: string[]
-  setupOpen: string[]
-  treeSel: { kind: 'book' | 'volume' | 'setup' | 'unit' | 'dossier'; name?: string; n?: number }
-  bookOutlineSelected: boolean
-  visibleVolumeFiles: NovelFileNode[]
+  treeSel: { kind: 'book' | 'volume' | 'unit' | 'cast' | 'setup' | 'ledger'; name?: string }
+  volumes: NovelVolumeInfo[]
+  units: NovelUnitEntry[]
+  unitPhases: Record<string, NovelUnitPhase>
+  /** Unit the primary button is about (dot marker). */
+  primaryUnit: string | null
   worldDocs: NovelFileNode[]
-  castDocs: NovelFileNode[]
-  treeUnits: NovelUnitEntry[]
-  unitPhases: Record<string, NovelChapterPhase>
-  continuityFiles: NovelFileNode[]
-  reviewFiles: NovelFileNode[]
-  nextVolume: number
+  ledgerFiles: NovelFileNode[]
+  summaryFiles: NovelFileNode[]
+  castCount: number
+  castIssueCount: number
 }>()
 
 const emit = defineEmits<{
-  'update:treeOpen': [v: string[]]
-  'update:setupOpen': [v: string[]]
   'select-book-outline': []
-  'select-volume': [node: NovelFileNode]
-  'select-setup': [path: string, name: string]
+  'select-volume': [volume: number]
   'select-unit': [unitId: string]
-  'select-dossier': [path: string, name: string]
-  'add-volume': []
+  'select-cast': []
+  'select-setup': [path: string, name: string]
+  'select-facts': []
+  'select-ledger': [node: NovelFileNode, kind: 'facts' | 'summary']
 }>()
 
 const { t } = useI18n()
 const pendingOnly = ref(false)
+const setupOpen = ref(false)
+const ledgerOpen = ref(false)
 
-const SETUP_DOC_KEYS = new Set(['bible', 'world', 'glossary', 'reveal', 'rules', 'platform', 'goldfinger'])
+const SETUP_DOC_KEYS = new Set(['bible', 'world', 'glossary', 'reveal', 'rules', 'platform', 'goldfinger', 'authorLore', 'style', 'lockedTerms'])
 
 function setupDocTitle(name: string): string {
   const id = setupDocLabel(name)
@@ -50,248 +52,258 @@ function setupDocTitle(name: string): string {
   return id
 }
 
-function volumeLabel(name: string): string {
-  return name.replace(/\.md$/i, '')
-}
-
-function phaseLabel(phase: NovelChapterPhase): string {
-  const map: Record<NovelChapterPhase, string> = {
-    empty: 'phaseEmpty',
-    contract_draft: 'phaseContractDraft',
-    contract_ready: 'phaseContractReady',
+function phaseLabel(phase: NovelUnitPhase): string {
+  const map: Record<NovelUnitPhase, string> = {
+    pending_outline: 'phasePendingOutline',
+    ready: 'phaseReady',
     drafted: 'phaseDrafted',
     review_fail: 'phaseReviewFail',
-    review_pass: 'phaseReviewPass',
-    committed: 'phaseCommitted',
+    finalized: 'phaseFinalized',
   }
   return t(`novelWorkbench.${map[phase]}`)
 }
 
-function unitRowLabel(entry: NovelUnitEntry): string {
+function unitRange(entry: NovelUnitEntry): string {
   if (entry.chapterFrom > 0 && entry.chapterTo >= entry.chapterFrom) {
-    return t('novelWorkbench.unitRow', {
-      n: entry.index,
-      from: entry.chapterFrom,
-      to: entry.chapterTo,
+    return `ch${entry.chapterFrom}–${entry.chapterTo}`
+  }
+  return ''
+}
+
+function unitPurpose(entry: NovelUnitEntry): string {
+  const vol = props.volumes.find((v) => v.volume === entry.volume)
+  const row = vol?.rows.find((r) => r.id === entry.unitId)
+  return row?.purpose ?? ''
+}
+
+/** Volumes from files ∪ volumes implied by unit ids, sorted. */
+const volumeGroups = computed(() => {
+  const nums = new Set<number>()
+  for (const v of props.volumes) nums.add(v.volume)
+  for (const u of props.units) nums.add(u.volume)
+  return [...nums]
+    .sort((a, b) => a - b)
+    .map((volume) => {
+      const units = props.units
+        .filter((u) => u.volume === volume)
+        .filter((u) => !pendingOnly.value || isUnitPhasePending(props.unitPhases[u.unitId] ?? 'pending_outline'))
+      const all = props.units.filter((u) => u.volume === volume)
+      const finalized = all.filter((u) => props.unitPhases[u.unitId] === 'finalized').length
+      return {
+        volume,
+        hasOutline: props.volumes.some((v) => v.volume === volume),
+        units,
+        total: all.length,
+        finalized,
+      }
     })
-  }
-  return `U${entry.index}`
-}
-
-function volumeHeading(volume: number): string {
-  return `v${String(volume).padStart(2, '0')}`
-}
-
-const filteredUnits = computed(() => {
-  if (!pendingOnly.value) return props.treeUnits
-  return props.treeUnits.filter((e) => {
-    const phase = props.unitPhases[e.unitId] ?? 'empty'
-    return isChapterPhasePending(phase)
-  })
 })
 
-const groupedUnits = computed(() => {
-  const map = new Map<number, NovelUnitEntry[]>()
-  for (const e of filteredUnits.value) {
-    const list = map.get(e.volume) ?? []
-    list.push(e)
-    map.set(e.volume, list)
-  }
-  return [...map.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([volume, units]) => ({ volume, units }))
-})
+const isVolumeSelected = (volume: number) =>
+  props.treeSel.kind === 'volume' && volumeNumFromName(props.treeSel.name || '') === volume
 
-const dossierFiles = computed(() => [
-  ...props.continuityFiles.filter((n) => !n.isDir),
-  ...props.reviewFiles.filter((n) => !n.isDir),
-])
-
-const treeOpenModel = computed({
-  get: () => props.treeOpen,
-  set: (v) => emit('update:treeOpen', v),
-})
-
-const setupOpenModel = computed({
-  get: () => props.setupOpen,
-  set: (v) => emit('update:setupOpen', v),
-})
+const isSetupSelected = (name: string) => props.treeSel.kind === 'setup' && props.treeSel.name === name
 </script>
 
 <template>
   <aside class="novel-binder">
-    <DqCollapse v-model="treeOpenModel">
-      <DqCollapseItem name="outline" :title="t('novelWorkbench.folderOutline')">
-        <button
-          type="button"
-          class="novel-binder__item"
-          :class="{ 'novel-binder__item--on': treeSel.kind === 'book' }"
-          @click="emit('select-book-outline')"
-        >
-          {{ t('novelWorkbench.bookOutline') }}
-        </button>
-        <button
-          v-for="v in visibleVolumeFiles"
-          :key="v.name"
-          type="button"
-          class="novel-binder__item"
-          :class="{ 'novel-binder__item--on': treeSel.kind === 'volume' && treeSel.name === v.name }"
-          @click="emit('select-volume', v)"
-        >
-          {{ volumeLabel(v.name) }}
-        </button>
-        <button type="button" class="novel-binder__item novel-binder__item--ghost" @click="emit('add-volume')">
-          + {{ t('novelWorkbench.actionVolumeOutline', { n: nextVolume }) }}
-        </button>
-      </DqCollapseItem>
+    <section class="novel-binder__section">
+      <button
+        type="button"
+        class="novel-binder__item novel-binder__item--top"
+        :class="{ 'novel-binder__item--on': treeSel.kind === 'book' }"
+        @click="emit('select-book-outline')"
+      >
+        {{ t('novelWorkbench.bookOutline') }}
+      </button>
+    </section>
 
-      <DqCollapseItem name="setup" :title="t('novelWorkbench.folderSetup')">
+    <section class="novel-binder__section novel-binder__section--grow">
+      <div class="novel-binder__head">
+        <span>{{ t('novelWorkbench.folderVolumes') }}</span>
+        <button
+          v-if="units.length"
+          type="button"
+          class="novel-binder__filter-btn"
+          :class="{ 'novel-binder__filter-btn--on': pendingOnly }"
+          @click="pendingOnly = !pendingOnly"
+        >
+          {{ pendingOnly ? t('novelWorkbench.showAllUnits', { n: units.length }) : t('novelWorkbench.showPendingUnits') }}
+        </button>
+      </div>
+
+      <div v-for="g in volumeGroups" :key="g.volume" class="novel-binder__vol">
         <button
           type="button"
-          class="novel-binder__item"
-          :class="{ 'novel-binder__item--on': treeSel.kind === 'setup' && treeSel.name === 'book-bible.md' }"
+          class="novel-binder__item novel-binder__item--vol"
+          :class="{ 'novel-binder__item--on': isVolumeSelected(g.volume), 'novel-binder__item--dim': !g.hasOutline }"
+          @click="emit('select-volume', g.volume)"
+        >
+          <span class="novel-binder__vol-name">{{ volumeId(g.volume) }}</span>
+          <span class="novel-binder__vol-meta">
+            {{ g.hasOutline ? t('novelWorkbench.volumeProgress', { done: g.finalized, total: g.total }) : t('novelWorkbench.volumeNoOutline') }}
+          </span>
+        </button>
+        <button
+          v-for="entry in g.units"
+          :key="entry.unitId"
+          type="button"
+          class="novel-binder__item novel-binder__item--unit"
+          :class="{
+            'novel-binder__item--on': treeSel.kind === 'unit' && treeSel.name === entry.unitId,
+          }"
+          :title="unitPurpose(entry) || entry.unitId"
+          @click="emit('select-unit', entry.unitId)"
+        >
+          <span class="novel-binder__dot" :class="'novel-binder__dot--' + (unitPhases[entry.unitId] || 'pending_outline')" />
+          <span class="novel-binder__unit-main">
+            <span class="novel-binder__unit-line">
+              <span class="novel-binder__unit-id">U{{ entry.index }}</span>
+              <span v-if="unitRange(entry)" class="novel-binder__unit-range">{{ unitRange(entry) }}</span>
+              <span v-if="primaryUnit === entry.unitId" class="novel-binder__next">▶</span>
+            </span>
+            <span v-if="unitPurpose(entry)" class="novel-binder__unit-purpose">{{ unitPurpose(entry) }}</span>
+          </span>
+          <span class="novel-phase" :class="'novel-phase--' + (unitPhases[entry.unitId] || 'pending_outline')">
+            {{ phaseLabel(unitPhases[entry.unitId] || 'pending_outline') }}
+          </span>
+        </button>
+        <p v-if="g.hasOutline && !g.units.length" class="novel-binder__hint">
+          {{ g.total ? t('novelWorkbench.noPendingUnits') : t('novelWorkbench.volumeNotAccepted') }}
+        </p>
+      </div>
+      <p v-if="!volumeGroups.length" class="novel-binder__hint">{{ t('novelWorkbench.noVolumesYet') }}</p>
+    </section>
+
+    <section class="novel-binder__section novel-binder__section--bottom">
+      <button
+        type="button"
+        class="novel-binder__item novel-binder__item--top"
+        :class="{ 'novel-binder__item--on': treeSel.kind === 'cast' }"
+        @click="emit('select-cast')"
+      >
+        <span>{{ t('novelWorkbench.castWall') }}</span>
+        <span class="novel-binder__count">
+          {{ castCount }}
+          <span v-if="castIssueCount" class="novel-binder__warn" :title="t('novelWorkbench.castLintFail')">!</span>
+        </span>
+      </button>
+
+      <button type="button" class="novel-binder__item novel-binder__item--top" @click="setupOpen = !setupOpen">
+        <span>{{ t('novelWorkbench.folderSetup') }}</span>
+        <span class="novel-binder__count">{{ setupOpen ? '−' : '+' }}</span>
+      </button>
+      <template v-if="setupOpen">
+        <button
+          type="button"
+          class="novel-binder__item novel-binder__item--nested"
+          :class="{ 'novel-binder__item--on': isSetupSelected('book-bible.md') }"
           @click="emit('select-setup', novelBiblePath(bookId), 'book-bible.md')"
         >
           {{ t('novelWorkbench.setupDoc_bible') }}
         </button>
-        <DqCollapse v-model="setupOpenModel" class="novel-binder__sub">
-          <DqCollapseItem name="world" :title="t('novelWorkbench.folderSetupWorld')">
-            <button
-              v-for="f in worldDocs"
-              :key="f.name"
-              type="button"
-              class="novel-binder__item novel-binder__item--nested"
-              :class="{ 'novel-binder__item--on': treeSel.kind === 'setup' && treeSel.name === f.name }"
-              @click="emit('select-setup', f.path || `${novelCanonDir(bookId)}/${f.name}`, f.name)"
-            >
-              {{ setupDocTitle(f.name) }}
-            </button>
-            <p v-if="!worldDocs.length" class="novel-binder__hint">{{ t('novelWorkbench.noCanonYet') }}</p>
-          </DqCollapseItem>
-          <DqCollapseItem name="cast" :title="t('novelWorkbench.folderSetupCast')">
-            <button
-              v-for="f in castDocs"
-              :key="f.name"
-              type="button"
-              class="novel-binder__item novel-binder__item--nested"
-              :class="{ 'novel-binder__item--on': treeSel.kind === 'setup' && treeSel.name === f.name }"
-              @click="emit('select-setup', f.path || `${novelCastDir(bookId)}/${f.name}`, f.name)"
-            >
-              {{ setupDocTitle(f.name) }}
-            </button>
-          </DqCollapseItem>
-        </DqCollapse>
-      </DqCollapseItem>
-
-      <DqCollapseItem name="prose">
-        <template #title>
-          <span>{{ t('novelWorkbench.folderProse') }}</span>
-          <span class="novel-binder__count">{{ treeUnits.length }}</span>
-        </template>
-        <div v-if="treeUnits.length" class="novel-binder__filter">
-          <button
-            type="button"
-            class="novel-binder__filter-btn"
-            :class="{ 'novel-binder__filter-btn--on': pendingOnly }"
-            @click="pendingOnly = !pendingOnly"
-          >
-            {{
-              pendingOnly
-                ? t('novelWorkbench.showAllChapters', { n: treeUnits.length })
-                : t('novelWorkbench.showFocusChapters')
-            }}
-          </button>
-        </div>
-        <div v-for="group in groupedUnits" :key="group.volume" class="novel-binder__vol">
-          <div class="novel-binder__vol-label">{{ volumeHeading(group.volume) }}</div>
-          <button
-            v-for="entry in group.units"
-            :key="entry.unitId"
-            type="button"
-            class="novel-binder__item novel-binder__item--chapter"
-            :class="{
-              'novel-binder__item--on': treeSel.kind === 'unit' && treeSel.name === entry.unitId,
-              'novel-binder__item--dim': !entry.prose,
-            }"
-            @click="emit('select-unit', entry.unitId)"
-          >
-            <span class="novel-binder__chapter-name">{{ unitRowLabel(entry) }}</span>
-            <span
-              class="novel-binder__phase"
-              :class="'novel-binder__phase--' + (unitPhases[entry.unitId] || 'empty')"
-            >
-              {{ phaseLabel(unitPhases[entry.unitId] || 'empty') }}
-            </span>
-          </button>
-        </div>
-        <p v-if="!filteredUnits.length" class="novel-binder__hint">
-          {{ treeUnits.length ? t('novelWorkbench.noPendingChapters') : t('novelWorkbench.noChapters') }}
-        </p>
-      </DqCollapseItem>
-
-      <DqCollapseItem name="dossier" :title="t('novelWorkbench.dossier')">
         <button
-          v-for="f in dossierFiles"
-          :key="f.path || f.name"
+          v-for="f in worldDocs"
+          :key="f.name"
           type="button"
-          class="novel-binder__item"
-          :class="{ 'novel-binder__item--on': treeSel.kind === 'dossier' && treeSel.name === f.name }"
-          @click="emit('select-dossier', f.path || f.name, f.name)"
+          class="novel-binder__item novel-binder__item--nested"
+          :class="{ 'novel-binder__item--on': isSetupSelected(f.name) }"
+          @click="emit('select-setup', f.path || `${novelCanonDir(bookId)}/${f.name}`, f.name)"
+        >
+          {{ setupDocTitle(f.name) }}
+        </button>
+        <p v-if="!worldDocs.length" class="novel-binder__hint">{{ t('novelWorkbench.noCanonYet') }}</p>
+      </template>
+
+      <button type="button" class="novel-binder__item novel-binder__item--top" @click="ledgerOpen = !ledgerOpen">
+        <span>{{ t('novelWorkbench.ledger') }}</span>
+        <span class="novel-binder__count">{{ ledgerOpen ? '−' : '+' }}</span>
+      </button>
+      <template v-if="ledgerOpen">
+        <button
+          type="button"
+          class="novel-binder__item novel-binder__item--nested"
+          :class="{ 'novel-binder__item--on': treeSel.kind === 'ledger' && treeSel.name === 'facts.md' }"
+          @click="emit('select-facts')"
+        >
+          facts.md
+        </button>
+        <button
+          v-for="f in summaryFiles"
+          :key="'s-' + f.name"
+          type="button"
+          class="novel-binder__item novel-binder__item--nested"
+          :class="{ 'novel-binder__item--on': treeSel.kind === 'ledger' && treeSel.name === f.name }"
+          @click="emit('select-ledger', f, 'summary')"
+        >
+          summaries/{{ f.name }}
+        </button>
+        <button
+          v-for="f in ledgerFiles"
+          :key="'l-' + f.name"
+          type="button"
+          class="novel-binder__item novel-binder__item--nested novel-binder__item--dim"
+          :class="{ 'novel-binder__item--on': treeSel.kind === 'ledger' && treeSel.name === f.name }"
+          @click="emit('select-ledger', f, 'facts')"
         >
           {{ f.name }}
         </button>
-        <p v-if="!dossierFiles.length" class="novel-binder__hint">{{ t('novelWorkbench.noDossierYet') }}</p>
-      </DqCollapseItem>
-    </DqCollapse>
+      </template>
+    </section>
   </aside>
 </template>
 
 <style scoped>
 .novel-binder {
-  flex: 0 0 240px;
-  min-width: 200px;
-  max-width: 280px;
-  overflow: auto;
+  flex: 0 0 250px;
+  min-width: 210px;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   border-right: 1px solid color-mix(in srgb, var(--dq-border-subtle, #000) 50%, transparent);
-  padding: 6px 0 16px;
   background: color-mix(in srgb, var(--dq-glass-popover-bg, #fff) 40%, transparent);
 }
 
-.novel-binder :deep(.dq-collapse-item__header) {
-  padding: 6px 12px;
-  font-size: var(--dq-font-size-caption);
-  font-weight: 650;
-  border-radius: 6px;
+.novel-binder__section {
+  flex-shrink: 0;
+  padding: 6px 0;
 }
 
-.novel-binder :deep(.dq-collapse-item__header:hover) {
-  background: color-mix(in srgb, var(--dq-accent) 8%, transparent);
+.novel-binder__section--grow {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-top: 1px solid color-mix(in srgb, var(--dq-border-subtle, #000) 30%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--dq-border-subtle, #000) 30%, transparent);
 }
 
-.novel-binder :deep(.dq-collapse-item__title) {
+.novel-binder__section--bottom {
+  max-height: 45%;
+  overflow: auto;
+}
+
+.novel-binder__head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-}
-
-.novel-binder__sub {
-  margin-left: 4px;
-}
-
-.novel-binder__sub :deep(.dq-collapse-item__header) {
-  padding-left: 28px;
-  font-weight: 600;
+  padding: 4px 12px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
 }
 
 .novel-binder__item {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 6px;
   width: 100%;
   margin: 0;
-  padding: 6px 12px 6px 28px;
+  padding: 6px 12px;
   border: none;
   background: transparent;
   color: inherit;
@@ -310,98 +322,142 @@ const setupOpenModel = computed({
   font-weight: 650;
 }
 
-.novel-binder__item--ghost {
-  opacity: 0.65;
+.novel-binder__item--top {
+  font-weight: 650;
 }
 
 .novel-binder__item--nested {
-  padding-left: 40px;
+  padding-left: 26px;
 }
 
 .novel-binder__item--dim {
-  opacity: 0.78;
+  opacity: 0.7;
 }
 
-.novel-binder__item--chapter {
+.novel-binder__vol {
+  padding-bottom: 4px;
+}
+
+.novel-binder__item--vol {
+  padding: 5px 12px 3px;
+}
+
+.novel-binder__vol-name {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.novel-binder__vol-meta {
+  font-size: 10px;
+  opacity: 0.55;
+}
+
+.novel-binder__item--unit {
+  align-items: flex-start;
+  padding: 5px 12px 5px 16px;
+}
+
+.novel-binder__dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--dq-border-subtle, #000) 45%, transparent);
+}
+
+.novel-binder__dot--ready,
+.novel-binder__dot--drafted {
+  background: var(--dq-accent);
+}
+
+.novel-binder__dot--review_fail {
+  background: var(--dq-danger, #dc2626);
+}
+
+.novel-binder__dot--finalized {
+  background: var(--dq-success, #16a34a);
+}
+
+.novel-binder__unit-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 3px;
+  gap: 1px;
 }
 
-.novel-binder__chapter-name {
+.novel-binder__unit-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.novel-binder__unit-id {
+  font-weight: 650;
+}
+
+.novel-binder__unit-range {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.novel-binder__next {
+  font-size: 9px;
+  color: var(--dq-accent);
+}
+
+.novel-binder__unit-purpose {
+  font-size: 11px;
+  opacity: 0.7;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.novel-binder__phase {
-  align-self: flex-start;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 650;
-  background: color-mix(in srgb, var(--dq-border-subtle, #000) 28%, transparent);
-  opacity: 0.9;
-}
-
-.novel-binder__phase--contract_ready,
-.novel-binder__phase--drafted {
-  background: color-mix(in srgb, var(--dq-accent) 16%, transparent);
-  color: var(--dq-accent);
-}
-
-.novel-binder__phase--review_fail {
-  background: color-mix(in srgb, var(--dq-danger, #dc2626) 16%, transparent);
-  color: var(--dq-danger, #dc2626);
-}
-
-.novel-binder__phase--review_pass {
-  background: color-mix(in srgb, #ca8a04 18%, transparent);
-  color: #a16207;
-}
-
-.novel-binder__phase--committed {
-  background: color-mix(in srgb, var(--dq-success, #16a34a) 16%, transparent);
-  color: var(--dq-success, #16a34a);
-}
-
 .novel-binder__count {
-  opacity: 0.5;
   font-weight: 400;
+  opacity: 0.55;
+  font-size: 11px;
+}
+
+.novel-binder__warn {
+  display: inline-block;
+  min-width: 14px;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dq-danger, #dc2626) 18%, transparent);
+  color: var(--dq-danger, #dc2626);
+  font-weight: 700;
+  text-align: center;
+  opacity: 1;
 }
 
 .novel-binder__hint {
   margin: 0;
-  padding: 2px 12px 2px 28px;
-  font-size: var(--dq-font-size-caption);
+  padding: 2px 12px 4px 26px;
+  font-size: 11px;
   opacity: 0.55;
   line-height: 1.35;
 }
 
-.novel-binder__filter {
-  padding: 2px 12px 6px 28px;
-}
-
 .novel-binder__filter-btn {
   margin: 0;
-  padding: 2px 0;
+  padding: 0;
   border: none;
   background: transparent;
   color: var(--dq-accent);
   font: inherit;
   font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
   cursor: pointer;
+  opacity: 1;
 }
 
 .novel-binder__filter-btn--on {
   font-weight: 650;
-}
-
-.novel-binder__vol-label {
-  padding: 6px 12px 2px 20px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  opacity: 0.5;
 }
 </style>

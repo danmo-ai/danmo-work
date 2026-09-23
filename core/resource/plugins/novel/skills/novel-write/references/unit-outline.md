@@ -12,22 +12,34 @@ Official name: **单元细纲**. Do not introduce other product names. This file
 | Format | **YAML only** — copy `assets/templates/unit-outline.yaml` via `read_skill` |
 | Forbidden | Markdown unit outlines, per-chapter outline files, copying scene/`cut_hook` text into the volume outline |
 
-**本文件是单元级唯一事实源。** 卷纲只索引（unit_id / 章范围 / 一句话功能 / 本单元禁碰 / 钩子类型），不重复本文件字段。写细纲时从卷纲索引行 + 一句话功能出发，展开为完整合同。
+**本文件是单元级唯一事实源。** 卷纲只分配（unit_id / 章范围 / 一句话功能 / 终局边界短语 / 钩子类型 / 本卷人物），不重复本文件字段。
 
-写细纲前先读本卷纲：定位 **单元索引表** 中本单元的行，`unit_id` 与章范围必须对上。卷纲没有这一行、或章范围对不上 → 退回 `novel-plan`，不要空造细纲。
+**头部已由 `accept-volume` 种下**（`unit_id` / `chapter_range` / `function` / `next_hook.type` / `status: proposed` / `word_*`）。你的活是把 `proposed` 填成 `accepted`：合同、`on_stage` / `pov`、场面、章切口。没有头文件 → 卷纲没批准或没跑 `accept-volume`，退回 `novel-plan`，不要空造。
+
+## 一批细纲
+
+一轮填 **≤4 个** `proposed` 单元（按 unit 顺序），写完 `exec_shell` gate `--action lint-units --volume vNN`，读 `### UNITS` 逐单元 PASS/FAIL；FAIL 只补失败的那几个再跑。本卷仍有 `proposed` → 下一轮再发一批。不要在同一轮写正文。
+
+## 上场人物
+
+- `on_stage`：本单元开口或被写到的角色 stem（= `canon/cast/<stem>.md` 文件名），**必须 ⊆ 卷纲「本卷人物」**，且全部 `canon`（`accept-volume` 已提升；不在名单的新角色 → 退回 `novel-plan` 补卡 + 加进本卷人物）。
+- `pov`：本单元默认 POV stem，∈ `on_stage`。preflight 会给他注入「不知」一行。
+- 场面级可选 `who`（本场在场子集）/ `pov`（覆盖）。
+- 龙套用工称，不进 `on_stage`。`on_stage` 为空 → preflight 不带人物并 warning。
 
 ## 从索引下推
 
-卷纲索引只给你：`unit_id` / 章范围 / 一句话功能 / 本单元禁碰 / 下一单元钩子类型。你要把它展开为完整合同：
+头部已给：`unit_id` / 章范围 / `function` / `next_hook.type` / 终局边界短语。你要把它展开为完整合同：
 
-- 一句话功能 → `function`
+- `function` 已种下，**不改**（改了 gate 只 warning，以卷纲为准）
 - 上一单元 `next_hook.out` → `entry`（因果入口）
 - 你设计：主角局部目标 → `desire`
 - 你设计：得不到的具体原因 → `obstacle`
 - 你设计：关键选择（谁/在哪/代价）→ `choice`
 - 你设计：主兑现 → `payoff`；主爽点形态 → `pleasure`（单元一条，连续3单元不雷同）
 - 本单元禁碰（索引表 + bible unlock 卷 + `canon/locked-terms.yaml`）→ `forbidden` / `endgame_boundary`
-- 钩子类型（索引表已给）→ `next_hook.type`；你设计：具体事件 → `next_hook.out`
+- `next_hook.type` 已种下（改了 blocking）；你设计：具体事件 → `next_hook.out`
+- 卷纲终局边界格非空时，`forbidden` 与 `endgame_boundary` 不得皆空（blocking）
 
 ## 场面与切章
 
@@ -57,11 +69,12 @@ Official name: **单元细纲**. Do not introduce other product names. This file
 
 ## Process
 
-1. Read the volume **单元索引表** for this unit. Missing row or range mismatch → stop, back to `novel-plan`.
-2. **状态对齐（只读小节）**：读 `continuity/facts.md` `### Cast snapshot` 中本单元角色的行（`state_deltas` 的「从X」必须与 snapshot 一致）。场面含双人对手戏时，另读相关人物卡「关系」段（关系卡只写质态，不写编年史）。
-3. Write `outline/units/vNN-U#.yaml`. Set `status=accepted` when ready to draft（默认不 `ask_user`）。新正式姓名过取名短清单；重要新角色先写 `candidate` 卡。
-4. Set `novel-state.yaml` `active_unit` to this id，`stage: writing`.
-5. Proceed to `unit-write.md`.
+1. `glob outline/units/vNN-U*.yaml`，取 `status: proposed` 的前 ≤4 个。没有 → 卷纲未批准 / 未 `accept-volume`，back to `novel-plan`。
+2. 读卷纲「本卷人物」列表（只这一节）与上一单元 `next_hook.out`。
+3. **状态对齐（只读小节）**：读 `continuity/facts.md` `### Cast snapshot` 中涉及角色的行（`state_deltas` 的「从X」必须与 snapshot 一致）。场面含双人对手戏时，另读相关人物卡「关系」段（只写质态，不写编年史）。
+4. 逐个 `edit` `outline/units/vNN-U#.yaml`：`on_stage` / `pov` / 合同 / `scenes` / `chapters` / `state_deltas` / `info_control`，`status=accepted`（默认不 `ask_user`）。新正式姓名过取名短清单。
+5. `exec_shell` gate `--action lint-units --volume vNN`；FAIL 只补失败单元。
+6. Set `novel-state.yaml` `active_unit` 为本批第一个，`stage: writing`。停；写正文另开一轮（`unit-write.md`）。
 
 ## Status
 

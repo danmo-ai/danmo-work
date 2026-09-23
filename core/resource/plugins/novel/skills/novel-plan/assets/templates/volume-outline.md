@@ -1,12 +1,15 @@
 # Volume outline — v{{NN}} {{卷名}}
 
-**卷纲只写卷级判断 + 单元索引。** 单元级细节（desire/obstacle/choice/payoff/pleasure/forbidden/scenes/章切口）**全部在 `outline/units/v{{NN}}-U#.yaml`**，本文件不重复。
+**卷纲只写卷级判断 + 单元索引 + 本卷人物。卷纲分配，细纲落笔。** 单元级细节（desire/obstacle/choice/payoff/pleasure/forbidden/scenes/章切口/on_stage/pov）**全部在 `outline/units/v{{NN}}-U#.yaml`**，本文件不重复。
+
+批准后跑 `novel_gate.py --action accept-volume --volume v{{NN}}`：「本卷人物」全部 `candidate → canon`，并按单元索引每行种出 `outline/units/v{{NN}}-U#.yaml` 头（status: proposed）。
 
 ## 锁卷 checklist（批准前勾选）
 
 - [ ] 本卷目标一句话立住；与全书读者承诺不打架
 - [ ] 长线结构钩已写；短线不空窗过久；设了必有兑或可见回馈
 - [ ] 单元索引因果链不断（每个 unit_id 有入口 + 一句话功能 + 下钩类型）
+- [ ] 「本卷人物」列全（stem 与 `canon/cast/*.md` 文件名一致；细纲 `on_stage` 只能从这里选）
 - [ ] 有双线时：事业/感情各一句 + 本卷交织点；无则标「跳过」
 - [ ] 终局边界已填；未提前打光圣经禁碰
 - [ ] 连续 3 个单元主爽点形态不雷同（在 yaml 的 `pleasure` 字段核对）
@@ -74,12 +77,21 @@
 | v{{NN}}-U7 | ch–ch | | | 未完成动作 |
 | v{{NN}}-U8 | ch–ch | | | 突然揭示 |
 
-**规则：**
-- 章范围必须连续、覆盖本卷全部章，无重叠无缺口。
-- 钩子类型只用九类：信息缺口 / 未兑现承诺 / 高代价选择 / 身份反转 / 关系临界 / 倒计时 / 未完成动作 / 突然揭示 / 回声·意象。具体事件文案在 yaml `next_hook.out`。
+**规则（gate 对照）：**
+- 章范围必须连续、覆盖本卷全部章，无重叠无缺口（`accept-volume` / `lint-units` blocking）。
+- 钩子类型只用九类：信息缺口 / 未兑现承诺 / 高代价选择 / 身份反转 / 关系临界 / 倒计时 / 未完成动作 / 突然揭示 / 回声/意象。细纲 `next_hook.type` 须与本表一致（blocking）；具体事件文案只在 yaml `next_hook.out`。
+- 一句话功能由本表定，`accept-volume` 种进细纲 `function`；细纲改了只 warning，以卷纲为准。
+- 终局边界格非空时，细纲 `forbidden` 与 `endgame_boundary` 不得皆空（blocking）。
 - 单元之间必须有因果（上一单元的 next_hook 引出下一单元的 entry）。
 - 连续 3 个单元主爽点形态雷同 → 重排（在 yaml `pleasure` 核对）。
 - **禁止**在本文件写 desire/obstacle/choice/payoff/pleasure/forbidden/scenes/场面/章切口——那些是 yaml 的活。
+
+## 本卷人物（stem；批准即 canon）
+
+一行一个 `canon/cast/<stem>.md` 的文件名。细纲 `on_stage` 只能从这里选；`accept-volume` 把这里的 `candidate` 全部提成 `canon`。龙套不列。
+
+- {{protagonist-stem}}
+- {{antagonist-stem}}
 
 ## 情绪与人物弧
 

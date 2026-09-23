@@ -15,98 +15,74 @@ export interface NovelStateSummary {
 export type GateStatus = 'unknown' | 'pass' | 'fail' | 'skipped'
 
 export interface NovelExtendedState extends NovelStateSummary {
+  genre: string
   qcProfile: string
+  craftLane: string
   continuationMode: boolean
   activeUnit: string
-  frozenBatch: { from: number; to: number } | null
-  batchFreezeArtifact: string
+  /** artifacts.cast_registry — `ok` / `fail` written by gate cast-lint, else raw value. */
+  castRegistry: string
   gates: { knowledge: GateStatus; asset: GateStatus; qc: GateStatus }
   blockers: string[]
 }
 
-/** Coarse phase for constraint footer / legacy. */
-export type NovelPipelinePhase = 'init' | 'setup' | 'outline' | 'writing' | 'review' | 'idle'
+/**
+ * Three workbench phases (+ idle):
+ * planning  — no approved volume outline yet (or approved but not accept-volume'd)
+ * outlining — the current volume still has `proposed` unit YAML heads
+ * units     — every unit of the current volume is outlined; write → finalize one by one
+ */
+export type NovelPipelinePhase = 'planning' | 'outlining' | 'units' | 'idle'
 
-/** Eight visible pipeline steps (workbench stepper). */
-export type NovelPipelineStepId =
-  | 'init'
-  | 'setup'
-  | 'outline'
-  | 'volume'
-  | 'contract'
-  | 'write'
-  | 'review'
-  | 'commit'
+/**
+ * Unit state inferred from disk:
+ * pending_outline — `proposed` head without scenes (seeded by accept-volume)
+ * ready           — `accepted` outline, no prose
+ * drafted         — prose exists, not yet finalized
+ * review_fail     — prose exists and reviews/<unit>-review.md says FAIL
+ * finalized       — `reviewed` and chapter range ≤ last_committed_ch
+ */
+export type NovelUnitPhase = 'pending_outline' | 'ready' | 'drafted' | 'review_fail' | 'finalized'
 
-export type NovelChapterPhase =
-  | 'empty'
-  | 'contract_draft'
-  | 'contract_ready'
-  | 'drafted'
-  | 'review_fail'
-  | 'review_pass'
-  | 'committed'
+/** Primary actions drive the single CTA; secondary actions live under 「更多」. */
+export type NovelPrimaryAction = 'plan' | 'outline-batch' | 'write' | 'finalize' | 'next-volume'
+export type NovelSecondaryAction = 'contract-one' | 'expand' | 'review' | 'polish' | 'cast-fix'
+export type NovelStageAction = 'init' | 'migrate' | NovelPrimaryAction | NovelSecondaryAction
 
-/** Workbench actions; each maps to a focused novel-* skill. */
-export type NovelStageAction =
-  | 'init'
-  | 'outline'
-  | 'volume'
-  | 'assets'
-  | 'goldfinger'
-  | 'contract'
-  | 'write'
-  | 'continue'
-  | 'expand'
-  | 'review'
-  | 'polish'
-  | 'commit'
-  | 'review-polish-commit'
-  | 'continuation'
-  | 'preflight'
+export const NOVEL_PRIMARY_ACTIONS: readonly NovelPrimaryAction[] = [
+  'plan',
+  'outline-batch',
+  'write',
+  'finalize',
+  'next-volume',
+]
+
+export const NOVEL_SECONDARY_ACTIONS: readonly NovelSecondaryAction[] = [
+  'contract-one',
+  'expand',
+  'review',
+  'polish',
+  'cast-fix',
+]
 
 export type NovelSkillId = 'novel-setup' | 'novel-plan' | 'novel-write' | 'novel-review'
 
 export interface NovelStagePrefillCtx {
   bookId?: string
-  chapter?: number
-  chapterPath?: string
   unitId?: string
   unitPath?: string
   volume?: number
-  batchFrom?: number
-  batchTo?: number
+  /** For outline-batch: the ≤4 proposed unit ids in this round. */
+  batchUnits?: string[]
+  /** For cast-fix: the cast stem to complete. */
+  stem?: string
+  /** True when the volume outline file already exists (plan → approve + accept-volume). */
+  volumeOutlineExists?: boolean
 }
 
-export interface NovelActionDecision {
-  allowed: boolean
-  blockers: string[]
-}
-
-export interface NovelBookPipeline {
-  phase: NovelPipelinePhase
-  /** Active step among the 8-step rail. */
-  step: NovelPipelineStepId
-  primaryAction: NovelStageAction | null
-  primaryUnit?: string
-  primaryChapter?: number
-  gates: { knowledge: GateStatus; asset: GateStatus; qc: GateStatus }
-  blockers: string[]
-  progress: { committed: number; totalWithContract: number; percent: number }
-  frozenBatch: { from: number; to: number } | null
-}
-
-export interface NovelBookContext {
-  bookId: string
-  state: NovelExtendedState
-  entries: NovelUnitEntry[]
-  unitPhases: Record<string, NovelChapterPhase>
-  castFileCount: number
-  hasBookOutline: boolean
-  hasVolumeOutline: boolean
-  hasBatchFreezeFile: boolean
-  batchFreezeFrozen: boolean
-}
+// ---------------------------------------------------------------------------
+// YAML scalars (no dependency)
+// ---------------------------------------------------------------------------
 
 function yamlScalar(raw: string, key: string): string {
   const re = new RegExp(`^${key}:\\s*(.*)$`, 'm')
@@ -120,6 +96,7 @@ function yamlScalar(raw: string, key: string): string {
   } else {
     const hash = v.search(/\s+#/)
     if (hash >= 0) v = v.slice(0, hash).trim()
+    if (v.startsWith('#')) v = ''
   }
   if (v === '""' || v === "''") return ''
   return v
@@ -127,14 +104,40 @@ function yamlScalar(raw: string, key: string): string {
 
 function yamlNestedScalar(raw: string, parent: string, key: string): string {
   // Capture indented block under `parent:` until next top-level key.
-  // Do not use `$` in a non-greedy lookahead — it stops at the first nested line EOL.
   const blockRe = new RegExp(`^${parent}:\\s*\\n((?:[ \\t].*\\n?)*)`, 'm')
   const block = raw.match(blockRe)
   if (!block) return ''
   const re = new RegExp(`^[ \\t]+${key}:\\s*(.*)$`, 'm')
   const m = block[1].match(re)
   if (!m) return ''
-  return (m[1] ?? '').trim().replace(/^["']|["']$/g, '')
+  let v = (m[1] ?? '').trim()
+  const hash = v.search(/\s+#/)
+  if (hash >= 0 && !/^["']/.test(v)) v = v.slice(0, hash).trim()
+  return v.replace(/^["']|["']$/g, '')
+}
+
+/** `key: [a, b]` flow list or `key:\n  - a\n  - b` block list → string[]. */
+function yamlList(raw: string, key: string): string[] {
+  const flow = raw.match(new RegExp(`^${key}:\\s*\\[([^\\]]*)\\]`, 'm'))
+  if (flow) {
+    return flow[1]
+      .split(',')
+      .map((s) => s.trim().replace(/^["']|["']$/g, ''))
+      .filter(Boolean)
+  }
+  const block = raw.match(new RegExp(`^${key}:\\s*\\n((?:[ \\t]+-\\s+.*\\n?)*)`, 'm'))
+  if (!block) return []
+  const out: string[] = []
+  for (const line of block[1].split('\n')) {
+    const m = line.match(/^\s+-\s+(.*)$/)
+    if (!m) continue
+    let v = m[1].trim()
+    const hash = v.search(/\s+#/)
+    if (hash >= 0 && !/^["']/.test(v)) v = v.slice(0, hash).trim()
+    v = v.replace(/^["']|["']$/g, '')
+    if (v) out.push(v)
+  }
+  return out
 }
 
 /** Parse a few scalar fields from novel-state.yaml without a YAML dependency. */
@@ -150,24 +153,6 @@ export function parseNovelStateYaml(raw: string): NovelStateSummary {
 
 export function parseNovelStateExtended(raw: string): NovelExtendedState {
   const base = parseNovelStateYaml(raw)
-  const from = Number.parseInt(yamlNestedScalar(raw, 'frozen_batch', 'from'), 10)
-  const to = Number.parseInt(yamlNestedScalar(raw, 'frozen_batch', 'to'), 10)
-  let frozenBatch =
-    Number.isFinite(from) && Number.isFinite(to) && from > 0 && to >= from
-      ? { from, to }
-      : null
-  if (!frozenBatch) {
-    const batchBlock = raw.match(/^frozen_batch:\s*\n((?:[ \t].*\n?)*)/m)
-    if (batchBlock) {
-      const f = batchBlock[1].match(/^\s+from:\s*(\d+)/m)
-      const t = batchBlock[1].match(/^\s+to:\s*(\d+)/m)
-      const fromN = f ? Number.parseInt(f[1], 10) : NaN
-      const toN = t ? Number.parseInt(t[1], 10) : NaN
-      if (Number.isFinite(fromN) && Number.isFinite(toN) && fromN > 0 && toN >= fromN) {
-        frozenBatch = { from: fromN, to: toN }
-      }
-    }
-  }
 
   const parseGateBlock = (rawYaml: string): { knowledge: GateStatus; asset: GateStatus; qc: GateStatus } => {
     const defaults: { knowledge: GateStatus; asset: GateStatus; qc: GateStatus } = {
@@ -190,69 +175,26 @@ export function parseNovelStateExtended(raw: string): NovelExtendedState {
     }
   }
 
-  const artifactsBlock = raw.match(/^artifacts:\s*\n((?:[ \t].*\n?)*)/m)
-  let batchFreezeArtifact = yamlNestedScalar(raw, 'artifacts', 'batch_freeze')
-  if (!batchFreezeArtifact && artifactsBlock) {
-    const m = artifactsBlock[1].match(/^\s+batch_freeze:\s*(.+)$/m)
-    if (m) batchFreezeArtifact = m[1].trim().replace(/^["']|["']$/g, '')
-  }
-
   const blockers: string[] = []
   const blockerBlock = raw.match(/^blockers:\s*\n((?:\s+-\s+.+\n?)*)/m)
   if (blockerBlock) {
     for (const line of blockerBlock[1].split('\n')) {
       const m = line.match(/^\s*-\s+(.*)$/)
-      if (m?.[1]?.trim()) blockers.push(m[1].trim())
+      if (m?.[1]?.trim()) blockers.push(m[1].trim().replace(/^["']|["']$/g, ''))
     }
   }
 
   return {
     ...base,
+    genre: yamlScalar(raw, 'genre'),
     qcProfile: yamlScalar(raw, 'qc_profile') || 'general',
+    craftLane: yamlScalar(raw, 'craft_lane') || 'default',
     continuationMode: /continuation_mode:\s*true/i.test(raw),
     activeUnit: yamlScalar(raw, 'active_unit'),
-    frozenBatch,
-    batchFreezeArtifact,
+    castRegistry: yamlNestedScalar(raw, 'artifacts', 'cast_registry'),
     gates: parseGateBlock(raw),
     blockers,
   }
-}
-
-/** Structured fields from chapters/chNNN-outline.yaml (best-effort scalars). */
-export interface NovelContractFields {
-  status: string
-  title: string
-  unitId: string
-  scene: string
-  purpose: string
-  pleasurePoint: string
-  microPayoff: string
-  emotionLine: string
-  wordTarget: string
-  hookType: string
-  hookOut: string
-}
-
-export function parseContractYaml(raw: string): NovelContractFields {
-  const status = yamlScalar(raw, 'status').toLowerCase()
-  return {
-    status: status || 'proposed',
-    title: yamlScalar(raw, 'title_working'),
-    unitId: yamlScalar(raw, 'unit_id'),
-    scene: yamlScalar(raw, 'scene'),
-    purpose: yamlScalar(raw, 'purpose'),
-    pleasurePoint: yamlScalar(raw, 'pleasure_point'),
-    microPayoff: yamlScalar(raw, 'micro_payoff'),
-    emotionLine: yamlScalar(raw, 'emotion_line'),
-    wordTarget: yamlScalar(raw, 'word_target'),
-    hookType: yamlNestedScalar(raw, 'hook', 'type'),
-    hookOut: yamlNestedScalar(raw, 'hook', 'out'),
-  }
-}
-
-/** True when the chapter still needs author/agent work (not yet committed). */
-export function isChapterPhasePending(phase: NovelChapterPhase): boolean {
-  return phase !== 'committed'
 }
 
 export function parseReviewVerdict(raw: string): 'PASS' | 'FAIL' | null {
@@ -261,329 +203,9 @@ export function parseReviewVerdict(raw: string): 'PASS' | 'FAIL' | null {
   return m[1].toUpperCase() === 'PASS' ? 'PASS' : 'FAIL'
 }
 
-export function parseBatchFreezeYaml(raw: string): { status: string } {
-  return { status: yamlScalar(raw, 'status').toLowerCase() || 'proposed' }
-}
-
-export function inferChapterPhase(
-  entry: NovelChapterEntry,
-  lastCommittedCh: number,
-  contractRaw?: string,
-  reviewRaw?: string,
-): NovelChapterPhase {
-  if (entry.chapter <= lastCommittedCh && entry.prose) return 'committed'
-
-  const contractStatus = contractRaw ? parseContractYaml(contractRaw).status : ''
-  const verdict = reviewRaw ? parseReviewVerdict(reviewRaw) : null
-
-  if (entry.prose) {
-    if (verdict === 'FAIL') return 'review_fail'
-    // PASS stub optional: contract reviewed (post-review, pre-commit) or legacy PASS file
-    if (verdict === 'PASS' || contractStatus === 'reviewed') return 'review_pass'
-    return 'drafted'
-  }
-
-  if (entry.contract) {
-    if (contractStatus === 'accepted' || contractStatus === 'drafted' || contractStatus === 'reviewed') {
-      return 'contract_ready'
-    }
-    return 'contract_draft'
-  }
-
-  return 'empty'
-}
-
-export function inferChapterNextAction(phase: NovelChapterPhase): NovelStageAction | null {
-  switch (phase) {
-    case 'empty':
-      return 'contract'
-    case 'contract_draft':
-      return 'contract'
-    case 'contract_ready':
-      return 'write'
-    case 'drafted':
-    case 'review_fail':
-      return 'review'
-    case 'review_pass':
-      return 'commit'
-    case 'committed':
-      return null
-    default:
-      return null
-  }
-}
-
-export function buildChapterPhases(
-  entries: NovelChapterEntry[],
-  lastCommittedCh: number,
-  contractRaws: Record<number, string> = {},
-  reviewRaws: Record<number, string> = {},
-): Record<number, NovelChapterPhase> {
-  const out: Record<number, NovelChapterPhase> = {}
-  for (const e of entries) {
-    out[e.chapter] = inferChapterPhase(
-      e,
-      lastCommittedCh,
-      contractRaws[e.chapter],
-      reviewRaws[e.chapter],
-    )
-  }
-  return out
-}
-
-export function inferBookPipelinePhase(ctx: NovelBookContext): NovelPipelinePhase {
-  if (ctx.state.stage === 'idle') return 'idle'
-  const art = ctx.state
-  if (!ctx.hasBookOutline && art.stage === 'init') return 'init'
-  if (!ctx.hasBookOutline && ctx.castFileCount === 0) return 'init'
-  if (!ctx.hasBookOutline) return ctx.castFileCount === 0 ? 'setup' : 'outline'
-  const phases = Object.values(ctx.unitPhases)
-  if (phases.some((p) => p === 'drafted' || p === 'review_fail' || p === 'review_pass')) {
-    return 'review'
-  }
-  if (ctx.entries.length > 0 || ctx.hasVolumeOutline) return 'writing'
-  if (ctx.castFileCount === 0) return 'setup'
-  return 'outline'
-}
-
-/** Map book context to one of 8 visible pipeline steps. */
-export function inferPipelineStep(ctx: NovelBookContext): NovelPipelineStepId {
-  if (ctx.state.stage === 'idle') return 'commit'
-  if (!ctx.hasBookOutline && ctx.castFileCount === 0 && ctx.state.stage === 'init') return 'init'
-  if (!ctx.hasBookOutline && ctx.castFileCount === 0) return 'setup'
-  if (!ctx.hasBookOutline) return 'outline'
-  if (!ctx.hasVolumeOutline) return 'volume'
-
-  const sorted = [...ctx.entries].sort(compareUnits)
-  for (const e of sorted) {
-    const ph = ctx.unitPhases[e.unitId] ?? 'empty'
-    if (ph === 'empty' || ph === 'contract_draft') return 'contract'
-    if (ph === 'contract_ready') return 'write'
-    if (ph === 'drafted' || ph === 'review_fail') return 'review'
-    if (ph === 'review_pass') return 'commit'
-  }
-  if (ctx.entries.length === 0) return 'contract'
-  return 'write'
-}
-
-function compareUnits(a: NovelUnitEntry, b: NovelUnitEntry): number {
-  if (a.volume !== b.volume) return a.volume - b.volume
-  return a.index - b.index
-}
-
-export function computeBookPipeline(ctx: NovelBookContext): NovelBookPipeline {
-  const phase = inferBookPipelinePhase(ctx)
-  const step = inferPipelineStep(ctx)
-  const committed = ctx.entries.filter((e) => ctx.unitPhases[e.unitId] === 'committed').length
-  const totalWithContract = ctx.entries.filter((e) => e.outline || e.prose).length
-  const percent =
-    totalWithContract > 0 ? Math.min(100, Math.round((committed / totalWithContract) * 100)) : 0
-
-  const assetGate: GateStatus =
-    ctx.castFileCount > 0 ? 'pass' : ctx.state.gates.asset === 'fail' ? 'fail' : 'unknown'
-
-  const gates = {
-    knowledge: ctx.state.gates.knowledge,
-    asset: assetGate,
-    qc: ctx.state.gates.qc,
-  }
-
-  const blockers = [...ctx.state.blockers]
-  if (assetGate === 'unknown' && ctx.castFileCount === 0) {
-    blockers.push('blocker.noCast')
-  }
-
-  let primaryAction: NovelStageAction | null = null
-  let primaryUnit: string | undefined
-
-  switch (step) {
-    case 'init':
-      primaryAction = 'init'
-      break
-    case 'setup':
-      primaryAction = 'assets'
-      break
-    case 'outline':
-      primaryAction = 'outline'
-      break
-    case 'volume':
-      primaryAction = 'volume'
-      break
-    case 'contract':
-    case 'write':
-    case 'review':
-    case 'commit': {
-      const sorted = [...ctx.entries].sort(compareUnits)
-      for (const e of sorted) {
-        const ph = ctx.unitPhases[e.unitId] ?? 'empty'
-        const next = inferChapterNextAction(ph)
-        if (next) {
-          primaryAction = next
-          primaryUnit = e.unitId
-          break
-        }
-      }
-      if (!primaryAction) {
-        primaryAction = step === 'review' || step === 'commit' ? 'continue' : 'contract'
-      }
-      break
-    }
-  }
-
-  return {
-    phase,
-    step,
-    primaryAction,
-    primaryUnit,
-    gates,
-    blockers,
-    progress: { committed, totalWithContract, percent },
-    frozenBatch: ctx.state.frozenBatch,
-  }
-}
-
-export function canRunAction(
-  action: NovelStageAction,
-  ctx: NovelBookContext,
-  unitId?: string,
-): NovelActionDecision {
-  const blockers: string[] = []
-  const pending = [...ctx.entries].sort(compareUnits).find((e) => ctx.unitPhases[e.unitId] !== 'committed')
-  const uid = unitId ?? pending?.unitId ?? ''
-
-  if (
-    action === 'write' ||
-    action === 'expand' ||
-    action === 'review' ||
-    action === 'commit' ||
-    action === 'polish' ||
-    action === 'review-polish-commit'
-  ) {
-    if (ctx.castFileCount === 0) blockers.push('blocker.noCast')
-  }
-
-  const phaseOf = (id: string) => (id ? ctx.unitPhases[id] : undefined)
-
-  if (action === 'write') {
-    if (!uid) blockers.push('blocker.noChapter')
-    const phase = phaseOf(uid)
-    if (phase !== 'contract_ready') {
-      if (phase === 'empty' || phase === 'contract_draft' || !phase) blockers.push('blocker.needContract')
-      else if (phase === 'drafted' || phase === 'review_fail' || phase === 'review_pass') {
-        blockers.push('blocker.alreadyDrafted')
-      } else if (phase === 'committed') blockers.push('blocker.alreadyCommitted')
-    }
-  }
-
-  if (action === 'expand' || action === 'review') {
-    const phase = phaseOf(uid)
-    if (action === 'expand') {
-      if (phase !== 'drafted' && phase !== 'review_fail' && phase !== 'review_pass') {
-        blockers.push('blocker.needDraft')
-      }
-      if (phase === 'committed') blockers.push('blocker.alreadyCommitted')
-    } else if (phase !== 'drafted' && phase !== 'review_fail') {
-      blockers.push('blocker.needDraft')
-    }
-  }
-
-  if (action === 'commit' || action === 'polish') {
-    const phase = phaseOf(uid)
-    if (phase !== 'review_pass') blockers.push('blocker.needReviewPass')
-  }
-
-  if (action === 'review-polish-commit') {
-    if (!uid) blockers.push('blocker.noChapter')
-    const phase = phaseOf(uid)
-    if (phase === 'empty' || phase === 'contract_draft' || phase === 'contract_ready' || !phase) {
-      blockers.push('blocker.needDraft')
-    }
-    if (phase === 'committed') blockers.push('blocker.alreadyCommitted')
-  }
-
-  return { allowed: blockers.length === 0, blockers }
-}
-
-
-export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
-  switch (action) {
-    case 'init':
-      return 'novel-setup'
-    case 'assets':
-    case 'goldfinger':
-    case 'outline':
-    case 'volume':
-      return 'novel-plan'
-    case 'expand':
-    case 'review':
-    case 'polish':
-    case 'commit':
-    case 'review-polish-commit':
-    case 'continuation':
-      return 'novel-review'
-    default:
-      return 'novel-write'
-  }
-}
-
-/**
- * Composer load line: skill + intent only.
- * Which reference / template / KB theme to open lives in each skill's
- * Intent→Load table — do not hardcode skillRefs here (skill updates would desync).
- */
-export function formatLoadProtocol(action: NovelStageAction): string {
-  const skillId = novelActionSkillId(action)
-  if (skillId === 'novel-write' && (action === 'write' || action === 'continue' || action === 'preflight')) {
-    return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；写正文先跑 gate preflight --unit，只消费 ### CONTEXT；落盘一份单元正文后停下（扩写/润色/定稿另轮）。`
-  }
-  if (skillId === 'novel-review') {
-    return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；定稿车道（扩写/审/润/Commit），与写作首稿分 turn。`
-  }
-  return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill。`
-}
-
-export function buildConstraintFooter(
-  pipeline: NovelBookPipeline,
-  action: NovelStageAction,
-  blockers: string[],
-): string {
-  const skillId = novelActionSkillId(action)
-  const lines = [
-    '---',
-    `阶段 ${pipeline.phase}/${pipeline.step} · 动作 ${action} · 技能 ${skillId}`,
-    `gates knowledge=${pipeline.gates.knowledge} asset=${pipeline.gates.asset} qc=${pipeline.gates.qc}`,
-  ]
-  if (blockers.length) lines.push(`阻断：${blockers.join('；')}`)
-  lines.push('Team：delegate_agent.goal 须含本消息任务原文。')
-  return lines.join('\n')
-}
-
-export function buildConstrainedPrefill(
-  action: NovelStageAction,
-  ctx: NovelStagePrefillCtx,
-  pipeline?: NovelBookPipeline,
-  blockers?: string[],
-): string {
-  const body = buildNovelStagePrefill(action, ctx)
-  const skillLine = formatLoadProtocol(action)
-  const parts = [`【任务】\n${body}`, skillLine]
-  if (pipeline) {
-    parts.push(buildConstraintFooter(pipeline, action, blockers ?? []))
-  }
-  return parts.join('\n\n')
-}
-
-/** Stepper is progress-only; clicks do not inject Composer. */
-export const NOVEL_PIPELINE_STEPS: { id: NovelPipelineStepId; action?: NovelStageAction }[] = [
-  { id: 'init' },
-  { id: 'setup' },
-  { id: 'outline' },
-  { id: 'volume' },
-  { id: 'contract' },
-  { id: 'write' },
-  { id: 'review' },
-  { id: 'commit' },
-]
+// ---------------------------------------------------------------------------
+// Paths
+// ---------------------------------------------------------------------------
 
 export function novelActiveBookPath(): string {
   return 'novel/.active-book'
@@ -591,10 +213,6 @@ export function novelActiveBookPath(): string {
 
 export function novelBookDir(bookId: string): string {
   return `novel/${bookId}`
-}
-
-export function novelChaptersDir(bookId: string): string {
-  return `novel/${bookId}/chapters`
 }
 
 export function novelStatePath(bookId: string): string {
@@ -609,12 +227,69 @@ export function novelContinuityDir(bookId: string): string {
   return `novel/${bookId}/continuity`
 }
 
+export function novelFactsPath(bookId: string): string {
+  return `novel/${bookId}/continuity/facts.md`
+}
+
+export function novelSummariesDir(bookId: string): string {
+  return `novel/${bookId}/continuity/summaries`
+}
+
 export function novelOutlineDir(bookId: string): string {
   return `novel/${bookId}/outline`
 }
 
 export function novelVolumesDir(bookId: string): string {
   return `novel/${bookId}/outline/volumes`
+}
+
+export function novelVolumeOutlinePath(bookId: string, volume: number): string {
+  return `novel/${bookId}/outline/volumes/${volumeId(volume)}.md`
+}
+
+export function novelReviewsDir(bookId: string): string {
+  return `novel/${bookId}/reviews`
+}
+
+export function novelCanonDir(bookId: string): string {
+  return `novel/${bookId}/canon`
+}
+
+export function novelCastDir(bookId: string): string {
+  return `novel/${bookId}/canon/cast`
+}
+
+export function novelCastCardPath(bookId: string, stem: string): string {
+  return `novel/${bookId}/canon/cast/${stem}.md`
+}
+
+export function novelLegacyChaptersDir(bookId: string): string {
+  return `novel/${bookId}/chapters`
+}
+
+export function novelUnitOutlinePath(bookId: string, unitId: string): string {
+  return `novel/${bookId}/outline/units/${unitId}.yaml`
+}
+
+export function novelUnitProsePath(bookId: string, unitId: string): string {
+  return `novel/${bookId}/units/${unitId}.md`
+}
+
+export function novelUnitReviewPath(bookId: string, unitId: string): string {
+  return `novel/${bookId}/reviews/${unitId}-review.md`
+}
+
+export function novelUnitsDir(bookId: string): string {
+  return `novel/${bookId}/units`
+}
+
+export function novelUnitOutlinesDir(bookId: string): string {
+  return `novel/${bookId}/outline/units`
+}
+
+/** `v01` for 1. */
+export function volumeId(volume: number): string {
+  return `v${String(Math.max(0, volume)).padStart(2, '0')}`
 }
 
 /** Volume number from names like v01.md, v02-三眼时间回廊.md, volume01-chapter-index.md. */
@@ -648,6 +323,62 @@ export function mergeVolumeOutlineFiles(
   return [...fromDir, ...extras]
 }
 
+/** Next volume to outline = max existing volume file + 1 (fallback 1). */
+export function nextVolumeNumber(volumeFiles: NovelFileNode[]): number {
+  let max = 0
+  for (const f of volumeFiles) {
+    if (f.isDir) continue
+    const n = volumeNumFromName(f.name)
+    if (n != null && n > max) max = n
+  }
+  return max + 1
+}
+
+/** Display name for a 设定 file. Known canon filenames get short labels; cast cards drop the numeric prefix. */
+export function setupDocLabel(name: string): string {
+  const key = name.toLowerCase()
+  const known: Record<string, string> = {
+    'book-bible.md': 'bible',
+    'world.md': 'world',
+    'glossary.md': 'glossary',
+    'reveal-schedule.md': 'reveal',
+    'writing-rules.md': 'rules',
+    'platform-positioning.md': 'platform',
+    'goldfinger.md': 'goldfinger',
+    'author-lore.md': 'authorLore',
+    'style-fingerprint.md': 'style',
+    'locked-terms.yaml': 'lockedTerms',
+  }
+  if (known[key]) return known[key]
+  return name.replace(/^\d+-/, '').replace(/\.(md|ya?ml)$/i, '')
+}
+
+export function sortMdNodes(nodes: NovelFileNode[]): NovelFileNode[] {
+  return nodes
+    .filter((n) => !n.isDir && /\.md$/i.test(n.name))
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+}
+
+/** Outline / misc docs: markdown + yaml. */
+export function sortWorkbenchDocNodes(nodes: NovelFileNode[]): NovelFileNode[] {
+  return nodes
+    .filter((n) => !n.isDir && /\.(md|ya?ml)$/i.test(n.name))
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+}
+
+export function chapterNumFromName(name: string): number | null {
+  const m = name.match(/(\d+)/)
+  if (!m) return null
+  const n = Number.parseInt(m[1], 10)
+  return Number.isFinite(n) ? n : null
+}
+
+// ---------------------------------------------------------------------------
+// Markdown tables (book outline / volume index / cast relations)
+// ---------------------------------------------------------------------------
+
 export interface BookOutlineVolumeRow {
   vol: string
   goal: string
@@ -655,10 +386,13 @@ export interface BookOutlineVolumeRow {
   twist: string
 }
 
+/** One row of the volume 单元索引 table (or a legacy unit card / table). */
 export interface VolumeUnitRow {
   id: string
   range: string
   purpose: string
+  endgameBoundary: string
+  hookType: string
 }
 
 function markdownTableCells(line: string): string[] {
@@ -701,9 +435,8 @@ export function parseBookOutlineVolumeRows(md: string): BookOutlineVolumeRow[] {
   return rows
 }
 
-/** Parse 剧情单元 cards, or a legacy unit/chapter-index table, from a volume outline. */
 export function parseChapterRange(s: string): { from: number; to: number } | null {
-  const m = s.match(/ch?\s*(\d+)\s*[-–~至到]\s*ch?\s*(\d+)/i) || s.match(/(\d+)\s*[-–~至到]\s*(\d+)/)
+  const m = s.match(/ch?\s*(\d+)\s*[-–—~至到]\s*(?:ch)?\s*(\d+)/i) || s.match(/(\d+)\s*[-–—~至到]\s*(\d+)/)
   if (!m) return null
   const from = Number.parseInt(m[1], 10)
   const to = Number.parseInt(m[2], 10)
@@ -715,11 +448,62 @@ function stripMdInline(s: string): string {
   return s.replace(/^`+|`+$/g, '').trim()
 }
 
-/** Prefer unit cards (`### 剧情单元` / `- 单元ID：`); fall back to markdown tables. */
-export function parseVolumeUnitRows(md: string): VolumeUnitRow[] {
+const UNIT_ID_RE = /^v\d{2,}-U\d+$/i
+const UNIT_ID_HEADERS = new Set(['unit_id', '单元', '单元 id', '单元id', 'unit'])
+
+/**
+ * Rows of the 单元索引 table:
+ * `| unit_id | 章范围 | 一句话功能 | 本单元终局边界（禁碰） | 下一单元钩子类型 |`.
+ * `U1` in the first column is expanded with `volume` (e.g. 1 → v01-U1).
+ * Falls back to legacy `### 剧情单元` cards and older tables.
+ */
+export function parseVolumeUnitRows(md: string, volume?: number): VolumeUnitRow[] {
+  const table = parseVolumeIndexTable(md, volume)
+  if (table.length) return table
   const cards = parseVolumeUnitCards(md)
   if (cards.length) return cards
-  return parseVolumeUnitTable(md)
+  return parseLegacyUnitTable(md)
+}
+
+function expandUnitId(first: string, volume?: number): string {
+  const m = first.match(/^U(\d+)$/i)
+  if (m && volume && volume > 0) return `${volumeId(volume)}-U${m[1]}`
+  return first
+}
+
+function parseVolumeIndexTable(md: string, volume?: number): VolumeUnitRow[] {
+  const rows: VolumeUnitRow[] = []
+  let grab = false
+  let sawTable = false
+  for (const line of md.split(/\r?\n/)) {
+    const s = line.trim()
+    if (s.startsWith('#')) {
+      if (grab && rows.length) break
+      grab = s.includes('单元索引')
+      sawTable = false
+      continue
+    }
+    if (!grab) continue
+    const cells = markdownTableCells(line)
+    if (!cells.length) {
+      if (sawTable && rows.length) break
+      continue
+    }
+    sawTable = true
+    if (isMarkdownSepRow(cells)) continue
+    const first = stripMdInline(cells[0] ?? '')
+    if (!first || UNIT_ID_HEADERS.has(first.toLowerCase())) continue
+    const id = expandUnitId(first, volume)
+    if (!UNIT_ID_RE.test(id)) continue
+    rows.push({
+      id,
+      range: cells[1] ?? '',
+      purpose: cells[2] ?? '',
+      endgameBoundary: cells[3] ?? '',
+      hookType: stripMdInline(cells[4] ?? ''),
+    })
+  }
+  return rows
 }
 
 function parseVolumeUnitCards(md: string): VolumeUnitRow[] {
@@ -732,19 +516,19 @@ function parseVolumeUnitCards(md: string): VolumeUnitRow[] {
     }
     cur = null
   }
+  const blank = (): VolumeUnitRow => ({ id: '', range: '', purpose: '', endgameBoundary: '', hookType: '' })
 
   for (const raw of md.split(/\r?\n/)) {
     const line = raw.trim()
     const heading = line.match(/^#{2,4}\s*剧情单元\s*(.+)?$/i)
     if (heading) {
       flush()
-      const rest = (heading[1] || '').trim()
-      cur = { id: rest || '', range: '', purpose: '' }
+      cur = { ...blank(), id: (heading[1] || '').trim() }
       continue
     }
     const idLine = line.match(/^[-*]\s*单元ID[：:]\s*(.+)$/i)
     if (idLine) {
-      if (!cur) cur = { id: '', range: '', purpose: '' }
+      if (!cur) cur = blank()
       cur.id = stripMdInline(idLine[1])
       continue
     }
@@ -754,13 +538,13 @@ function parseVolumeUnitCards(md: string): VolumeUnitRow[] {
       cur.range = stripMdInline(rangeLine[1])
       continue
     }
-    const purposeLine = line.match(/^[-*]\s*单元功能[（(][^）)]*[）)]?[：:]\s*(.+)$/i)
-      || line.match(/^[-*]\s*单元功能[：:]\s*(.+)$/i)
+    const purposeLine =
+      line.match(/^[-*]\s*单元功能[（(][^）)]*[）)]?[：:]\s*(.+)$/i) ||
+      line.match(/^[-*]\s*单元功能[：:]\s*(.+)$/i)
     if (purposeLine) {
       cur.purpose = stripMdInline(purposeLine[1])
       continue
     }
-    // Next major section ends the unit block list.
     if (/^##\s+/.test(line) && !/^##\s*剧情单元/i.test(line)) {
       flush()
       break
@@ -770,7 +554,7 @@ function parseVolumeUnitCards(md: string): VolumeUnitRow[] {
   return rows.filter((r) => Boolean(r.id || r.range))
 }
 
-function parseVolumeUnitTable(md: string): VolumeUnitRow[] {
+function parseLegacyUnitTable(md: string): VolumeUnitRow[] {
   const rows: VolumeUnitRow[] = []
   let mode: 'unit' | 'legacy' | null = null
   for (const line of md.split(/\r?\n/)) {
@@ -791,104 +575,280 @@ function parseVolumeUnitTable(md: string): VolumeUnitRow[] {
     if (!mode) continue
     if (!cells[0]) continue
     if (mode === 'unit') {
-      rows.push({
-        id: cells[0],
-        range: cells[1] ?? '',
-        purpose: cells[2] ?? '',
-      })
+      rows.push({ id: cells[0], range: cells[1] ?? '', purpose: cells[2] ?? '', endgameBoundary: '', hookType: '' })
     } else {
-      rows.push({
-        id: cells[0],
-        range: cells[0],
-        purpose: cells[1] ?? '',
-      })
+      rows.push({ id: cells[0], range: cells[0], purpose: cells[1] ?? '', endgameBoundary: '', hookType: '' })
     }
   }
   return rows
 }
 
-/** Next volume to outline = max existing volume file + 1 (fallback 1). */
-export function nextVolumeNumber(volumeFiles: NovelFileNode[]): number {
-  let max = 0
-  for (const f of volumeFiles) {
-    if (f.isDir) continue
-    const n = volumeNumFromName(f.name)
-    if (n != null && n > max) max = n
+/** Stems listed under `## 本卷人物` (one `- stem` per line; backticks / trailing notes tolerated). */
+export function parseVolumeCast(md: string): string[] {
+  const out: string[] = []
+  let grab = false
+  for (const line of md.split(/\r?\n/)) {
+    const s = line.trim()
+    if (s.startsWith('#')) {
+      grab = s.includes('本卷人物')
+      continue
+    }
+    if (!grab) continue
+    const m = s.match(/^[-*]\s*`?([A-Za-z0-9][A-Za-z0-9_-]*)`?/)
+    if (m && !out.includes(m[1])) out.push(m[1])
   }
-  return max + 1
+  return out
 }
 
-export function novelReviewsDir(bookId: string): string {
-  return `novel/${bookId}/reviews`
+// ---------------------------------------------------------------------------
+// Cast cards
+// ---------------------------------------------------------------------------
+
+export type NovelCastStatus = 'candidate' | 'canon' | ''
+export type NovelCastRole = 'protagonist' | 'volume_antagonist' | 'recurring' | ''
+
+export interface NovelCastRelation {
+  /** Counterpart stem. */
+  target: string
+  type: string
+  current: string
+  lastChange: string
+  nextNode: string
 }
 
-export function novelCanonDir(bookId: string): string {
-  return `novel/${bookId}/canon`
+export interface NovelCastCard {
+  stem: string
+  name: string
+  status: NovelCastStatus
+  role: NovelCastRole
+  visualAnchor: string
+  speechAnchor: string
+  behaviorAnchor: string
+  catchphrase: string
+  desire: string
+  intersect: string
+  exit: string
+  unknown: string
+  dialogue: { pressure: string; daily: string; disguise: string }
+  /** Human-facing labels of unfilled minimum fields for this role. */
+  missing: string[]
+  relations: NovelCastRelation[]
 }
 
-/** Display name for a 设定 file. Known canon filenames get short labels; cast cards drop the numeric prefix. */
-export function setupDocLabel(name: string): string {
-  const key = name.toLowerCase()
-  const known: Record<string, string> = {
-    'book-bible.md': 'bible',
-    'world.md': 'world',
-    'glossary.md': 'glossary',
-    'reveal-schedule.md': 'reveal',
-    'writing-rules.md': 'rules',
-    'platform-positioning.md': 'platform',
-    'goldfinger.md': 'goldfinger',
+const CAST_KV_RE = /^\s*`?(status|role)`?\s*[：:]\s*([A-Za-z_-]+)/i
+const CAST_ANCHOR_RE = /^\s*[-*]\s*\*?\*?(视觉|语言|行为)\*?\*?[：:]\s*(.*)$/
+const CAST_UNKNOWN_RE = /^\s*[-*]\s*\*?\*?不知\*?\*?[：:]\s*(.*)$/
+const CAST_DIALOGUE_RE = /^\s*[-*]\s*\*?\*?(压力下|日常|掩饰(?:\s*\/\s*说谎)?)\*?\*?[：:]\s*(.*)$/
+const CAST_CATCHPHRASE_RE = /^\s*[-*]\s*\*?\*?口头禅[^：:]*[：:]\s*(.*)$/
+const CAST_INTERSECT_RE = /^\s*[-*]\s*\*?\*?与主角相交点[^：:]*[：:]\s*(.*)$/
+const CAST_DESIRE_RE = /^\s*[-*]\s*\*?\*?欲望[^：:]*[：:]\s*(.*)$/
+const CAST_EXIT_RE = /^\s*[-*]\s*\*?\*?退场[^：:]*[：:]\s*(.*)$/
+const TEMPLATE_PLACEHOLDER_RE = /^\{\{.*\}\}$/
+
+function cleanCastValue(v: string): string {
+  const s = v.trim()
+  return TEMPLATE_PLACEHOLDER_RE.test(s) ? '' : s
+}
+
+export function castStemFromName(name: string): string {
+  return name.replace(/\.md$/i, '')
+}
+
+/** Mirror of the gate's `parse_cast_card` (status / role header, anchors, samples, relation table). */
+export function parseCastCard(md: string, stem: string): NovelCastCard {
+  const lines = md.replace(/\r\n/g, '\n').split('\n')
+  const first = (lines[0] ?? '').replace(/^#+\s*/, '').trim()
+  const card: NovelCastCard = {
+    stem,
+    name: TEMPLATE_PLACEHOLDER_RE.test(first) ? '' : first,
+    status: '',
+    role: '',
+    visualAnchor: '',
+    speechAnchor: '',
+    behaviorAnchor: '',
+    catchphrase: '',
+    desire: '',
+    intersect: '',
+    exit: '',
+    unknown: '',
+    dialogue: { pressure: '', daily: '', disguise: '' },
+    missing: [],
+    relations: [],
   }
-  if (known[key]) return known[key]
-  return name.replace(/^\d+-/, '').replace(/\.md$/i, '')
+
+  for (const line of lines.slice(0, 12)) {
+    const m = line.match(CAST_KV_RE)
+    if (!m) continue
+    const key = m[1].toLowerCase()
+    const val = m[2].trim().toLowerCase()
+    if (key === 'status' && !card.status && (val === 'candidate' || val === 'canon')) card.status = val
+    if (key === 'role' && !card.role && (val === 'protagonist' || val === 'volume_antagonist' || val === 'recurring')) {
+      card.role = val
+    }
+  }
+
+  let section = ''
+  let relHeaderSeen = false
+  for (const line of lines) {
+    const s = line.trim()
+    if (s.startsWith('#')) {
+      section = s.replace(/^#+/, '').trim()
+      relHeaderSeen = false
+      continue
+    }
+    if (section.includes('三锚点')) {
+      const m = line.match(CAST_ANCHOR_RE)
+      if (m) {
+        const v = cleanCastValue(m[2])
+        if (m[1] === '视觉') card.visualAnchor = v
+        else if (m[1] === '语言') card.speechAnchor = v
+        else card.behaviorAnchor = v
+        continue
+      }
+    }
+    if (section.includes('台词')) {
+      const m = line.match(CAST_DIALOGUE_RE)
+      if (m) {
+        const v = cleanCastValue(m[2])
+        if (m[1] === '压力下') card.dialogue.pressure = v
+        else if (m[1] === '日常') card.dialogue.daily = v
+        else card.dialogue.disguise = v
+        continue
+      }
+    }
+    if (section.includes('知识边界')) {
+      const m = line.match(CAST_UNKNOWN_RE)
+      if (m) {
+        card.unknown = cleanCastValue(m[1])
+        continue
+      }
+    }
+    if (section.includes('语言习惯')) {
+      const m = line.match(CAST_CATCHPHRASE_RE)
+      if (m) {
+        card.catchphrase = cleanCastValue(m[1])
+        continue
+      }
+    }
+    if (section.includes('功能')) {
+      const mi = line.match(CAST_INTERSECT_RE)
+      if (mi) {
+        card.intersect = cleanCastValue(mi[1])
+        continue
+      }
+      const me = line.match(CAST_EXIT_RE)
+      if (me) {
+        card.exit = cleanCastValue(me[1])
+        continue
+      }
+    }
+    if (section.includes('四件套') && !card.desire) {
+      const m = line.match(CAST_DESIRE_RE)
+      if (m) {
+        card.desire = cleanCastValue(m[1])
+        continue
+      }
+    }
+    if (section.includes('关系')) {
+      const cells = markdownTableCells(line)
+      if (!cells.length) continue
+      if (isMarkdownSepRow(cells)) continue
+      if (!relHeaderSeen) {
+        relHeaderSeen = true
+        if (cells[0] === '对方' || cells.includes('类型')) continue
+      }
+      const target = stripMdInline(cells[0] ?? '')
+      if (!target) continue
+      card.relations.push({
+        target,
+        type: cells[1] ?? '',
+        current: cells[2] ?? '',
+        lastChange: cells[3] ?? '',
+        nextNode: cells[4] ?? '',
+      })
+    }
+  }
+
+  card.missing = castMissingFields(card)
+  return card
 }
 
-export function novelCastDir(bookId: string): string {
-  return `novel/${bookId}/canon/cast`
+function castDialogueSample(card: NovelCastCard): string {
+  return card.dialogue.pressure || card.dialogue.daily || card.dialogue.disguise
 }
 
-export function novelChapterSummariesPath(bookId: string): string {
-  // Legacy alias — prefer ledger
-  return `novel/${bookId}/continuity/ledger.md`
+/** Minimum fill per role (template 完整度 table); labels match the gate output. */
+export function castMissingFields(card: NovelCastCard): string[] {
+  const miss: string[] = []
+  if (card.role === 'recurring') {
+    if (!card.desire) miss.push('欲望')
+    if (!card.intersect) miss.push('与主角相交点')
+    if (!card.visualAnchor && !card.behaviorAnchor) miss.push('视觉锚或行为锚')
+    if (!card.catchphrase) miss.push('口头禅')
+    if (!castDialogueSample(card)) miss.push('台词样例')
+  } else {
+    if (!card.visualAnchor) miss.push('视觉锚')
+    if (!card.speechAnchor) miss.push('语言锚')
+    if (!card.behaviorAnchor) miss.push('行为锚')
+    if (!card.unknown) miss.push('知识边界·不知')
+    if (!card.dialogue.pressure) miss.push('台词·压力下')
+    if (!card.dialogue.daily) miss.push('台词·日常')
+    if (!card.dialogue.disguise) miss.push('台词·掩饰')
+  }
+  if (!card.exit) miss.push('退场')
+  return miss
 }
 
-export function novelLedgerPath(bookId: string): string {
-  return `novel/${bookId}/continuity/ledger.md`
+export interface NovelRelationEdge {
+  from: string
+  to: string
+  type: string
+  current: string
+  /** True when `to` does not list `from` back (cast-lint blocking). */
+  missingBackEdge: boolean
+  /** True when `to` has no card at all. */
+  unknownTarget: boolean
 }
 
-export function novelBatchFreezePath(bookId: string): string {
-  // Legacy path kept for soft-read; freeze now lives in novel-state.yaml
-  return `novel/${bookId}/continuity/batch-freeze.yaml`
+/** Relation edges across all cards; flags missing back edges and unknown stems like `cast-lint`. */
+export function buildRelationEdges(cards: NovelCastCard[]): NovelRelationEdge[] {
+  const byStem = new Map(cards.map((c) => [c.stem, c]))
+  const edges: NovelRelationEdge[] = []
+  for (const c of cards) {
+    for (const r of c.relations) {
+      const other = byStem.get(r.target)
+      edges.push({
+        from: c.stem,
+        to: r.target,
+        type: r.type,
+        current: r.current,
+        unknownTarget: !other,
+        missingBackEdge: Boolean(other) && !other!.relations.some((x) => x.target === c.stem),
+      })
+    }
+  }
+  return edges
 }
 
-export function novelChapterReviewPath(bookId: string, chapter: number): string {
-  const pad = String(chapter).padStart(3, '0')
-  return `novel/${bookId}/reviews/ch${pad}-review.md`
+/** Local cast lint verdict from parsed cards (same rules the gate enforces). */
+export function castLintIssues(cards: NovelCastCard[]): string[] {
+  const issues: string[] = []
+  if (!cards.length) return ['blocker.noCast']
+  if (!cards.some((c) => c.role === 'protagonist' && c.status === 'canon')) issues.push('blocker.noProtagonist')
+  for (const c of cards) {
+    if (!c.role) issues.push(`cast.missingRole:${c.stem}`)
+    if (!c.status) issues.push(`cast.missingStatus:${c.stem}`)
+  }
+  for (const e of buildRelationEdges(cards)) {
+    if (e.unknownTarget) issues.push(`cast.unknownStem:${e.from}→${e.to}`)
+    else if (e.missingBackEdge) issues.push(`cast.missingBackEdge:${e.from}→${e.to}`)
+  }
+  return issues
 }
 
-export function novelChapterFilePath(bookId: string, chapter: number): string {
-  const pad = String(chapter).padStart(3, '0')
-  return `novel/${bookId}/chapters/ch${pad}.md`
-}
-
-export function novelChapterContractPath(bookId: string, chapter: number): string {
-  const pad = String(chapter).padStart(3, '0')
-  return `novel/${bookId}/chapters/ch${pad}-outline.yaml`
-}
-
-export function isNovelChapterPath(path: string): boolean {
-  const p = path.replace(/\\/g, '/')
-  return /\/chapters\/[^/]+\.md$/i.test(p) && !/(?:contract|outline)\.md$/i.test(p)
-}
-
-/** Chapter outline YAML under chapters/ (`chNNN-outline.yaml`). */
-export function isNovelContractName(name: string): boolean {
-  return /^ch\d+-outline\.(ya?ml)$/i.test(name)
-}
-
-export function isNovelContractPath(path: string): boolean {
-  const p = path.replace(/\\/g, '/')
-  return /\/chapters\/ch\d+-outline\.(ya?ml)$/i.test(p)
-}
+// ---------------------------------------------------------------------------
+// Units
+// ---------------------------------------------------------------------------
 
 export interface NovelUnitEntry {
   unitId: string
@@ -905,6 +865,9 @@ export interface NovelUnitScene {
   id: string
   beat: string
   chapter: number
+  who: string[]
+  pov: string
+  where: string
 }
 
 export interface NovelUnitChapterCut {
@@ -919,12 +882,19 @@ export interface NovelUnitOutlineFields {
   status: string
   title: string
   functionText: string
+  entry: string
   desire: string
   obstacle: string
+  choice: string
+  payoff: string
   pleasure: string
+  forbidden: string
   wordTarget: string
   hookType: string
   hookOut: string
+  onStage: string[]
+  pov: string
+  chapterRange: { from: number; to: number } | null
   scenes: NovelUnitScene[]
   chapters: NovelUnitChapterCut[]
 }
@@ -963,24 +933,9 @@ export function isNovelUnitProseName(name: string): boolean {
   return /^v\d+-U\d+\.md$/i.test(name)
 }
 
-export function novelUnitOutlinePath(bookId: string, unitId: string): string {
-  return `novel/${bookId}/outline/units/${unitId}.yaml`
-}
-
-export function novelUnitProsePath(bookId: string, unitId: string): string {
-  return `novel/${bookId}/units/${unitId}.md`
-}
-
-export function novelUnitReviewPath(bookId: string, unitId: string): string {
-  return `novel/${bookId}/reviews/${unitId}-review.md`
-}
-
-export function novelUnitsDir(bookId: string): string {
-  return `novel/${bookId}/units`
-}
-
-export function novelUnitOutlinesDir(bookId: string): string {
-  return `novel/${bookId}/outline/units`
+export function compareUnits(a: NovelUnitEntry, b: NovelUnitEntry): number {
+  if (a.volume !== b.volume) return a.volume - b.volume
+  return a.index - b.index
 }
 
 export function buildUnitEntries(outlineNodes: NovelFileNode[], proseNodes: NovelFileNode[]): NovelUnitEntry[] {
@@ -1050,9 +1005,24 @@ function blockField(block: string[], key: string): string {
   const re = new RegExp(`(?:^|\\s)${key}:\\s*(.*)$`)
   for (const line of block) {
     const m = line.match(re)
-    if (m) return m[1].replace(/^["']|["']$/g, '').trim()
+    if (m) {
+      let v = m[1].trim()
+      const hash = v.search(/\s+#/)
+      if (hash >= 0 && !/^["'\[]/.test(v)) v = v.slice(0, hash).trim()
+      return v.replace(/^["']|["']$/g, '').trim()
+    }
   }
   return ''
+}
+
+function blockList(block: string[], key: string): string[] {
+  const v = blockField(block, key)
+  const m = v.match(/^\[([^\]]*)\]$/)
+  if (!m) return v ? [v] : []
+  return m[1]
+    .split(',')
+    .map((s) => s.trim().replace(/^["']|["']$/g, ''))
+    .filter(Boolean)
 }
 
 export function parseUnitOutlineYaml(raw: string): NovelUnitOutlineFields {
@@ -1060,6 +1030,9 @@ export function parseUnitOutlineYaml(raw: string): NovelUnitOutlineFields {
     id: blockField(block, 'id'),
     beat: blockField(block, 'beat'),
     chapter: Number.parseInt(blockField(block, 'chapter'), 10) || 0,
+    who: blockList(block, 'who'),
+    pov: blockField(block, 'pov'),
+    where: blockField(block, 'where'),
   }))
   const chapters: NovelUnitChapterCut[] = sectionBlocks(raw, 'chapters').map((block) => ({
     chapter: Number.parseInt(blockField(block, 'chapter'), 10) || 0,
@@ -1067,17 +1040,25 @@ export function parseUnitOutlineYaml(raw: string): NovelUnitOutlineFields {
     cutHook: blockField(block, 'cut_hook'),
     wordShare: blockField(block, 'word_share'),
   }))
+  const range = raw.match(/^chapter_range:\s*\[\s*(\d+)\s*,\s*(\d+)\s*\]/m)
   return {
     unitId: yamlScalar(raw, 'unit_id'),
     status: yamlScalar(raw, 'status').toLowerCase() || 'proposed',
     title: yamlScalar(raw, 'title_working'),
     functionText: yamlScalar(raw, 'function'),
+    entry: yamlScalar(raw, 'entry'),
     desire: yamlScalar(raw, 'desire'),
     obstacle: yamlScalar(raw, 'obstacle'),
+    choice: yamlScalar(raw, 'choice'),
+    payoff: yamlScalar(raw, 'payoff'),
     pleasure: yamlScalar(raw, 'pleasure'),
+    forbidden: yamlScalar(raw, 'forbidden'),
     wordTarget: yamlScalar(raw, 'word_target'),
     hookType: yamlNestedScalar(raw, 'next_hook', 'type'),
     hookOut: yamlNestedScalar(raw, 'next_hook', 'out'),
+    onStage: yamlList(raw, 'on_stage'),
+    pov: yamlScalar(raw, 'pov'),
+    chapterRange: range ? { from: Number(range[1]), to: Number(range[2]) } : null,
     scenes,
     chapters,
   }
@@ -1087,36 +1068,44 @@ export function applyUnitOutline(entry: NovelUnitEntry, raw: string): NovelUnitE
   const parsed = parseUnitOutlineYaml(raw)
   const from = parsed.chapters[0]?.chapter ?? 0
   const to = parsed.chapters.length ? parsed.chapters[parsed.chapters.length - 1].chapter : 0
-  const range = raw.match(/chapter_range:\s*\[(\d+)\s*,\s*(\d+)\]/)
   return {
     ...entry,
-    chapterFrom: range ? Number(range[1]) : from,
-    chapterTo: range ? Number(range[2]) : to,
+    chapterFrom: parsed.chapterRange ? parsed.chapterRange.from : from,
+    chapterTo: parsed.chapterRange ? parsed.chapterRange.to : to,
     label: parsed.title ? `${entry.unitId} · ${parsed.title}` : entry.unitId,
   }
 }
 
+/**
+ * proposed + no scenes → pending_outline; accepted (no prose) → ready;
+ * prose → drafted / review_fail; reviewed + range ≤ last_committed_ch → finalized.
+ */
 export function inferUnitPhase(
   entry: NovelUnitEntry,
   lastCommittedCh: number,
   outlineRaw?: string,
   reviewRaw?: string,
-): NovelChapterPhase {
-  const status = outlineRaw ? parseUnitOutlineYaml(outlineRaw).status : ''
+): NovelUnitPhase {
+  const outline = outlineRaw ? parseUnitOutlineYaml(outlineRaw) : null
+  const status = outline?.status ?? ''
   const verdict = reviewRaw ? parseReviewVerdict(reviewRaw) : null
-  const covered =
-    entry.prose && entry.chapterTo > 0 && entry.chapterTo <= lastCommittedCh
-  if (covered) return 'committed'
+  const rangeTo = entry.chapterTo || outline?.chapterRange?.to || 0
   if (entry.prose) {
+    if (status === 'reviewed' && rangeTo > 0 && rangeTo <= lastCommittedCh) return 'finalized'
     if (verdict === 'FAIL') return 'review_fail'
-    if (verdict === 'PASS' || status === 'reviewed') return 'review_pass'
     return 'drafted'
   }
   if (entry.outline) {
-    if (status === 'accepted' || status === 'drafted' || status === 'reviewed') return 'contract_ready'
-    return 'contract_draft'
+    // Only an accepted outline is ready to draft. A proposed head stays
+    // pending even if some scene rows were filled in — status is the contract.
+    if (status === 'accepted' || status === 'drafted' || status === 'reviewed') return 'ready'
+    return 'pending_outline'
   }
-  return 'empty'
+  return 'pending_outline'
+}
+
+export function isUnitPhasePending(phase: NovelUnitPhase): boolean {
+  return phase !== 'finalized'
 }
 
 export function buildUnitPhases(
@@ -1124,8 +1113,8 @@ export function buildUnitPhases(
   lastCommittedCh: number,
   outlineRaws: Record<string, string> = {},
   reviewRaws: Record<string, string> = {},
-): Record<string, NovelChapterPhase> {
-  const out: Record<string, NovelChapterPhase> = {}
+): Record<string, NovelUnitPhase> {
+  const out: Record<string, NovelUnitPhase> = {}
   for (const e of entries) {
     const applied = outlineRaws[e.unitId] ? applyUnitOutline(e, outlineRaws[e.unitId]) : e
     out[e.unitId] = inferUnitPhase(applied, lastCommittedCh, outlineRaws[e.unitId], reviewRaws[e.unitId])
@@ -1164,221 +1153,426 @@ export function countPlainChars(text: string): number {
   return text.replace(/\s+/g, '').length
 }
 
-/** One numbered chapter slot: optional prose (.md) + optional chapter outline (.yaml). */
-export interface NovelChapterEntry {
-  chapter: number
-  label: string
-  prose: NovelFileNode | null
-  contract: NovelFileNode | null
+// ---------------------------------------------------------------------------
+// Book context → phase → primary action
+// ---------------------------------------------------------------------------
+
+export interface NovelVolumeInfo {
+  volume: number
+  /** File name under outline/volumes (or outline root for legacy names). */
+  fileName: string
+  /** Stems under 「本卷人物」. */
+  cast: string[]
+  rows: VolumeUnitRow[]
 }
 
-/** Sort chapter filenames like ch001.md, ch10.md naturally. */
-export function sortChapterNodes(nodes: NovelFileNode[]): NovelFileNode[] {
-  const files = nodes.filter((n) => !n.isDir && /\.md$/i.test(n.name) && !isNovelContractName(n.name))
-  return files.slice().sort((a, b) => {
-    const na = chapterNumFromName(a.name)
-    const nb = chapterNumFromName(b.name)
-    if (na != null && nb != null && na !== nb) return na - nb
-    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
-  })
+export interface NovelBookContext {
+  bookId: string
+  state: NovelExtendedState
+  entries: NovelUnitEntry[]
+  unitPhases: Record<string, NovelUnitPhase>
+  /** Parsed unit YAML by unitId (only for entries with an outline file). */
+  unitOutlines: Record<string, NovelUnitOutlineFields>
+  volumes: NovelVolumeInfo[]
+  cast: NovelCastCard[]
+  hasBookOutline: boolean
+  /** Old layout detected (ledger.md without facts.md, chapters/ prose, `## chNNN` in facts). */
+  legacy: boolean
 }
 
-/** Merge chapters/*.md prose and chapter-outline YAML under chapters/ (`*-outline.yaml`). */
-export function buildChapterEntries(...nodeLists: NovelFileNode[][]): NovelChapterEntry[] {
-  const byCh = new Map<number, NovelChapterEntry>()
-  const ensure = (n: number): NovelChapterEntry => {
-    let e = byCh.get(n)
-    if (!e) {
-      e = {
-        chapter: n,
-        label: `ch${String(n).padStart(3, '0')}`,
-        prose: null,
-        contract: null,
-      }
-      byCh.set(n, e)
-    }
-    return e
-  }
-  for (const nodes of nodeLists) {
-    for (const node of nodes) {
-      if (node.isDir) continue
-      const n = chapterNumFromName(node.name)
-      if (n == null) continue
-      if (isNovelContractName(node.name)) {
-        const e = ensure(n)
-        if (!e.contract) e.contract = node
-      } else if (/\.md$/i.test(node.name)) {
-        // Only treat chapters-dir prose as body; outline/*.md is not chapter prose.
-        const p = (node.path || '').replace(/\\/g, '/')
-        if (p.includes('/outline/')) continue
-        ensure(n).prose = node
-      }
-    }
-  }
-  return [...byCh.values()].sort((a, b) => a.chapter - b.chapter)
+export interface NovelPrimaryDecision {
+  action: NovelStageAction
+  phase: NovelPipelinePhase
+  unitId?: string
+  volume?: number
+  /** For outline-batch: proposed unit ids in this round (≤4). */
+  batchUnits?: string[]
+  /** i18n blocker keys (`blocker.*`) or raw state blockers. */
+  blockers: string[]
+  allowed: boolean
 }
 
-export function sortMdNodes(nodes: NovelFileNode[]): NovelFileNode[] {
-  return nodes
-    .filter((n) => !n.isDir && /\.md$/i.test(n.name))
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+export interface NovelBookPipeline {
+  phase: NovelPipelinePhase
+  /** Volume the phase is talking about (latest volume file, or 1). */
+  volume: number
+  gates: { knowledge: GateStatus; asset: GateStatus; qc: GateStatus }
+  blockers: string[]
+  progress: { finalized: number; outlined: number; total: number; percent: number }
+  primary: NovelPrimaryDecision | null
 }
 
-/** Outline / misc: markdown plus chapter-outline yaml so legacy outlines under outline/ also surface. */
-export function sortWorkbenchDocNodes(nodes: NovelFileNode[]): NovelFileNode[] {
-  return nodes
-    .filter((n) => !n.isDir && (/\.md$/i.test(n.name) || isNovelContractName(n.name)))
-    .slice()
-    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+/** Latest volume by file; 0 when no volume outline exists. */
+export function currentVolumeNumber(ctx: Pick<NovelBookContext, 'volumes'>): number {
+  let max = 0
+  for (const v of ctx.volumes) if (v.volume > max) max = v.volume
+  return max
 }
 
-export function chapterNumFromName(name: string): number | null {
-  const m = name.match(/(\d+)/)
-  if (!m) return null
-  const n = Number.parseInt(m[1], 10)
-  return Number.isFinite(n) ? n : null
+export function volumeInfo(ctx: Pick<NovelBookContext, 'volumes'>, volume: number): NovelVolumeInfo | null {
+  return ctx.volumes.find((v) => v.volume === volume) ?? null
 }
 
-export function nextChapterNumber(
-  lastCommitted: number,
-  chapterFiles: NovelFileNode[] | NovelChapterEntry[],
-): number {
-  let maxFile = 0
-  for (const f of chapterFiles) {
-    if ('chapter' in f && typeof (f as NovelChapterEntry).chapter === 'number') {
-      const n = (f as NovelChapterEntry).chapter
-      if (n > maxFile) maxFile = n
-      continue
-    }
-    const n = chapterNumFromName((f as NovelFileNode).name)
-    if (n != null && n > maxFile) maxFile = n
-  }
-  return Math.max(lastCommitted, maxFile) + 1
+function unitsOfVolume(ctx: NovelBookContext, volume: number): NovelUnitEntry[] {
+  return ctx.entries.filter((e) => e.volume === volume).sort(compareUnits)
 }
 
-/** Book-page primary CTA from files on disk (not max chapter index alone). */
-export type NovelBookNextStep = {
-  action: 'write' | 'contract' | 'continue'
-  chapter: number
+function proposedUnits(ctx: NovelBookContext, volume: number): NovelUnitEntry[] {
+  return unitsOfVolume(ctx, volume).filter((e) => (ctx.unitPhases[e.unitId] ?? 'pending_outline') === 'pending_outline')
 }
 
-export function inferNovelBookNextStep(
-  lastCommitted: number,
-  entries: NovelChapterEntry[],
-): NovelBookNextStep {
-  const sorted = [...entries].sort((a, b) => a.chapter - b.chapter)
-  for (const e of sorted) {
-    if (e.contract && !e.prose) {
-      return { action: 'write', chapter: e.chapter }
+/** Asset gate for writing: a canon protagonist exists and no `candidate` stands on stage. */
+export function assetGateStatus(ctx: NovelBookContext): GateStatus {
+  if (!ctx.cast.length) return ctx.state.gates.asset === 'fail' ? 'fail' : 'unknown'
+  const protagonist = ctx.cast.some((c) => c.role === 'protagonist' && c.status === 'canon')
+  return protagonist ? 'pass' : 'fail'
+}
+
+export function inferBookPipelinePhase(ctx: NovelBookContext): NovelPipelinePhase {
+  if (ctx.state.stage === 'idle') return 'idle'
+  const vol = currentVolumeNumber(ctx)
+  if (vol === 0) return 'planning'
+  const units = unitsOfVolume(ctx, vol)
+  if (!units.length) return 'planning'
+  if (proposedUnits(ctx, vol).length) return 'outlining'
+  if (units.some((e) => ctx.unitPhases[e.unitId] !== 'finalized')) return 'units'
+  return 'planning'
+}
+
+function writeBlockers(ctx: NovelBookContext, unitId: string): string[] {
+  const blockers: string[] = []
+  const outline = ctx.unitOutlines[unitId]
+  const byStem = new Map(ctx.cast.map((c) => [c.stem, c]))
+  if (assetGateStatus(ctx) !== 'pass') blockers.push(ctx.cast.length ? 'blocker.noProtagonist' : 'blocker.noCast')
+  if (outline) {
+    const vol = volumeInfo(ctx, unitMetaFromName(unitId)?.volume ?? 0)
+    for (const stem of outline.onStage) {
+      const card = byStem.get(stem)
+      if (!card) blockers.push(`blocker.unknownStem:${stem}`)
+      else if (card.status !== 'canon') blockers.push(`blocker.candidateOnStage:${stem}`)
+      if (vol && vol.cast.length && !vol.cast.includes(stem)) blockers.push(`blocker.castOutsideVolume:${stem}`)
     }
   }
-  if (sorted.length) {
-    const max = Math.max(lastCommitted, ...sorted.map((e) => e.chapter))
-    for (let n = Math.max(1, lastCommitted + 1); n <= max; n++) {
-      const e = sorted.find((x) => x.chapter === n)
-      if (!e?.contract) return { action: 'contract', chapter: n }
-      if (!e.prose) return { action: 'write', chapter: n }
-    }
-  }
-  const next = nextChapterNumber(lastCommitted, entries)
-  if (sorted.some((e) => e.prose)) {
-    return { action: 'continue', chapter: next }
-  }
-  return { action: 'contract', chapter: next }
+  return blockers
 }
 
+function decision(
+  action: NovelStageAction,
+  phase: NovelPipelinePhase,
+  extra: Partial<Omit<NovelPrimaryDecision, 'action' | 'phase' | 'blockers' | 'allowed'>>,
+  blockers: string[],
+): NovelPrimaryDecision {
+  return { action, phase, ...extra, blockers, allowed: blockers.length === 0 }
+}
+
+/**
+ * The one function that decides the primary button.
+ * planning → plan (volume N); outlining → outline-batch (first ≤4 proposed);
+ * units → write / finalize for the selected unit (or the first unfinished one);
+ * a finalized selection jumps to the next unfinished unit, or next-volume.
+ */
+export function selectPrimaryAction(ctx: NovelBookContext, selectedUnit?: string | null): NovelPrimaryDecision {
+  const stateBlockers = [...ctx.state.blockers]
+  if (ctx.legacy) return decision('migrate', 'planning', {}, [])
+
+  const phase = inferBookPipelinePhase(ctx)
+  const vol = currentVolumeNumber(ctx)
+
+  if (phase === 'idle') {
+    return decision('next-volume', 'idle', { volume: vol + 1 }, stateBlockers)
+  }
+
+  if (phase === 'planning') {
+    if (vol > 0 && unitsOfVolume(ctx, vol).every((e) => ctx.unitPhases[e.unitId] === 'finalized') && unitsOfVolume(ctx, vol).length) {
+      return decision('next-volume', phase, { volume: vol + 1 }, stateBlockers)
+    }
+    return decision('plan', phase, { volume: vol || 1 }, stateBlockers)
+  }
+
+  if (phase === 'outlining') {
+    const batch = proposedUnits(ctx, vol).slice(0, 4).map((e) => e.unitId)
+    return decision('outline-batch', phase, { volume: vol, batchUnits: batch, unitId: batch[0] }, stateBlockers)
+  }
+
+  // units
+  const unitAction = (entry: NovelUnitEntry): NovelPrimaryDecision | null => {
+    const ph = ctx.unitPhases[entry.unitId] ?? 'pending_outline'
+    if (ph === 'pending_outline') {
+      const batch = proposedUnits(ctx, entry.volume).slice(0, 4).map((e) => e.unitId)
+      return decision('outline-batch', phase, { volume: entry.volume, batchUnits: batch.length ? batch : [entry.unitId], unitId: entry.unitId }, stateBlockers)
+    }
+    if (ph === 'ready') {
+      return decision('write', phase, { unitId: entry.unitId, volume: entry.volume }, [...stateBlockers, ...writeBlockers(ctx, entry.unitId)])
+    }
+    if (ph === 'drafted' || ph === 'review_fail') {
+      return decision('finalize', phase, { unitId: entry.unitId, volume: entry.volume }, stateBlockers)
+    }
+    return null
+  }
+
+  const selected = selectedUnit ? ctx.entries.find((e) => e.unitId === selectedUnit) : undefined
+  if (selected) {
+    const d = unitAction(selected)
+    if (d) return d
+    // finalized selection → next unfinished unit in the same volume
+    for (const e of unitsOfVolume(ctx, selected.volume)) {
+      if (e.index <= selected.index) continue
+      const dd = unitAction(e)
+      if (dd) return dd
+    }
+    if (selected.volume !== vol) {
+      return decision('next-volume', phase, { volume: selected.volume + 1 }, stateBlockers)
+    }
+  }
+
+  for (const e of unitsOfVolume(ctx, vol)) {
+    const d = unitAction(e)
+    if (d) return d
+  }
+  return decision('next-volume', phase, { volume: vol + 1 }, stateBlockers)
+}
+
+export function computeBookPipeline(ctx: NovelBookContext, selectedUnit?: string | null): NovelBookPipeline {
+  const phase = inferBookPipelinePhase(ctx)
+  const vol = currentVolumeNumber(ctx) || 1
+  const total = ctx.entries.length
+  const finalized = ctx.entries.filter((e) => ctx.unitPhases[e.unitId] === 'finalized').length
+  const outlined = ctx.entries.filter((e) => ctx.unitPhases[e.unitId] !== 'pending_outline').length
+  const percent = total > 0 ? Math.min(100, Math.round((finalized / total) * 100)) : 0
+
+  const primary = selectPrimaryAction(ctx, selectedUnit)
+  // Planning may be all-candidate; the canon-protagonist check applies once units are being written.
+  const asset =
+    phase === 'outlining' || phase === 'units' ? assetGateStatus(ctx) : ctx.state.gates.asset
+  const gates = {
+    knowledge: ctx.state.gates.knowledge,
+    asset,
+    qc: ctx.state.gates.qc,
+  }
+  return {
+    phase,
+    volume: vol,
+    gates,
+    blockers: [...ctx.state.blockers],
+    progress: { finalized, outlined, total, percent },
+    primary,
+  }
+}
+
+/** Secondary (「更多」) actions available for a selected unit / cast card. */
+export function canRunAction(
+  action: NovelStageAction,
+  ctx: NovelBookContext,
+  unitId?: string,
+): { allowed: boolean; blockers: string[] } {
+  const blockers: string[] = []
+  const phase = unitId ? ctx.unitPhases[unitId] : undefined
+  switch (action) {
+    case 'write':
+      if (!unitId) blockers.push('blocker.noUnit')
+      else if (phase !== 'ready') blockers.push(phase === 'pending_outline' ? 'blocker.needOutline' : phase === 'finalized' ? 'blocker.alreadyFinalized' : 'blocker.alreadyDrafted')
+      if (unitId) blockers.push(...writeBlockers(ctx, unitId))
+      break
+    case 'finalize':
+    case 'expand':
+    case 'review':
+    case 'polish':
+      if (!unitId) blockers.push('blocker.noUnit')
+      else if (phase === 'pending_outline' || phase === 'ready') blockers.push('blocker.needDraft')
+      else if (phase === 'finalized') blockers.push('blocker.alreadyFinalized')
+      break
+    case 'contract-one':
+      if (!unitId) blockers.push('blocker.noUnit')
+      else if (phase !== 'pending_outline') blockers.push('blocker.alreadyOutlined')
+      break
+    case 'outline-batch':
+      if (!ctx.entries.some((e) => ctx.unitPhases[e.unitId] === 'pending_outline')) blockers.push('blocker.noProposed')
+      break
+    default:
+      break
+  }
+  if (action !== 'plan' && action !== 'init' && action !== 'migrate' && action !== 'cast-fix' && action !== 'next-volume') {
+    blockers.push(...ctx.state.blockers)
+  }
+  return { allowed: blockers.length === 0, blockers }
+}
+
+// ---------------------------------------------------------------------------
+// Composer prefill
+// ---------------------------------------------------------------------------
+
+export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
+  switch (action) {
+    case 'init':
+    case 'migrate':
+      return 'novel-setup'
+    case 'plan':
+    case 'next-volume':
+    case 'cast-fix':
+      return 'novel-plan'
+    case 'finalize':
+    case 'expand':
+    case 'review':
+    case 'polish':
+      return 'novel-review'
+    default:
+      return 'novel-write'
+  }
+}
+
+/**
+ * Composer load line: skill + intent only.
+ * Which reference / template / KB theme to open lives in each skill's
+ * Intent→Load table — do not hardcode skillRefs here (skill updates would desync).
+ */
+export function formatLoadProtocol(action: NovelStageAction): string {
+  const skillId = novelActionSkillId(action)
+  if (action === 'write') {
+    return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；写正文先跑 gate preflight --unit，只消费 ### CONTEXT；落盘一份单元正文后停下（定稿另轮）。`
+  }
+  if (action === 'outline-batch' || action === 'contract-one') {
+    return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；填完跑 gate lint-units --volume；本轮不写正文。`
+  }
+  if (skillId === 'novel-review') {
+    return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；定稿轮（qc-pack → 审 → 一次 Commit → postcommit），与写作分 turn。`
+  }
+  if (action === 'plan' || action === 'next-volume') {
+    return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；卷纲批准后跑 gate accept-volume --volume。`
+  }
+  return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill。`
+}
+
+export function buildConstraintFooter(
+  pipeline: NovelBookPipeline,
+  action: NovelStageAction,
+  blockers: string[],
+): string {
+  const skillId = novelActionSkillId(action)
+  const lines = [
+    '---',
+    `阶段 ${pipeline.phase} · 卷 ${volumeId(pipeline.volume)} · 动作 ${action} · 技能 ${skillId}`,
+    `gates knowledge=${pipeline.gates.knowledge} asset=${pipeline.gates.asset} qc=${pipeline.gates.qc}`,
+  ]
+  if (blockers.length) lines.push(`阻断：${blockers.join('；')}`)
+  lines.push('Team：delegate_agent.goal 须含本消息任务原文。')
+  return lines.join('\n')
+}
+
+export function buildConstrainedPrefill(
+  action: NovelStageAction,
+  ctx: NovelStagePrefillCtx,
+  pipeline?: NovelBookPipeline,
+  blockers?: string[],
+): string {
+  const body = buildNovelStagePrefill(action, ctx)
+  const skillLine = formatLoadProtocol(action)
+  const parts = [`【任务】\n${body}`, skillLine]
+  if (pipeline) {
+    parts.push(buildConstraintFooter(pipeline, action, blockers ?? []))
+  }
+  return parts.join('\n\n')
+}
+
+/** Intent + project paths only; no knowledge prose, no reference paths. */
 export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStagePrefillCtx): string {
   const bookId = (ctx.bookId ?? '').trim() || '<book-id>'
   const root = `novel/${bookId}`
   const vol = ctx.volume && ctx.volume > 0 ? ctx.volume : 0
-  const volPad = vol > 0 ? String(vol).padStart(2, '0') : 'NN'
+  const volTag = vol > 0 ? volumeId(vol) : 'vNN'
   const unitId = (ctx.unitId ?? '').trim() || 'vNN-U#'
   const unitPath = ctx.unitPath || `${root}/units/${unitId}.md`
   const outlinePath = `${root}/outline/units/${unitId}.yaml`
-  // Keep intent + project paths only. Which skill reference / template / KB
-  // theme to open lives in the skill Intent→Load table (see formatLoadProtocol).
+  const volumePath = `${root}/outline/volumes/${volTag}.md`
+  const batch = (ctx.batchUnits ?? []).filter(Boolean)
+  const batchText = batch.length ? batch.join('、') : `${volTag} 前 ≤4 个 status: proposed 单元`
 
   switch (action) {
     case 'init':
       return [
         '开一本新书并立项。',
-        '用一次 ask_user 收齐：题材、读者承诺、篇幅/平台、POV、禁忌。',
-        '落盘标准树到 novel/<book-id>/。新角色先 candidate；卷纲批准时一并 promote。',
+        '用一次 ask_user 收齐：题材（八题材之一）、读者承诺、篇幅/平台、POV、禁忌。',
+        `exec_shell gate --action init --book-id <slug> --title <书名> --genre <题材> 建树到 ${root.replace(bookId, '<book-id>')}/，再填 bible / state / world。人物卡留给规划轮。`,
       ].join('\n')
-    case 'outline':
+    case 'migrate':
       return [
-        `书目录：${root}/`,
-        `产出总纲 ${root}/outline/book_outline.md（不写单元正文）。`,
-        '卷纲另做；场面和章切口只进单元细纲。',
+        `旧书迁移（${root}/）。`,
+        'exec_shell gate --action doctor 看 [migrate] 项，再 --action migrate --book-id；核对 continuity/commits/migrate-<date>.md，确认 genre 后清 blocker。',
       ].join('\n')
-    case 'volume':
+    case 'plan':
+      if (ctx.volumeOutlineExists) {
+        return [
+          `第 ${vol || 'N'} 卷卷纲已在 ${volumePath}，等我批准。`,
+          '批准后 exec_shell gate --action accept-volume --volume ' + volTag + '：本卷人物 candidate → canon，按单元索引种出 proposed 细纲头。不写细纲正文。',
+        ].join('\n')
+      }
       return [
-        `为第 ${vol || 'N'} 卷写卷纲 → ${root}/outline/volumes/v${volPad}.md`,
-        '止于剧情单元卡；不写单元细纲/正文。写完等我确认（本卷点名人物一并 canon）。',
+        `规划一轮（书：${root}/）：人物卡（canon/cast/<stem>.md，status: candidate，按 role 填最小必填）+ 总纲 outline/book_outline.md + 第 ${vol || 1} 卷卷纲 ${volumePath}（单元索引 + 本卷人物 stem）。`,
+        '止于卷纲；不写细纲、不写正文。写完停下等我批准，批准后再跑 gate accept-volume。',
       ].join('\n')
-    case 'assets':
+    case 'next-volume':
       return [
-        `书目录：${root}/`,
-        '整理/补全人物卡与世界观到 canon/。新实体先 candidate；卷纲批准时 promote。',
+        `上一卷已全部定稿。为第 ${vol || 'N+1'} 卷写卷纲 → ${volumePath}（单元索引 + 本卷人物；新角色先 candidate 卡）。`,
+        '卷末先在 continuity/summaries/ 上一卷文件末尾写卷总结。写完停下等我批准，批准后跑 gate accept-volume --volume ' + volTag + '。',
       ].join('\n')
-    case 'goldfinger':
+    case 'outline-batch':
       return [
-        `书目录：${root}/`,
-        '设计或修订金手指，默认写入主角 cast 卡。',
+        `一批细纲（卷 ${volTag}）：把 ${batchText} 从 proposed 填成 accepted → ${root}/outline/units/。`,
+        '每个补 on_stage（⊆ 卷纲本卷人物）/ pov / 合同 / scenes / chapters / state_deltas；不改 function 与 next_hook.type。',
+        `填完 exec_shell gate --action lint-units --volume ${volTag}，FAIL 只补失败单元。本轮不写正文。`,
       ].join('\n')
-    case 'contract':
+    case 'contract-one':
       return [
-        `为单元 ${unitId} 写单元细纲 → ${outlinePath}`,
-        '从本卷纲单元卡下推；场面覆盖章范围，每章至少 2 场。就绪后 status=accepted，并写入 active_unit。',
+        `只填单元 ${unitId} 的细纲 → ${outlinePath}（proposed → accepted）。`,
+        `补 on_stage / pov / 合同 / 场面 / 章切口；gate lint-units --volume ${unitId.split('-')[0]} 通过后停下。`,
       ].join('\n')
     case 'write':
       return [
-        `写单元 ${unitId} 正文首稿，一份文件 ${unitPath}。`,
-        '章与章用单独一行 --- 分隔，标题为 ## 第N章。先 gate preflight --unit，只消费 ### CONTEXT + 本单元细纲；落盘后停下。',
-        '本轮不要扩写、去 AI 味或 Continuity Commit（另开一轮定稿，便于换模）。一轮只写这一个单元。',
+        `写单元 ${unitId} 正文，一份文件 ${unitPath}。`,
+        '先 exec_shell gate --action preflight --unit ' + unitId + '，只消费 ### CONTEXT（题材文 + 单元卡 + on_stage 人物）；不再读细纲 / 人物卡 / facts。',
+        '章与章用单独一行 --- 分隔，标题为 ## 第N章。落盘后停下；定稿另开一轮（可换模）。一轮只写这一个单元。',
       ].join('\n')
-    case 'continue':
+    case 'finalize':
       return [
-        `接着写下个单元的细纲和正文首稿（书：${root}/）。`,
-        'gate preflight --unit → 一份 units/vNN-U#.md 后停下；扩写/润色/定稿另开一轮。',
+        `定稿单元 ${unitId}（${unitPath}）。`,
+        `先 exec_shell gate --action qc-pack --unit ${unitId}：expand_needed=yes 才扩写，HITS 非空才润色；再 10 维审；PASS 不写 review 文件。`,
+        `一次补丁 Commit（continuity/summaries/${unitId.split('-')[0]}.md 章摘要 + facts 游标 + 人物卡关系两列 + 细纲 reviewed + state）→ gate --action postcommit --unit ${unitId} exit 0。不拆多次 Commit。`,
       ].join('\n')
     case 'expand':
       return [
-        `对 ${unitPath} 做字数/厚度扩写并落盘（扩场面，不按章注水）。`,
-        '按 expansion 纪律 ≤3 种技术；改完复跑 gate precommit --unit。保持章标题和 ---。',
+        `只扩写 ${unitPath}（扩场面，不按章注水；≤3 种技术）。`,
+        `改完复跑 gate qc-pack --unit ${unitId}，expand_needed 应为 no。保持章标题和 ---。不 Commit。`,
       ].join('\n')
     case 'review':
       return [
-        `审阅单元 ${unitId}（${unitPath}）。`,
-        '先 gate precommit --unit。PASS：只更新 gates.qc，不写 review 文件。FAIL/深审：写 reviews/' + unitId + '-review.md。',
+        `只审单元 ${unitId}（${unitPath}）：gate qc-pack --unit 后做 10 维审。`,
+        `PASS 只更新 gates.qc；FAIL / 深审写 reviews/${unitId}-review.md。不 Commit。`,
       ].join('\n')
     case 'polish':
       return [
-        `对 ${unitPath} 做去 AI 味润色并落盘。`,
-        'gate scan-deslop --unit 定位后按行号改；不改情节 Canon。',
+        `只给 ${unitPath} 去 AI 味：按 gate qc-pack / scan-deslop --unit ${unitId} 的 ### HITS 行号定点改。`,
+        '不改情节 Canon；复扫 exit 0 后停下。不 Commit。',
       ].join('\n')
-    case 'commit':
+    case 'cast-fix': {
+      const stem = (ctx.stem ?? '').trim() || '<stem>'
       return [
-        `对单元 ${unitId}（${unitPath}）做 Continuity Commit。`,
-        '一次补丁更新 ledger 里该单元每一章 ## chNNN + 细纲 reviewed + last_committed_ch；再 gate postcommit --unit。',
+        `补人物卡 ${root}/canon/cast/${stem}.md：按 role 的完整度表补缺项（三锚点 / 语言习惯 / 台词样例 / 关系表对边）。`,
+        '不改 status（提升只由 accept-volume 做）。补完 exec_shell gate --action cast-lint --book-id ' + bookId + '。',
       ].join('\n')
-    case 'review-polish-commit':
-      return [
-        `对单元 ${unitId}（${unitPath}）定稿串行：扩写(如需) → 审 → 可选润色 → 一次 Commit。`,
-        '这是写作之后的定稿轮（可换经济/质检模型）。PASS 不写 review 文件；FAIL 才落盘。不要按章拆成多次 Commit。',
-      ].join('\n')
-    case 'continuation':
-      return [
-        `续写/接手本书（${root}/）。`,
-        'Frozen_Canon 未确认禁止写正文。旧 chapters/ 需迁成 units/ 后再写。',
-      ].join('\n')
-    case 'preflight':
-      return [
-        `写前预检（书：${root}/，单元 ${unitId}）。`,
-        'exec_shell gate preflight --unit；回报 ### CONTEXT 与 VERDICT。',
-      ].join('\n')
+    }
     default:
       return ''
   }
+}
+
+/** Legacy layout heuristics — the gate's `doctor` is authoritative; this only flips the CTA to 「迁移」. */
+export function detectLegacyLayout(input: {
+  continuityFiles: NovelFileNode[]
+  legacyChapterFiles: NovelFileNode[]
+  factsRaw?: string
+}): boolean {
+  const names = new Set(input.continuityFiles.map((f) => f.name.toLowerCase()))
+  if (names.has('ledger.md') && !names.has('facts.md')) return true
+  if (input.legacyChapterFiles.some((f) => !f.isDir && /\.md$/i.test(f.name))) return true
+  if (input.factsRaw && /^##\s+ch\d{3}/m.test(input.factsRaw)) return true
+  return false
 }

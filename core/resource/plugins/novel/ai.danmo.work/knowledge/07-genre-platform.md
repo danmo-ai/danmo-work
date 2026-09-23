@@ -6,6 +6,8 @@
 
 ## 八个类型
 
+`novel-state.yaml` 的 `genre` 取值就是下表的检索标题之一。写正文前 `preflight` 按 `genre` 把对应那一篇整篇放进 CONTEXT；`genre=悬疑` 且 `craft_lane=crime-human` 时再接「刑侦人味文风」。非悬疑不得标 `crime-human`（gate 拦）。
+
 | 检索标题 | `qc_profile` | 禁止漂移 |
 |----------|----------------|----------|
 | 玄幻 | `male_power` | 说明书开篇；无代价暴兵；越级秒顶级 |
@@ -77,6 +79,7 @@
 ## Checklist
 
 - [ ] 题材已收进八个检索标题之一；对不上才用本篇
+- [ ] `genre` 已写入 novel-state（八个标题之一）
 - [ ] `qc_profile` 已写入 novel-state
 - [ ] 刑侦、探案、社会派才标 `craft_lane=crime-human`（规则在「悬疑」）
 - [ ] 单章配额按 2000–3500，主爽点在单元上

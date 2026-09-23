@@ -47,21 +47,13 @@ Status: `planted` | `advanced` | `paid` | `dropped`.
 Open count ≤ 5. `dangling`（埋了再无下文、未登记 dropped）= bug，卷收束/组装门硬检不得存在。
 伏笔回收力度与埋设时的强调程度成正比。
 
-## Volume summaries
-
-卷收束时追加（人工确认后归档该卷明细，见下）：
-
-```markdown
-### vNN 卷总结（500–800 字）
-- 事件主线：…
-- 人物状态：各主要角色卷终状态一行
-- 带入下卷的线索：…
-- 未回收伏笔 + 预期回收卷：FS-id → vNN
-```
-
 ## Chapter summaries
 
-Append a fixed block per Commit（五要素为 gate 硬检必填；第 6 行可选）:
+章摘要**不写在本文件**。Commit 时直接写 `continuity/summaries/vNN.md`（每章一个 `## chNNN` 块，五要素为 gate 硬检必填）；本节只留每卷一行索引。卷收束只在该卷文件末尾追加 `### vNN 卷总结`。本文件体积 ≈ O(事实 + 人物 + 伏笔)，不随章数增长。
+
+- v01 → continuity/summaries/v01.md
+
+`## chNNN` 块格式（写进 `summaries/vNN.md`）：
 
 ```markdown
 ## chNNN {{title}}
@@ -73,17 +65,24 @@ Append a fixed block per Commit（五要素为 gate 硬检必填；第 6 行可�
 - 线索: thread PLANTED/ADVANCED/RESOLVED（可选）
 ```
 
-**体积治理**：本文件只保留**当前卷**的 `## chNNN` 明细。卷收束（人工确认）后：
-该卷摘要块移入 `continuity/summaries/vNN.md` 归档，本节只留 `### vNN 卷总结`。
-本文件体积 ≈ O(当前卷章数 + 卷数×800字)，不随全书无限增长。
-gate `postcommit` 同时接受本文件与 `continuity/summaries/` 归档中的摘要块。
+卷总结（卷收束时追加到 `summaries/vNN.md` 末尾）：
+
+```markdown
+### vNN 卷总结（500–800 字）
+- 事件主线：…
+- 人物状态：各主要角色卷终状态一行
+- 带入下卷的线索：…
+- 未回收伏笔 + 预期回收卷：FS-id → vNN
+```
+
+旧书若本文件仍有 `## chNNN` 块：跑 `novel_gate.py --action migrate` 拆到卷文件。gate `postcommit` 到 `summaries/vNN.md` 核对。
 
 ## After each Commit
 
 1. Add only facts the new chapter showed or let a careful reader infer.
 2. Promote `reader_inference` → `shown_fact` when the prose confirms.
-3. Update cursor, cast snapshot deltas, open loops, cannot-rewind.
-4. Append `## chNNN` summary block（追加到 `## Chapter summaries` 节末尾）。
+3. Update cursor, cast snapshot deltas（关系质态列只从变化的卡关系边抄一句）, open loops, cannot-rewind.
+4. `## chNNN` 摘要块写到 `continuity/summaries/vNN.md`；新卷第一次 Commit 时在上面索引加一行。
 5. Do not write author-only truths, unused 终局储备, or next-volume unlocks.
 6. **执行日志**（gate 结果/四计数/扩写技术/锁词扫描）写到 `continuity/commits/<unit_id>.md`，不进本文件。
-7. 卷末章 Commit 后提示用户：可做卷收束（写 `### vNN 卷总结` + 归档明细）。
+7. 卷末章 Commit 后提示用户：可做卷收束（在 `summaries/vNN.md` 末尾写 `### vNN 卷总结`）。

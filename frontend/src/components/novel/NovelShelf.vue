@@ -47,7 +47,7 @@ const { t } = useI18n()
           <div v-if="b.progress" class="novel-shelf__progress">
             {{
               t('novelWorkbench.progressLabel', {
-                committed: b.progress.committed,
+                done: b.progress.finalized,
                 total: b.progress.total,
               })
             }}
