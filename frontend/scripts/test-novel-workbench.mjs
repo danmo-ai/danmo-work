@@ -124,6 +124,53 @@ assert.equal(parsed.chapters.length, 2)
 assert.equal(parsed.chapters[0].cutHook, '敲门')
 assert.equal(parsed.chapters[1].wordShare, '4000')
 
+const legacyOutline = `unit_id: v02-U1
+title: 省城城东独居女性系列案
+status: reviewed
+function: DNA 时代首案
+protagonist_goal: 把五起串并破掉
+causal_entry: 地基刨出旧鞋
+core_obstacle: 现场被擦干净
+key_choice: 两条线都得过
+scenes:
+  - id: S1
+    章位: ch093-ch094
+    name: 临江旧鞋与城东第五起
+    must_land:
+      - 不是丢的，是放的
+      - 章末只切断
+  - id: S2
+    章位: ch095-ch096
+    name: 同一双脚与并案会
+    must_land:
+      - 鞋是一双
+chapters:
+  - chapter: 93
+    title: 地基里的鞋
+    scene: S1
+    cut_hook:
+      type: 突然揭示
+      text: 不是丢的。是放的。
+  - chapter: 94
+    title: 干净得反常
+    cut_hook: 门外未动
+`
+const legacy = parseUnitOutlineYaml(legacyOutline)
+assert.equal(legacy.title, '省城城东独居女性系列案')
+assert.equal(legacy.desire, '把五起串并破掉')
+assert.equal(legacy.entry, '地基刨出旧鞋')
+assert.equal(legacy.obstacle, '现场被擦干净')
+assert.equal(legacy.choice, '两条线都得过')
+assert.equal(legacy.scenes.length, 2)
+assert.equal(legacy.scenes[0].id, 'S1')
+assert.equal(legacy.scenes[0].beat, '临江旧鞋与城东第五起')
+assert.equal(legacy.scenes[0].where, 'ch093-ch094')
+assert.equal(legacy.scenes[1].beat, '同一双脚与并案会')
+assert.equal(legacy.chapters.length, 2)
+assert.equal(legacy.chapters[0].title, '地基里的鞋')
+assert.equal(legacy.chapters[0].cutHook, '突然揭示 · 不是丢的。是放的。')
+assert.equal(legacy.chapters[1].cutHook, '门外未动')
+
 const built = buildUnitEntries(
   [{ name: 'v01-U1.yaml', path: 'novel/b/outline/units/v01-U1.yaml', isDir: false }],
   [

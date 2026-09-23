@@ -386,7 +386,8 @@ function onBodyClick(ev: MouseEvent) {
           <div class="novel-reader__summary-title">{{ t('novelWorkbench.unitScenes') }}</div>
           <ol class="novel-reader__summary-list">
             <li v-for="s in unitOutline.scenes" :key="s.id || s.beat">
-              {{ s.id }} · {{ s.beat }}
+              <template v-if="s.id">{{ s.id }}</template><template v-if="s.id && s.beat"> · </template>{{ s.beat }}
+              <span v-if="s.where"> · {{ s.where }}</span>
               <span v-if="s.chapter"> · {{ t('novelWorkbench.chapterN', { n: s.chapter }) }}</span>
               <span v-if="s.who.length"> · {{ s.who.join('、') }}</span>
             </li>

@@ -975,29 +975,34 @@ export function buildUnitEntries(outlineNodes: NovelFileNode[], proseNodes: Nove
 function sectionBlocks(raw: string, section: string): string[][] {
   const lines = raw.split(/\r?\n/)
   let on = false
-  const blocks: string[][] = []
-  let cur: string[] | null = null
-  const flush = () => {
-    if (cur && cur.length) blocks.push(cur)
-    cur = null
-  }
+  const body: string[] = []
   for (const line of lines) {
     if (!on) {
       if (line === `${section}:` || line.startsWith(`${section}:`)) on = true
       continue
     }
-    if (/^[A-Za-z_][\w]*:/.test(line)) {
-      flush()
-      break
-    }
-    if (/^\s+-\s+/.test(line)) {
-      flush()
+    // Next top-level key ends the section. Nested list items stay inside.
+    if (/^\S/.test(line)) break
+    body.push(line)
+  }
+  let minIndent = Infinity
+  for (const line of body) {
+    const m = line.match(/^(\s+)-\s+/)
+    if (m) minIndent = Math.min(minIndent, m[1].length)
+  }
+  if (!Number.isFinite(minIndent)) return []
+  const blocks: string[][] = []
+  let cur: string[] | null = null
+  for (const line of body) {
+    const m = line.match(/^(\s+)-\s+/)
+    if (m && m[1].length === minIndent) {
+      if (cur && cur.length) blocks.push(cur)
       cur = [line]
       continue
     }
     if (cur) cur.push(line)
   }
-  flush()
+  if (cur && cur.length) blocks.push(cur)
   return blocks
 }
 
@@ -1015,6 +1020,31 @@ function blockField(block: string[], key: string): string {
   return ''
 }
 
+function blockChild(block: string[], parent: string, child: string): string {
+  let inParent = false
+  let parentIndent = 0
+  const parentRe = new RegExp(`^(\\s*)${parent}:\\s*(.*)$`)
+  const childRe = new RegExp(`^\\s+${child}:\\s*(.*)$`)
+  for (const line of block) {
+    const pm = line.match(parentRe)
+    if (pm) {
+      const inline = pm[2].trim()
+      if (inline && !inline.startsWith('|')) return inline.replace(/^["']|["']$/g, '')
+      inParent = true
+      parentIndent = pm[1].length
+      continue
+    }
+    if (!inParent) continue
+    if (line.trim()) {
+      const indent = line.match(/^(\s*)/)?.[1].length ?? 0
+      if (indent <= parentIndent) break
+    }
+    const cm = line.match(childRe)
+    if (cm) return cm[1].trim().replace(/^["']|["']$/g, '')
+  }
+  return ''
+}
+
 function blockList(block: string[], key: string): string[] {
   const v = blockField(block, key)
   const m = v.match(/^\[([^\]]*)\]$/)
@@ -1028,28 +1058,33 @@ function blockList(block: string[], key: string): string[] {
 export function parseUnitOutlineYaml(raw: string): NovelUnitOutlineFields {
   const scenes: NovelUnitScene[] = sectionBlocks(raw, 'scenes').map((block) => ({
     id: blockField(block, 'id'),
-    beat: blockField(block, 'beat'),
+    beat: blockField(block, 'beat') || blockField(block, 'name'),
     chapter: Number.parseInt(blockField(block, 'chapter'), 10) || 0,
     who: blockList(block, 'who'),
     pov: blockField(block, 'pov'),
-    where: blockField(block, 'where'),
-  }))
-  const chapters: NovelUnitChapterCut[] = sectionBlocks(raw, 'chapters').map((block) => ({
-    chapter: Number.parseInt(blockField(block, 'chapter'), 10) || 0,
-    title: blockField(block, 'title_working'),
-    cutHook: blockField(block, 'cut_hook'),
-    wordShare: blockField(block, 'word_share'),
-  }))
+    where: blockField(block, 'where') || blockField(block, '章位'),
+  })).filter((s) => s.id || s.beat)
+  const chapters: NovelUnitChapterCut[] = sectionBlocks(raw, 'chapters').map((block) => {
+    const hookScalar = blockField(block, 'cut_hook')
+    const hookText = hookScalar || blockChild(block, 'cut_hook', 'text')
+    const hookType = hookScalar ? '' : blockChild(block, 'cut_hook', 'type')
+    return {
+      chapter: Number.parseInt(blockField(block, 'chapter'), 10) || 0,
+      title: blockField(block, 'title_working') || blockField(block, 'title'),
+      cutHook: [hookType, hookText].filter(Boolean).join(' · '),
+      wordShare: blockField(block, 'word_share'),
+    }
+  })
   const range = raw.match(/^chapter_range:\s*\[\s*(\d+)\s*,\s*(\d+)\s*\]/m)
   return {
     unitId: yamlScalar(raw, 'unit_id'),
     status: yamlScalar(raw, 'status').toLowerCase() || 'proposed',
-    title: yamlScalar(raw, 'title_working'),
+    title: yamlScalar(raw, 'title_working') || yamlScalar(raw, 'title'),
     functionText: yamlScalar(raw, 'function'),
-    entry: yamlScalar(raw, 'entry'),
-    desire: yamlScalar(raw, 'desire'),
-    obstacle: yamlScalar(raw, 'obstacle'),
-    choice: yamlScalar(raw, 'choice'),
+    entry: yamlScalar(raw, 'entry') || yamlScalar(raw, 'causal_entry'),
+    desire: yamlScalar(raw, 'desire') || yamlScalar(raw, 'protagonist_goal'),
+    obstacle: yamlScalar(raw, 'obstacle') || yamlScalar(raw, 'core_obstacle'),
+    choice: yamlScalar(raw, 'choice') || yamlScalar(raw, 'key_choice'),
     payoff: yamlScalar(raw, 'payoff'),
     pleasure: yamlScalar(raw, 'pleasure'),
     forbidden: yamlScalar(raw, 'forbidden'),

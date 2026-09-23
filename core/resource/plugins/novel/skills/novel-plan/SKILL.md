@@ -6,7 +6,7 @@ license: MIT
 compatibility: Requires write, edit, read_file, glob, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "4.0"
+  version: "4.1"
   category: creative-writing
 ---
 
@@ -18,6 +18,8 @@ metadata:
 
 - **总纲** `outline/book_outline.md`：全书地图 + 分卷表 + 伏笔**计划**清单（FS-id/内容/埋点卷/计划回收卷）。运行时状态不写这里。
 - **卷纲** `outline/volumes/vNN.md`：卷级判断 + **单元索引表**（unit_id / 章范围 / 一句话功能 / 终局边界短语 / 下一钩类型）+ **`## 本卷人物`**（stem 列表；批准即 canon）。卷纲分配，细纲落笔。
+- **单元按一次矛盾切**（从起到收）。建议 **3–8 章**，硬上限 **10 章**。先定本卷高潮，再往前切；切完再数章。卷的幕是「节奏锚点」，用来核对高潮/中点落在哪个单元，不另做一层索引。详见 `outline.md`「怎么切单元」。
+- **章内场景不进规划。** 卷纲写到单元索引为止。可写的一场在细纲里叫场面（`scenes`），每章至少 2 场。
 - **卷纲禁止**写 desire/obstacle/choice/payoff/pleasure/forbidden/scenes/场面/章切口——那些全部在 `outline/units/vNN-U#.yaml`。
 - **人物卡** `canon/cast/<stem>.md`：文件名 stem 即角色 id，卷纲「本卷人物」、细纲 `on_stage`、关系表「对方」都用它。卡首 `` `status` `` / `` `role` `` 键值行。
 - **伏笔运行时状态**由 `continuity/facts.md` Open loops 维护；**锁词**在 `canon/locked-terms.yaml`。
