@@ -4,6 +4,7 @@ stage: init  # init|setup|outline|writing|review|idle
 next_action: ""
 last_committed_ch: 0
 last_preflight: ""       # one-line receipt; no separate preflight-log file
+genre: ""  # 玄幻|仙侠|都市|悬疑|现代言情|古代言情|仕途扫黑|系统穿越 — preflight 按此整篇注入题材专有文
 qc_profile: general  # male_power|female_emotion|mystery|general
 craft_lane: default  # default|crime-human — 仅刑侦/探案/社会派；勿因 mystery 标灵异
 continuation_mode: false
