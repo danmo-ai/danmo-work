@@ -252,13 +252,31 @@ func TestNovelGatePythonScript(t *testing.T) {
 		t.Skip("python3 not found")
 	}
 	dir := t.TempDir()
-	for _, name := range []string{"novel_gate.py", "novel_gate_test.py"} {
-		data, err := fs.ReadFile(FS, "novel/skills/novel-setup/scripts/"+name)
-		if err != nil {
-			t.Fatal(err)
+	const scripts = "novel/skills/novel-setup/scripts"
+	// Entry shell + tests + the novel_gate/ package (synced as a directory).
+	if err := fs.WalkDir(FS, scripts, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
 		}
-		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
-			t.Fatal(err)
+		if strings.Contains(path, "__pycache__") {
+			return nil
+		}
+		rel := strings.TrimPrefix(path, scripts+"/")
+		data, err := fs.ReadFile(FS, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o644)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"novel_gate.py", "novel_gate_test.py", "novel_gate/__init__.py", "novel_gate/cli.py", "novel_gate/context.py", "novel_gate/cast.py", "novel_gate/outline.py", "novel_gate/ledger.py", "novel_gate/deslop.py"} {
+		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(name))); err != nil {
+			t.Fatalf("gate script layout: %v", err)
 		}
 	}
 	cmd := exec.Command(py, "-m", "unittest", "novel_gate_test")

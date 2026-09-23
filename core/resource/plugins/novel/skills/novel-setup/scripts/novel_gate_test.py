@@ -59,11 +59,107 @@ aliases:
     - "方主任"
 """
 
+CAST_ZHUJUE = """# 主角
+
+`status`: canon
+`role`: protagonist
+
+## 功能
+
+- 本职（一句话）：落魄捕快
+- 退场：仍在场
+
+## 四件套（protagonist / volume_antagonist 必填）
+
+- 欲望（此刻要什么，可观察）：反证身份
+- 伤口（为何怕失去 / 为何偏执）：被冤
+- 手段（智 / 力 / 情 / 骗）：智
+- 代价底线（绝不做 / 一定会做）：不杀无辜
+
+## 知识边界
+
+- 已知：自己是捕快
+- 不知：宿敌真身
+- 误以为：失踪信是伪造
+
+## 三锚点（气质锁定）
+
+- **视觉**：左手缠布
+- **语言**：短句，口头禅「说重点」
+- **行为**：压力下摸腰牌
+
+## 语言习惯（可观察）
+
+- 口头禅（≤2）：说重点
+
+## 台词样例（各 ≤40 字）
+
+- 压力下：说重点，谁的信。
+- 日常：先吃饭。
+- 掩饰 / 说谎：我没见过他。
+
+## 关系
+
+| 对方 | 类型 | 当前质态 | 最近变化点（单元级） | 下一预期节点 |
+|------|------|----------|----------------------|--------------|
+| lin-xue | 旧识 | 猜疑 | v01-U1 客栈重逢 | 同盟 |
+"""
+
+CAST_LINXUE = """# 林雪
+
+`status`: canon
+`role`: recurring
+
+## 功能
+
+- 与主角相交点（recurring 必填）：客栈掌柜
+- 退场：第二卷退
+
+## 三锚点
+
+- **视觉**：银簪
+- **行为**：擦柜台
+
+## 语言习惯
+
+- 口头禅（≤2）：客官慢走
+
+## 台词样例
+
+- 压力下：柜台后面没人。
+
+## 关系
+
+| 对方 | 类型 | 当前质态 | 最近变化点（单元级） | 下一预期节点 |
+|------|------|----------|----------------------|--------------|
+| zhu-jue | 旧识 | 信任 | v01-U1 客栈重逢 | 同盟 |
+"""
+
+VOLUME = """# Volume outline — v01 客栈
+
+## 卷目标
+
+一句话：反证身份。
+
+## 单元索引（只索引，不展开）
+
+| unit_id | 章范围 | 一句话功能 | 本单元终局边界（禁碰） | 下一单元钩子类型 |
+|---------|--------|------------|------------------------|------------------|
+| v01-U1 | ch1–ch1 | 开局立冲突 | 宿敌真身 | 未兑现承诺 |
+
+## 本卷人物（stem；批准即 canon）
+
+- zhu-jue
+- lin-xue
+"""
+
 OUTLINE = """unit_id: v01-U1
 chapter_range: [1, 1]
 title_working: 客栈
 word_target: 4000
 status: accepted
+on_stage: [zhu-jue, lin-xue]
+pov: zhu-jue
 function: 开局立冲突
 entry: 开卷切口
 desire: 活下来并反证身份
@@ -114,7 +210,11 @@ TREE = {
 title: Demo
 stage: writing
 last_committed_ch: 0
+genre: 玄幻
 qc_profile: male_power
+craft_lane: default
+artifacts:
+  cast_registry: missing
 gates:
   knowledge: pass
   asset: pass
@@ -125,13 +225,9 @@ blockers: []
     "novel/demo/canon/world.md": "# world\n",
     "novel/demo/canon/author-lore.md": "# author lore\n终局: 宿敌真身 v5\n",
     "novel/demo/canon/locked-terms.yaml": LOCKED_TERMS,
-    "novel/demo/canon/cast/.gitkeep": "",
-    "novel/demo/outline/volumes/v01.md": """# Volume
-### 剧情单元 U1
-- 单元ID：`v01-U1`
-- 章范围：ch1-ch1
-- 单元功能（本段必须完成）：开局立冲突
-""",
+    "novel/demo/canon/cast/zhu-jue.md": CAST_ZHUJUE,
+    "novel/demo/canon/cast/lin-xue.md": CAST_LINXUE,
+    "novel/demo/outline/volumes/v01.md": VOLUME,
     "novel/demo/outline/units/v01-U1.yaml": OUTLINE,
     "novel/demo/units/v01-U1.md": PROSE,
     "novel/demo/continuity/facts.md": FACTS,
@@ -162,7 +258,7 @@ class GateTests(unittest.TestCase):
         blob = rep.format()
         self.assertIn("### CONTEXT", blob)
         self.assertIn("接钩", blob)
-        self.assertIn("单元功能", blob)
+        self.assertIn("单元卡 v01-U1", blob)
         self.assertIn("场面序", blob)
         self.assertIn("章切口", blob)
 
@@ -245,35 +341,73 @@ class GateTests(unittest.TestCase):
         self.assertEqual(rep.verdict, "FAIL", rep.format())
         self.assertTrue(any("missing ---" in f["message"] for f in rep.findings), rep.format())
 
+    def _mark_reviewed(self) -> None:
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
+        p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
+        (self.root / "novel/demo/novel-state.yaml").write_text(
+            "book_id: demo\nstage: writing\nlast_committed_ch: 1\ngenre: 玄幻\nqc_profile: male_power\n",
+            encoding="utf-8",
+        )
+
+    def _write_summary(self, body: str = POST_SUMMARY) -> Path:
+        p = self.root / "novel/demo/continuity/summaries/v01.md"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("# Chapter summaries — v01\n\n" + body, encoding="utf-8")
+        return p
+
     def test_postcommit(self):
         rep = ng.run(str(self.root), "demo", "postcommit", "v01-U1")
         self.assertEqual(rep.verdict, "FAIL")
-        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
-        p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
-        facts = self.root / "novel/demo/continuity/facts.md"
-        facts.write_text(FACTS + POST_SUMMARY, encoding="utf-8")
-        (self.root / "novel/demo/novel-state.yaml").write_text(
-            "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
-            encoding="utf-8",
-        )
+        self._mark_reviewed()
+        self._write_summary()
         rep = ng.run(str(self.root), "demo", "postcommit", "v01-U1")
         self.assertEqual(rep.verdict, "PASS", rep.format())
 
+    def test_postcommit_summary_in_facts_only_advises_migrate(self):
+        """## chNNN blocks left in facts.md still count, but postcommit points at migrate."""
+        self._mark_reviewed()
+        facts = self.root / "novel/demo/continuity/facts.md"
+        facts.write_text(FACTS + POST_SUMMARY, encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "postcommit", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertTrue(any("migrate" in f["message"] for f in rep.findings), rep.format())
+
+    def test_postcommit_missing_summary_file_blocks(self):
+        self._mark_reviewed()
+        rep = ng.run(str(self.root), "demo", "postcommit", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("summaries/v01.md" in f["message"] for f in rep.findings), rep.format())
+
     def test_postcommit_legacy_ledger_fallback(self):
-        """Old books with only ledger.md still pass postcommit."""
+        """Old books with only ledger.md (as the facts source) still pass postcommit."""
         facts = self.root / "novel/demo/continuity/facts.md"
         facts.unlink()
         ledger = self.root / "novel/demo/continuity/ledger.md"
-        ledger.write_text(LEDGER + POST_SUMMARY, encoding="utf-8")
-        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
-        p.write_text(p.read_text(encoding="utf-8").replace("status: accepted", "status: reviewed"), encoding="utf-8")
-        (self.root / "novel/demo/novel-state.yaml").write_text(
-            "book_id: demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: male_power\n",
-            encoding="utf-8",
-        )
+        ledger.write_text(LEDGER, encoding="utf-8")
+        self._mark_reviewed()
+        self._write_summary()
         rep = ng.run(str(self.root), "demo", "postcommit", "v01-U1")
         self.assertEqual(rep.verdict, "PASS", rep.format())
         self.assertEqual(ng.ledger_path(self.root / "novel/demo").name, "ledger.md")
+
+    def test_postcommit_relation_delta_without_card_writeback_warns(self):
+        self._mark_reviewed()
+        self._write_summary()
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
+        p.write_text(
+            p.read_text(encoding="utf-8").replace(
+                'state_deltas: ["主角: 被辱→声望回升"]',
+                'state_deltas: ["zhu-jue: 对 lin-xue 从猜疑→信任"]',
+            ),
+            encoding="utf-8",
+        )
+        card = self.root / "novel/demo/canon/cast/zhu-jue.md"
+        card.write_text(card.read_text(encoding="utf-8").replace("v01-U1 客栈重逢", "初见"), encoding="utf-8")
+        facts = self.root / "novel/demo/continuity/facts.md"
+        facts.write_text(FACTS.replace("| 主角 |", "| zhu-jue |"), encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "postcommit", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertTrue(any(f["check"] == "relation" for f in rep.findings), rep.format())
 
     def test_doctor_blocks_legacy_chapters(self):
         book = self.root / "novel/demo"
@@ -416,17 +550,314 @@ class GateTests(unittest.TestCase):
         self.assertEqual(rep.verdict, "FAIL", rep.format())
         self.assertTrue(any("craft_lane" in f["message"] for f in rep.findings), rep.format())
 
-    def test_candidate_in_scene_blocks(self):
-        cast = self.root / "novel/demo/canon/cast/林雪.md"
-        cast.write_text("# 林雪\n\n`status`: candidate\n", encoding="utf-8")
-        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
-        p.write_text(
-            p.read_text(encoding="utf-8").replace("want: 保住面子", "want: 保住面子\n    who: 林雪"),
-            encoding="utf-8",
-        )
+    def _book(self) -> Path:
+        return self.root / "novel/demo"
+
+    def _edit(self, rel: str, old: str, new: str) -> None:
+        p = self._book() / rel
+        text = p.read_text(encoding="utf-8")
+        self.assertIn(old, text, f"{rel} lacks {old!r}")
+        p.write_text(text.replace(old, new), encoding="utf-8")
+
+    def test_candidate_on_stage_blocks(self):
+        self._edit("canon/cast/lin-xue.md", "`status`: canon", "`status`: candidate")
         rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
         self.assertEqual(rep.verdict, "FAIL", rep.format())
         self.assertTrue(any("candidate" in f["message"] for f in rep.findings), rep.format())
+
+    def test_on_stage_outside_volume_cast_blocks(self):
+        self._edit("outline/volumes/v01.md", "- lin-xue\n", "")
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("本卷人物" in f["message"] for f in rep.findings), rep.format())
+
+    def test_no_canon_protagonist_blocks_asset_gate(self):
+        self._edit("canon/cast/zhu-jue.md", "`role`: protagonist", "`role`: recurring")
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any(f["check"] == "asset" for f in rep.findings), rep.format())
+
+    def test_preflight_context_spec(self):
+        """Plan §6: genre article whole, volume row, unit card, on_stage-only cast, POV 不知."""
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        blob = "\n".join(rep.context_lines)
+        self.assertIn("题材专有文「玄幻」", blob)
+        self.assertIn("# 玄幻", blob)
+        self.assertNotIn("刑侦人味文风", blob.split("- genre:")[0])
+        self.assertIn("卷纲索引行: v01-U1 | ch1–ch1 | 开局立冲突 | 钩子=未兑现承诺 | 终局边界=宿敌真身", blob)
+        self.assertIn("单元卡 v01-U1", blob)
+        self.assertIn("choice: 是否公开反证", blob)
+        self.assertIn("payoff: 主角声望可见回升", blob)
+        self.assertIn("三锚点: 视觉=左手缠布", blob)
+        self.assertIn("台词: 说重点，谁的信。", blob)
+        self.assertIn("不知（POV 不得写出）: 宿敌真身", blob)
+        self.assertIn("林雪（lin-xue，recurring）", blob)
+        self.assertIn("主角 → lin-xue: 旧识 / 猜疑", blob)
+        # not injected: wound / arc / chronicle
+        self.assertNotIn("被冤", blob)
+        self.assertNotIn("伤口", blob)
+
+    def test_preflight_crime_lane_adds_flavor_article(self):
+        self._edit("novel-state.yaml", "genre: 玄幻", "genre: 悬疑")
+        self._edit("novel-state.yaml", "craft_lane: default", "craft_lane: crime-human")
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        blob = "\n".join(rep.context_lines)
+        self.assertIn("题材专有文「悬疑」", blob)
+        self.assertIn("题材专有文「刑侦人味文风」", blob)
+
+    def test_crime_lane_requires_suspense_genre(self):
+        self._edit("novel-state.yaml", "craft_lane: default", "craft_lane: crime-human")
+        rep = ng.run(str(self.root), "demo", "doctor", "")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("crime-human requires genre=悬疑" in f["message"] for f in rep.findings), rep.format())
+
+    def test_preflight_empty_on_stage_has_no_snapshot_rows(self):
+        self._edit("outline/units/v01-U1.yaml", "on_stage: [zhu-jue, lin-xue]\npov: zhu-jue\n", "on_stage: []\n")
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        blob = "\n".join(rep.context_lines)
+        self.assertIn("未列上场人物", blob)
+        self.assertNotIn("| 主角 | 城东客栈 |", blob)
+        self.assertTrue(any(f["check"] == "on_stage" for f in rep.findings), rep.format())
+
+    def test_function_mismatch_warns_hook_type_mismatch_blocks(self):
+        self._edit("outline/units/v01-U1.yaml", "function: 开局立冲突", "function: 开局，立冲突！")
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self._edit("outline/units/v01-U1.yaml", "function: 开局，立冲突！", "function: 别的功能")
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertTrue(any(f["check"] == "function" and f["severity"] == "advisory" for f in rep.findings), rep.format())
+        self._edit("outline/units/v01-U1.yaml", "type: 未兑现承诺", "type: 倒计时")
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("next_hook.type=倒计时 != volume index" in f["message"] for f in rep.findings), rep.format())
+
+    def test_endgame_boundary_from_volume_requires_unit_field(self):
+        self._edit("outline/units/v01-U1.yaml", 'forbidden: ["宿敌真身"]', "forbidden: []")
+        self._edit("outline/units/v01-U1.yaml", "endgame_boundary: 宿敌真身", 'endgame_boundary: ""')
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any(f["check"] == "endgame_boundary" for f in rep.findings), rep.format())
+
+    # --- accept-volume / lint-units ---
+
+    def test_accept_volume_promotes_and_seeds(self):
+        book = self._book()
+        self._edit("canon/cast/lin-xue.md", "`status`: canon", "`status`: candidate")
+        (book / "outline/volumes/v02.md").write_text(
+            "# Volume outline — v02\n\n## 单元索引\n\n"
+            "| unit_id | 章范围 | 一句话功能 | 本单元终局边界（禁碰） | 下一单元钩子类型 |\n"
+            "|---|---|---|---|---|\n"
+            "| v02-U1 | ch2–ch4 | 进城 | 方子衡 | 信息缺口 |\n"
+            "| v02-U2 | ch5–ch6 | 验骨 | — | 倒计时 |\n\n"
+            "## 本卷人物（stem；批准即 canon）\n\n- zhu-jue\n- lin-xue\n",
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "accept-volume", "", "v02")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertIn("`status`: canon", (book / "canon/cast/lin-xue.md").read_text(encoding="utf-8"))
+        seeded = book / "outline/units/v02-U1.yaml"
+        self.assertTrue(seeded.is_file(), rep.format())
+        data = ng.load_unit(book, "v02-U1")[0]
+        self.assertEqual(data["unit_id"], "v02-U1")
+        self.assertEqual(data["chapter_range"], [2, 4])
+        self.assertEqual(data["status"], "proposed")
+        self.assertEqual(data["function"], "进城")
+        self.assertEqual(data["next_hook"]["type"], "信息缺口")
+        self.assertEqual(data["endgame_boundary"], "方子衡")
+        self.assertEqual(data["word_floor"], 3 * 2000)
+        self.assertTrue((book / "outline/units/v02-U2.yaml").is_file())
+        # idempotent: existing YAML is kept
+        seeded.write_text(seeded.read_text(encoding="utf-8").replace("status: proposed", "status: accepted"), encoding="utf-8")
+        rep2 = ng.run(str(self.root), "demo", "accept-volume", "", "v02")
+        self.assertEqual(rep2.verdict, "PASS", rep2.format())
+        self.assertIn("status: accepted", seeded.read_text(encoding="utf-8"))
+
+    def test_accept_volume_blocks_on_gap_and_missing_cast(self):
+        book = self._book()
+        (book / "outline/volumes/v02.md").write_text(
+            "# v02\n\n## 单元索引\n\n| unit_id | 章范围 | 功能 | 边界 | 钩 |\n|---|---|---|---|---|\n"
+            "| v02-U1 | ch2–ch3 | 进城 | | 信息缺口 |\n| v02-U2 | ch5–ch6 | 验骨 | | 倒计时 |\n",
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "accept-volume", "", "v02")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        msgs = " ".join(f["message"] for f in rep.findings)
+        self.assertIn("gap/overlap", msgs)
+        self.assertIn("本卷人物", msgs)
+        self.assertFalse((book / "outline/units/v02-U1.yaml").exists())
+
+    def test_lint_units_reports_per_unit(self):
+        book = self._book()
+        bad = OUTLINE.replace("unit_id: v01-U1", "unit_id: v01-U2").replace("on_stage: [zhu-jue, lin-xue]", "on_stage: [zhu-jue, wai-ren]")
+        (book / "outline/units/v01-U2.yaml").write_text(bad, encoding="utf-8")
+        self._edit(
+            "outline/volumes/v01.md",
+            "| v01-U1 | ch1–ch1 | 开局立冲突 | 宿敌真身 | 未兑现承诺 |\n",
+            "| v01-U1 | ch1–ch1 | 开局立冲突 | 宿敌真身 | 未兑现承诺 |\n| v01-U2 | ch2–ch2 | 上门 | | 倒计时 |\n",
+        )
+        rep = ng.run(str(self.root), "demo", "lint-units", "", "v01")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        blob = rep.format()
+        self.assertIn("### UNITS", blob)
+        self.assertIn("v01-U1: PASS", blob)
+        self.assertIn("v01-U2: FAIL", blob)
+        self.assertIn("wai-ren", blob)
+        rc = ng.main(["--workdir", str(self.root), "--book-id", "demo", "--action", "lint-units", "--volume", "v01"])
+        self.assertEqual(rc, 1)
+
+    def test_lint_units_proposed_without_scenes_is_pending(self):
+        book = self._book()
+        head = ng.seed_unit_yaml(
+            {"unit_id": "v01-U2", "chapter_range": [2, 3], "function": "上门", "endgame_boundary": "", "next_hook_type": "倒计时"},
+            {"word_floor_per_ch": 2000, "word_ceiling_per_ch": 3500},
+            ["zhu-jue"],
+        )
+        (book / "outline/units/v01-U2.yaml").write_text(head, encoding="utf-8")
+        self._edit(
+            "outline/volumes/v01.md",
+            "| v01-U1 | ch1–ch1 | 开局立冲突 | 宿敌真身 | 未兑现承诺 |\n",
+            "| v01-U1 | ch1–ch1 | 开局立冲突 | 宿敌真身 | 未兑现承诺 |\n| v01-U2 | ch2–ch3 | 上门 | | 倒计时 |\n",
+        )
+        rep = ng.run(str(self.root), "demo", "lint-units", "", "v01")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertIn("待细纲", rep.format())
+
+    # --- cast-lint ---
+
+    def test_cast_lint_back_edge(self):
+        book = self._book()
+        self._edit("canon/cast/lin-xue.md", "| zhu-jue | 旧识 | 信任 | v01-U1 客栈重逢 | 同盟 |\n", "")
+        rep = ng.run(str(self.root), "demo", "cast-lint", "")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("no back row" in f["message"] for f in rep.findings), rep.format())
+        self.assertIn("cast_registry: fail", (book / "novel-state.yaml").read_text(encoding="utf-8"))
+        (book / "canon/cast/lin-xue.md").write_text(CAST_LINXUE, encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "cast-lint", "")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertIn("cast_registry: ok", (book / "novel-state.yaml").read_text(encoding="utf-8"))
+
+    def test_cast_lint_unknown_stem_and_missing_role(self):
+        self._edit("canon/cast/zhu-jue.md", "| lin-xue | 旧识 |", "| 林雪 | 旧识 |")
+        self._edit("canon/cast/lin-xue.md", "`role`: recurring\n", "")
+        rep = ng.run(str(self.root), "demo", "cast-lint", "")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        msgs = " ".join(f["message"] for f in rep.findings)
+        self.assertIn("对方=林雪", msgs)
+        self.assertIn("`role`", msgs)
+
+    def test_parse_cast_card(self):
+        card = ng.parse_cast_card(CAST_ZHUJUE, "zhu-jue")
+        self.assertEqual((card.status, card.role), ("canon", "protagonist"))
+        self.assertEqual(card.anchors["视觉"], "左手缠布")
+        self.assertEqual(card.dialogue["压力下"], "说重点，谁的信。")
+        self.assertEqual(card.unknown, "宿敌真身")
+        self.assertEqual(card.relations[0]["other"], "lin-xue")
+        self.assertEqual(card.missing_fields(), [])
+        rec = ng.parse_cast_card(CAST_LINXUE, "lin-xue")
+        self.assertEqual(rec.missing_fields(), ["欲望"])
+
+    # --- qc-pack ---
+
+    def test_qc_pack_single_output(self):
+        p = self._book() / "units/v01-U1.md"
+        p.write_text("## 第1章 客栈\n\n开头干净。\n他目光深邃，不禁点头。明日午时当众验骨。\n", encoding="utf-8")
+        rep, hits = ng.run_with_hits(str(self.root), "demo", "qc-pack", "v01-U1")
+        blob = rep.format()
+        self.assertIn("### COUNTS", blob)
+        self.assertIn("ai_vocab_count: 3", blob)
+        self.assertIn("### LENGTH", blob)
+        self.assertIn("expand_needed: yes", blob)
+        self.assertIn("polish_needed: yes", blob)
+        self.assertIn("### HITS", blob)
+        self.assertIn("units/v01-U1.md:L4:", "\n".join(hits))
+        self.assertEqual(rep.verdict, "FAIL", blob)
+
+    # --- init ---
+
+    def test_init_builds_tree(self):
+        rep = ng.run(str(self.root), "newbook", "init", "", "", title="新书", genre="悬疑")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        book = self.root / "novel/newbook"
+        for rel in (
+            "novel-state.yaml", "book-bible.md", "canon/world.md", "canon/author-lore.md",
+            "canon/locked-terms.yaml", "continuity/facts.md", "canon/style-fingerprint.md",
+            "outline/book-outline.md", "outline/volumes", "outline/units", "units", "continuity/summaries", "reviews",
+        ):
+            self.assertTrue((book / rel).exists(), rel)
+        state = (book / "novel-state.yaml").read_text(encoding="utf-8")
+        self.assertIn('book_id: "newbook"', state)
+        self.assertIn("genre: 悬疑", state)
+        self.assertIn("stage: setup", state)
+        self.assertIn("新书", (book / "continuity/facts.md").read_text(encoding="utf-8"))
+        rep2 = ng.run(str(self.root), "newbook", "init", "", "", title="新书")
+        self.assertEqual(rep2.verdict, "PASS", rep2.format())
+        self.assertIn("(kept)", rep2.format())
+        rep3 = ng.run(str(self.root), "newbook", "doctor", "")
+        self.assertEqual(rep3.verdict, "PASS", rep3.format())
+
+    # --- migrate ---
+
+    def test_migrate_old_book(self):
+        book = self._book()
+        # old layout: summaries in facts, no genre, no on_stage/pov, no role, no 本卷人物
+        (book / "continuity/facts.md").write_text(FACTS + POST_SUMMARY, encoding="utf-8")
+        (book / "novel-state.yaml").write_text(
+            "book_id: demo\ntitle: Demo\nstage: writing\nlast_committed_ch: 1\nqc_profile: mystery\nblockers: []\n",
+            encoding="utf-8",
+        )
+        self._edit("outline/units/v01-U1.yaml", "on_stage: [zhu-jue, lin-xue]\npov: zhu-jue\n", "")
+        self._edit("outline/units/v01-U1.yaml", 'state_deltas: ["主角: 被辱→声望回升"]', 'state_deltas: ["zhu-jue: 被辱→声望回升"]')
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: reviewed")
+        (book / "canon/cast/zhu-jue.md").write_text(
+            CAST_ZHUJUE.replace("`role`: protagonist\n", "").replace("- 本职（一句话）：落魄捕快", "- 角色：protagonist"),
+            encoding="utf-8",
+        )
+        self._edit("canon/cast/lin-xue.md", "`role`: recurring\n", "")
+        self._edit("outline/volumes/v01.md", "## 本卷人物（stem；批准即 canon）\n\n- zhu-jue\n- lin-xue\n", "")
+        rep = ng.run(str(self.root), "demo", "migrate", "")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        facts = (book / "continuity/facts.md").read_text(encoding="utf-8")
+        self.assertNotIn("## ch001", facts)
+        self.assertIn("v01 → continuity/summaries/v01.md", facts)
+        self.assertIn("## ch001", (book / "continuity/summaries/v01.md").read_text(encoding="utf-8"))
+        state = (book / "novel-state.yaml").read_text(encoding="utf-8")
+        self.assertIn("genre: 悬疑", state)
+        self.assertIn("确认 genre", state)
+        unit = (book / "outline/units/v01-U1.yaml").read_text(encoding="utf-8")
+        self.assertIn("on_stage: [zhu-jue]", unit)
+        self.assertIn('pov: ""', unit)
+        self.assertIn("`role`: protagonist", (book / "canon/cast/zhu-jue.md").read_text(encoding="utf-8"))
+        self.assertIn("`role`: recurring", (book / "canon/cast/lin-xue.md").read_text(encoding="utf-8"))
+        vol = (book / "outline/volumes/v01.md").read_text(encoding="utf-8")
+        self.assertIn("## 本卷人物", vol)
+        self.assertIn("- zhu-jue", vol)
+        self.assertTrue(list((book / "continuity/commits").glob("migrate-*.md")))
+        facts_new = facts.replace("| 主角 |", "| zhu-jue |")
+        (book / "continuity/facts.md").write_text(facts_new, encoding="utf-8")
+        rep2 = ng.run(str(self.root), "demo", "postcommit", "v01-U1")
+        self.assertEqual(rep2.verdict, "PASS", rep2.format())
+        rep3 = ng.run(str(self.root), "demo", "doctor", "")
+        self.assertEqual(rep3.verdict, "PASS", rep3.format())
+        self.assertFalse(any(f["check"] == "migrate" for f in rep3.findings), rep3.format())
+
+    def test_doctor_advises_migrate_on_old_layout(self):
+        self._edit("continuity/facts.md", "## Chapter summaries\n", "## Chapter summaries\n" + POST_SUMMARY)
+        rep = ng.run(str(self.root), "demo", "doctor", "")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertTrue(any(f["check"] == "migrate" and "summaries" in f["message"] for f in rep.findings), rep.format())
+
+    def test_parse_volume_helpers(self):
+        rows = ng.parse_volume_index(VOLUME, "v01")
+        self.assertEqual(rows[0]["unit_id"], "v01-U1")
+        self.assertEqual(rows[0]["chapter_range"], [1, 1])
+        self.assertEqual(rows[0]["next_hook_type"], "未兑现承诺")
+        self.assertEqual(ng.parse_volume_cast(VOLUME), ["zhu-jue", "lin-xue"])
+        short = "| U3 | 7-9 | 功能 | | 倒计时 |"
+        self.assertEqual(ng.parse_volume_index("## 单元索引\n" + short, "v02")[0]["unit_id"], "v02-U3")
 
     def test_split_unit_prose_ok(self):
         text = "## 第1章 夜雨\n\n正文。\n\n---\n\n## 第2章 上门\n\n续。\n"

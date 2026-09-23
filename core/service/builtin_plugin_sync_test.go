@@ -39,6 +39,13 @@ func TestSyncBuiltinPluginsMaterializesPacks(t *testing.T) {
 	if _, err := os.Stat(gateScript); err != nil {
 		t.Fatalf("novel_gate.py should sync like other skill resources: %v", err)
 	}
+	// The gate is a package next to the entry shell; the whole directory must land.
+	for _, name := range []string{"__init__.py", "cli.py", "context.py", "cast.py", "outline.py", "ledger.py", "deslop.py", "qc.py", "doctor.py", "init.py", "migrate.py", "book.py", "common.py"} {
+		pkgFile := filepath.Join(root, "plugins", "novel", "skills", "novel-setup", "scripts", "novel_gate", name)
+		if _, err := os.Stat(pkgFile); err != nil {
+			t.Fatalf("novel_gate package file %s should sync: %v", name, err)
+		}
+	}
 	if _, err := os.Stat(leftover); err == nil {
 		t.Fatal("migrated github.md leftover was not cleaned")
 	}
