@@ -333,6 +333,38 @@ class GateTests(unittest.TestCase):
                 self.assertIn("毒句式", blob)
                 self.assertTrue(any(needle in h for h in hits), hits)
 
+    def test_scan_deslop_shi_de_emphasis(self):
+        """「是……的。」强调框架：用户基准例拦截；短对白/不是…的 不误杀。"""
+        p = self.root / "novel/demo/units/v01-U1.md"
+        # blocking
+        p.write_text(
+            "## 第1章 客栈\n开头干净。\n红旗巷的警情，是晚上十点多才到所里的。\n",
+            encoding="utf-8",
+        )
+        rep, hits = ng.run_with_hits(str(self.root), "demo", "scan-deslop", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("是晚上十点多才到所里的。" in h for h in hits), hits)
+
+        # pass: natural order
+        p.write_text(
+            "## 第1章 客栈\n开头干净。\n红旗巷的警情，晚上十点多才到所里。\n",
+            encoding="utf-8",
+        )
+        rep, _ = ng.run_with_hits(str(self.root), "demo", "scan-deslop", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+
+        # pass: short dialogue / 不是…的 / bare 是的
+        for ok in (
+            "「是他干的。」老陈说。",
+            "这不是失败的结局。",
+            "是的。他点了点头。",
+            "他是警察。",
+        ):
+            with self.subTest(ok=ok):
+                p.write_text(f"## 第1章 客栈\n开头干净。\n{ok}\n", encoding="utf-8")
+                rep, hits = ng.run_with_hits(str(self.root), "demo", "scan-deslop", "v01-U1")
+                self.assertEqual(rep.verdict, "PASS", f"{ok!r} → {hits}")
+
     def test_precommit_missing_divider(self):
         book = self.root / "novel/demo"
         outline = (book / "outline/units/v01-U1.yaml").read_text(encoding="utf-8")
