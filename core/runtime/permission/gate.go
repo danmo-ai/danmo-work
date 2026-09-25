@@ -122,7 +122,7 @@ func (g *Gate) CheckRequest(req Request) Result {
 		if isConsequentialRisk(req.Risk) || req.ToolName == "exec_shell" || strings.HasPrefix(req.ToolName, "mcp_") {
 			return Result{Decision: DecisionDeny, Reason: ReasonModeDeny}
 		}
-		if req.ToolName == "write" || req.ToolName == "edit" || req.ToolName == "apply_patch" {
+		if req.ToolName == "write" || req.ToolName == "edit" || req.ToolName == "edit_batch" || req.ToolName == "apply_patch" {
 			return Result{Decision: DecisionDeny, Reason: ReasonModeDeny}
 		}
 		return Result{Decision: DecisionAllow}

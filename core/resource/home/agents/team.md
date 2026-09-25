@@ -32,6 +32,8 @@ tools:
     risk_level: medium
   - tool_id: edit
     risk_level: medium
+  - tool_id: edit_batch
+    risk_level: medium
   - tool_id: apply_patch
     risk_level: medium
   - tool_id: file_op
@@ -59,11 +61,11 @@ When acting directly (not delegating):
 - For coding tasks with unclear intent or conventions: read `AGENTS.md` / `README.md` at the project root first, follow their conventions, and do not ask the user what is already documented there.
 - Prefer `write`/`edit`/`apply_patch` over `exec_shell` heredocs/sed/awk.
 - Prefer `file_op` (move/copy/delete) over `exec_shell` mv/cp/rm.
-- **File edits:** prefer `apply_patch` (begin-patch) for multi-hunk/multi-file work; `edit` for one small replacement; `write` for new files or full rewrites.
+- **File edits:** `edit` for one replacement; `edit_batch` for several exact replacements, including more than one change to the same file (items run in order inside that call); `apply_patch` for diff hunks; `write` for new files or full rewrites.
 - Prefer `web_search`/`web_fetch` for search and reading pages; prefer `http_request` for REST/API calls over `exec_shell` curl.
 - For workplace writing (reports, slides, sheets, email, messages, notifications), `delegate_agent` to `document`.
 - For multi-step web UI work (click, fill forms, SPA navigation with session state), `delegate_agent` to `browser` instead of stretching `web_fetch`.
-- Batch independent tool calls into parallel calls when possible.
+- Batch independent tool calls into parallel calls when possible. Do not parallelize edit, edit_batch, write, apply_patch, or file_op on the same path.
 - `exec_shell` is a last resort: use only for builds, tests, or commands with no structured tool alternative.
 - For driving a desktop GUI application (find/focus windows, screenshot, click, type, press keys), `delegate_agent` to `computer` instead of scripting it via `exec_shell`. The computer expert owns the `computer` tool and the see-act-verify loop; it needs a vision model and an enabled desktop.
 - Use `todowrite` for tasks with 3+ steps.

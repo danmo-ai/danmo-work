@@ -9,6 +9,11 @@ import (
 	"danmo-work/core/domain"
 )
 
+// parallelSamePathRule is shared by file-mutation tools. One path must not be
+// written by concurrent tool calls; same-file sequences belong in edit_batch
+// or a single apply_patch.
+const parallelSamePathRule = "- Do not run this tool in parallel with edit, edit_batch, write, apply_patch, or file_op on the same path. Concurrent writes to one path race and drop changes. Different paths may run in parallel.\n"
+
 type Edit struct{}
 
 func (h *Edit) Name() string                { return "edit" }
@@ -30,17 +35,14 @@ func (h *Edit) Describe(args map[string]any) string {
 func (h *Edit) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
 		Name: "edit",
-		Description: "Performs exact string replacements in an existing file.\n\n" +
-			"**Important**: All paths are relative to the project root directory. Use relative paths like 'src/main.go' instead of absolute paths.\n\n" +
-			"- You MUST use read_file first on this exact path -- the edit will fail if you haven't read it in this turn.\n" +
-			"- When editing text from read_file output, preserve exact indentation (tabs/spaces). The line number prefix from read_file (e.g., '1: ') is NOT part of the file content.\n" +
-			"- oldString must match the file content. If exact matching fails, fuzzy matching tries indent-strip then whitespace normalize.\n" +
-			"- On failure, the error includes the closest matching file region — copy exact text from that hint (or re-read) and retry.\n" +
-			"- newString must be different from oldString.\n" +
-			"- Use replaceAll for replacing and renaming strings across the file.\n" +
-			"- For multi-hunk or multi-file edits, prefer apply_patch (begin-patch) instead of many edit calls.\n" +
-			"- Text files are always persisted as UTF-8 (no BOM); legacy encodings are converted on write.\n" +
-			"- The result includes a unified diff showing what was changed.",
+		Description: "Replaces one exact string in an existing file.\n\n" +
+			"Paths are relative to the project root (e.g. src/main.go).\n\n" +
+			"- Read this exact path with read_file first in this turn. Fails if it was not read, or if it changed since that read.\n" +
+			"- oldString is file text, not the read_file line-number prefix (e.g. '1: '). Keep indentation. Match order: exact, then indent-strip, then whitespace normalize. A miss returns the closest region — copy that text, or re-read, and retry.\n" +
+			"- newString must differ from oldString. replaceAll changes every match; otherwise the match must be unique.\n" +
+			"- One replacement per call. Several replacements, including more than one in the same file, go in one edit_batch (applied in order; later items see earlier results). Diff hunks go in one apply_patch.\n" +
+			parallelSamePathRule +
+			"- Text is stored as UTF-8 (no BOM). The result includes a unified diff.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -66,10 +68,6 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 	if oldStr == "" {
 		return domain.ToolResult{}, fmt.Errorf("oldString is required")
 	}
-	if oldStr == newStr {
-		return domain.ToolResult{}, fmt.Errorf("oldString and newString must be different")
-	}
-
 	relPath := path
 	resolvedPath, err := resolveWritePath(workDirFromInput(input), path)
 	if err != nil {
@@ -89,27 +87,8 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 		return domain.ToolResult{}, fmt.Errorf("cannot edit %q: %w", relPath, err)
 	}
 
-	replacement, count, matchErr := tryExactReplace(content, oldStr, newStr, replaceAll)
-
+	replacement, count, matchErr := applyStringReplace(relPath, content, oldStr, newStr, replaceAll)
 	if matchErr != nil {
-		if !strings.Contains(matchErr.Error(), "not found") {
-			return domain.ToolResult{}, matchErr
-		}
-		replacement, count, matchErr = tryIndentFuzzyReplace(content, oldStr, newStr, replaceAll)
-	}
-
-	if matchErr != nil {
-		replacement, count, matchErr = tryWhitespaceFuzzyReplace(content, oldStr, newStr, replaceAll)
-	}
-
-	if matchErr != nil {
-		if strings.Contains(matchErr.Error(), "not found") {
-			return domain.ToolResult{}, formatEditNotFoundError(relPath, content, oldStr)
-		}
-		// Multiple matches: keep the original error but add a short next-step hint.
-		if strings.Contains(matchErr.Error(), "occurrences of oldString") {
-			return domain.ToolResult{}, fmt.Errorf("%w. Tip: widen oldString with surrounding unique context, or set replaceAll=true", matchErr)
-		}
 		return domain.ToolResult{}, matchErr
 	}
 
@@ -155,4 +134,36 @@ func (h *Edit) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 			"line_ending":   outMeta.LineEnding,
 		},
 	}, nil
+}
+
+// applyStringReplace runs the edit match cascade against in-memory text.
+// relPath is only used in the not-found hint.
+func applyStringReplace(relPath, content, oldStr, newStr string, replaceAll bool) (string, int, error) {
+	if oldStr == "" {
+		return "", 0, fmt.Errorf("oldString is required")
+	}
+	if oldStr == newStr {
+		return "", 0, fmt.Errorf("oldString and newString must be different")
+	}
+
+	replacement, count, matchErr := tryExactReplace(content, oldStr, newStr, replaceAll)
+	if matchErr != nil {
+		if !strings.Contains(matchErr.Error(), "not found") {
+			return "", 0, matchErr
+		}
+		replacement, count, matchErr = tryIndentFuzzyReplace(content, oldStr, newStr, replaceAll)
+	}
+	if matchErr != nil {
+		replacement, count, matchErr = tryWhitespaceFuzzyReplace(content, oldStr, newStr, replaceAll)
+	}
+	if matchErr != nil {
+		if strings.Contains(matchErr.Error(), "not found") {
+			return "", 0, formatEditNotFoundError(relPath, content, oldStr)
+		}
+		if strings.Contains(matchErr.Error(), "occurrences of oldString") {
+			return "", 0, fmt.Errorf("%w. Tip: widen oldString with surrounding unique context, or set replaceAll=true", matchErr)
+		}
+		return "", 0, matchErr
+	}
+	return replacement, count, nil
 }

@@ -38,6 +38,7 @@ func (h *FileOp) Schema() domain.ToolSchema {
 			"- Directories can only be deleted with recursive=true.\n" +
 			"- Deleting a symlink is refused; copying a directory fails on symlinks inside it.\n" +
 			"- Do NOT use exec_shell mv/cp/rm for file management — use this tool instead.\n" +
+			parallelSamePathRule +
 			"- The result summarizes what changed for audit.",
 		Parameters: map[string]any{
 			"type": "object",

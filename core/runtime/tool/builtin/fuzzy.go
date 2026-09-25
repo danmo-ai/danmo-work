@@ -328,7 +328,7 @@ func formatEditNotFoundError(relPath, content, oldStr string) error {
 		b.WriteString("\nNo close match found. Re-read the file with read_file and copy oldString from the current contents.\n")
 	}
 
-	b.WriteString("\nTips: preserve exact indentation/whitespace; if the file changed, read_file again; for multi-hunk or multi-file edits prefer apply_patch.")
+	b.WriteString("\nTips: preserve exact indentation/whitespace; if the file changed, read_file again; for several replacements in one file use edit_batch; for diff hunks use apply_patch.")
 	return fmt.Errorf("%s", b.String())
 }
 

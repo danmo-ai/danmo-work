@@ -26,7 +26,7 @@ type FileChangeAppender interface {
 
 func isFileMutatingTool(name string) bool {
 	switch name {
-	case "write", "edit", "apply_patch":
+	case "write", "edit", "edit_batch", "apply_patch":
 		return true
 	default:
 		return false

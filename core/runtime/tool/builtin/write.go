@@ -25,15 +25,13 @@ func (h *Write) Describe(args map[string]any) string {
 func (h *Write) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
 		Name: "write",
-		Description: "Writes a file or creates a directory on the local filesystem.\n\n" +
-			"**Important**: All paths are relative to the project root directory. Use relative paths like 'src/main.go' instead of absolute paths.\n\n" +
-			"- Auto-creates all parent directories -- do NOT use exec_shell mkdir beforehand.\n" +
-			"- This tool will overwrite the existing file if there is one at the provided path.\n" +
-			"- If the file already exists, you MUST use read_file first to read its contents.\n" +
-			"- ALWAYS prefer editing existing files with apply_patch (begin-patch) or edit. NEVER write new files unless explicitly required.\n" +
-			"- Do NOT use exec_shell with cat/echo/heredoc for writing files.\n" +
-			"- Text files are always persisted as UTF-8 (no BOM); legacy encodings are converted on write.\n" +
-			"- The result includes a unified diff when overwriting an existing file.",
+		Description: "Creates a file or directory, or replaces a whole file.\n\n" +
+			"Paths are relative to the project root (e.g. src/main.go).\n\n" +
+			"- Parent directories are created automatically. Do not use exec_shell mkdir, cat, echo, or heredoc.\n" +
+			"- Overwrites the file at path when one exists. An existing file must be read with read_file first.\n" +
+			"- Prefer edit for one replacement, edit_batch for several replacements in order (the same file may repeat), and apply_patch for diff hunks. Use write for a new file or a full rewrite.\n" +
+			parallelSamePathRule +
+			"- Text is stored as UTF-8 (no BOM). Overwriting an existing file includes a unified diff.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

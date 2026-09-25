@@ -296,6 +296,7 @@ func New(cfg Config) *Core {
 		},
 	})
 	eng.RegisterTool(&builtin.Edit{})
+	eng.RegisterTool(&builtin.EditBatch{})
 	eng.RegisterTool(&builtin.Write{})
 	eng.RegisterTool(&builtin.FileOp{})
 	eng.RegisterTool(&builtin.ApplyPatch{})

@@ -124,8 +124,8 @@ func IsCoreTool(toolID string) bool {
 
 // NormalizeAgentBindings moves legacy tools[].mcpServer entries into
 // MCPServers, drops wildcards/empties/Core tools, and keeps tools[] as
-// Bound builtins only. Agents that bind edit always get apply_patch too
-// (same risk as edit when newly added).
+// Bound builtins only. Agents that bind edit always get apply_patch and
+// edit_batch too (same risk as edit when newly added).
 func NormalizeAgentBindings(a *Agent) {
 	if a == nil {
 		return
@@ -146,7 +146,7 @@ func NormalizeAgentBindings(a *Agent) {
 	outTools := make([]ToolBinding, 0, len(a.Tools))
 	seenTools := make(map[string]struct{}, len(a.Tools))
 	var editRisk RiskLevel
-	hasEdit, hasApplyPatch := false, false
+	hasEdit, hasApplyPatch, hasEditBatch := false, false, false
 	for _, t := range a.Tools {
 		if mcp := strings.TrimSpace(t.MCPServer); mcp != "" && mcp != "*" {
 			if _, ok := seen[mcp]; !ok {
@@ -170,14 +170,21 @@ func NormalizeAgentBindings(a *Agent) {
 			editRisk = t.RiskLevel
 		case "apply_patch":
 			hasApplyPatch = true
+		case "edit_batch":
+			hasEditBatch = true
 		}
 	}
-	if hasEdit && !hasApplyPatch {
+	if hasEdit {
 		risk := editRisk
 		if risk == "" {
 			risk = RiskMedium
 		}
-		outTools = append(outTools, ToolBinding{ToolID: "apply_patch", RiskLevel: risk})
+		if !hasApplyPatch {
+			outTools = append(outTools, ToolBinding{ToolID: "apply_patch", RiskLevel: risk})
+		}
+		if !hasEditBatch {
+			outTools = append(outTools, ToolBinding{ToolID: "edit_batch", RiskLevel: risk})
+		}
 	}
 	a.MCPServers = outServers
 	a.Tools = outTools

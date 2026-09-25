@@ -47,8 +47,8 @@ func TestNormalizeAgentBindingsPairsEditWithApplyPatch(t *testing.T) {
 		},
 	}
 	NormalizeAgentBindings(&a)
-	hasEdit, hasPatch := false, false
-	var patchRisk RiskLevel
+	hasEdit, hasPatch, hasBatch := false, false, false
+	var patchRisk, batchRisk RiskLevel
 	for _, b := range a.Tools {
 		switch b.ToolID {
 		case "edit":
@@ -56,13 +56,16 @@ func TestNormalizeAgentBindingsPairsEditWithApplyPatch(t *testing.T) {
 		case "apply_patch":
 			hasPatch = true
 			patchRisk = b.RiskLevel
+		case "edit_batch":
+			hasBatch = true
+			batchRisk = b.RiskLevel
 		}
 	}
-	if !hasEdit || !hasPatch {
-		t.Fatalf("edit must imply apply_patch, got %+v", a.Tools)
+	if !hasEdit || !hasPatch || !hasBatch {
+		t.Fatalf("edit must imply apply_patch and edit_batch, got %+v", a.Tools)
 	}
-	if patchRisk != RiskMedium {
-		t.Fatalf("apply_patch risk=%q, want medium (match edit)", patchRisk)
+	if patchRisk != RiskMedium || batchRisk != RiskMedium {
+		t.Fatalf("paired risk patch=%q batch=%q, want medium (match edit)", patchRisk, batchRisk)
 	}
 
 	// Idempotent when already paired.

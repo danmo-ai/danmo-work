@@ -58,8 +58,10 @@ func (h *ApplyPatch) Schema() domain.ToolSchema {
 			"- Matching is search-based (no line numbers required) and tolerates small whitespace/indent drift.\n" +
 			"- Also accepts classic unified diffs (`---/`+++`/`@@ -l,s +l,s @@`) as a fallback.\n" +
 			"- Read target files first when updating existing content.\n" +
-			"- Prefer this over multiple edit calls when changing several places at once.\n" +
-			"- Text files are always persisted as UTF-8 (no BOM); legacy encodings are converted on write.",
+			"- Hunks in this call are applied in order, including several hunks in the same file.\n" +
+			"- Prefer edit for one exact replacement and edit_batch for several exact replacements. Use this tool when a diff hunk is clearer.\n" +
+			parallelSamePathRule +
+			"- Text is stored as UTF-8 (no BOM).",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
