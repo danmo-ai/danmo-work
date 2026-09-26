@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -79,14 +80,79 @@ func TestBrowserNavigate_RequiresURL(t *testing.T) {
 	}
 }
 
+type denyEgress struct{}
+
+func (denyEgress) CheckHost(host string) error {
+	return fmt.Errorf("egress: network deny blocks host %q", host)
+}
+func (denyEgress) ProxyURL() string { return "" }
+
 func TestBrowserNavigate_SSRFBlocked(t *testing.T) {
-	h := &BrowserNavigate{Browser: newFakeBrowser()}
+	br := newFakeBrowser()
+	h := &BrowserNavigate{Browser: br}
+	blocked := []string{
+		"file:///tmp/index.html",
+		"http://10.0.0.1/",
+		"http://192.168.1.1/",
+		"http://169.254.169.254/",
+	}
+	for _, raw := range blocked {
+		_, err := h.Execute(context.Background(), map[string]any{
+			"__session_id": "s1",
+			"url":          raw,
+		})
+		if err == nil {
+			t.Errorf("expected block for %s", raw)
+		}
+	}
+	if br.acquired["s1"] != 0 {
+		t.Fatalf("blocked URLs must not launch a tab, acquire=%d", br.acquired["s1"])
+	}
+}
+
+func TestBrowserNavigate_AllowsPreviewLoopback(t *testing.T) {
+	br := newFakeBrowser()
+	h := &BrowserNavigate{Browser: br}
+	raw := "http://127.0.0.1:7801/api/v1/projects/proj-1/raw/index.html"
+	res, err := h.Execute(context.Background(), map[string]any{
+		"__session_id": "s1",
+		"url":          raw,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if br.page.navigated != raw {
+		t.Fatalf("navigated %q", br.page.navigated)
+	}
+	if !strings.Contains(res.Content, "127.0.0.1:7801") {
+		t.Fatalf("content: %s", res.Content)
+	}
+
+	for _, raw := range []string{
+		"http://localhost:7801/api/v1/proxy/http/localhost-3000/",
+		"http://[::1]:7801/api/v1/projects/proj-1/raw/index.html",
+	} {
+		if _, err := h.Execute(context.Background(), map[string]any{
+			"__session_id": "s1",
+			"url":          raw,
+		}); err != nil {
+			t.Errorf("%s: %v", raw, err)
+		}
+	}
+}
+
+func TestBrowserNavigate_LoopbackHonorsEgressDeny(t *testing.T) {
+	br := newFakeBrowser()
+	h := &BrowserNavigate{Browser: br, Egress: denyEgress{}}
 	_, err := h.Execute(context.Background(), map[string]any{
 		"__session_id": "s1",
-		"url":          "http://127.0.0.1/",
+		"url":          "http://127.0.0.1:7801/api/v1/projects/proj-1/raw/index.html",
 	})
-	if err == nil {
-		t.Fatal("expected SSRF block")
+	if err == nil || !strings.Contains(err.Error(), "network deny") {
+		t.Fatalf("expected egress deny, got %v", err)
+	}
+	if br.acquired["s1"] != 0 {
+		t.Fatal("deny must not launch a tab")
 	}
 }
 

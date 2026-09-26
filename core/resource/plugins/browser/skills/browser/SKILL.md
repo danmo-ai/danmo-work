@@ -34,6 +34,22 @@ delete.
 - **Launch (default):** no `cdp_url` → local Chrome/Edge/Chromium starts headless.
 - **Attach:** Settings CDP URL (e.g. `http://127.0.0.1:9222`) → attach to that browser; closing tabs does not kill the remote process.
 
+## Local files and dev servers
+
+Do not open `file://`. Project files and local dev servers are already served by this app (default `http://127.0.0.1:7801`). Use those URLs.
+
+| Target | Open this |
+|--------|-----------|
+| Project file | `http://127.0.0.1:7801/api/v1/projects/<projectId>/raw/<path>` |
+| Local dev server | `http://127.0.0.1:7801/api/v1/proxy/http/<host>-<port>/<path>` |
+
+- `<projectId>` is the `proj-…` directory in the working path when the workspace lives under the data dir.
+- `<path>` is relative to the project files root (the working directory), e.g. `index.html`.
+- HTML responses include `<base href>`, so relative assets (`vendor/`, `textures/`) load from the same `/raw/` directory.
+- A dev server on `localhost:3000` is `/api/v1/proxy/http/localhost-3000/`. HTTPS uses `/api/v1/proxy/https/…`.
+- If the goal gives a `file://` path, convert it to the `/raw/` URL above. Do not start another static server.
+- Loopback (`127.0.0.1`, `localhost`, `::1`) is allowed. Other private addresses (10/8, 192.168/16, link-local, cloud metadata) stay blocked.
+
 ## Workflow
 
 1. `browser_navigate(url=…)` — returns title, URL, and interactive snapshot with refs `e1`, `e2`, …

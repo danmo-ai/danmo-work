@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net"
+	"net/url"
 	"strings"
 	"time"
 
@@ -30,6 +32,37 @@ func formatBrowserSnapshot(title, url, snapshot string) string {
 	}
 	b.WriteString(snapshot)
 	return b.String()
+}
+
+// assertBrowserNavigateURL applies SSRF checks, but allows loopback so the
+// headless tab can open this app's project-file and dev-server preview routes
+// (127.0.0.1:<backend>). Sandbox deny/allowlist still runs when egress is set.
+// file:// is rejected; callers use the /raw and /proxy HTTP routes instead.
+func assertBrowserNavigateURL(raw string, egress HostEgressChecker) error {
+	if err := validateURL(raw); err != nil {
+		return err
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return err
+	}
+	host := u.Hostname()
+	if isLoopbackHost(host) {
+		if egress != nil {
+			return egress.CheckHost(host)
+		}
+		return nil
+	}
+	return assertPublicURLWithEgress(raw, egress)
+}
+
+func isLoopbackHost(host string) bool {
+	host = strings.Trim(strings.ToLower(strings.TrimSpace(host)), "[]")
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func acquireBrowserPage(ctx context.Context, br port.Browser, input map[string]any) (port.BrowserPage, error) {
@@ -66,10 +99,13 @@ func (h *BrowserNavigate) Schema() domain.ToolSchema {
 		Name: "browser_navigate",
 		Description: "Navigate the sticky browser tab for this session to a URL and return an interactive snapshot with refs (e1, e2, …).\n\n" +
 			"- Use for multi-step page interaction. For one-shot readable text extraction prefer web_fetch.\n" +
-			"- url: HTTP/HTTPS URL (required).\n" +
+			"- url: HTTP/HTTPS URL (required). file:// is not accepted.\n" +
+			"- Project files: http://127.0.0.1:7801/api/v1/projects/<projectId>/raw/<path> (path relative to the project files root). HTML gets a <base> so relative assets load.\n" +
+			"- Local dev servers: http://127.0.0.1:7801/api/v1/proxy/http/<host>-<port>/<path> (https → /proxy/https/...). Example: localhost:3000 → /api/v1/proxy/http/localhost-3000/.\n" +
+			"- Loopback (127.0.0.1, localhost, ::1) is allowed. Other private, link-local, and metadata addresses stay blocked.\n" +
 			"- wait_until: load | domcontentloaded | networkidle (default load).\n" +
 			"- After navigate, call browser_act with refs from the snapshot. Use browser_screenshot only when vision is needed.\n" +
-			"- Private/local addresses are blocked (SSRF). Requires local Chrome/Edge/Chromium or runtime.browser.cdp_url.",
+			"- Requires local Chrome/Edge/Chromium or runtime.browser.cdp_url.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -93,7 +129,7 @@ func (h *BrowserNavigate) Execute(ctx context.Context, input map[string]any) (do
 	}
 	urlStr = upgradeToHTTPS(urlStr)
 	egress := browserEgressFromInput(input, h.Egress)
-	if err := assertPublicURLWithEgress(urlStr, egress); err != nil {
+	if err := assertBrowserNavigateURL(urlStr, egress); err != nil {
 		return domain.ToolResult{}, err
 	}
 	waitUntil := "load"
