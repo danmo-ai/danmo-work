@@ -2,9 +2,10 @@
 
 Commit = tools landed. 定稿轮里 **一次** `apply_patch` 覆盖：
 - `continuity/summaries/vNN.md`（本单元每章一个 `## chNNN` 块）
-- `continuity/facts.md`（公开事实 + cursor + Cast snapshot + Open loops；**不写章摘要**）
+- `continuity/facts.md`（公开事实 + cursor + Cast snapshot（含年龄/职位）+ Open loops；**不写章摘要**）
 - 相关人物卡 `canon/cast/<stem>.md` 关系表两列（仅当 `state_deltas` 涉及关系质态）
-- `continuity/commits/vNN-U#.md`（本单元执行日志）
+- 单元细纲 `state_deltas`（结构化核对：与正文一致的身份跃迁）
+- `continuity/commits/vNN-U#.md`（本单元执行日志；可含「本单元身份转变摘要」）
 - 单元细纲 `status=reviewed`
 - `novel-state.yaml`
 
@@ -19,9 +20,10 @@ After review PASS (and optional polish) for the active unit. PASS 不要求 `rev
 | 文件 | 写什么 | 不写什么 |
 |------|--------|----------|
 | `continuity/summaries/vNN.md` | 每章 `## chNNN` 块（五要素）；卷收束时末尾追加 `### vNN 卷总结` | 执行日志、事实表 |
-| `continuity/facts.md` | Public facts 新增 / 升级；cursor；Cast snapshot 增量；Open loops；每卷一行 `vNN → continuity/summaries/vNN.md` 索引 | `## chNNN` 块（旧书跑 `--action migrate` 拆出） |
-| `canon/cast/<stem>.md` | 「当前质态」「最近变化点（含本单元 id）」两列 | 编年史、逐章流水 |
-| `continuity/commits/vNN-U#.md` | gate 结果、四计数、锁词、字数、扩写 / deslop 处置、偏离登记 | 读者事实 |
+| `continuity/facts.md` | Public facts 新增 / 升级；cursor；Cast snapshot 增量（**年龄 / 职位 / 位置** 等按 `state_deltas` 重放到本单元末）；Open loops；每卷一行 `vNN → continuity/summaries/vNN.md` 索引 | `## chNNN` 块（旧书跑 `--action migrate` 拆出） |
+| `canon/cast/<stem>.md` | 「当前质态」「最近变化点（含本单元 id）」两列；**不改**开卷年龄/本职基线 | 编年史、逐章流水、用改「本职」冒充当前职位 |
+| `outline/units/vNN-U#.yaml` | 核对并必要时改写结构化 `state_deltas`（`stem`/`field`/`from`/`to`）与正文一致 | 把 `to` 写进人物卡基线 |
+| `continuity/commits/vNN-U#.md` | gate 结果、四计数、锁词、字数、扩写 / deslop 处置、偏离登记、**本单元身份转变摘要** | 读者事实 |
 
 ### 1. `continuity/summaries/vNN.md`
 
@@ -45,13 +47,20 @@ After review PASS (and optional polish) for the active unit. PASS 不要求 `rev
 2. **Tracking** — cursor（`last_committed_ch` / 当前卷单元 / next action），Cast snapshot 增量，cannot-rewind
 3. **Open loops** — plant / advance / pay off（≤5 open；`dangling` = bug）；细纲 `info_control.foreshadowing` 的 FS-id 必须出现在表中
 
-细纲每条 `state_deltas` 的「谁」必须出现在 Cast snapshot（gate 硬检）。Snapshot「关系质态」列只做写作用的压缩游标：从变化的那条卡关系边抄一句，不在这里新编。
+细纲每条 `state_deltas` 的「谁」（`stem`）必须出现在 Cast snapshot（gate 硬检）。Snapshot「关系质态」列只做写作用的压缩游标：从变化的那条卡关系边抄一句，不在这里新编。
+
+**身份跃迁回写：** 对照正文与细纲，确认本单元职位/年龄/位置等变化成立后：
+1. 细纲 `state_deltas` 用结构化项（`field: title|age|location|power|relation|…` + `from`/`to`）；旧字符串 `"stem: 从X→Y"` 仍接受。
+2. Cast snapshot 对应列改为本单元结束后的值（= 基线 + 截至本单元所有已 Commit delta 的重放结果）。
+3. **不要**改人物卡「开卷年龄 / 本职」基线。
+
+gate `postcommit`：身份类 delta 的 `to` 与 snapshot 年龄/职位/位置不一致 → advisory。
 
 ### 3. 人物卡关系回写
 
-`state_deltas` 涉及关系质态变化（信任±/站队/债务/秘密共享）时，**同一 patch** 更新**两张**相关卡「关系」表的「当前质态」与「最近变化点」两列；「最近变化点」须含本单元 id（如 `v01-U4 同盟成形`）。两边质态可以不同。关系状态的事实源是人物卡，facts 不另存。**不写编年史**。
+`state_deltas` 涉及关系质态变化（`field: relation` 或文本含信任±/站队/债务/秘密共享）时，**同一 patch** 更新**两张**相关卡「关系」表的「当前质态」与「最近变化点」两列；「最近变化点」须含本单元 id（如 `v01-U4 同盟成形`）。两边质态可以不同。关系状态的事实源是人物卡，facts 不另存。**不写编年史**。
 
-gate `postcommit`：`state_deltas` 文本含关系词而对应卡「最近变化点」无本单元 id → warning。
+gate `postcommit`：关系类 delta 而对应卡「最近变化点」无本单元 id → warning。
 
 ### 4. `continuity/commits/vNN-U#.md`（执行日志）
 
@@ -85,6 +94,17 @@ gate `postcommit`：`state_deltas` 文本含关系词而对应卡「最近变化
 
 5 规则：章内时间只前进；章间隔须明示（「三日后」）；多 POV 同时事件不矛盾；季节/月相/昼夜对齐；旅行时间物理可行。
 
+细纲须有 `gap_from_prev`；须有 `story_day` 或 `time_label`（accepted+ gate blocking）。非 `flashback` 时 `story_day` 相对前序单元不得回跳（gate `timeline_monotonic`）。
+
+### Commit 前一致性自查（对照 qc-pack `### CONTINUITY`）
+
+| 项 | 通过标准 |
+|----|----------|
+| 身份 | 开场=CONTINUITY identity；单元末落地 `to`；snapshot 年龄/职位/位置已刷新 |
+| 知情 | POV「不知」未在正文泄漏；知情范围列与揭示一致 |
+| 伤势/资源 | 开场对齐 snapshot；变化在正文或 deltas 有交代 |
+| 时钟 | `story_day`/`gap` 与正文时间句一致；闪回已标 |
+
 | 常见错误 | 如何抓 | 如何修 |
 |----------|--------|--------|
 | 到达太快 | 对照地图距离与交通方式 | 加过渡章或改距离设定 |
@@ -92,6 +112,8 @@ gate `postcommit`：`state_deltas` 文本含关系词而对应卡「最近变化
 | 昼夜错位 | 上章深夜、下章同场正午无间隔说明 | 补时间间隔句 |
 | 伤愈太快 | Cast snapshot 伤势栏 vs 正文行动 | 保留伤势代价或加 healing 设定 |
 | 分身两地 | 同角色同时间两个地点 | 以 facts 位置栏为准改正文 |
+| 职位/年龄穿帮 | CONTINUITY identity vs 正文称呼 | 以 identity + 已 Commit delta 为准；本单元 `to` 只在单元末落地 |
+| 开场写穿 | 开场已用 `to` 终局身份 | 回改正文或调整 delta / 场面顺序 |
 
 ## 卷收束（人工确认后执行）
 

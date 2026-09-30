@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "hooks": {
+    "userPromptSubmit": [
+      {
+        "matcher": "novel",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_DIR}/skills/novel-setup/scripts/novel_hook_context.py\"",
+            "timeoutSec": 5
+          }
+        ]
+      }
+    ],
+    "subagentStart": [
+      {
+        "matcher": "novel",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_DIR}/skills/novel-setup/scripts/novel_hook_context.py\"",
+            "timeoutSec": 5
+          }
+        ]
+      }
+    ]
+  }
+}

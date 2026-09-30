@@ -28,7 +28,7 @@ metadata:
 |----|------|------|-----------------|
 | 扩写 | `expand_needed: yes` 或 `word_floor` blocking | `expansion.md` | 扩写与字数控制 |
 | 审本单元 | 总是 | `review-gates.md`（10 维加权 + 发稿前四步自查） | 文风与去 AI 味 |
-| 去 AI 味 | `HITS` 非空或审稿 P0 | `polish-deslop.md`（用 qc-pack 的 HITS 行号，不再单跑 scan-deslop） | 同上；`subgenre=刑侦探案` 人味对照用 CONTEXT 里已注入的人味篇，不另查 |
+| 去 AI 味 | `HITS` 非空、审稿 P0、或 EmotionalConnection 扣分 | `polish-deslop.md`（先 Pass 0 叙事架构 ≤5 处，再用 qc-pack 的 HITS 行号） | 同上；`subgenre=刑侦探案` 人味对照用 CONTEXT 里已注入的人味篇，不另查 |
 | Commit | 审 PASS | `continuity-commit.md` + `commit-log.md` | — |
 | 卷收束 | 卷末单元 Commit 后，人确认 | `continuity-commit.md` 卷收束节 + `review-gates.md` Assembly Checklist | — |
 
@@ -36,8 +36,9 @@ metadata:
 
 **Commit = 一次 patch：**
 - `continuity/summaries/vNN.md`：该单元每一章 `## chNNN` 五要素块（新卷新建文件 + facts 索引行）
-- `continuity/facts.md`：Public facts + cursor + Cast snapshot 增量 + Open loops（**不写章摘要**）
-- 相关 `canon/cast/<stem>.md` 关系表「当前质态」「最近变化点（含本单元 id）」两列（仅当 `state_deltas` 涉及关系变化；两张卡都改）
+- `continuity/facts.md`：Public facts + cursor + Cast snapshot 增量（含年龄/职位，按 `state_deltas` 重放）+ Open loops（**不写章摘要**）
+- 相关 `canon/cast/<stem>.md` 关系表「当前质态」「最近变化点（含本单元 id）」两列（仅当 `state_deltas` 涉及关系变化；两张卡都改；**不改**开卷身份基线）
+- 细纲结构化 `state_deltas` 与正文身份变迁对齐；commits 日志可写身份转变摘要
 - `continuity/commits/vNN-U#.md`：执行日志（gate 结果 / 四计数 / 锁词 / 字数 / 扩写 / 偏离）
 - 细纲 `status=reviewed` + `novel-state.yaml`（`last_committed_ch` = 章范围末章，`active_unit` 指向下一单元）
 - `postcommit --unit` exit 0

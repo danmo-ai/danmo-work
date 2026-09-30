@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .common import Report, read_book_text, write_book_text
+from .identity import parse_cast_baseline
 
 CAST_ANCHOR_RE = re.compile(r"^\s*[-*]\s*\*?\*?(视觉|语言|行为)\*?\*?[：:]\s*(.*)")
 CAST_KV_RE = re.compile(r"^\s*`?(status|role)`?\s*[：:]\s*([A-Za-z_-]+)", re.I)
@@ -35,6 +36,8 @@ class CastCard:
     desire: str = ""
     intersect: str = ""
     exit: str = ""
+    age_at_start: str = ""
+    title_baseline: str = ""
     relations: list[dict] = field(default_factory=list)
     text: str = ""
 
@@ -125,7 +128,7 @@ def parse_cast_card(text: str, stem: str = "", path: Path | None = None) -> Cast
             if m:
                 card.catchphrase = _clean(m.group(1))
                 continue
-        if "功能" in section:
+        if "功能" in section or "身份基线" in section:
             m = _INTERSECT_RE.match(line)
             if m:
                 card.intersect = _clean(m.group(1))
@@ -155,6 +158,9 @@ def parse_cast_card(text: str, stem: str = "", path: Path | None = None) -> Cast
                     "next": cells[4] if len(cells) > 4 else "",
                 }
             )
+    base = parse_cast_baseline(text)
+    card.age_at_start = base.get("age") or ""
+    card.title_baseline = base.get("title") or ""
     # fallback: template-less legacy cards may carry anchors anywhere
     if not card.anchors:
         for line in lines:
@@ -242,22 +248,42 @@ def load_cast_relations(book_root: Path, names: list[str], cache=None) -> list[s
 
 
 def cast_context_lines(
-    book_root: Path, names: list[str], pov: str, snapshot_rows: list[str], cache=None
+    book_root: Path, names: list[str], pov: str, snapshot_rows: list[str], cache=None,
+    ledger_text: str = "",
 ) -> list[str]:
-    """CONTEXT block for on_stage characters: snapshot row + 三锚点 + 1 台词 (+ POV 不知)."""
+    """CONTEXT block for on_stage: Identity@unit (opening) + snapshot + 三锚点 + 台词 (+ POV 不知).
+
+    Identity uses Cast snapshot ∪ card baseline — never this unit's state_deltas `to`.
+    """
+    from .identity import (
+        format_identity_line,
+        identity_from_snapshot_and_baseline,
+        parse_cast_snapshot_table,
+    )
+
     lines: list[str] = []
     cards = load_cast_cards(book_root, cache)
+    snap_table = parse_cast_snapshot_table(ledger_text) if ledger_text else {}
+    # Also seed table from raw snapshot_rows if ledger_text empty
+    if not snap_table and snapshot_rows:
+        snap_table = parse_cast_snapshot_table(
+            "### Cast snapshot\n\n| 角色 |\n|------|\n" + "\n".join(snapshot_rows)
+        )
     for name in names:
         card = cards.get(name)
         if card is None:
             lines.append(f"  - {name}: （无人物卡 canon/cast/{name}.md）")
             continue
         lines.append(f"  - {card.label}（{name}，{card.role or 'recurring'}）")
-        snap = [row for row in snapshot_rows if name in row or (card.label and card.label in row)]
-        if snap:
-            lines.append(f"    snapshot: {snap[0]}")
-        else:
-            lines.append("    snapshot: （不在 Cast snapshot — Commit 后须补）")
+        baseline = {"age": card.age_at_start, "title": card.title_baseline}
+        ident = identity_from_snapshot_and_baseline(name, card.label, snap_table, baseline)
+        lines.append(f"    identity@unit: {format_identity_line(ident)}")
+        # Full snapshot row omitted when identity@unit is present (avoid redundancy).
+        # If identity empty and character absent from Cast snapshot, note without "snapshot:" key.
+        if not any(ident.get(k) for k in ("age", "title", "location", "goal", "injury", "knowledge")):
+            snap = [row for row in snapshot_rows if name in row or (card.label and card.label in row)]
+            if not snap:
+                lines.append("    缺席 Cast snapshot — Commit 后须补")
         anchors = [f"{k}={v}" for k, v in card.anchors.items() if v]
         lines.append("    三锚点: " + ("; ".join(anchors[:3]) if anchors else "（无三锚点行）"))
         sample = card.dialogue_sample()

@@ -36,7 +36,13 @@
 ## 时间线
 
 - 章内时间单调或明确跳跃标注；禁止无说明时间倒流。
-- `timeline_events` 与正文 `when` 一致。
+- 书级 `novel-state.time_system`（默认 `relative_days`）+ 总纲每卷 `story_span` + 卷纲「本卷时间线」+ 细纲 `story_day` / `gap_from_prev` 对齐。
+- accepted+：`gap_from_prev` 必填；`story_day` 与 `time_label` 至少其一（gate blocking）。
+- 非 `flashback` 时细纲 `story_day` 相对前序单元不得回跳（gate `timeline_monotonic`）。
+- 写前 CONTEXT 状态优先注入时钟与 `identity@unit`；定稿对照 qc-pack `### CONTINUITY`。
+- 场面 `when`（故事时）与 `where`（地点）分列；与 Cast snapshot 位置栏一致。
+- 人物年龄/职位：卡上只存开卷基线；当前值在 Cast snapshot；单元跃迁写结构化 `state_deltas`；Commit 后 title/location 与 snapshot 不一致 → postcommit blocking。
+- 可选 `timeline_events` 表仅作索引，真源仍是大纲字段 + Commit delta。
 - 多线并行时每线标注时间点。
 
 ## 终局储备

@@ -168,17 +168,11 @@ def legacy_chapters_message(book_root: Path) -> str | None:
     )
 
 
-def state_delta_who(items: list[str]) -> list[str]:
-    out = []
-    for item in items:
-        s = item.strip()
-        if ":" in s:
-            out.append(s.split(":", 1)[0].strip())
-        elif "：" in s:
-            out.append(s.split("：", 1)[0].strip())
-        elif s:
-            out.append(s)
-    return [w for w in out if w]
+def state_delta_who(items: list | None) -> list[str]:
+    """Who stems in state_deltas (string or structured dict)."""
+    from .identity import state_delta_who as _who
+
+    return _who(items)
 
 
 def on_stage_of(unit: dict) -> list[str]:
@@ -416,15 +410,22 @@ def validate_unit_shape(unit: dict, r: Report, rel: str) -> None:
     if a > 0 and nums != list(range(a, b + 1)):
         r.blocking("chapters", f"{rel} chapters {nums} != range {a}-{b}")
     counts: dict[int, int] = {}
+    status = str(unit.get("status") or "").strip()
+    require_emotion = status in ("accepted", "drafted", "reviewed")
     for s in scenes:
         n = _as_int(s.get("chapter"))
         counts[n] = counts.get(n, 0) + 1
+        sid = s.get("id") or "?"
         beat = str(s.get("beat") or "").strip()
         if beat not in BEAT_NAMES:
-            r.blocking("scenes", f"{rel} scene {s.get('id') or '?'} beat={beat!r} invalid")
+            r.blocking("scenes", f"{rel} scene {sid} beat={beat!r} invalid")
         landed = s.get("must_land") or []
         if not isinstance(landed, list) or not any(str(x).strip() for x in landed):
-            r.blocking("scenes", f"{rel} scene {s.get('id') or '?'} must_land empty")
+            r.blocking("scenes", f"{rel} scene {sid} must_land empty")
+        if require_emotion:
+            for key in ("emotional_beat", "reader_effect", "subtext"):
+                if is_blank(s.get(key)):
+                    r.blocking("scenes", f"{rel} scene {sid} {key} empty")
     if a > 0:
         for n in range(a, b + 1):
             if counts.get(n, 0) < 2:
@@ -440,6 +441,14 @@ def validate_unit_shape(unit: dict, r: Report, rel: str) -> None:
         r.blocking("hook", f"next_hook.type must be one of KB 爽点与追读 types, got {htype}")
     if not hout:
         r.blocking("hook", "next_hook.out empty (need a concrete event)")
+    from .identity import normalize_state_deltas, validate_timeline_fields
+
+    validate_timeline_fields(unit, r, rel)
+    for row_d in normalize_state_deltas(unit.get("state_deltas")):
+        if not row_d.get("stem"):
+            r.blocking("state_deltas", f"{rel} state_deltas entry missing stem/who")
+        if not (row_d.get("to") or row_d.get("note") or row_d.get("from")):
+            r.advisory("state_deltas", f"{rel} state_deltas {row_d.get('stem')}: empty from/to/note")
 
 
 def validate_unit_against_volume(unit: dict, row: dict | None, r: Report, rel: str) -> None:
@@ -542,10 +551,15 @@ def seed_unit_yaml(row: dict, unit_scale: dict, volume_cast: list[str]) -> str:
         f"on_stage: []      # ⊆ 卷纲「本卷人物」: {', '.join(volume_cast) if volume_cast else '（卷纲未列）'}",
         'pov: ""           # 默认 POV stem；场面可用 pov 覆盖',
         "",
-        "scenes: []        # - id: S1 / beat / chapter / where / pov / who / want / turn / must_land",
+        "story_day: null             # 本单元开场相对日序（D0=开书日）",
+        'gap_from_prev: ""           # 与上单元时间差；首单元写「开卷」',
+        'time_label: ""',
+        "flashback: false",
+        "",
+        "scenes: []        # - id: S1 / beat / chapter / when / where / pov / who / want / turn / must_land / emotional_beat / reader_effect / subtext",
         "chapters: []      # - chapter / title_working / opens_on / ends_on / cut_hook / word_share",
         "",
-        "state_deltas: []",
+        "state_deltas: []  # {stem, field: title|age|location|power|relation|…, from, to, note?} 或 legacy \"stem: from→to\"",
         "info_control:",
         "  reveals: []",
         "  foreshadowing: []",
@@ -661,6 +675,9 @@ def lint_units(book_root: Path, st: dict, volume: str, r: Report, cache=None) ->
             sub.advisory("contract", f"{rel} status=proposed, no scenes yet — 待细纲")
         else:
             validate_unit_shape(u, sub, rel)
+            from .identity import check_timeline_monotonic
+
+            check_timeline_monotonic(book_root, u, sub, rel)
         validate_unit_against_volume(u, by_id.get(uid), sub, rel)
         if scene_rows(u) or on_stage_of(u):
             validate_on_stage(u, volume_cast, status_map, sub, rel)

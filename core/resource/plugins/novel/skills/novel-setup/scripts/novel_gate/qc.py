@@ -75,8 +75,7 @@ def check_scan_deslop(book_root: Path, unit_id: str, r: Report) -> list[str]:
 
 def check_qc_pack(book_root: Path, st: dict, unit_id: str, r: Report, cache=None) -> list[str]:
     """precommit + scan-deslop in one report: verdict, 四计数, word floor/ceiling,
-    lock hits, and HITS with line numbers. Adds a LENGTH section so the 定稿 round can
-    decide 扩写 / 润色 without a second gate call."""
+    lock hits, HITS, and ### CONTINUITY for 定稿对照."""
     check_precommit(book_root, st, unit_id, r, cache)
     prose_rel = unit_prose_rel(unit_id)
     if not file_exists(book_root, prose_rel):
@@ -111,4 +110,10 @@ def check_qc_pack(book_root: Path, st: dict, unit_id: str, r: Report, cache=None
         length.append(f"ch{sl['chapter']}: {rune_count(sl['body'])} / share {shares.get(sl['chapter'], 0)}")
     r.section("LENGTH", length)
     r.section("HITS", hits)
+    try:
+        from .context import build_continuity_lines
+
+        r.section("CONTINUITY", build_continuity_lines(book_root, u, cache, st))
+    except Exception as e:
+        r.section("CONTINUITY", [f"（装配失败: {e}）"])
     return hits

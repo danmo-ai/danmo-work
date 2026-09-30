@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "novel",
-  "version": "3.0.0",
-  "description": "Novel / webnovel writing expert. Unit-as-atomic-contract pipeline: volume outline slimmed to unit-index (no duplicated fields), unit YAML is the single source of unit-level truth, ledger split into facts + per-unit commit logs, lock-term gate auto-scan, foreshadowing state table single-sourced, word floor/ceiling hard gate, cast relation table de-chronicled. 8-step setup/plan/write/review.",
+  "version": "3.1.0",
+  "description": "Novel / webnovel writing expert. Unit-as-atomic-contract pipeline: volume outline slimmed to unit-index (no duplicated fields), unit YAML is the single source of unit-level truth, ledger split into facts + per-unit commit logs, lock-term gate auto-scan, foreshadowing state table single-sourced, word floor/ceiling hard gate, cast relation table de-chronicled. Scene emotional contract (emotional_beat / reader_effect / subtext) + narrative-architecture deslop. 8-step setup/plan/write/review.",
   "author": { "name": "Danmo" },
   "license": "MIT",
   "keywords": ["novel", "writing", "expert", "builtin", "knowledge"]

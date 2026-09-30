@@ -9,8 +9,8 @@
 ## Preflight
 
 1. `exec_shell` gate `--action preflight --unit vNN-U#`（`novel-setup/references/gate.md`）。exit ≠ 0 → **停止**（常见：`on_stage` 含 `candidate` / 不在本卷人物 / 无 canon protagonist / 细纲未 `accepted` / 钩子类型与卷纲不一致）。接手旧书另跑 `--action doctor`。
-2. 读 stdout 的 `### CONTEXT`，依次：风格指纹 → **题材专有文全文**（`genre`；`subgenre=刑侦探案` 再接子类专有文「刑侦人味文风」）→ 卷纲索引行 → **单元卡**（function / entry / desire / obstacle / choice / payoff / pleasure / forbidden / reveals / foreshadowing / state_deltas / on_stage / pov / 场面序 / 章切口 / next_hook.out）→ 接钩 → **人物**（仅 `on_stage`：snapshot 行 + 三锚点 + 1 条台词；`pov` 加「不知」；在场关系行）→ 开放债务 → 锁词 → 加载纪律。**这是本轮唯一额外上下文。**
-3. 可选：`search_kb` **至多 1** 次，且只在单元含 ch1–3 时查「节奏与结构」并 `read_skill` `opening-chapters.md` **一次**。其余情况**不查**：题材篇与人味篇已在 CONTEXT 里。
+2. 读 stdout 的 `### CONTEXT`，**状态优先**依次：书级一行 → 卷纲索引 + 本卷时间线 → **本单元/上一单元时钟** → **单元卡**（合同/场面/章切口；不含重复 deltas）→ 接钩 → **人物**（`identity@unit` + 三锚点 + 台词；`pov`「不知」）→ **本单元身份转变目标**（勿当开场人设）→ 开放债务 → 锁词 → **题材专有文（可截断）** → 风格指纹 → 加载纪律。**这是本轮唯一额外上下文。**
+3. 可选：`search_kb` **至多 1** 次，且只在单元含 ch1–3 时查「节奏与结构」并 `read_skill` `opening-chapters.md` **一次**；或题材截断不足时查同名 KB 篇。其余情况**不查**。
 4. 场面 `beat` 含场景标签时，用 `scene-routing.md` 决定是否把那一次 KB 用在「情绪与场景」。不要开第二次 `search_kb`。
 5. 仅当细纲 `continuity_risks` 非空 → 才可 `read_file` 点名旧单元正文。
 
@@ -19,13 +19,14 @@
 ### 写作前（全部能答才动笔）
 
 1. 工作窗口：场面序 + CONTEXT 给的上一单元末钩是什么？
-2. `on_stage` 每人的 snapshot 行 + 三锚点 + 台词都在 CONTEXT 里？`pov` 的「不知」不得在正文里被他说破？
+2. `on_stage` 每人的 **identity@unit** + 三锚点 + 台词都在 CONTEXT 里？开场称呼/职位是否对齐 identity（不是细纲 `to`）？`pov` 的「不知」不得在正文里被他说破？
 3. 本单元 FS-id（plant/advance/payoff）与 Open loops 对得上？
 4. 世界规则已在 canon/world.md 立过？新规则是否在影响剧情之前建立？
 5. 开篇 500 字内是否接住上一单元 `next_hook.out`（首单元除外）？
-6. 时间线与上一单元不矛盾？
+6. 时间线与上一单元不矛盾（对照 CONTEXT 本单元/上一单元时钟 / `gap_from_prev`）？
 7. POV 知情范围：第一人称不知他人想法；全知换头用空行，不用单独一行 `---`？
 8. 人名是否都来自 CONTEXT（单元卡 + on_stage 人物）？禁止临时发明正式全名；龙套用工称。
+9. 本单元身份 `to` 只在单元过程中兑现，开场不得写穿？
 
 写入 `novel-state.yaml`：
 
@@ -43,6 +44,7 @@ last_preflight: "[YYYY-MM-DD v01-U1] state:writing | outline:accepted | gate:PAS
 
 - `write` **一份** `units/vNN-U#.md`。
 - 按 `scenes` 顺序写。每场把 `must_land` 写成动作或对白，不要一句口号收场。
+- **同时兑现场面契约**（CONTEXT「场面序」里的 `情:` / `→读:` / `潜:`）：情绪弧要在场面内可感；读者效果靠动作/对白/信息差达成，禁止旁白宣布「他很愤怒」；有对白时表面话题 ≠ 真实诉求（对齐 `subtext`）。只推进情节清单、不落地情绪与读者效果 = 失败。
 - 章界只在细纲 `chapters[]` 的切口处断开。格式：
 
 ```markdown

@@ -19,9 +19,14 @@ from .common import (
 from .outline import (
     chapter_range_of,
     load_unit,
-    state_delta_who,
     unit_outline_rel,
     unit_prose_rel,
+)
+from .identity import (
+    format_delta_line,
+    normalize_state_deltas,
+    relation_delta_rows,
+    state_delta_who,
 )
 
 MAX_OPEN_DEBTS = 5
@@ -369,9 +374,19 @@ def open_loops_rows(ledger_text: str) -> list[str]:
 RELATION_DELTA_RE = re.compile(r"信任|站队|债务|秘密|结盟|背叛|决裂|反目|投靠|欠")
 
 
-def relation_deltas(items: list[str]) -> list[str]:
-    """state_deltas lines whose text describes a relationship change."""
-    return [s for s in items if RELATION_DELTA_RE.search(s)]
+def relation_deltas(items: list) -> list[str]:
+    """Legacy-compatible: return display lines for relationship state_deltas."""
+    rows = relation_delta_rows(items)
+    if rows:
+        return [format_delta_line(r) for r in rows]
+    # Fallback: string scan for old callers
+    out = []
+    for s in nonempty_list(items):
+        if isinstance(s, dict):
+            continue
+        if RELATION_DELTA_RE.search(str(s)):
+            out.append(str(s))
+    return out
 
 
 # --- postcommit ---
@@ -418,8 +433,9 @@ def check_postcommit(book_root: Path, st: dict, unit_id: str, r: Report) -> None
     lp = ledger_path(book_root)
     if lp.is_file():
         ledger_text = read_book_text(lp)
-    deltas = nonempty_list(u.get("state_deltas"))
-    who = state_delta_who(deltas)
+    raw_deltas = u.get("state_deltas")
+    deltas_norm = normalize_state_deltas(raw_deltas)
+    who = state_delta_who(raw_deltas)
     if who and ledger_text:
         names = parse_cast_snapshot_names(ledger_text)
         for w in who:
@@ -427,6 +443,46 @@ def check_postcommit(book_root: Path, st: dict, unit_id: str, r: Report) -> None
                 r.blocking(
                     "commit",
                     f"state_deltas who={w} not found in Cast snapshot after Commit",
+                )
+    # Identity fields: title/location `to` must match Cast snapshot (blocking); age advisory
+    if deltas_norm and ledger_text:
+        from .identity import parse_cast_snapshot_table, _snapshot_get
+
+        snap = parse_cast_snapshot_table(ledger_text)
+        needs_identity_cols = any(
+            row["field"] in ("title", "age") and row.get("to") for row in deltas_norm
+        )
+        if needs_identity_cols and snap:
+            sample = next(iter(snap.values()))
+            if not any(("年龄" in k or "职位" in k or "本职" in k) for k in sample):
+                r.blocking(
+                    "identity",
+                    "Cast snapshot missing 年龄/职位 columns after identity state_deltas — refresh facts.md table on Commit",
+                )
+        for row in deltas_norm:
+            if row["field"] not in ("title", "age", "location"):
+                continue
+            to = row.get("to") or ""
+            if not to:
+                continue
+            entry = snap.get(row["stem"]) or {}
+            if not entry:
+                for k, v in snap.items():
+                    if row["stem"] in k or k in row["stem"]:
+                        entry = v
+                        break
+            col = {"title": ("职位", "本职"), "age": ("年龄",), "location": ("位置",)}[row["field"]]
+            cur = _snapshot_get(entry, *col)
+            sev = r.blocking if row["field"] in ("title", "location") else r.advisory
+            if cur and to not in cur and cur not in to:
+                sev(
+                    "identity",
+                    f"state_deltas {row['stem']}.{row['field']}→{to} but Cast snapshot has {cur!r} — refresh snapshot on Commit",
+                )
+            elif not cur:
+                sev(
+                    "identity",
+                    f"state_deltas {row['stem']}.{row['field']}→{to} but Cast snapshot missing column — refresh snapshot",
                 )
     fs_ids = foreshadow_ids_from_contract(u)
     if fs_ids and ledger_text:
@@ -437,16 +493,17 @@ def check_postcommit(book_root: Path, st: dict, unit_id: str, r: Report) -> None
                     "commit",
                     f"foreshadowing {fs} not found in Open loops after Commit",
                 )
-    rel_deltas = relation_deltas(deltas)
+    rel_deltas = relation_delta_rows(raw_deltas)
     if rel_deltas:
         from .cast import load_cast_cards
 
         cards = load_cast_cards(book_root)
-        for stem in state_delta_who(rel_deltas):
+        for row in rel_deltas:
+            stem = row["stem"]
             card = cards.get(stem)
             if card is None:
                 continue
-            touched = any(unit_id in row.get("last_change", "") for row in card.relations)
+            touched = any(unit_id in r0.get("last_change", "") for r0 in card.relations)
             if not touched:
                 r.advisory(
                     "relation",

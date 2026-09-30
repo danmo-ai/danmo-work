@@ -6,7 +6,9 @@ Suggested collections (names are conventions — be consistent within a book):
 
 ## `characters`
 
-`id`, `book_id`, `name`, `status` (`candidate|canon`), `role`, `desire`, `wound`, `traits`, `visual_anchor`, `voice_anchor`, `behavior_anchor`, `knowledge_boundary`, `location`, `notes`, `updated_ch`
+`id`, `book_id`, `name`, `status` (`candidate|canon`), `role`, `age_at_story_start`, `title_baseline`, `desire`, `wound`, `traits`, `visual_anchor`, `voice_anchor`, `behavior_anchor`, `knowledge_boundary`, `location`, `notes`, `updated_ch`
+
+Live age/title/location after Commit live in `continuity/facts.md` Cast snapshot (replay of `state_deltas`), not as mutable canon card fields.
 
 ## `locations`
 
@@ -23,6 +25,8 @@ Suggested collections (names are conventions — be consistent within a book):
 ## `timeline_events`
 
 `id`, `book_id`, `chapter`, `when`, `fact`, `sources`, `characters`
+
+Optional mirror only. Authoritative clock is `novel-state.time_system` + volume「本卷时间线」+ unit `story_day` / `gap_from_prev` + Commit Cast snapshot.
 
 ## `foreshadows`
 

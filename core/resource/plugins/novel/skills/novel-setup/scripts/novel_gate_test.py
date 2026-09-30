@@ -2,6 +2,8 @@
 """Tests for novel_gate.py (stdlib unittest)."""
 from __future__ import annotations
 
+import json
+import re
 import sys
 import tempfile
 import unittest
@@ -22,9 +24,9 @@ FACTS = """# Continuity facts
 
 ### Cast snapshot（上场角色）
 
-| 角色 | 位置 | 目标 | 伤势/资源 | 知情范围 |
-|------|------|------|-----------|----------|
-| 主角 | 城东客栈 | 反证身份 | 无伤 | 不知宿敌真身 |
+| 角色 | 年龄 | 职位 | 位置 | 目标 | 伤势/资源 | 知情范围 | 关系质态（一行） |
+|------|------|------|------|------|-----------|----------|------------------|
+| 主角 | 28 | 落魄捕快 | 城东客栈 | 反证身份 | 无伤 | 不知宿敌真身 | |
 
 ### Cannot rewind
 
@@ -67,6 +69,8 @@ CAST_ZHUJUE = """# 主角
 ## 功能
 
 - 本职（一句话）：落魄捕快
+- 开卷年龄（`age_at_story_start`，整数或「约N」）：28
+- 本职 / 开卷身份（一句话；baseline title）：落魄捕快
 - 退场：仍在场
 
 ## 四件套（protagonist / volume_antagonist 必填）
@@ -160,6 +164,9 @@ word_target: 4000
 status: accepted
 on_stage: [zhu-jue, lin-xue]
 pov: zhu-jue
+story_day: 0
+gap_from_prev: 开卷
+flashback: false
 function: 开局立冲突
 entry: 开卷切口
 desire: 活下来并反证身份
@@ -180,6 +187,9 @@ scenes:
     want: 保住面子
     turn: 被当众羞辱
     must_land: ["有人笑他"]
+    emotional_beat: 镇定→羞怒
+    reader_effect: 替主角窝火
+    subtext: 谈身份证明 | 争面子高低
   - id: S2
     beat: 兑现
     chapter: 1
@@ -187,6 +197,9 @@ scenes:
     want: 反证身份
     turn: 留下失踪信
     must_land: ["亮出腰牌"]
+    emotional_beat: 羞怒→冷硬反压
+    reader_effect: 解气并好奇下文
+    subtext: 无
 chapters:
   - chapter: 1
     title_working: 客栈
@@ -261,6 +274,23 @@ class GateTests(unittest.TestCase):
         self.assertIn("单元卡 v01-U1", blob)
         self.assertIn("场面序", blob)
         self.assertIn("章切口", blob)
+        self.assertIn("情:镇定→羞怒", blob)
+        self.assertIn("→读:替主角窝火", blob)
+        self.assertIn("潜:谈身份证明 | 争面子高低", blob)
+
+    def test_preflight_missing_emotional_contract_blocks(self):
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
+        text = p.read_text(encoding="utf-8")
+        text = text.replace("    emotional_beat: 镇定→羞怒\n", "")
+        text = text.replace("    reader_effect: 替主角窝火\n", "")
+        text = text.replace("    subtext: 谈身份证明 | 争面子高低\n", "")
+        p.write_text(text, encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(
+            any("emotional_beat" in f["message"] for f in rep.findings),
+            rep.format(),
+        )
 
     def test_doctor_pass(self):
         rep = ng.run(str(self.root), "demo", "doctor", "")
@@ -375,10 +405,16 @@ class GateTests(unittest.TestCase):
         )
         # two scenes on ch1 only — add two for ch2 by duplicating beat lines via extra scenes
         outline = outline.replace(
-            "    must_land: [\"亮出腰牌\"]\nchapters:",
-            "    must_land: [\"亮出腰牌\"]\n"
-            "  - id: S3\n    beat: 尝试\n    chapter: 2\n    where: 主角 | 昼 | 门口\n    want: 进去\n    turn: 门开了\n    must_land: [\"敲门\"]\n"
-            "  - id: S4\n    beat: 加压\n    chapter: 2\n    where: 主角 | 昼 | 门口\n    want: 问清\n    turn: 没人应\n    must_land: [\"没人应\"]\n"
+            "    must_land: [\"亮出腰牌\"]\n    emotional_beat: 羞怒→冷硬反压\n"
+            "    reader_effect: 解气并好奇下文\n    subtext: 无\nchapters:",
+            "    must_land: [\"亮出腰牌\"]\n    emotional_beat: 羞怒→冷硬反压\n"
+            "    reader_effect: 解气并好奇下文\n    subtext: 无\n"
+            "  - id: S3\n    beat: 尝试\n    chapter: 2\n    where: 主角 | 昼 | 门口\n"
+            "    want: 进去\n    turn: 门开了\n    must_land: [\"敲门\"]\n"
+            "    emotional_beat: 期待→落空\n    reader_effect: 紧张\n    subtext: 无\n"
+            "  - id: S4\n    beat: 加压\n    chapter: 2\n    where: 主角 | 昼 | 门口\n"
+            "    want: 问清\n    turn: 没人应\n    must_land: [\"没人应\"]\n"
+            "    emotional_beat: 落空→不安\n    reader_effect: 悬着\n    subtext: 无\n"
             "chapters:",
         )
         (book / "outline/units/v01-U1.yaml").write_text(outline, encoding="utf-8")
@@ -627,13 +663,23 @@ class GateTests(unittest.TestCase):
         self.assertTrue(any(f["check"] == "asset" for f in rep.findings), rep.format())
 
     def test_preflight_context_spec(self):
-        """Plan §6: genre article whole, volume row, unit card, on_stage-only cast, POV 不知."""
+        """State-first CONTEXT: clock/identity before genre; no duplicate snapshot row."""
         rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
         self.assertEqual(rep.verdict, "PASS", rep.format())
         blob = "\n".join(rep.context_lines)
+        # order: book line / clock before genre article
+        i_book = blob.find("- 书级:")
+        i_clock = blob.find("- 本单元时钟:")
+        i_ident = blob.find("identity@unit:")
+        i_genre = blob.find("题材专有文「玄幻」")
+        self.assertGreaterEqual(i_book, 0, blob[:400])
+        self.assertGreaterEqual(i_clock, 0, blob[:400])
+        self.assertGreaterEqual(i_ident, 0, blob)
+        self.assertGreaterEqual(i_genre, 0, blob)
+        self.assertLess(i_clock, i_genre, "clock should precede genre article")
+        self.assertLess(i_ident, i_genre, "identity should precede genre article")
         self.assertIn("题材专有文「玄幻」", blob)
-        self.assertIn("# 玄幻", blob)
-        self.assertNotIn("刑侦人味文风", blob.split("- genre:")[0])
+        self.assertNotIn("刑侦人味文风", blob.split("- 题材专有文")[0] if "- 题材专有文" in blob else blob)
         self.assertIn("卷纲索引行: v01-U1 | ch1–ch1 | 开局立冲突 | 钩子=未兑现承诺 | 终局边界=宿敌真身", blob)
         self.assertIn("单元卡 v01-U1", blob)
         self.assertIn("choice: 是否公开反证", blob)
@@ -643,9 +689,103 @@ class GateTests(unittest.TestCase):
         self.assertIn("不知（POV 不得写出）: 宿敌真身", blob)
         self.assertIn("林雪（lin-xue，recurring）", blob)
         self.assertIn("主角 → lin-xue: 旧识 / 猜疑", blob)
+        # no redundant snapshot lines when identity present
+        self.assertNotIn("snapshot:", blob)
         # not injected: wound / arc / chronicle
         self.assertNotIn("被冤", blob)
         self.assertNotIn("伤口", blob)
+
+    def test_outline_pack_thin_injection(self):
+        """Thin pack for 细纲: snapshot/loops/timeline; no genre article / unit card."""
+        # Make U1 proposed so the batch queue is non-empty
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: proposed")
+        # Strip scenes so proposed stays advisory-friendly (pack doesn't care)
+        rep = ng.run(str(self.root), "demo", "outline-pack", "", "v01")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        blob = rep.format()
+        self.assertIn("### OUTLINE_PACK", blob)
+        self.assertIn("本卷时间线", blob)
+        self.assertIn("本卷人物", blob)
+        self.assertIn("Cast snapshot", blob)
+        self.assertIn("开放债务", blob)
+        self.assertIn("FS-001", blob)
+        self.assertIn("v01-U1", blob)
+        self.assertIn("接钩→entry", blob)
+        self.assertIn("上一单元时钟", blob)
+        # must NOT be full preflight CONTEXT
+        self.assertNotIn("题材专有文", blob)
+        self.assertNotIn("单元卡 v01-U1", blob)
+        self.assertNotIn("风格指纹", blob)
+        self.assertNotIn("identity@unit:", blob)
+
+    def test_accepted_missing_gap_blocks(self):
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
+        text = p.read_text(encoding="utf-8")
+        text = re.sub(r"^gap_from_prev:.*$", 'gap_from_prev: ""', text, count=1, flags=re.M)
+        p.write_text(text, encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(
+            any(f["check"] == "timeline" and "gap_from_prev" in f["message"] for f in rep.findings),
+            rep.format(),
+        )
+
+    def test_qc_pack_has_continuity_section(self):
+        # drafted status for review path; need enough prose to pass length soft checks
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: drafted")
+        prose = "## 第1章 客栈\n\n" + ("客栈里有人笑他。他亮出腰牌。明日午时当众验骨。" * 80) + "\n"
+        (self.root / "novel/demo/units/v01-U1.md").write_text(prose, encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "qc-pack", "v01-U1")
+        blob = rep.format()
+        self.assertIn("### CONTINUITY", blob)
+        self.assertIn("开场期望身份", blob)
+        self.assertIn("identity@unit", blob)
+        self.assertIn("时钟:", blob)
+        self.assertIn("单元结束身份目标", blob)
+
+    def test_postcommit_title_to_mismatch_blocks(self):
+        self._write_summary()
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: reviewed")
+        self._edit(
+            "outline/units/v01-U1.yaml",
+            'state_deltas: ["主角: 被辱→声望回升"]',
+            'state_deltas:\n  - stem: 主角\n    field: title\n    from: "落魄捕快"\n    to: "试用捕头"\n',
+        )
+        # snapshot still has 落魄捕快 — should block
+        self._edit("novel-state.yaml", "last_committed_ch: 0", "last_committed_ch: 1")
+        rep = ng.run(str(self.root), "demo", "postcommit", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(
+            any(f["check"] == "identity" and f["severity"] == "blocking" for f in rep.findings),
+            rep.format(),
+        )
+
+    def test_novel_hook_script(self):
+        import subprocess
+
+        script = Path(__file__).resolve().parent / "novel_hook_context.py"
+        book = self.root / "novel/demo"
+        payload = json.dumps(
+            {
+                "event": "subagentStart",
+                "agent_id": "novel",
+                "workdir": str(book),
+                "goal": "写单元",
+            },
+            ensure_ascii=False,
+        )
+        proc = subprocess.run(
+            [sys.executable, str(script)],
+            input=payload,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        out = json.loads(proc.stdout)
+        self.assertIn("additionalContext", out)
+        self.assertIn("stage=", out["additionalContext"])
+        self.assertIn("preflight", out["additionalContext"])
 
     def test_preflight_crime_subgenre_adds_flavor_article(self):
         self._edit("novel-state.yaml", "genre: 玄幻", "genre: 悬疑")
@@ -996,6 +1136,124 @@ note: |
         finally:
             builtins.__import__ = real_import
         self.assertEqual(rep.verdict, "PASS", rep.format())
+
+    def test_normalize_state_deltas_structured_and_legacy(self):
+        rows = ng.normalize_state_deltas(
+            [
+                {"stem": "zhu-jue", "field": "title", "from": "捕快", "to": "捕头"},
+                "lin-xue: 猜疑→信任",
+            ]
+        )
+        self.assertEqual(rows[0]["stem"], "zhu-jue")
+        self.assertEqual(rows[0]["field"], "title")
+        self.assertEqual(rows[0]["to"], "捕头")
+        self.assertEqual(rows[1]["stem"], "lin-xue")
+        self.assertEqual(rows[1]["from"], "猜疑")
+        self.assertEqual(rows[1]["to"], "信任")
+        self.assertEqual(ng.state_delta_who(rows), ["zhu-jue", "lin-xue"])
+
+    def test_preflight_injects_identity_at_unit(self):
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        ctx = "\n".join(rep.context_lines)
+        self.assertIn("identity@unit:", ctx)
+        self.assertIn("职位=", ctx)
+        # Opening identity must not use unit-end spoilers as the only line
+        self.assertIn("本单元身份转变目标", ctx)
+
+    def test_timeline_monotonic_blocks_backward_day(self):
+        prior = """unit_id: v01-U0
+chapter_range: [1, 1]
+title_working: prior
+word_target: 4000
+status: reviewed
+on_stage: [zhu-jue]
+pov: zhu-jue
+story_day: 5
+gap_from_prev: 开卷
+flashback: false
+function: prior
+entry: x
+desire: x
+obstacle: x
+choice: x
+payoff: x
+pleasure: x
+forbidden: []
+endgame_boundary: ""
+next_hook:
+  type: 信息缺口
+  out: hook
+scenes:
+  - id: S1
+    beat: 建立期待
+    chapter: 1
+    where: a
+    want: a
+    turn: a
+    must_land: ["a"]
+    emotional_beat: a→b
+    reader_effect: x
+    subtext: 无
+  - id: S2
+    beat: 兑现
+    chapter: 1
+    where: a
+    want: a
+    turn: a
+    must_land: ["b"]
+    emotional_beat: a→b
+    reader_effect: x
+    subtext: 无
+chapters:
+  - chapter: 1
+    title_working: p
+    opens_on: S1
+    ends_on: S2
+    cut_hook: hook
+    word_share: 4000
+state_deltas: []
+info_control:
+  reveals: []
+  foreshadowing: []
+constraint_checks:
+  timeline_monotonic: true
+"""
+        (self.root / "novel/demo/outline/units/v01-U0.yaml").write_text(prior, encoding="utf-8")
+        # Move U1 to chapters 2–2 so U0 ends before it; story_day 2 < prior 5 → block
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
+        text = p.read_text(encoding="utf-8")
+        text = text.replace("chapter_range: [1, 1]", "chapter_range: [2, 2]")
+        text = text.replace("chapter: 1", "chapter: 2")
+        if "story_day:" not in text:
+            text = text.replace("state_deltas:", "story_day: 2\ngap_from_prev: 回跳\nflashback: false\nstate_deltas:")
+        p.write_text(text, encoding="utf-8")
+        # Volume index still lists U1 as ch1 — expect chapter_range mismatch blocking OR timeline;
+        # force volume row aside: patch volume outline chapter for U1
+        vol = self.root / "novel/demo/outline/volumes/v01.md"
+        vtext = vol.read_text(encoding="utf-8")
+        vol.write_text(
+            vtext.replace("| v01-U1 | ch1–ch1 |", "| v01-U1 | ch2–ch2 |").replace(
+                "| v01-U1 | 1-1 |", "| v01-U1 | 2-2 |"
+            ),
+            encoding="utf-8",
+        )
+        # Also fix common index format in VOLUME fixture
+        if "v01-U1" in vtext:
+            vol.write_text(
+                re.sub(
+                    r"(\|\s*v01-U1\s*\|)\s*ch?\s*1\s*[–\-]\s*ch?\s*1",
+                    r"\1 ch2–ch2",
+                    vol.read_text(encoding="utf-8"),
+                    count=1,
+                ),
+                encoding="utf-8",
+            )
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertTrue(
+            any(f.get("check") == "timeline" and f.get("severity") == "blocking" for f in rep.findings),
+            rep.format(),
+        )
 
 
 if __name__ == "__main__":

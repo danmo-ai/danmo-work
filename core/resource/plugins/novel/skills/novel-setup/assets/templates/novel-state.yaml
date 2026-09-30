@@ -7,6 +7,7 @@ last_preflight: ""       # one-line receipt; no separate preflight-log file
 genre: ""  # 玄幻|仙侠|都市|悬疑|现代言情|古代言情|仕途扫黑|系统穿越 — preflight 按此整篇注入题材专有文
 subgenre: ""  # 同一 genre 内取「题材与平台」子类闭集的一行；悬疑/刑侦探案再注入「刑侦人味文风」
 qc_profile: general  # male_power|female_emotion|mystery|general
+time_system: relative_days  # relative_days|calendar — 卷纲时间线 / 细纲 story_day 对齐
 continuation_mode: false
 active_unit: ""          # vNN-U# currently being outlined or drafted
 

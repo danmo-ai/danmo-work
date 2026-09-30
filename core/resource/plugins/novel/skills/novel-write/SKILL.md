@@ -27,7 +27,7 @@ metadata:
 
 | Intent | Load | search_kb（≤1） | Script |
 |--------|------|-----------------|--------|
-| 一批细纲 | `unit-outline.md` + `unit-scale.md` | 节奏与结构（新名用文内取名短清单） | 写完 `--action lint-units --volume vNN`；FAIL 只补失败的那几个 |
+| 一批细纲 | `unit-outline.md` + `unit-scale.md` | 节奏与结构（新名用文内取名短清单） | 先 `--action outline-pack --volume vNN` 消费 `### OUTLINE_PACK`；写完 `--action lint-units --volume vNN`；FAIL 只补失败的那几个 |
 | 单写一个细纲 | 同上 | 同上 | 同上 |
 | 写单元正文 | `unit-write.md` | **默认不查**；单元含 ch1–3 → 唯一一次查「节奏与结构」+ `read_skill` `opening-chapters.md` | `--action preflight --unit vNN-U#` exit 0 |
 | 续写 / 卡文 | `continuation.md` | 同「写单元正文」 | 同上 |
@@ -35,7 +35,9 @@ metadata:
 
 **细纲必填新字段：** `on_stage`（本单元开口或被写到的 canon stem，⊆ 卷纲「本卷人物」）、`pov`（默认 POV stem，∈ `on_stage`）；场面可选 `who` / `pov`。卷纲已定的 `unit_id` / 章范围 / `function` / `next_hook.type` 不改（`function` 改了只 warning，以卷纲为准）。
 
-**写正文只消费 CONTEXT。** preflight 已注入：风格指纹、题材专有文全文（`subgenre=刑侦探案` 再接人味篇）、卷纲索引行、渲染后的单元卡、上一钩、`on_stage` 人物（snapshot + 三锚点 + 1 条台词；`pov` 加「不知」）、开放债务、锁词。不再通读 YAML，不读人物卡，不查题材篇 / 人味篇。
+**细纲先消费 outline-pack（薄）。** 含本卷时间线、本卷人物、Cast snapshot 身份行、open loops、锁词、proposed 接钩/上一时钟。**不是**写正文 CONTEXT（无题材全文、无单元卡）。
+
+**写正文只消费 CONTEXT。** preflight 已注入（状态优先）：书级/时钟、卷纲索引、渲染后的单元卡、上一钩、`on_stage`（`identity@unit` + 三锚点 + 台词；`pov`「不知」）、身份转变目标、开放债务、锁词、题材专有文（可截断；`subgenre=刑侦探案` 再接人味篇）、风格指纹。不再通读 YAML，不读人物卡；题材全文不足时才查 KB。
 
 ## Hard stops
 

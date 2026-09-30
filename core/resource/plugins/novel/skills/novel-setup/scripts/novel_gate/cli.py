@@ -19,7 +19,7 @@ from .common import (
     set_state_nested_scalar,
     write_book_text,
 )
-from .context import check_preflight
+from .context import check_outline_pack, check_preflight
 from .doctor import check_doctor
 from .init import init_book
 from .ledger import check_postcommit
@@ -28,11 +28,11 @@ from .outline import accept_volume, lint_units
 from .qc import check_precommit, check_qc_pack, check_scan_deslop
 
 UNIT_ACTIONS = {"preflight", "precommit", "postcommit", "scan-deslop", "qc-pack"}
-VOLUME_ACTIONS = {"accept-volume", "lint-units"}
+VOLUME_ACTIONS = {"accept-volume", "lint-units", "outline-pack"}
 BOOK_ACTIONS = {"doctor", "cast-lint", "migrate"}
 ACTIONS = UNIT_ACTIONS | VOLUME_ACTIONS | BOOK_ACTIONS | {"init"}
 ACTION_HELP = (
-    "doctor | init | accept-volume | lint-units | cast-lint | preflight | "
+    "doctor | init | accept-volume | lint-units | outline-pack | cast-lint | preflight | "
     "qc-pack | precommit | scan-deslop | postcommit | migrate"
 )
 
@@ -112,6 +112,8 @@ def run_with_hits(
                     + [f"+ outline/units/{u}.yaml (proposed)" for u in info.get("seeded", [])]
                     + [f"= outline/units/{u}.yaml (kept)" for u in info.get("kept", [])],
                 )
+        elif action == "outline-pack":
+            check_outline_pack(root, st, vol, r, BookCache(root))
         else:
             results = lint_units(root, st, vol, r, BookCache(root))
             body = []
@@ -156,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--workdir", default=".", help="project root or book root")
     p.add_argument("--book-id", default="", help="slug under novel/<book-id>/")
     p.add_argument("--unit", default="", help="plot unit id, e.g. v01-U1")
-    p.add_argument("--volume", default="", help="volume id for accept-volume / lint-units, e.g. v01")
+    p.add_argument("--volume", default="", help="volume id for accept-volume / lint-units / outline-pack, e.g. v01")
     p.add_argument("--title", default="", help="book title (init)")
     p.add_argument("--genre", default="", help="genre for init: 玄幻|仙侠|都市|悬疑|现代言情|古代言情|仕途扫黑|系统穿越")
     p.add_argument("--json", action="store_true")

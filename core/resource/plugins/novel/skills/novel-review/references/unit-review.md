@@ -10,10 +10,11 @@
 
 ## 流程
 
-1. `qc-pack --unit vNN-U#`（一次输出 precommit + scan-deslop：`### COUNTS` / `### HITS` / `expand_needed` / `polish_needed`）。
-2. 总字数 &lt; `word_target` × 0.8，或某章薄于 `word_share` × 0.7 → 先 `expansion.md`（扩场面，不注水）。
-3. 审：`review-gates.md`。PASS 不写 review 文件。FAIL / 深审写 `reviews/vNN-U#-review.md` 并停。
-4. 可选润色后，`continuity-commit.md`：一次补丁覆盖该单元全部 `## chNNN`，细纲 `status=reviewed`，`last_committed_ch` 推到章范围末章。
-5. `postcommit --unit vNN-U#` exit 0 才算定稿。
+1. `qc-pack --unit vNN-U#`（一次输出 precommit + scan-deslop：`### COUNTS` / `### HITS` / `### LENGTH` / **`### CONTINUITY`**）。
+2. **先读 `### CONTINUITY`**（开场 identity、结束 `to`、时钟、伏笔对照），再审正文。
+3. 总字数 &lt; `word_target` × 0.8，或某章薄于 `word_share` × 0.7 → 先 `expansion.md`（扩场面，不注水）。
+4. 审：`review-gates.md`（Continuity 维与硬失败 5–7 对照 CONTINUITY）。PASS 不写 review 文件。FAIL / 深审写 `reviews/vNN-U#-review.md` 并停。
+5. 可选润色后，`continuity-commit.md`：一次补丁覆盖该单元全部 `## chNNN`，细纲 `status=reviewed`，`last_committed_ch` 推到章范围末章。
+6. `postcommit --unit vNN-U#` exit 0 才算定稿。
 
 禁止跳到下一单元。下一单元另开写作 turn。

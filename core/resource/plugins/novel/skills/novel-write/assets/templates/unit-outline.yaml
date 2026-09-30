@@ -14,6 +14,12 @@ status: proposed             # proposed|accepted|drafted|reviewed
 on_stage: []                 # 本单元开口或被写到的 canon stem；须 ⊆ 卷纲「本卷人物」；含 candidate → blocking
 pov: ""                      # 本单元默认 POV stem（须在 on_stage 内）；场面可用 pov 覆盖；preflight 给他注入「不知」
 
+# 故事时钟（相对日序默认；与卷纲「本卷时间线」、novel-state.time_system 对齐）
+story_day: null              # 本单元开场相对日序（整数，D0=开书日）；calendar 模式可改用 time_label
+gap_from_prev: ""            # 与上一单元的时间差（如「三日后」「同日黄昏」）；首单元写「开卷」
+time_label: ""               # 可读时钟（如「秋分前后」）；可选
+flashback: false             # true 时允许 story_day 回跳；须在正文明示闪回
+
 # 单元级合同（卷纲不重复这些字段）
 function: ""                 # 本单元必须完成的一件事；来自卷纲索引，改动只 warning（以卷纲为准）
 entry: ""                    # 因果入口；U1 写开卷切口；由上一单元 next_hook 引出
@@ -33,12 +39,16 @@ scenes:
   - id: S1
     beat: 建立期待            # 建立期待|尝试|加压|决断|兑现|余波
     chapter: 1
-    where: ""                 # time | location
+    when: ""                  # 本场故事时（相对上场面或章内锚点）；勿与 where 混写
+    where: ""                 # 地点 only（旧稿「time | location」仍可读，accepted 起建议拆开）
     pov: ""                   # 可选，覆盖单元级 pov（须在 on_stage 内）
     who: []                   # 可选，本场在场子集（⊆ on_stage）
     want: ""
     turn: ""
     must_land: []             # 1–3 个可落地的动作/对白事实，禁止口号
+    emotional_beat: ""        # 本场主情绪从 X→Y（一句）
+    reader_effect: ""         # 期望读者感受（紧张/心疼/解气/代入认同…一句）
+    subtext: ""               # 表面在谈什么 | 实际在争什么；无对白写「无」
 
 chapters:
   - chapter: 1
@@ -48,13 +58,22 @@ chapters:
     cut_hook: ""              # 章末切口；末章等于 next_hook.out
     word_share: 2500          # 单章目标字数 2000–3500
 
-state_deltas: []              # "谁: 从X→Y"，单元级（关系质态变化同步回写 cast 卡，不写编年史）
+# 本单元身份/状态跃迁（结构化优先；关系质态变化同步回写 cast 卡，不写编年史）
+# 写法 A（推荐）:
+#   - stem: zhu-jue
+#     field: title            # title|age|location|power|relation|status|other
+#     from: "落魄捕快"
+#     to: "试用捕头"
+#     note: ""                # relation 时写对方 stem + 质态
+# 写法 B（兼容旧稿）: "zhu-jue: 落魄捕快→试用捕头"
+# preflight 只把 from/当前 snapshot 注入开场身份；to 是单元结束目标，禁止当开场人设
+state_deltas: []
 info_control:
   reveals: []                # 本单元新揭示给读者的事实
   foreshadowing: []          # "FS-001: plant|advance|payoff"
 constraint_checks:
   goldfinger_ratio_ok: true
-  timeline_monotonic: true
+  timeline_monotonic: true   # gate：非 flashback 时 story_day 相对前序单元不回跳
   active_plot_lines_le_3: true
   endgame_reserve_ok: true
   agency_settled: true

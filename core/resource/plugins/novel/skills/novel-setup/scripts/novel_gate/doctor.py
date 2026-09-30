@@ -43,6 +43,20 @@ def legacy_structure_notes(book_root: Path, st: dict) -> list[str]:
         if u.get("scenes") and "on_stage" not in u:
             notes.append(f"{unit_outline_rel(uid)} has scenes but no on_stage")
             break
+        status = str(u.get("status") or "").strip()
+        if status in ("accepted", "drafted", "reviewed"):
+            missing_emo = False
+            for s in u.get("scenes") or []:
+                if not isinstance(s, dict):
+                    continue
+                if any(not str(s.get(k) or "").strip() for k in ("emotional_beat", "reader_effect", "subtext")):
+                    missing_emo = True
+                    break
+            if missing_emo:
+                notes.append(
+                    f"{unit_outline_rel(uid)} scenes missing emotional_beat/reader_effect/subtext — 补细纲后再写"
+                )
+                break
     cast_dir = book_root / "canon" / "cast"
     if cast_dir.is_dir():
         for path in sorted(cast_dir.glob("*.md")):

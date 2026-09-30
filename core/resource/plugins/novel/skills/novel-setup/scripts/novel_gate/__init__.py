@@ -2,12 +2,12 @@
 
 python3 novel_gate.py --action ACTION --workdir PROJECT [--book-id SLUG] [--unit vNN-U#] [--volume vNN] [--json]
 
-Actions: doctor | init | accept-volume | lint-units | cast-lint | preflight | qc-pack |
+Actions: doctor | init | accept-volume | lint-units | outline-pack | cast-lint | preflight | qc-pack |
 precommit | scan-deslop | postcommit | migrate. Exit 0 PASS, 1 FAIL, 2 usage/error.
 
 Modules: common (YAML/IO/Report), outline (unit YAML + volume index, accept-volume,
 lint-units), cast (cards, cast-lint, promote), ledger (facts / summaries / postcommit),
-context (state, KB articles, preflight CONTEXT), deslop + qc (scans, precommit, qc-pack),
+context (state, KB articles, preflight CONTEXT, outline-pack), deslop + qc (scans, precommit, qc-pack),
 doctor, init, migrate, book (cache), cli.
 """
 from __future__ import annotations
@@ -41,7 +41,9 @@ from .context import (
     QC_PROFILES,
     STYLE_MAX_RUNES,
     SUBGENRES,
+    build_outline_pack,
     build_preflight_context,
+    check_outline_pack,
     check_preflight,
     genre_articles,
     kb_cite_errors,
@@ -76,6 +78,12 @@ from .ledger import (
     summary_has_five_keys,
 )
 from .migrate import run_migrate
+from .identity import (
+    check_timeline_monotonic,
+    format_delta_line,
+    normalize_state_deltas,
+    state_delta_who,
+)
 from .outline import (
     BEAT_NAMES,
     HOOK_TYPES,
@@ -88,7 +96,6 @@ from .outline import (
     parse_volume_index,
     seed_unit_yaml,
     split_unit_prose,
-    state_delta_who,
     unit_listed,
     validate_unit_shape,
 )

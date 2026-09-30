@@ -3,8 +3,8 @@
 ## Hierarchy
 
 1. **总纲** — 核心纲、读者承诺、强设定指针、全书结构钩/双线、分卷结构表、主线伏笔（计划层）、结局方向（终局储备 unlock **只在** `book-bible.md`，总纲链过去即可）；模板 `book-outline.md` 文首有**锁纲 checklist**
-2. **卷纲** — 卷目标（含结构钩/双线）、冲突与起终、终局边界、节奏锚点、**单元索引**（unit_id / 章范围 / 一句话功能 / 本单元禁碰 / 钩子类型）、情绪/人物弧、反转、伏笔；模板 `volume-outline.md` 文首有**锁卷 checklist**
-3. **单元细纲** — 下一技能 `novel-write`（`unit-outline.md`）；YAML `outline/units/vNN-U#.yaml` 是单元级**唯一**合同
+2. **卷纲** — 卷目标（含结构钩/双线）、**本卷时间线**、**起终身份表**、终局边界、节奏锚点、**单元索引**、情绪/人物弧、反转、伏笔；模板 `volume-outline.md` 文首有**锁卷 checklist**
+3. **单元细纲** — 下一技能 `novel-write`（`unit-outline.md`）；YAML `outline/units/vNN-U#.yaml` 是单元级**唯一**合同（含 `story_day` / 结构化 `state_deltas`）
 
 卷纲只写到**单元索引**为止。禁止在卷纲写 desire/obstacle/choice/payoff/pleasure/forbidden/scenes、场面、单章任务、爽点文案——那些只进 yaml。
 
@@ -70,6 +70,8 @@
 | 双线（有则填） | 全书弧在总纲；本卷推进+交织在卷纲 | 总纲「双线」→ 卷纲「双线」 |
 | 结构钩 | 全书长线在总纲；本卷长/短在卷纲；短线单元下钩；设了必兑 | 总纲「结构钩」→ 卷纲「结构钩」→ yaml `next_hook` |
 | 体量 | 分卷表能覆盖 Length target（新手宜按 ≥30 万字练控场估算） | 总纲分卷表 + 体量备注 |
+| 时间线 | 总纲每卷 `story_span`；卷纲「本卷时间线」+ 起终身份表 | 总纲分卷表 → 卷纲时间线/身份 → 细纲 `story_day` |
+| 身份变迁 | 人物卡只存开卷基线；卷终身份在卷纲表；单元跃迁在 `state_deltas` | 人物卡身份基线 → 卷纲起终身份 → yaml deltas |
 
 缺单元索引、章范围缺口/重叠 → **不要进入单元细纲**。
 

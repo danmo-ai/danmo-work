@@ -29,14 +29,14 @@
 |------|------|----------|
 | Opening 开篇 | 10% | 前 3 段出现冲突；接住上章 hook.out；无禁用开头（天气/作息/回顾/慢背景/寒暄/设定讲座） |
 | Plot & Scene | 15% | 至少一个不可逆事件；场景遵循 目标→冲突→结果；因果链驱动，无巧合推进 |
-| Character | 15% | 无 OOC；人物对事件有情绪+行动反应；POV 章至少一次内心冲突或艰难抉择；**本章新正式姓名须可对上 cast / 非 AI 批量名** |
-| Dialogue | 10% | 潜台词 ≥30%；无解释型对白；遮名测试通过 |
+| Character | 15% | 无 OOC；人物对事件有情绪+行动反应；POV 章至少一次内心冲突或艰难抉择；**知情边界**未泄漏；**开场身份**对齐 CONTINUITY identity（非 `to`）；本章新正式姓名须可对上 cast；对照场面序 `情:` 是否在正文可感 |
+| Dialogue | 10% | 潜台词 ≥30%；无解释型对白；遮名测试通过；有对白场对齐场面序 `潜:` |
 | Hook & Suspense | 10% | hook 类型不与上章连续同类；关闭/推进一个旧张力并开新张力；悬念强度不连续 3 章下陷 |
-| Show vs Tell | 10% | 情绪经身体/动作/对话呈现；闪回 ≤2 段 |
+| Show vs Tell | 10% | 情绪经身体/动作/对话呈现；闪回 ≤2 段；**禁止只堆身体反应而无行为/认知后果**；`reader_effect` 靠戏达成，不靠旁白宣布 |
 | Pacing & Rhythm | 10% | 句长段长有变化；信息密度高低交替；无中部塌陷/高潮仓促 |
 | Sensory & World | 5% | 每场景 ≥3 种感官且 ≥1 非视觉；契诃夫之枪纪律 |
 | Language & Anti-AI | 10% | gate 四计数在阈值内；无禁词/毒句式；四字格 ≤2/段；**新名无 AI 模板感**（全员文艺双字/同批相似/说明书寓意 → 扣分，见「人设与群像 → 人物取名反 AI」） |
-| Continuity | 5% | 承接上章 hook.out；身体状态/时间线/伏笔与 ledger 一致；POV 无信息泄漏 |
+| Continuity | 5% | 承接上章 hook.out；对照 qc-pack `### CONTINUITY`：**开场**身份=identity（禁写穿 `to`）；**单元末**落地 `state_deltas.to`；`story_day`/`gap` 与正文时间一致；伤势/位置与开场 snapshot 一致（变化须有交代）；POV「不知」未泄漏；FS 与 Open loops / `info_control` 一致 |
 
 **门限：**
 
@@ -50,6 +50,9 @@
 2. 英文泄漏（gate blocking）
 3. 人名/人物状态与 `canon/cast` 或 ledger Cast snapshot 矛盾
 4. 时间线与 ledger 摘要矛盾（顺序/昼夜/旅程时长）
+5. 开场身份与 `### CONTINUITY` identity / Cast snapshot 明显矛盾（职位·年龄·同场两地）
+6. 正文开场已使用本单元 `state_deltas.to` 的终局身份（写穿）
+7. 本单元 `info_control.foreshadowing` 标注的 FS-id 未出现在 Open loops（定稿前）
 
 ### 升级机制
 
@@ -62,7 +65,7 @@ REVISE 两轮仍不过 → **FORCED PASS**：遗留问题打 severity 标签（`
 | Lens | Blocking if… |
 |------|----------------|
 | Structure / purpose | Chapter misses `purpose` or `beats` |
-| Character / OOC | Breaks desire/wound, knowledge boundary, or 三锚点 |
+| Character / OOC | Breaks desire/wound, knowledge boundary, 开场身份, or 三锚点 |
 | World / lore | Contradicts Canon rules without change request |
 | Tension / pacing | Dead air with no intentional蓄势; or hook missing |
 | Voice / style | Wrong POV or severe style break |
@@ -73,8 +76,9 @@ REVISE 两轮仍不过 → **FORCED PASS**：遗留问题打 severity 标签（`
 | Lens | Blocking if… |
 |------|----------------|
 | **ReaderPull** | 开放钩子债务 >5；未在 500 字内接上一章钩；近 5 章无爽点（开篇期 blocking） |
+| **EmotionalConnection** | 场面序 `情:` / `→读:` / `潜:` 正文不可感；只推事件清单；情绪单一身体模板；读者无代入点（对照 KB「情绪与场景 → 场面契约 / 代入六支柱」）。默认 **advisory**；`qc_profile=female_emotion` 或番茄向 ch1–3 **升 blocking** |
 | **PacingDensity** | 番茄向：章内无 300–500 字波动；连续 3 章纯铺垫 |
-| **StrongConstraints** | 金手指代劳关键抉择；时间线冲突；活跃叙事线 >3；提前打光终局底牌；无关角色夺走高光 |
+| **StrongConstraints** | 金手指代劳关键抉择；时间线冲突（对照细纲 `story_day`/`gap` 与 `### CONTINUITY`）；活跃叙事线 >3；提前打光终局底牌；无关角色夺走高光 |
 | **追更指数** | 章末无可感知悬念且中段无加压（番茄向 ch1–3 blocking） |
 
 番茄向/免费网文额外检查（ch1–3 blocking，之后 advisory）：开篇 3 句内有冲突、首章末必钩、章纲 `pleasure_point` 与 `hook` 非空且正文兑现；开篇信息过载 / 口号钩 / 水文注水 → 对照 KB「强约束 → 高频雷点」。
