@@ -1,6 +1,14 @@
 # Unit write（单元正文首稿）
 
-写正文：**先跑 gate preflight，只消费它打印的 `### CONTEXT`。** CONTEXT 已含渲染后的单元卡，不再第二遍通读 YAML；不读人物卡；不要为走流程扫全书树。
+## Pipeline system
+
+写正文只读本 pack（`read_file` stdout 的 `file:`）。禁止 `read_skill` 长文、扫树、二读 YAML、人物卡、facts 全文、`author-lore`、`search_kb`。
+
+1. `exec_shell` gate `--action prompt-pack --stage write --unit vNN-U#`。exit ≠ 0 → 停。
+2. 只消费 pack 里的 CONTEXT。人名闭集 = CONTEXT 已出现称呼。兑现场面 `情:` / `→读:` / `潜:`。
+3. `write` 一份 `units/vNN-U#.md`：`## 第N章`，章间单独一行 `---`。细纲 `status=drafted`。停。不定稿。
+
+写正文（agent 未走 pack 时的旧路径）：**先跑 gate preflight，只消费它打印的 `### CONTEXT`。** CONTEXT 已含渲染后的单元卡，不再第二遍通读 YAML；不读人物卡；不要为走流程扫全书树。
 
 一轮只写 **一个** 单元，落成 **一份** `units/vNN-U#.md`。章是这份文件里的切口，不是单独文件。一份文件是为了写和读时不要丢掉章与章的衔接和一致性，不是为了把单章写长。
 

@@ -1,7 +1,7 @@
 ---
 name: novel-review
 source: builtin
-description: 定稿 round for one drafted unit — gate --action qc-pack (word floor/ceiling + 四计数 + 锁词 + HITS in one output), skip expansion when length is fine and polish when HITS is empty, 10-dim review, then one-patch Continuity Commit (summaries/vNN.md chapter blocks + facts cursor + cast relation columns + reviewed + state) and gate postcommit. Also 卷收束. Not for opening a book, cast, outlines, or first drafts.
+description: 定稿 round for one drafted unit — prompt-pack --stage finalize (word/HITS/COUNTS/CONTINUITY on disk), skip expansion when length is fine, 10-dim review, one-patch Commit and postcommit. Prefer a new session (no chat history). Not for opening a book or first drafts.
 license: MIT
 compatibility: Requires write, edit, read_file, grep, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
@@ -11,6 +11,14 @@ metadata:
 ---
 
 # Novel Review（定稿一轮 · 卷收束）
+
+## Pipeline system
+
+定稿只读本 pack。禁止写首稿、扫树、`search_kb`（人味对照已在 pack）。
+
+1. `exec_shell` gate `--action prompt-pack --stage finalize --unit vNN-U#`。
+2. 按 pack 的 LENGTH / HITS / COUNTS / CONTINUITY 选路：`expand_needed` 才扩写；HITS 非空才按行号润色；10 维审。PASS 不写 `reviews/`。
+3. 一次 Commit 补丁后 `postcommit --unit`。exit ≠ 0 停。不要第三轮自动重试。
 
 **Stage 5/5.** 一个单元一轮定稿（可与写作分模）：`qc-pack --unit` 一份 stdout → 字数够则跳扩写、HITS 空则跳润色 → 10 维审 → 修 P0 → 一次补丁 Commit → `postcommit --unit`。**与 novel-write 分开**：禁止在首稿 turn 定稿。本技能不换模型。
 
@@ -22,15 +30,15 @@ metadata:
 
 ## Do
 
-先跑 `exec_shell` gate `--action qc-pack --unit vNN-U#`，读三段：`### LENGTH`（`expand_needed` / `polish_needed` / 各章 runes vs share）、`### HITS`（行号）、`### COUNTS`（四计数）+ BLOCKING（锁词 / 字数 floor / 章结构）。按结果只加载需要的那几步：
+先跑 `exec_shell` gate `--action prompt-pack --stage finalize --unit vNN-U#`，`read_file` stdout 的 `file:`（LENGTH / HITS / COUNTS / CONTINUITY）。按 pack 选路。
 
 | 步 | 触发 | Load | search_kb（≤1，整轮共用） |
 |----|------|------|-----------------|
-| 扩写 | `expand_needed: yes` 或 `word_floor` blocking | `expansion.md` | 扩写与字数控制 |
-| 审本单元 | 总是 | `review-gates.md`（10 维加权 + 发稿前四步自查） | 文风与去 AI 味 |
-| 去 AI 味 | `HITS` 非空、审稿 P0、或 EmotionalConnection 扣分 | `polish-deslop.md`（先 Pass 0 叙事架构 ≤5 处，再用 qc-pack 的 HITS 行号） | 同上；`subgenre=刑侦探案` 人味对照用 CONTEXT 里已注入的人味篇，不另查 |
-| Commit | 审 PASS | `continuity-commit.md` + `commit-log.md` | — |
-| 卷收束 | 卷末单元 Commit 后，人确认 | `continuity-commit.md` 卷收束节 + `review-gates.md` Assembly Checklist | — |
+| 扩写 | pack `expand_needed: yes` 或 `word_floor` blocking | 仅 pack 不足才 `expansion.md` | 默认不查 |
+| 审本单元 | 总是 | 仅 pack 不足才 `review-gates.md` | 默认不查 |
+| 去 AI 味 | pack HITS 非空、审稿 P0 | 仅 pack 不足才 `polish-deslop.md` | 默认不查 |
+| Commit | 审 PASS | 优先 pack CONTINUITY + `state_deltas`；不足才 `continuity-commit.md` | — |
+| 卷收束 | 卷末单元 Commit 后，人确认 | `continuity-commit.md` 卷收束节 | — |
 
 改完正文再跑一次 `qc-pack` 直到 exit 0，再 Commit。**PASS：不写 `reviews/` 文件**，只更新 `gates.qc`。**FAIL / 深审：写 `reviews/vNN-U#-review.md`** 并停（human stop）。
 

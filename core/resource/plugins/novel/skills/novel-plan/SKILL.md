@@ -12,7 +12,7 @@ metadata:
 
 # Novel Plan（规划一轮：人物 · 总纲 · 卷纲）
 
-**Stage 2/5.** 一轮出：人物卡（`candidate`）+ `outline/book_outline.md` + 本卷 `outline/volumes/vNN.md`（含单元索引 + 本卷人物）。**人只在卷纲批准处停。** 批准后脚本 `accept-volume` 提升人物并种细纲头。**No 单元细纲, no unit prose.** 本技能不换模型。
+**Stage 2/5.** 一轮出：人物卡（`candidate`）+ `outline/book_outline.md` + 本卷 `outline/volumes/vNN.md`（含单元索引 + 本卷人物）。**人只在卷纲批准处停。** 批准后只跑 `accept-volume`（不要 read_skill、不要写细纲）。批准后脚本 `accept-volume` 提升人物并种细纲头。**No 单元细纲, no unit prose.** 本技能不换模型。
 
 ## 分层硬规则
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Deterministic novel write-gate — entry shell. Stdlib only. Invoked by novel skills via exec_shell.
 
-python3 novel_gate.py --action doctor|init|accept-volume|lint-units|outline-pack|cast-lint|preflight|qc-pack|precommit|scan-deslop|postcommit|migrate \\
-  --workdir PROJECT [--book-id SLUG] [--unit vNN-U#] [--volume vNN] [--json]
-Unit actions require --unit; accept-volume / lint-units / outline-pack require --volume; init requires --book-id.
+python3 novel_gate.py --action doctor|init|accept-volume|lint-units|outline-pack|cast-lint|preflight|prompt-pack|qc-pack|precommit|scan-deslop|postcommit|migrate \\
+  --workdir PROJECT [--book-id SLUG] [--unit vNN-U#] [--volume vNN] [--stage write|outline|finalize] [--json]
+Unit actions require --unit; accept-volume / lint-units / outline-pack require --volume; prompt-pack --stage write|finalize needs --unit, --stage outline needs --volume; init requires --book-id.
 Exit 0 PASS, 1 FAIL, 2 usage/error. Implementation lives in the novel_gate/ package next to this file.
 """
 from __future__ import annotations

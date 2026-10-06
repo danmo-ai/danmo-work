@@ -20,6 +20,8 @@ import {
   isVolumeOutlineName,
   mergeVolumeOutlineFiles,
   nextVolumeNumber,
+  opensFreshSession,
+  novelFreshSessionTitle,
   novelActionSkillId,
   novelUnitOutlinePath,
   novelUnitProsePath,
@@ -418,10 +420,17 @@ const constrained = buildConstrainedPrefill('write', {
 }, pipe, [])
 assert.ok(constrained.includes('【任务】'))
 assert.ok(constrained.includes('技能 novel-write · 意图 write'))
-assert.ok(constrained.includes('preflight --unit'))
-assert.ok(constrained.includes('Intent→Load'))
+assert.ok(constrained.includes('prompt-pack --stage write'))
+assert.ok(constrained.includes('意图 write'))
 assert.ok(!constrained.includes('chapter-write.md'))
 assert.ok(constrained.includes('delegate_agent.goal'))
+
+assert.equal(opensFreshSession('write'), true)
+assert.equal(opensFreshSession('outline-batch'), true)
+assert.equal(opensFreshSession('finalize'), true)
+assert.equal(opensFreshSession('plan'), false)
+assert.equal(opensFreshSession('init'), false)
+assert.equal(novelFreshSessionTitle('write', { unitId: 'v01-U1' }), '写 v01-U1')
 
 assert.equal(novelActionSkillId('init'), 'novel-setup')
 assert.equal(novelActionSkillId('migrate'), 'novel-setup')
@@ -430,9 +439,9 @@ assert.equal(novelActionSkillId('write'), 'novel-write')
 assert.equal(novelActionSkillId('outline-batch'), 'novel-write')
 assert.equal(novelActionSkillId('finalize'), 'novel-review')
 assert.equal(novelActionSkillId('review'), 'novel-review')
-assert.ok(formatLoadProtocol('write').includes('gate preflight --unit'))
+assert.ok(formatLoadProtocol('write').includes('prompt-pack --stage write'))
 assert.ok(formatLoadProtocol('outline-batch').includes('lint-units'))
-assert.ok(formatLoadProtocol('finalize').includes('qc-pack'))
+assert.ok(formatLoadProtocol('finalize').includes('prompt-pack --stage finalize'))
 assert.ok(!formatLoadProtocol('write').includes('chapter-write.md'))
 
 const stages = [
@@ -481,10 +490,10 @@ assert.equal(novelUnitProsePath('star-inn', 'v01-U1'), 'novel/star-inn/units/v01
 
 const writePrefill = buildNovelStagePrefill('write', { bookId: 'star-inn', unitId: 'v01-U1' })
 assert.ok(writePrefill.includes('units/v01-U1.md'))
-assert.ok(writePrefill.includes('preflight --unit'))
+assert.ok(writePrefill.includes('prompt-pack --stage write --unit'))
 assert.ok(writePrefill.includes('---'))
 assert.ok(writePrefill.includes('停下'))
-assert.ok(writePrefill.includes('### CONTEXT'))
+assert.ok(!writePrefill.includes('### CONTEXT'))
 
 const md = `## 第1章 夜雨
 

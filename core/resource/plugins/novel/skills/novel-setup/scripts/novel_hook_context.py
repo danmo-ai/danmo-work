@@ -55,11 +55,11 @@ def main() -> int:
         except Exception:
             pass
     lines = [
-        "novel 流程 nudge（非硬 CONTEXT；写单元仍须 gate preflight）:",
+        "novel 流程 nudge（非硬 CONTEXT；写单元用 prompt-pack --stage write）:",
         f"- book={book or '（未检出）'} stage={stage or '（空）'} active_unit={active or '（空）'} last_committed_ch={last or '0'}",
-        "- 细纲：先 outline-pack --volume … 消费 ### OUTLINE_PACK，再 lint-units。",
-        "- 写单元：先 preflight --unit …，只消费 ### CONTEXT。",
-        "- 定稿：qc-pack → 审（### CONTINUITY）→ Commit → postcommit。",
+        "- 细纲：prompt-pack --stage outline --volume …，只读 pack file。",
+        "- 写单元：prompt-pack --stage write --unit …，只读 pack file。",
+        "- 定稿：prompt-pack --stage finalize --unit … → Commit → postcommit。",
     ]
     ctx = "\n".join(lines)
     if len(ctx) > 400:

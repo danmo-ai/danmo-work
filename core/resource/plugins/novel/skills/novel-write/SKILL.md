@@ -1,21 +1,23 @@
 ---
 name: novel-write
 source: builtin
-description: Two intents — 一批细纲 (fill ≤4 proposed unit YAML heads into accepted contracts, then gate --action lint-units) and 写单元 (gate --action preflight, consume only its CONTEXT, draft one units/vNN-U#.md). Unit YAML is the single source of unit-level truth. Not for 扩写, deslop, review, or Commit — those are novel-review (separate turn / model).
+description: Two intents — 一批细纲 (prompt-pack --stage outline, fill ≤4 proposed unit YAML, lint-units) and 写单元 (prompt-pack --stage write, read pack file only, draft one units/vNN-U#.md). Not for 扩写, deslop, review, or Commit — those are novel-review (new session).
 license: MIT
 compatibility: Requires write, edit, read_file, grep, glob, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
   author: danmo-work
-  version: "4.0"
+  version: "4.1"
   category: creative-writing
 ---
 
 # Novel Write（一批细纲 · 写单元）
 
-**Stage 3–4/5.** 两个意图，两种轮次：
+**Stage 3–4/5.** 生产路径（工作台新会话）：**exec prompt-pack → read_file 包文件 → write 目标 → 停。** 禁止 `read_skill` 长文、扫树、二读 YAML、`search_kb`。
 
-- **一批细纲**：把 `accept-volume` 种出的 `proposed` 头填成 `accepted` 合同，一批 ≤4 个，写完跑 `lint-units --volume vNN`；本卷还有 `proposed` 再发下一批。
-- **写单元**：一轮一个单元，`preflight --unit` → 只读 `### CONTEXT` → 一份 `units/vNN-U#.md` → 停。定稿另开一轮（`novel-review`，可换模）。
+- **一批细纲**：`--action prompt-pack --stage outline --volume vNN`，填 ≤4 个 `proposed`，再 `lint-units`。
+- **写单元**：`--action prompt-pack --stage write --unit vNN-U#`，只读 pack，一份 `units/vNN-U#.md`，不定稿。
+
+卡文 / 续写例外才 `read_skill` `continuation.md`。
 
 ## When to load
 
@@ -25,30 +27,23 @@ metadata:
 
 ## Do
 
-| Intent | Load | search_kb（≤1） | Script |
-|--------|------|-----------------|--------|
-| 一批细纲 | `unit-outline.md` + `unit-scale.md` | 节奏与结构（新名用文内取名短清单） | 先 `--action outline-pack --volume vNN` 消费 `### OUTLINE_PACK`；写完 `--action lint-units --volume vNN`；FAIL 只补失败的那几个 |
-| 单写一个细纲 | 同上 | 同上 | 同上 |
-| 写单元正文 | `unit-write.md` | **默认不查**；单元含 ch1–3 → 唯一一次查「节奏与结构」+ `read_skill` `opening-chapters.md` | `--action preflight --unit vNN-U#` exit 0 |
-| 续写 / 卡文 | `continuation.md` | 同「写单元正文」 | 同上 |
-| 场景/对白质感 | `unit-write.md` + 按需 `scene-routing.md` | 情绪与场景（占掉本轮那一次） | 同上 |
+| Intent | Script | 读什么 | 写什么 |
+|--------|--------|--------|--------|
+| 一批细纲 / 单写一个细纲 | `prompt-pack --stage outline --volume vNN` 然后 `lint-units --volume vNN` | 仅 pack `file:` | `outline/units/*.yaml`（本批） |
+| 写单元正文 | `prompt-pack --stage write --unit vNN-U#` | 仅 pack | `units/vNN-U#.md` + 细纲 `drafted` |
+| 续写 / 卡文 | 同上；仍失败才 `read_skill` continuation | 仅 pack | 同上 |
 
-**细纲必填新字段：** `on_stage`（本单元开口或被写到的 canon stem，⊆ 卷纲「本卷人物」）、`pov`（默认 POV stem，∈ `on_stage`）；场面可选 `who` / `pov`。卷纲已定的 `unit_id` / 章范围 / `function` / `next_hook.type` 不改（`function` 改了只 warning，以卷纲为准）。
-
-**细纲先消费 outline-pack（薄）。** 含本卷时间线、本卷人物、Cast snapshot 身份行、open loops、锁词、proposed 接钩/上一时钟。**不是**写正文 CONTEXT（无题材全文、无单元卡）。
-
-**写正文只消费 CONTEXT。** preflight 已注入（状态优先）：书级/时钟、卷纲索引、渲染后的单元卡、上一钩、`on_stage`（`identity@unit` + 三锚点 + 台词；`pov`「不知」）、身份转变目标、开放债务、锁词、题材专有文（可截断；`subgenre=刑侦探案` 再接人味篇）、风格指纹。不再通读 YAML，不读人物卡；题材全文不足时才查 KB。
+**细纲必填：** `on_stage` ⊆ 卷纲「本卷人物」、`pov` ∈ `on_stage`。不改卷纲已定的 `function` / `next_hook.type`。
 
 ## Hard stops
 
-- No prose without `accepted` 细纲 + `on_stage` 全 `canon` + 存在 `canon` protagonist（preflight asset 门）。
-- Gate preflight FAIL → no prose.
+- Pack / preflight FAIL → no prose.
 - Frozen_Canon unconfirmed → no prose.
 - **One unit per turn.** 不同单元正文不批量；细纲可批。
-- **Draft turn ends at the unit file.** 不扩写 / 不去 AI 味 / 不审 / 不 Commit（用户明示单轮例外除外）。
-- **单元规模**：3–8 章默认，硬上限 10 章（`unit-scale.md`）。
+- **Draft turn ends at the unit file.**
+- **单元规模**：3–8 章默认，硬上限 10 章。
 
 ## Stop
 
-一批细纲：`lint-units` 全 PASS → 报 `### UNITS`，提示下一批或开始写单元。
-写单元：`units/vNN-U#.md` on disk → 细纲 `status=drafted` → hand off `novel-review`，建议换模。
+一批细纲：`lint-units` 全 PASS → 报 `### UNITS`。
+写单元：`units/vNN-U#.md` on disk → `drafted` → 定稿另开**新会话**（`prompt-pack --stage finalize`）。

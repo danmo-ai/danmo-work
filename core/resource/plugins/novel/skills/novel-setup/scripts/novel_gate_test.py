@@ -718,6 +718,49 @@ class GateTests(unittest.TestCase):
         self.assertNotIn("风格指纹", blob)
         self.assertNotIn("identity@unit:", blob)
 
+    def test_prompt_pack_write_short_stdout_and_disk(self):
+        rep = ng.run(str(self.root), "demo", "prompt-pack", "v01-U1", stage="write")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        blob = rep.format()
+        self.assertIn("### PACK", blob)
+        self.assertIn("file: .pack/write-v01-U1.md", blob)
+        self.assertIn("write: units/v01-U1.md", blob)
+        self.assertNotIn("题材专有文", blob)
+        self.assertNotIn("identity@unit:", blob)
+        self.assertNotIn("### CONTEXT", blob)
+        pack = self._book() / ".pack/write-v01-U1.md"
+        self.assertTrue(pack.is_file(), pack)
+        text = pack.read_text(encoding="utf-8")
+        self.assertIn("## Pipeline system", text)
+        self.assertIn("## CONTEXT", text)
+        self.assertIn("identity@unit:", text)
+        self.assertIn("题材专有文", text)
+        self.assertLess(len(blob), 2500, blob)
+
+    def test_prompt_pack_outline_disk(self):
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: proposed")
+        rep = ng.run(str(self.root), "demo", "prompt-pack", "", "v01", stage="outline")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        blob = rep.format()
+        self.assertIn(".pack/outline-v01.md", blob)
+        self.assertNotIn("### OUTLINE_PACK", blob)
+        text = (self._book() / ".pack/outline-v01.md").read_text(encoding="utf-8")
+        self.assertIn("## OUTLINE_PACK", text)
+        self.assertIn("本卷人物", text)
+
+    def test_prompt_pack_finalize_disk(self):
+        rep = ng.run(str(self.root), "demo", "prompt-pack", "v01-U1", stage="finalize")
+        blob = rep.format()
+        self.assertIn("### PACK", blob)
+        self.assertIn(".pack/finalize-v01-U1.md", blob)
+        self.assertNotIn("### CONTINUITY", blob)
+        self.assertNotIn("### LENGTH", blob)
+        pack = self._book() / ".pack/finalize-v01-U1.md"
+        self.assertTrue(pack.is_file(), blob)
+        text = pack.read_text(encoding="utf-8")
+        self.assertIn("## Pipeline system", text)
+        self.assertTrue("LENGTH" in text or "CONTINUITY" in text or "HITS" in text, text[:400])
+
     def test_accepted_missing_gap_blocks(self):
         p = self.root / "novel/demo/outline/units/v01-U1.yaml"
         text = p.read_text(encoding="utf-8")
@@ -785,7 +828,7 @@ class GateTests(unittest.TestCase):
         out = json.loads(proc.stdout)
         self.assertIn("additionalContext", out)
         self.assertIn("stage=", out["additionalContext"])
-        self.assertIn("preflight", out["additionalContext"])
+        self.assertIn("prompt-pack", out["additionalContext"])
 
     def test_preflight_crime_subgenre_adds_flavor_article(self):
         self._edit("novel-state.yaml", "genre: 玄幻", "genre: 悬疑")

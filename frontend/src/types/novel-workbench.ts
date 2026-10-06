@@ -49,6 +49,45 @@ export type NovelPrimaryAction = 'plan' | 'outline-batch' | 'write' | 'finalize'
 export type NovelSecondaryAction = 'contract-one' | 'expand' | 'review' | 'polish' | 'cast-fix'
 export type NovelStageAction = 'init' | 'migrate' | NovelPrimaryAction | NovelSecondaryAction
 
+export const NOVEL_FRESH_SESSION_ACTIONS: readonly NovelStageAction[] = [
+  'outline-batch',
+  'contract-one',
+  'write',
+  'finalize',
+  'expand',
+  'review',
+  'polish',
+]
+
+export function opensFreshSession(action: NovelStageAction): boolean {
+  return (NOVEL_FRESH_SESSION_ACTIONS as readonly string[]).includes(action)
+}
+
+export function novelFreshSessionTitle(
+  action: NovelStageAction,
+  ctx: { unitId?: string; volume?: number },
+): string {
+  const unit = (ctx.unitId ?? '').trim()
+  const vol = ctx.volume && ctx.volume > 0 ? volumeId(ctx.volume) : ''
+  switch (action) {
+    case 'outline-batch':
+    case 'contract-one':
+      return vol ? `细纲 ${vol}` : '一批细纲'
+    case 'write':
+      return unit ? `写 ${unit}` : '写单元'
+    case 'finalize':
+      return unit ? `定稿 ${unit}` : '定稿'
+    case 'expand':
+      return unit ? `扩写 ${unit}` : '扩写'
+    case 'review':
+      return unit ? `审 ${unit}` : '审稿'
+    case 'polish':
+      return unit ? `润色 ${unit}` : '润色'
+    default:
+      return action
+  }
+}
+
 export const NOVEL_PRIMARY_ACTIONS: readonly NovelPrimaryAction[] = [
   'plan',
   'outline-batch',
@@ -1463,16 +1502,16 @@ export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
 export function formatLoadProtocol(action: NovelStageAction): string {
   const skillId = novelActionSkillId(action)
   if (action === 'write') {
-    return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；写正文先跑 gate preflight --unit，只消费 ### CONTEXT；落盘一份单元正文后停下（定稿另轮）。`
+    return `技能 ${skillId} · 意图 ${action} — exec_shell prompt-pack --stage write --unit；read_file pack file；write 一份单元正文后停（定稿另开新会话）。不要 read_skill / 扫树。`
   }
   if (action === 'outline-batch' || action === 'contract-one') {
-    return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；填完跑 gate lint-units --volume；本轮不写正文。`
+    return `技能 ${skillId} · 意图 ${action} — prompt-pack --stage outline --volume；只读 pack；填完 lint-units。本轮不写正文。`
   }
   if (skillId === 'novel-review') {
-    return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；定稿轮（qc-pack → 审 → 一次 Commit → postcommit），与写作分 turn。`
+    return `技能 ${skillId} · 意图 ${action} — prompt-pack --stage finalize --unit；只读 pack；Commit → postcommit。新会话、不定稿塞进写作 turn。`
   }
   if (action === 'plan' || action === 'next-volume') {
-    return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；卷纲批准后跑 gate accept-volume --volume。`
+    return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；卷纲批准后只跑 gate accept-volume --volume。`
   }
   return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill。`
 }
@@ -1536,8 +1575,8 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
     case 'plan':
       if (ctx.volumeOutlineExists) {
         return [
-          `第 ${vol || 'N'} 卷卷纲已在 ${volumePath}，等我批准。`,
-          '批准后 exec_shell gate --action accept-volume --volume ' + volTag + '：本卷人物 candidate → canon，按单元索引种出 proposed 细纲头。不写细纲正文。',
+          `第 ${vol || 'N'} 卷卷纲已在 ${volumePath}。只跑 gate：`,
+          `exec_shell gate --action accept-volume --volume ${volTag}（本卷人物 candidate → canon，种 proposed 细纲头）。不要写细纲、不要写正文、不要 read_skill。`,
         ].join('\n')
       }
       return [
@@ -1552,40 +1591,40 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
     case 'outline-batch':
       return [
         `一批细纲（卷 ${volTag}）：把 ${batchText} 从 proposed 填成 accepted → ${root}/outline/units/。`,
-        '每个补 on_stage（⊆ 卷纲本卷人物）/ pov / 合同 / scenes / chapters / state_deltas；不改 function 与 next_hook.type。',
-        `填完 exec_shell gate --action lint-units --volume ${volTag}，FAIL 只补失败单元。本轮不写正文。`,
+        `exec_shell gate --action prompt-pack --stage outline --volume ${volTag}，只 read_file pack file。`,
+        `填完 lint-units --volume ${volTag}。本轮不写正文。不要 read_skill / 扫树。`,
       ].join('\n')
     case 'contract-one':
       return [
         `只填单元 ${unitId} 的细纲 → ${outlinePath}（proposed → accepted）。`,
-        `补 on_stage / pov / 合同 / 场面 / 章切口；gate lint-units --volume ${unitId.split('-')[0]} 通过后停下。`,
+        `prompt-pack --stage outline --volume ${unitId.split('-')[0]}；lint-units 通过后停下。`,
       ].join('\n')
     case 'write':
       return [
         `写单元 ${unitId} 正文，一份文件 ${unitPath}。`,
-        '先 exec_shell gate --action preflight --unit ' + unitId + '，只消费 ### CONTEXT（题材文 + 单元卡 + on_stage 人物）；不再读细纲 / 人物卡 / facts。',
-        '章与章用单独一行 --- 分隔，标题为 ## 第N章。落盘后停下；定稿另开一轮（可换模）。一轮只写这一个单元。',
+        `exec_shell gate --action prompt-pack --stage write --unit ${unitId}；只 read_file pack file（不要消费超长 stdout）。`,
+        '章与章用单独一行 --- 分隔，标题为 ## 第N章。落盘后停下；定稿另开新会话。不要 read_skill / 扫树 / search_kb。',
       ].join('\n')
     case 'finalize':
       return [
         `定稿单元 ${unitId}（${unitPath}）。`,
-        `先 exec_shell gate --action qc-pack --unit ${unitId}：expand_needed=yes 才扩写，HITS 非空才润色；再 10 维审；PASS 不写 review 文件。`,
-        `一次补丁 Commit（continuity/summaries/${unitId.split('-')[0]}.md 章摘要 + facts 游标 + 人物卡关系两列 + 细纲 reviewed + state）→ gate --action postcommit --unit ${unitId} exit 0。不拆多次 Commit。`,
+        `exec_shell gate --action prompt-pack --stage finalize --unit ${unitId}；只读 pack。`,
+        `一次 Commit 后 postcommit --unit ${unitId}。不拆多次 Commit。`,
       ].join('\n')
     case 'expand':
       return [
-        `只扩写 ${unitPath}（扩场面，不按章注水；≤3 种技术）。`,
-        `改完复跑 gate qc-pack --unit ${unitId}，expand_needed 应为 no。保持章标题和 ---。不 Commit。`,
+        `只扩写 ${unitPath}。prompt-pack --stage finalize --unit ${unitId}，按 pack LENGTH 扩场面。`,
+        '不 Commit。',
       ].join('\n')
     case 'review':
       return [
-        `只审单元 ${unitId}（${unitPath}）：gate qc-pack --unit 后做 10 维审。`,
-        `PASS 只更新 gates.qc；FAIL / 深审写 reviews/${unitId}-review.md。不 Commit。`,
+        `只审单元 ${unitId}。prompt-pack --stage finalize --unit ${unitId} 后 10 维审。`,
+        `PASS 只更新 gates.qc；FAIL 写 reviews/${unitId}-review.md。不 Commit。`,
       ].join('\n')
     case 'polish':
       return [
-        `只给 ${unitPath} 去 AI 味：按 gate qc-pack / scan-deslop --unit ${unitId} 的 ### HITS 行号定点改。`,
-        '不改情节 Canon；复扫 exit 0 后停下。不 Commit。',
+        `只给 ${unitPath} 去 AI 味：按 prompt-pack finalize 的 HITS 行号定点改。`,
+        '复扫后停下。不 Commit。',
       ].join('\n')
     case 'cast-fix': {
       const stem = (ctx.stem ?? '').trim() || '<stem>'

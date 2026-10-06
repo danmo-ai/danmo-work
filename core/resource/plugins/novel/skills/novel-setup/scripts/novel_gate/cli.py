@@ -20,6 +20,13 @@ from .common import (
     write_book_text,
 )
 from .context import check_outline_pack, check_preflight
+from .pack import (
+    STAGE_FINALIZE,
+    STAGE_OUTLINE,
+    STAGE_WRITE,
+    STAGES,
+    materialize_pack,
+)
 from .doctor import check_doctor
 from .init import init_book
 from .ledger import check_postcommit
@@ -30,10 +37,10 @@ from .qc import check_precommit, check_qc_pack, check_scan_deslop
 UNIT_ACTIONS = {"preflight", "precommit", "postcommit", "scan-deslop", "qc-pack"}
 VOLUME_ACTIONS = {"accept-volume", "lint-units", "outline-pack"}
 BOOK_ACTIONS = {"doctor", "cast-lint", "migrate"}
-ACTIONS = UNIT_ACTIONS | VOLUME_ACTIONS | BOOK_ACTIONS | {"init"}
+ACTIONS = UNIT_ACTIONS | VOLUME_ACTIONS | BOOK_ACTIONS | {"init", "prompt-pack"}
 ACTION_HELP = (
     "doctor | init | accept-volume | lint-units | outline-pack | cast-lint | preflight | "
-    "qc-pack | precommit | scan-deslop | postcommit | migrate"
+    "prompt-pack | qc-pack | precommit | scan-deslop | postcommit | migrate"
 )
 
 
@@ -47,6 +54,52 @@ def _record_cast_registry(book_root: Path, verdict: str) -> None:
         write_book_text(sp, new)
 
 
+def _infer_pack_stage(stage: str, unit: str, volume: str) -> str:
+    s = (stage or "").strip().lower()
+    if s in STAGES:
+        return s
+    if (volume or "").strip() and not (unit or "").strip():
+        return STAGE_OUTLINE
+    if s == "qc" or s == "review":
+        return STAGE_FINALIZE
+    return STAGE_WRITE
+
+
+def _run_prompt_pack(
+    root: Path,
+    st: dict,
+    bid: str,
+    stage: str,
+    unit: str,
+    volume: str,
+) -> tuple[Report, list[str]]:
+    stg = _infer_pack_stage(stage, unit, volume)
+    cache = BookCache(root)
+    hit_lines: list[str] = []
+    if stg == STAGE_OUTLINE:
+        vol = (volume or "").strip()
+        if not vol or not VOLUME_ID_RE.match(vol):
+            raise ValueError("prompt-pack --stage outline requires --volume vNN")
+        r = Report("prompt-pack", bid, root, 0)
+        check_outline_pack(root, st, vol, r, cache)
+        r.finalize()
+        materialize_pack(r, root, stg, volume=vol)
+        return r, hit_lines
+    unit_id = (unit or "").strip()
+    if not unit_id:
+        raise ValueError(f"prompt-pack --stage {stg} requires --unit vNN-U#")
+    if not UNIT_ID_RE.match(unit_id):
+        raise ValueError(f"--unit {unit_id} must match vNN-U#")
+    r = Report("prompt-pack", bid, root, 0, unit_id)
+    if stg == STAGE_FINALIZE:
+        hit_lines = check_qc_pack(root, st, unit_id, r, cache)
+    else:
+        check_preflight(root, st, unit_id, r, cache)
+    r.finalize()
+    materialize_pack(r, root, stg, unit_id=unit_id)
+    return r, hit_lines
+
+
 def run_with_hits(
     workdir: str,
     book_id: str,
@@ -55,6 +108,7 @@ def run_with_hits(
     volume: str = "",
     title: str = "",
     genre: str = "",
+    stage: str = "",
 ) -> tuple[Report, list[str]]:
     action = (action or "").strip().lower()
     if action not in ACTIONS:
@@ -98,6 +152,8 @@ def run_with_hits(
                 r.section("CHANGES", changes if changes else ["nothing to migrate"])
         r.finalize()
         return r, hit_lines
+    if action == "prompt-pack":
+        return _run_prompt_pack(root, st, bid, stage, unit, volume)
     if action in VOLUME_ACTIONS:
         vol = (volume or "").strip()
         if not vol or not VOLUME_ID_RE.match(vol):
@@ -161,6 +217,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--volume", default="", help="volume id for accept-volume / lint-units / outline-pack, e.g. v01")
     p.add_argument("--title", default="", help="book title (init)")
     p.add_argument("--genre", default="", help="genre for init: 玄幻|仙侠|都市|悬疑|现代言情|古代言情|仕途扫黑|系统穿越")
+    p.add_argument(
+        "--stage",
+        default="",
+        help="prompt-pack stage: write | outline | finalize (default: write if --unit, outline if --volume)",
+    )
     p.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
     try:
@@ -172,6 +233,7 @@ def main(argv: list[str] | None = None) -> int:
             args.volume,
             args.title,
             args.genre,
+            args.stage,
         )
     except UnicodeDecodeError as e:
         print(e.reason if e.reason else str(e), file=sys.stderr)

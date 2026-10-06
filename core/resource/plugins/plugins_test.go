@@ -274,7 +274,11 @@ func TestNovelGatePythonScript(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"novel_gate.py", "novel_gate_test.py", "novel_gate/__init__.py", "novel_gate/cli.py", "novel_gate/context.py", "novel_gate/cast.py", "novel_gate/outline.py", "novel_gate/ledger.py", "novel_gate/deslop.py"} {
+	for _, name := range []string{
+		"novel_gate.py", "novel_gate_test.py", "novel_gate/__init__.py", "novel_gate/cli.py",
+		"novel_gate/context.py", "novel_gate/cast.py", "novel_gate/outline.py", "novel_gate/ledger.py",
+		"novel_gate/deslop.py", "novel_gate/pack.py",
+	} {
 		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(name))); err != nil {
 			t.Fatalf("gate script layout: %v", err)
 		}

@@ -206,10 +206,11 @@ export const useSessionsStore = defineStore('sessions', () => {
       mimeType?: string
       data: string
     }>,
+    opts?: { agentId?: string; title?: string; skipAutoTitle?: boolean; planMode?: boolean },
   ) {
     loading.value = true
     try {
-      const agentId = selectedAgentId.value || defaultAgentId()
+      const agentId = opts?.agentId || selectedAgentId.value || defaultAgentId()
       if (!agentId) {
         throw new Error(i18n.global.t('sessions.noAgent'))
       }
@@ -218,8 +219,10 @@ export const useSessionsStore = defineStore('sessions', () => {
         modelId: selectedModelId.value,
         content,
         projectId: projectId ?? undefined,
-        planMode: selectedPlanMode.value,
+        planMode: opts?.planMode ?? selectedPlanMode.value,
       }
+      if (opts?.title) body.title = opts.title
+      if (opts?.skipAutoTitle) body.skipAutoTitle = true
       if (attachments?.length) body.attachments = attachments
       const t = await fetchJSON<Session>('/sessions', {
         method: 'POST',
@@ -228,6 +231,7 @@ export const useSessionsStore = defineStore('sessions', () => {
       sessions.value = [t, ...sessions.value.filter((x) => x.id !== t.id)]
       currentSessionId.value = t.id
       selectedProjectId.value = t.projectId ?? null
+      selectedAgentId.value = t.agentId ?? agentId
       composingNew.value = false
       resetStreamState()
       turns.value = []

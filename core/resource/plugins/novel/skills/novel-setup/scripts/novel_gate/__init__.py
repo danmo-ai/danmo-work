@@ -2,8 +2,8 @@
 
 python3 novel_gate.py --action ACTION --workdir PROJECT [--book-id SLUG] [--unit vNN-U#] [--volume vNN] [--json]
 
-Actions: doctor | init | accept-volume | lint-units | outline-pack | cast-lint | preflight | qc-pack |
-precommit | scan-deslop | postcommit | migrate. Exit 0 PASS, 1 FAIL, 2 usage/error.
+Actions: doctor | init | accept-volume | lint-units | outline-pack | cast-lint | preflight | prompt-pack |
+qc-pack | precommit | scan-deslop | postcommit | migrate. Exit 0 PASS, 1 FAIL, 2 usage/error.
 
 Modules: common (YAML/IO/Report), outline (unit YAML + volume index, accept-volume,
 lint-units), cast (cards, cast-lint, promote), ledger (facts / summaries / postcommit),
@@ -83,6 +83,12 @@ from .identity import (
     format_delta_line,
     normalize_state_deltas,
     state_delta_who,
+)
+from .pack import (
+    extract_pipeline_system,
+    materialize_pack,
+    pack_filename,
+    pipeline_system_for,
 )
 from .outline import (
     BEAT_NAMES,

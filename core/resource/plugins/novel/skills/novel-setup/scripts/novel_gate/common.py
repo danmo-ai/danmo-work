@@ -317,6 +317,8 @@ def iter_book_text_files(book_root: Path, *, skip_archive: bool = True) -> list[
             continue
         if skip_archive and "_archive" in path.parts:
             continue
+        if ".pack" in path.parts:
+            continue
         out.append(path)
     return sorted(out)
 

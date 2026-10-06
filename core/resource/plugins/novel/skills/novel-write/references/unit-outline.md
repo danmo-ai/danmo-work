@@ -1,5 +1,13 @@
 # 单元细纲
 
+## Pipeline system
+
+一批细纲只读本 pack。禁止扫树、读题材全文、读人物卡全文、写正文。
+
+1. `exec_shell` gate `--action prompt-pack --stage outline --volume vNN`。exit ≠ 0 → 停。
+2. 读 pack：把本批 ≤4 个 `proposed` 填成 `accepted`（`on_stage` / `pov` / 时钟 / 合同 / scenes / chapters / `state_deltas`）。不改卷纲已定的 `function` 与 `next_hook.type`。
+3. `lint-units --volume vNN`。FAIL 只补失败单元。停。
+
 **No prose without an accepted 单元细纲** for that unit.
 
 Official name: **单元细纲**. Do not introduce other product names. This file replaces per-chapter 章纲. Do not write `chapters/chNNN-outline.yaml`.

@@ -24,7 +24,12 @@ import {
   novelCastCardPath,
   novelContinuityDir,
   novelFactsPath,
+  novelFreshSessionTitle,
   novelOutlineDir,
+  novelSummariesDir,
+  novelUnitOutlinePath,
+  novelUnitProsePath,
+  opensFreshSession,
   novelSummariesDir,
   novelUnitOutlinePath,
   novelUnitProsePath,
@@ -577,7 +582,7 @@ function backToShelf() {
   void loadShelf()
 }
 
-function runAction(desk: DeskAction) {
+async function runAction(desk: DeskAction) {
   const bookId = selectedBookId.value ?? undefined
   const ctx = bookContext.value
   const pipe = pipeline.value
@@ -596,7 +601,7 @@ function runAction(desk: DeskAction) {
         ? novelUnitProsePath(bookId, desk.unitId)
         : undefined
 
-  let text = buildConstrainedPrefill(
+  const text = buildConstrainedPrefill(
     action,
     {
       bookId,
@@ -611,10 +616,36 @@ function runAction(desk: DeskAction) {
     desk.blockers,
   )
 
+  if (opensFreshSession(action)) {
+    if (!hasNovelExpert.value) {
+      toast.warning(t('composer.expertNeedDelegate'))
+      return
+    }
+    const pid = projectId.value
+    if (!pid) {
+      toast.warning(t('novelWorkbench.actionBlocked'))
+      return
+    }
+    try {
+      await sessions.createSession(text, pid, undefined, {
+        agentId: 'novel',
+        title: novelFreshSessionTitle(action, { unitId: desk.unitId, volume: desk.volume }),
+        skipAutoTitle: true,
+        planMode: false,
+      })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    }
+    return
+  }
+
   if (!canDelegate.value) {
-    text = `${t('novelWorkbench.needTeamHint')}\n\n${text}`
     toast.warning(t('composer.expertNeedDelegate'))
-  } else if (hasNovelExpert.value) {
+    workspaceUi.prefillComposer(`${t('novelWorkbench.needTeamHint')}\n\n${text}`)
+    workspaceUi.requestComposerSelectSkills([novelActionSkillId(action)])
+    return
+  }
+  if (hasNovelExpert.value) {
     workspaceUi.requestComposerSelectExperts(['novel'])
   }
   workspaceUi.requestComposerSelectSkills([novelActionSkillId(action)])
