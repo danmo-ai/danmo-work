@@ -2,17 +2,11 @@
 
 ## Pipeline system
 
-写正文只读本 pack（`read_file` stdout 的 `file:`）。禁止 `read_skill` 长文、扫树、二读 YAML、人物卡、facts 全文、`author-lore`、`search_kb`。
+写正文只读本 pack 的 CONTEXT（含风格指纹）。禁止 `preflight`、`qc-pack`、`read_skill`、`search_kb`、扫树、二读 YAML、人物卡、facts、`author-lore`、`find`/`glob`、通读已有正文。
 
-1. `exec_shell` gate `--action prompt-pack --stage write --unit vNN-U#`。exit ≠ 0 → 停。
-2. 只消费 pack 里的 CONTEXT。人名闭集 = CONTEXT 已出现称呼。兑现场面 `情:` / `→读:` / `潜:`。
-3. `write` 一份 `units/vNN-U#.md`：`## 第N章`，章间单独一行 `---`。细纲 `status=drafted`。停。不定稿。
-
-写正文（agent 未走 pack 时的旧路径）：**先跑 gate preflight，只消费它打印的 `### CONTEXT`。** CONTEXT 已含渲染后的单元卡，不再第二遍通读 YAML；不读人物卡；不要为走流程扫全书树。
-
-一轮只写 **一个** 单元，落成 **一份** `units/vNN-U#.md`。章是这份文件里的切口，不是单独文件。一份文件是为了写和读时不要丢掉章与章的衔接和一致性，不是为了把单章写长。
-
-风格指纹随 preflight CONTEXT 注入。本轮上下文未见风格指纹 → `read_file canon/style-fingerprint.md`（无则 bible `## Style card`）。
+1. 若 ephemeral 已 `PACK ready`：直接 `read_file` 包文件。否则钉死 `G="$WORK_HOME/plugins/novel/skills/novel-setup/scripts/novel_gate.py"` 跑 `--action prompt-pack --stage write --unit vNN-U#`。exit ≠ 0 → 停。
+2. 只消费 pack。人名闭集 = CONTEXT 已出现称呼。兑现场面 `情:` / `→读:` / `潜:`。指纹已在 CONTEXT，缺失也不要另读 `style-fingerprint.md`。
+3. `write` **一份** `units/vNN-U#.md`（覆盖即可，不要先读旧稿）：`## 第N章`，章间单独一行 `---`。细纲 `status=drafted`。停。不定稿。禁止写完再跑 gate。
 
 ## Preflight
 

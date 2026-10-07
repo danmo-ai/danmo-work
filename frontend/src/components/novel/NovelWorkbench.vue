@@ -32,6 +32,7 @@ import {
   opensFreshSession,
   setupDocLabel,
   splitUnitProseSections,
+  unitDeskActions,
   volumeId,
   volumeNumFromName,
   type NovelBookContext,
@@ -199,6 +200,25 @@ function primaryLabel(d: NovelPrimaryDecision): string {
   }
 }
 
+function deskActionLabel(action: NovelStageAction, unitId: string): string {
+  switch (action) {
+    case 'contract-one':
+      return t('novelWorkbench.actionContractOne', { unit: unitId })
+    case 'rewrite-outline':
+      return t('novelWorkbench.actionRewriteOutline', { unit: unitId })
+    case 'write':
+      return t('novelWorkbench.actionWriteUnit', { unit: unitId })
+    case 'rewrite':
+      return t('novelWorkbench.actionRewriteUnit', { unit: unitId })
+    case 'finalize':
+      return t('novelWorkbench.actionFinalizeUnit', { unit: unitId })
+    case 're-finalize':
+      return t('novelWorkbench.actionRefinalizeUnit', { unit: unitId })
+    default:
+      return action
+  }
+}
+
 function selectedOrCurrentVolumeExists(volume?: number): boolean {
   if (!volume) return false
   return volumes.value.some((v) => v.volume === volume)
@@ -239,42 +259,69 @@ const injectionPreview = computed((): InjectionPreview | null => {
   return {
     genre: ctx.state.genre || '',
     subgenre: ctx.state.subgenre || '',
-    unitId: d?.action === 'write' || d?.action === 'finalize' || d?.action === 'contract-one' || selectedUnitId.value ? unitId : '',
+    unitId: selectedUnitId.value || d?.unitId || '',
     onStage: outline?.onStage ?? [],
     pov: outline?.pov ?? '',
   }
 })
 
-const moreActions = computed((): DeskAction[] => {
+const unitDesk = computed((): DeskAction[] => {
+  const ctx = bookContext.value
+  const unitId = selectedUnitId.value
+  if (!ctx || !unitId) return []
+  return unitDeskActions(ctx, unitId).map((item) => ({
+    action: item.action,
+    unitId: item.unitId,
+    volume: item.volume,
+    label: deskActionLabel(item.action, item.unitId),
+    allowed: item.allowed,
+    blockers: item.blockers.map(blockerText),
+    recommended: item.recommended,
+  }))
+})
+
+/** Volume-level batch outline when a volume (not a unit) is selected. */
+const volumeDesk = computed((): DeskAction[] => {
+  const ctx = bookContext.value
+  if (!ctx || treeSel.value.kind !== 'volume') return []
+  const vol = selectedVolumeNum.value
+  if (vol == null) return []
+  const batch = ctx.entries
+    .filter((e) => e.volume === vol && (ctx.unitPhases[e.unitId] ?? 'pending_outline') === 'pending_outline')
+    .slice(0, 4)
+    .map((e) => e.unitId)
+  const decision = canRunAction('outline-batch', ctx)
+  return [
+    {
+      action: 'outline-batch',
+      volume: vol,
+      batchUnits: batch,
+      label: t('novelWorkbench.actionOutlineBatch', { n: vol, k: batch.length }),
+      allowed: decision.allowed,
+      blockers: decision.blockers.map(blockerText),
+      recommended: true,
+    },
+  ]
+})
+
+const extraActions = computed((): DeskAction[] => {
   const ctx = bookContext.value
   if (!ctx) return []
   const items: DeskAction[] = []
-  const push = (action: NovelStageAction, label: string, unitId?: string, stem?: string) => {
-    const decision = canRunAction(action, ctx, unitId)
-    items.push({
-      action,
-      unitId,
-      stem,
-      label,
-      allowed: decision.allowed,
-      blockers: decision.blockers.map(blockerText),
-    })
-  }
-  const unitId = selectedUnitId.value
-  if (unitId) {
-    const ph = unitPhases.value[unitId]
-    if (ph === 'pending_outline') push('contract-one', t('novelWorkbench.actionContractOne', { unit: unitId }), unitId)
-    if (ph === 'drafted' || ph === 'review_fail') {
-      push('expand', t('novelWorkbench.actionExpand'), unitId)
-      push('review', t('novelWorkbench.actionReview'), unitId)
-      push('polish', t('novelWorkbench.actionPolish'), unitId)
-    }
-  }
   if (treeSel.value.kind === 'cast') {
     const stem = treeSel.value.name
     const incomplete = ctx.cast.filter((c) => c.missing.length)
     const target = stem && ctx.cast.some((c) => c.stem === stem) ? stem : incomplete[0]?.stem
-    if (target) push('cast-fix', t('novelWorkbench.actionCastFix', { stem: target }), undefined, target)
+    if (target) {
+      const decision = canRunAction('cast-fix', ctx)
+      items.push({
+        action: 'cast-fix',
+        stem: target,
+        label: t('novelWorkbench.actionCastFix', { stem: target }),
+        allowed: decision.allowed,
+        blockers: decision.blockers.map(blockerText),
+      })
+    }
   }
   return items
 })
@@ -598,6 +645,9 @@ async function runAction(desk: DeskAction) {
         ? novelUnitProsePath(bookId, desk.unitId)
         : undefined
 
+  const unitPhase = desk.unitId ? unitPhases.value[desk.unitId] : undefined
+  const hasProse =
+    unitPhase === 'drafted' || unitPhase === 'review_fail' || unitPhase === 'finalized'
   const text = buildConstrainedPrefill(
     action,
     {
@@ -608,6 +658,7 @@ async function runAction(desk: DeskAction) {
       batchUnits: desk.batchUnits,
       stem: desk.stem,
       volumeOutlineExists: selectedOrCurrentVolumeExists(desk.volume),
+      hasProse,
     },
     pipe && ctx && action !== 'init' ? pipe : undefined,
     desk.blockers,
@@ -654,7 +705,7 @@ function runInit() {
 }
 
 function runFocusPrimary() {
-  const p = primaryDesk.value
+  const p = unitDesk.value.find((a) => a.recommended) || primaryDesk.value
   if (!p?.allowed) return
   runAction(p)
 }
@@ -787,7 +838,8 @@ const ledgerFiles = computed(() => continuityFiles.value.filter((f) => !f.isDir 
           :primary="primaryDesk"
           :jump-note="primaryJumpNote"
           :injection="injectionPreview"
-          :more-actions="moreActions"
+          :unit-actions="unitDesk.length ? unitDesk : volumeDesk"
+          :extra-actions="extraActions"
           :unit-phase="currentUnitPhase"
           :prose-chars="proseChars"
           :word-target="currentOutline?.wordTarget ?? ''"
@@ -796,14 +848,17 @@ const ledgerFiles = computed(() => continuityFiles.value.filter((f) => !f.isDir 
         />
       </div>
 
-      <div v-if="focusMode && primaryDesk" class="novel-wb__focus-cta">
+      <div
+        v-if="focusMode && (unitDesk.find((a) => a.recommended) || primaryDesk)"
+        class="novel-wb__focus-cta"
+      >
         <button
           type="button"
           class="novel-wb-btn novel-wb-btn--cta"
-          :disabled="!primaryDesk.allowed"
+          :disabled="!(unitDesk.find((a) => a.recommended) || primaryDesk)?.allowed"
           @click="runFocusPrimary"
         >
-          {{ primaryDesk.label }}
+          {{ (unitDesk.find((a) => a.recommended) || primaryDesk)?.label }}
         </button>
         <button type="button" class="novel-wb-link" @click="focusMode = false">
           {{ t('novelWorkbench.exitFocus') }}

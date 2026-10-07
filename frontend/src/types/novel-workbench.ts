@@ -44,16 +44,34 @@ export type NovelPipelinePhase = 'planning' | 'outlining' | 'units' | 'idle'
  */
 export type NovelUnitPhase = 'pending_outline' | 'ready' | 'drafted' | 'review_fail' | 'finalized'
 
-/** Primary actions drive the single CTA; secondary actions live under 「更多」. */
+/** Primary actions drive the recommended CTA; unit desk also exposes redo actions. */
 export type NovelPrimaryAction = 'plan' | 'outline-batch' | 'write' | 'finalize' | 'next-volume'
-export type NovelSecondaryAction = 'contract-one' | 'expand' | 'review' | 'polish' | 'cast-fix'
+export type NovelRedoAction = 'rewrite-outline' | 'rewrite' | 're-finalize'
+export type NovelSecondaryAction =
+  | 'contract-one'
+  | 'expand'
+  | 'review'
+  | 'polish'
+  | 'cast-fix'
+  | NovelRedoAction
 export type NovelStageAction = 'init' | 'migrate' | NovelPrimaryAction | NovelSecondaryAction
+
+/** Absolute gate entry used in prefill / hook fallback (shell expands $WORK_HOME). */
+export const NOVEL_GATE_PY =
+  '$WORK_HOME/plugins/novel/skills/novel-setup/scripts/novel_gate.py'
+
+export function novelGateCmd(args: string): string {
+  return `python3 "${NOVEL_GATE_PY}" --workdir . ${args}`
+}
 
 export const NOVEL_FRESH_SESSION_ACTIONS: readonly NovelStageAction[] = [
   'outline-batch',
   'contract-one',
+  'rewrite-outline',
   'write',
+  'rewrite',
   'finalize',
+  're-finalize',
   'expand',
   'review',
   'polish',
@@ -71,12 +89,19 @@ export function novelFreshSessionTitle(
   const vol = ctx.volume && ctx.volume > 0 ? volumeId(ctx.volume) : ''
   switch (action) {
     case 'outline-batch':
-    case 'contract-one':
       return vol ? `细纲 ${vol}` : '一批细纲'
+    case 'contract-one':
+      return unit ? `细纲 ${unit}` : '写细纲'
+    case 'rewrite-outline':
+      return unit ? `重写细纲 ${unit}` : '重写细纲'
     case 'write':
       return unit ? `写 ${unit}` : '写单元'
+    case 'rewrite':
+      return unit ? `重写 ${unit}` : '重写正文'
     case 'finalize':
       return unit ? `定稿 ${unit}` : '定稿'
+    case 're-finalize':
+      return unit ? `重定稿 ${unit}` : '重新定稿'
     case 'expand':
       return unit ? `扩写 ${unit}` : '扩写'
     case 'review':
@@ -98,11 +123,48 @@ export const NOVEL_PRIMARY_ACTIONS: readonly NovelPrimaryAction[] = [
 
 export const NOVEL_SECONDARY_ACTIONS: readonly NovelSecondaryAction[] = [
   'contract-one',
+  'rewrite-outline',
+  'rewrite',
+  're-finalize',
   'expand',
   'review',
   'polish',
   'cast-fix',
 ]
+
+/** Fixed order for the unit desk (always visible when a unit is selected). */
+export const NOVEL_UNIT_DESK_ACTIONS: readonly NovelStageAction[] = [
+  'contract-one',
+  'rewrite-outline',
+  'write',
+  'rewrite',
+  'finalize',
+  're-finalize',
+]
+
+export interface NovelUnitDeskItem {
+  action: NovelStageAction
+  unitId: string
+  volume?: number
+  recommended: boolean
+  allowed: boolean
+  blockers: string[]
+}
+
+/** Recommended next step for a unit phase (highlight only; does not hide redo keys). */
+export function recommendedUnitAction(phase: NovelUnitPhase): NovelStageAction {
+  switch (phase) {
+    case 'pending_outline':
+      return 'contract-one'
+    case 'ready':
+      return 'write'
+    case 'drafted':
+    case 'review_fail':
+      return 'finalize'
+    case 'finalized':
+      return 're-finalize'
+  }
+}
 
 export type NovelSkillId = 'novel-setup' | 'novel-plan' | 'novel-write' | 'novel-review'
 
@@ -117,6 +179,8 @@ export interface NovelStagePrefillCtx {
   stem?: string
   /** True when the volume outline file already exists (plan → approve + accept-volume). */
   volumeOutlineExists?: boolean
+  /** True when unit prose already exists (rewrite-outline stale-prose warning). */
+  hasProse?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -1433,7 +1497,11 @@ export function computeBookPipeline(ctx: NovelBookContext, selectedUnit?: string
   }
 }
 
-/** Secondary (「更多」) actions available for a selected unit / cast card. */
+/**
+ * Whether an action may run. Unit production/redo keys do NOT inherit book-level
+ * `state.blockers` (those only gate plan/init/migrate) so a stale book blocker
+ * cannot grey out the whole unit desk.
+ */
 export function canRunAction(
   action: NovelStageAction,
   ctx: NovelBookContext,
@@ -1441,34 +1509,78 @@ export function canRunAction(
 ): { allowed: boolean; blockers: string[] } {
   const blockers: string[] = []
   const phase = unitId ? ctx.unitPhases[unitId] : undefined
+  const hasDraft =
+    phase === 'drafted' || phase === 'review_fail' || phase === 'finalized'
   switch (action) {
     case 'write':
       if (!unitId) blockers.push('blocker.noUnit')
-      else if (phase !== 'ready') blockers.push(phase === 'pending_outline' ? 'blocker.needOutline' : phase === 'finalized' ? 'blocker.alreadyFinalized' : 'blocker.alreadyDrafted')
-      if (unitId) blockers.push(...writeBlockers(ctx, unitId))
+      else if (phase === 'pending_outline') blockers.push('blocker.needOutline')
+      else if (phase !== 'ready') blockers.push('blocker.useRewrite')
+      if (unitId && phase === 'ready') blockers.push(...writeBlockers(ctx, unitId))
+      break
+    case 'rewrite':
+      if (!unitId) blockers.push('blocker.noUnit')
+      else if (!hasDraft) blockers.push(phase === 'pending_outline' ? 'blocker.needOutline' : 'blocker.needDraft')
+      if (unitId && hasDraft) blockers.push(...writeBlockers(ctx, unitId))
       break
     case 'finalize':
+      if (!unitId) blockers.push('blocker.noUnit')
+      else if (phase === 'pending_outline' || phase === 'ready') blockers.push('blocker.needDraft')
+      else if (phase === 'finalized') blockers.push('blocker.useRefinalize')
+      break
+    case 're-finalize':
+      if (!unitId) blockers.push('blocker.noUnit')
+      else if (!hasDraft) blockers.push('blocker.needDraft')
+      break
     case 'expand':
     case 'review':
     case 'polish':
       if (!unitId) blockers.push('blocker.noUnit')
       else if (phase === 'pending_outline' || phase === 'ready') blockers.push('blocker.needDraft')
-      else if (phase === 'finalized') blockers.push('blocker.alreadyFinalized')
       break
     case 'contract-one':
       if (!unitId) blockers.push('blocker.noUnit')
-      else if (phase !== 'pending_outline') blockers.push('blocker.alreadyOutlined')
+      else if (phase !== 'pending_outline') blockers.push('blocker.useRewriteOutline')
+      break
+    case 'rewrite-outline':
+      if (!unitId) blockers.push('blocker.noUnit')
+      else if (phase === 'pending_outline') blockers.push('blocker.needOutlineFirst')
       break
     case 'outline-batch':
-      if (!ctx.entries.some((e) => ctx.unitPhases[e.unitId] === 'pending_outline')) blockers.push('blocker.noProposed')
+      if (!ctx.entries.some((e) => ctx.unitPhases[e.unitId] === 'pending_outline')) {
+        blockers.push('blocker.noProposed')
+      }
       break
     default:
       break
   }
-  if (action !== 'plan' && action !== 'init' && action !== 'migrate' && action !== 'cast-fix' && action !== 'next-volume') {
+  if (
+    action === 'plan' ||
+    action === 'init' ||
+    action === 'migrate' ||
+    action === 'next-volume'
+  ) {
     blockers.push(...ctx.state.blockers)
   }
   return { allowed: blockers.length === 0, blockers }
+}
+
+/** Always-visible unit desk actions for the selected unit (six keys + enable matrix). */
+export function unitDeskActions(ctx: NovelBookContext, unitId: string): NovelUnitDeskItem[] {
+  const entry = ctx.entries.find((e) => e.unitId === unitId)
+  const phase = ctx.unitPhases[unitId] ?? 'pending_outline'
+  const recommended = recommendedUnitAction(phase)
+  return NOVEL_UNIT_DESK_ACTIONS.map((action) => {
+    const decision = canRunAction(action, ctx, unitId)
+    return {
+      action,
+      unitId,
+      volume: entry?.volume,
+      recommended: action === recommended,
+      allowed: decision.allowed,
+      blockers: decision.blockers,
+    }
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -1485,6 +1597,7 @@ export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
     case 'cast-fix':
       return 'novel-plan'
     case 'finalize':
+    case 're-finalize':
     case 'expand':
     case 'review':
     case 'polish':
@@ -1496,19 +1609,22 @@ export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
 
 /**
  * Composer load line: skill + intent only.
- * Which reference / template / KB theme to open lives in each skill's
- * Intent→Load table — do not hardcode skillRefs here (skill updates would desync).
+ * Production paths prefer hook PACK ready → read_file; else exec the pinned G= line.
  */
 export function formatLoadProtocol(action: NovelStageAction): string {
   const skillId = novelActionSkillId(action)
-  if (action === 'write') {
-    return `技能 ${skillId} · 意图 ${action} — exec_shell prompt-pack --stage write --unit；read_file pack file；write 一份单元正文后停（定稿另开新会话）。不要 read_skill / 扫树。`
+  if (action === 'write' || action === 'rewrite') {
+    return `技能 ${skillId} · 意图 ${action} — 若 ephemeral 已 PACK ready 则只 read_file 包文件；否则 exec 钉死的 G= prompt-pack --stage write。按 CONTEXT 写一份正文后停。禁止先读旧稿、preflight、qc-pack、find/glob/read_skill/search_kb。`
   }
-  if (action === 'outline-batch' || action === 'contract-one') {
-    return `技能 ${skillId} · 意图 ${action} — prompt-pack --stage outline --volume；只读 pack；填完 lint-units。本轮不写正文。`
+  if (
+    action === 'outline-batch' ||
+    action === 'contract-one' ||
+    action === 'rewrite-outline'
+  ) {
+    return `技能 ${skillId} · 意图 ${action} — 若已 PACK ready 则只读 pack；否则 G= prompt-pack --stage outline。填 YAML 后 lint-units 一次；FAIL 只补一次再 lint 一次然后停。禁止读人物卡、read_skill、写正文、find/扫树。`
   }
-  if (skillId === 'novel-review') {
-    return `技能 ${skillId} · 意图 ${action} — prompt-pack --stage finalize --unit；只读 pack；Commit → postcommit。新会话、不定稿塞进写作 turn。`
+  if (action === 'finalize' || action === 're-finalize' || skillId === 'novel-review') {
+    return `技能 ${skillId} · 意图 ${action} — 若已 PACK ready 则只读 pack（EXPAND 锚点，勿通读正文）。否则 G= prompt-pack --stage finalize。一次改稿后 qc-pack 恰好 1 次。PASS：正文冻结，只按 COMMIT 改账本再 postcommit，禁止再改 units/*.md、禁止第二次 qc。FAIL：停。禁止直到 exit 0、find/read_skill/search_kb。`
   }
   if (action === 'plan' || action === 'next-volume') {
     return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；卷纲批准后只跑 gate accept-volume --volume。`
@@ -1591,34 +1707,71 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
     case 'outline-batch':
       return [
         `一批细纲（卷 ${volTag}）：把 ${batchText} 从 proposed 填成 accepted → ${root}/outline/units/。`,
-        `exec_shell gate --action prompt-pack --stage outline --volume ${volTag}，只 read_file pack file。`,
-        `填完 lint-units --volume ${volTag}。本轮不写正文。不要 read_skill / 扫树。`,
+        '若 ephemeral 已 PACK ready：直接 read_file 包文件。否则唯一允许的 exec_shell：',
+        novelGateCmd(`--book-id ${bookId} --action prompt-pack --stage outline --volume ${volTag}`),
+        `然后 lint-units 一次：${novelGateCmd(`--book-id ${bookId} --action lint-units --volume ${volTag}`)}。PASS 则停。FAIL 只补失败单元再 lint 一次然后停。禁止读人物卡、read_skill、写正文、find/扫树。`,
       ].join('\n')
     case 'contract-one':
       return [
         `只填单元 ${unitId} 的细纲 → ${outlinePath}（proposed → accepted）。`,
-        `prompt-pack --stage outline --volume ${unitId.split('-')[0]}；lint-units 通过后停下。`,
+        '若 ephemeral 已 PACK ready：直接 read_file。否则：',
+        novelGateCmd(
+          `--book-id ${bookId} --action prompt-pack --stage outline --volume ${unitId.split('-')[0] || volTag}`,
+        ),
+        'lint-units 一次；FAIL 再补一次然后停。禁止读人物卡、read_skill、写正文、find/扫树。',
       ].join('\n')
+    case 'rewrite-outline': {
+      const stale = ctx.hasProse
+        ? '警告：已有正文可能过期，本轮不删正文；完成后建议再点「重写正文」。'
+        : '本轮只改细纲，不写正文。'
+      return [
+        `重写单元 ${unitId} 细纲 → ${outlinePath}（覆盖已有 YAML）。`,
+        stale,
+        '若 ephemeral 已 PACK ready：直接 read_file。否则：',
+        novelGateCmd(
+          `--book-id ${bookId} --action prompt-pack --stage outline --volume ${unitId.split('-')[0] || volTag}`,
+        ),
+        '只改本单元细纲。lint-units 一次；FAIL 再补一次然后停。禁止读人物卡、read_skill、写正文、find/扫树。',
+      ].join('\n')
+    }
     case 'write':
       return [
         `写单元 ${unitId} 正文，一份文件 ${unitPath}。`,
-        `exec_shell gate --action prompt-pack --stage write --unit ${unitId}；只 read_file pack file（不要消费超长 stdout）。`,
-        '章与章用单独一行 --- 分隔，标题为 ## 第N章。落盘后停下；定稿另开新会话。不要 read_skill / 扫树 / search_kb。',
+        '若 ephemeral 已 PACK ready：直接 read_file 包文件（不要消费超长 stdout）。否则唯一允许的 exec_shell：',
+        novelGateCmd(`--book-id ${bookId} --action prompt-pack --stage write --unit ${unitId}`),
+        '章与章用单独一行 --- 分隔，标题为 ## 第N章。不要先读已有正文。落盘后停；禁止 preflight、qc-pack、find/glob/read_skill/search_kb/二读 YAML。定稿另开新会话。',
+      ].join('\n')
+    case 'rewrite':
+      return [
+        `重写单元 ${unitId} 正文：覆盖已有 ${unitPath}（不定稿）。`,
+        '若 ephemeral 已 PACK ready：直接 read_file。否则：',
+        novelGateCmd(`--book-id ${bookId} --action prompt-pack --stage write --unit ${unitId}`),
+        '按 pack CONTEXT 覆盖整份正文，不要先通读旧稿。落盘后停。禁止 preflight、qc-pack、find/read_skill/search_kb。',
       ].join('\n')
     case 'finalize':
       return [
         `定稿单元 ${unitId}（${unitPath}）。`,
-        `exec_shell gate --action prompt-pack --stage finalize --unit ${unitId}；只读 pack。`,
-        `一次 Commit 后 postcommit --unit ${unitId}。不拆多次 Commit。`,
+        '若 ephemeral 已 PACK ready：直接 read_file（pack 已含 LENGTH/HITS，不要先跑 qc-pack）。否则：',
+        novelGateCmd(`--book-id ${bookId} --action prompt-pack --stage finalize --unit ${unitId}`),
+        '硬停损：只按 pack 的 EXPAND 锚点与 HITS 做一次 edit（不要通读全文）。然后 qc-pack 恰好 1 次。',
+        `PASS → 正文冻结（禁止再改 ${unitPath}、禁止第二次 qc）→ 只按 pack 的 COMMIT 改 summaries/facts/state/commits → ${novelGateCmd(`--book-id ${bookId} --action postcommit --unit ${unitId}`)}。FAIL → 停。禁止 find/read_skill/search_kb/二读 YAML。`,
+      ].join('\n')
+    case 're-finalize':
+      return [
+        `重新定稿单元 ${unitId}（${unitPath}）。`,
+        '若 ephemeral 已 PACK ready：直接 read_file。否则：',
+        novelGateCmd(`--book-id ${bookId} --action prompt-pack --stage finalize --unit ${unitId}`),
+        '硬停损同定稿：EXPAND 锚点一次改稿；qc-pack 恰好 1 次；PASS 后正文冻结，只按 COMMIT 改账本。',
+        `PASS → postcommit --unit ${unitId}。FAIL → 停。禁止第二次 qc、禁止 find/read_skill/search_kb。`,
       ].join('\n')
     case 'expand':
       return [
-        `只扩写 ${unitPath}。prompt-pack --stage finalize --unit ${unitId}，按 pack LENGTH 扩场面。`,
+        `只扩写 ${unitPath}。若已 PACK ready 则读 pack；否则 ${novelGateCmd(`--book-id ${bookId} --action prompt-pack --stage finalize --unit ${unitId}`)}，按 LENGTH 扩场面。`,
         '不 Commit。',
       ].join('\n')
     case 'review':
       return [
-        `只审单元 ${unitId}。prompt-pack --stage finalize --unit ${unitId} 后 10 维审。`,
+        `只审单元 ${unitId}。prompt-pack --stage finalize 后 10 维审。`,
         `PASS 只更新 gates.qc；FAIL 写 reviews/${unitId}-review.md。不 Commit。`,
       ].join('\n')
     case 'polish':
@@ -1630,7 +1783,9 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       const stem = (ctx.stem ?? '').trim() || '<stem>'
       return [
         `补人物卡 ${root}/canon/cast/${stem}.md：按 role 的完整度表补缺项（三锚点 / 语言习惯 / 台词样例 / 关系表对边）。`,
-        '不改 status（提升只由 accept-volume 做）。补完 exec_shell gate --action cast-lint --book-id ' + bookId + '。',
+        '不改 status（提升只由 accept-volume 做）。补完 ' +
+          novelGateCmd(`--book-id ${bookId} --action cast-lint`) +
+          '。',
       ].join('\n')
     }
     default:

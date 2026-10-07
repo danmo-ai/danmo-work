@@ -110,10 +110,80 @@ def check_qc_pack(book_root: Path, st: dict, unit_id: str, r: Report, cache=None
         length.append(f"ch{sl['chapter']}: {rune_count(sl['body'])} / share {shares.get(sl['chapter'], 0)}")
     r.section("LENGTH", length)
     r.section("HITS", hits)
+    r.section("EXPAND", build_expand_anchors(slices, shares, need_expand, runes, threshold))
     try:
         from .context import build_continuity_lines
 
         r.section("CONTINUITY", build_continuity_lines(book_root, u, cache, st))
     except Exception as e:
         r.section("CONTINUITY", [f"（装配失败: {e}）"])
+    r.section("COMMIT", build_commit_card(u, st))
     return hits
+
+
+def build_expand_anchors(
+    slices: list[dict],
+    shares: dict,
+    need_expand: bool,
+    runes: int,
+    threshold: int,
+) -> list[str]:
+    """Short-chapter deficits + tail anchors so finalize does not re-read the whole unit."""
+    if not need_expand:
+        return ["expand_needed: no — do not expand prose; polish HITS only if any."]
+    gap = max(0, (threshold or 0) - runes)
+    lines = [
+        f"expand_needed: yes",
+        f"unit_shortfall: {gap} runes (reach floor in ONE edit batch; do not re-read the full file)",
+    ]
+    short: list[str] = []
+    for sl in slices:
+        ch = sl.get("chapter") or 0
+        share = shares.get(ch, 0) or 0
+        got = rune_count(sl.get("body") or "")
+        if share and got >= share:
+            continue
+        need = max(0, share - got) if share else 0
+        anchor = _chapter_tail_anchor(sl)
+        short.append(f"ch{ch}: {got}/{share or '—'} short {need} anchor {anchor}")
+    if short:
+        lines.extend(short[:12])
+    else:
+        lines.append("no per-chapter shortfall listed — add density inside existing scenes, one batch.")
+    lines.append("edit only these anchors; do not offset-read the whole unit.")
+    return lines
+
+
+def _chapter_tail_anchor(sl: dict) -> str:
+    body = str(sl.get("body") or "")
+    nonempty = [ln.strip() for ln in body.splitlines() if ln.strip() and ln.strip() != "---"]
+    head_line = int(sl.get("line") or 1)
+    if not nonempty:
+        return f"L{head_line} (empty chapter)"
+    tail = nonempty[-1]
+    if len(tail) > 42:
+        tail = tail[:42] + "…"
+    tail_line = head_line + max(1, len(body.splitlines()))
+    return f"L{tail_line} 「{tail}」"
+
+
+def build_commit_card(unit: dict, st: dict | None) -> list[str]:
+    """Ledger targets for after qc PASS. Prose must stay frozen."""
+    from .outline import chapter_range_of
+
+    uid = str(unit.get("unit_id") or "").strip() or "vNN-U#"
+    vol = uid.split("-")[0] if "-" in uid else "vNN"
+    a, b = chapter_range_of(unit)
+    chs = ", ".join(f"## ch{n:03d}" for n in range(a, b + 1)) if a and b else "(chapter_range missing)"
+    last = (st or {}).get("last_committed_ch")
+    return [
+        "AFTER qc-pack PASS: prose is FROZEN.",
+        f"NEVER edit units/{uid}.md again. NEVER run qc-pack again.",
+        "Do NOT re-read facts.md, outline YAML, cast cards, or prior commits — use CONTINUITY above.",
+        f"summaries: continuity/summaries/{vol}.md — add {chs} (五要素 each).",
+        "facts: cursor + snapshot/open-loops only if CONTINUITY deltas require it. No ## ch blocks in facts.",
+        f"outline: outline/units/{uid}.yaml status=reviewed.",
+        f"state: novel-state.yaml last_committed_ch={b or '?'} (was {last if last is not None else '?'}); active_unit → next.",
+        f"log: continuity/commits/{uid}.md",
+        "then postcommit --unit once. FAIL on that verify → stop, do not edit prose.",
+    ]

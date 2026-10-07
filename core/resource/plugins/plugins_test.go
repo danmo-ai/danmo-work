@@ -275,7 +275,8 @@ func TestNovelGatePythonScript(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{
-		"novel_gate.py", "novel_gate_test.py", "novel_gate/__init__.py", "novel_gate/cli.py",
+		"novel_gate.py", "novel_gate_test.py", "novel_hook_context.py",
+		"novel_gate/__init__.py", "novel_gate/cli.py", "novel_gate/intent.py",
 		"novel_gate/context.py", "novel_gate/cast.py", "novel_gate/outline.py", "novel_gate/ledger.py",
 		"novel_gate/deslop.py", "novel_gate/pack.py",
 	} {

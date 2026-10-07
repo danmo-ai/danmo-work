@@ -8,7 +8,7 @@
           {
             "type": "command",
             "command": "python3 \"${PLUGIN_DIR}/skills/novel-setup/scripts/novel_hook_context.py\"",
-            "timeoutSec": 5
+            "timeoutSec": 30
           }
         ]
       }
@@ -20,7 +20,7 @@
           {
             "type": "command",
             "command": "python3 \"${PLUGIN_DIR}/skills/novel-setup/scripts/novel_hook_context.py\"",
-            "timeoutSec": 5
+            "timeoutSec": 30
           }
         ]
       }

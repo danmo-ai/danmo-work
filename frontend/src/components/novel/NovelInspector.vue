@@ -12,6 +12,7 @@ export type DeskAction = {
   label: string
   allowed: boolean
   blockers: string[]
+  recommended?: boolean
 }
 
 export type InjectionPreview = {
@@ -24,10 +25,14 @@ export type InjectionPreview = {
 
 const props = defineProps<{
   pipeline: NovelBookPipeline | null
+  /** Book/volume-level recommended CTA when no unit desk is shown. */
   primary: DeskAction | null
   jumpNote: string
   injection: InjectionPreview | null
-  moreActions: DeskAction[]
+  /** Always-visible unit production keys (six). */
+  unitActions: DeskAction[]
+  /** Cast fix etc. — secondary, not the only production entry. */
+  extraActions: DeskAction[]
   unitPhase: NovelUnitPhase | null
   proseChars: number
   wordTarget: string
@@ -75,19 +80,42 @@ const wordLine = computed(() => {
     target: props.wordTarget || '—',
   })}`
 })
+
+const showUnitDesk = computed(() => props.unitActions.length > 0)
 </script>
 
 <template>
   <aside class="novel-insp">
     <div class="novel-insp__body">
-      <div class="novel-insp__block">
-        <div class="novel-insp__label">{{ t('novelWorkbench.primaryCta') }}</div>
+      <div v-if="showUnitDesk" class="novel-insp__block">
+        <div class="novel-insp__label">{{ t('novelWorkbench.unitDeskTitle') }}</div>
         <p v-if="wordLine" class="novel-insp__hint">{{ wordLine }}</p>
+        <div class="novel-insp__desk">
+          <button
+            v-for="(a, i) in unitActions"
+            :key="i"
+            type="button"
+            class="novel-wb-btn novel-insp__desk-btn"
+            :class="a.recommended ? 'novel-wb-btn--cta' : 'novel-wb-btn--ghost'"
+            :disabled="!a.allowed"
+            :title="a.blockers.length ? a.blockers.join(' · ') : a.recommended ? t('novelWorkbench.recommendedHint') : ''"
+            @click="emit('action', a)"
+          >
+            <span v-if="a.recommended" class="novel-insp__rec">{{ t('novelWorkbench.recommendedBadge') }}</span>
+            {{ a.label }}
+          </button>
+        </div>
+        <p class="novel-insp__inject">{{ t('novelWorkbench.unitDeskHint') }}</p>
+      </div>
+
+      <div v-else class="novel-insp__block">
+        <div class="novel-insp__label">{{ t('novelWorkbench.primaryCta') }}</div>
         <button
           v-if="primary"
           type="button"
           class="novel-wb-btn novel-wb-btn--cta novel-insp__cta"
           :disabled="!primary.allowed"
+          :title="primary.blockers.join(' · ')"
           @click="emit('action', primary)"
         >
           {{ primary.label }}
@@ -96,10 +124,17 @@ const wordLine = computed(() => {
         <p class="novel-insp__inject">{{ t('novelWorkbench.injectHint', { action: primary?.label || '' }) }}</p>
       </div>
 
-      <div v-if="primary && primary.blockers.length" class="novel-insp__blockers">
+      <div
+        v-if="(showUnitDesk ? unitActions : primary ? [primary] : []).some((a) => a.blockers.length && !a.allowed)"
+        class="novel-insp__blockers"
+      >
         <div class="novel-insp__label">{{ t('novelWorkbench.blockersTitle') }}</div>
         <ul>
-          <li v-for="(b, i) in primary.blockers" :key="i">{{ b }}</li>
+          <template v-for="(a, i) in showUnitDesk ? unitActions : primary ? [primary] : []" :key="'b' + i">
+            <li v-for="(b, j) in a.allowed ? [] : a.blockers" :key="j">
+              {{ a.label }}：{{ b }}
+            </li>
+          </template>
         </ul>
       </div>
 
@@ -122,14 +157,14 @@ const wordLine = computed(() => {
         </dl>
       </div>
 
-      <details v-if="moreActions.length" class="novel-insp__more">
-        <summary>{{ t('novelWorkbench.moreActions') }}</summary>
-        <div class="novel-insp__more-stack">
+      <div v-if="extraActions.length" class="novel-insp__block">
+        <div class="novel-insp__label">{{ t('novelWorkbench.extraActions') }}</div>
+        <div class="novel-insp__desk">
           <button
-            v-for="(a, i) in moreActions"
-            :key="i"
+            v-for="(a, i) in extraActions"
+            :key="'x' + i"
             type="button"
-            class="novel-wb-btn novel-wb-btn--ghost"
+            class="novel-wb-btn novel-wb-btn--ghost novel-insp__desk-btn"
             :disabled="!a.allowed"
             :title="a.blockers.join(' · ')"
             @click="emit('action', a)"
@@ -137,7 +172,7 @@ const wordLine = computed(() => {
             {{ a.label }}
           </button>
         </div>
-      </details>
+      </div>
 
       <p class="novel-insp__model" :title="t('novelWorkbench.modelTip')">ⓘ {{ t('novelWorkbench.modelTipShort') }}</p>
     </div>
@@ -191,6 +226,26 @@ const wordLine = computed(() => {
   width: 100%;
 }
 
+.novel-insp__desk {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.novel-insp__desk-btn {
+  width: 100%;
+  position: relative;
+  text-align: left;
+}
+
+.novel-insp__rec {
+  display: inline-block;
+  margin-right: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
 .novel-insp__blockers {
   padding: 8px 10px;
   border-radius: 8px;
@@ -220,23 +275,6 @@ const wordLine = computed(() => {
   margin: 0;
   line-height: 1.4;
   word-break: break-word;
-}
-
-.novel-insp__more {
-  font-size: var(--dq-font-size-caption);
-}
-
-.novel-insp__more summary {
-  cursor: pointer;
-  opacity: 0.7;
-  font-weight: 650;
-}
-
-.novel-insp__more-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
 }
 
 .novel-insp__model {

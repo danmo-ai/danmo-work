@@ -105,13 +105,43 @@ def materialize_pack(
     r.extra_sections = []
     r.counts = {}
     hint = write_hint(stage, unit_id, volume)
+    st = (stage or "").strip().lower()
+    do = "do: read_file the pack file only; then write the target; stop"
+    forbid = "forbid: read_skill long refs, glob/scan tree, second-read YAML, search_kb"
+    if st == STAGE_WRITE:
+        do = (
+            "do: read_file PACK CONTEXT only → write one units/vNN-U#.md (overwrite; do not read old prose) "
+            "→ set outline drafted → stop. No preflight, no qc-pack."
+        )
+        forbid = (
+            "forbid: read_skill, search_kb, glob, reread YAML/cast/facts/style-fingerprint, "
+            "preflight, qc-pack, read existing prose first"
+        )
+    elif st == STAGE_OUTLINE:
+        do = (
+            "do: read_file PACK → fill ≤4 proposed YAML → lint-units ONCE. "
+            "PASS: stop (YAML frozen). FAIL: fix those units, lint ONCE more, then stop."
+        )
+        forbid = (
+            "forbid: read_skill, read cast cards, glob, write prose, lint-units>2"
+        )
+    elif st == STAGE_FINALIZE:
+        do = (
+            "do: read PACK (EXPAND anchors + HITS only; do not reread full prose) → "
+            "one edit batch → qc-pack ONCE. PASS: prose FROZEN, commit COMMIT-card files only, postcommit. "
+            "FAIL: stop. Never edit units/*.md after PASS. Never a second qc-pack."
+        )
+        forbid = (
+            "forbid: read_skill, glob, search_kb, reread facts/yaml/cast, "
+            "qc-pack>1, edit prose after PASS, until-exit-0"
+        )
     r.section(
         "PACK",
         [
             f"file: {rel}",
             f"write: {hint}",
-            "do: read_file the pack file only; then write the target; stop",
-            "forbid: read_skill long refs, glob/scan tree, second-read YAML, search_kb",
+            do,
+            forbid,
         ],
     )
     return rel

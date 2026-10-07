@@ -733,6 +733,8 @@ class GateTests(unittest.TestCase):
         text = pack.read_text(encoding="utf-8")
         self.assertIn("## Pipeline system", text)
         self.assertIn("## CONTEXT", text)
+        self.assertNotIn("先跑 gate preflight", text)
+        self.assertIn("No preflight", blob)
         self.assertIn("identity@unit:", text)
         self.assertIn("题材专有文", text)
         self.assertLess(len(blob), 2500, blob)
@@ -759,6 +761,9 @@ class GateTests(unittest.TestCase):
         self.assertTrue(pack.is_file(), blob)
         text = pack.read_text(encoding="utf-8")
         self.assertIn("## Pipeline system", text)
+        self.assertIn("## COMMIT", text)
+        self.assertIn("prose is FROZEN", text)
+        self.assertIn("## EXPAND", text)
         self.assertTrue("LENGTH" in text or "CONTINUITY" in text or "HITS" in text, text[:400])
 
     def test_accepted_missing_gap_blocks(self):
@@ -803,17 +808,34 @@ class GateTests(unittest.TestCase):
             rep.format(),
         )
 
+    def test_intent_classifier_short_goals(self):
+        from novel_gate.intent import classify_goal
+
+        w = classify_goal("v01-U9正文写作")
+        self.assertEqual(w.kind, "write")
+        self.assertEqual(w.unit_id, "v01-U9")
+        f = classify_goal("v01-U9正文审阅定稿")
+        self.assertEqual(f.kind, "finalize")
+        o = classify_goal("v01-U9 细纲复核")
+        self.assertEqual(o.kind, "outline")
+        self.assertEqual(o.unit_id, "v01-U9")
+        n = classify_goal("规划卷纲")
+        self.assertEqual(n.kind, "none")
+        r = classify_goal("重写正文", active_unit="v01-U1")
+        self.assertEqual(r.kind, "write")
+        self.assertEqual(r.unit_id, "v01-U1")
+
     def test_novel_hook_script(self):
         import subprocess
 
         script = Path(__file__).resolve().parent / "novel_hook_context.py"
-        book = self.root / "novel/demo"
+        # Project root (not book root) — matches engine workdir
         payload = json.dumps(
             {
                 "event": "subagentStart",
                 "agent_id": "novel",
-                "workdir": str(book),
-                "goal": "写单元",
+                "workdir": str(self.root),
+                "goal": "v01-U1正文写作",
             },
             ensure_ascii=False,
         )
@@ -826,9 +848,41 @@ class GateTests(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         out = json.loads(proc.stdout)
-        self.assertIn("additionalContext", out)
-        self.assertIn("stage=", out["additionalContext"])
-        self.assertIn("prompt-pack", out["additionalContext"])
+        ctx = out.get("additionalContext") or ""
+        self.assertIn("NOVEL_ROUTE", ctx)
+        self.assertIn("stage=write", ctx)
+        self.assertIn("PACK ready:", ctx)
+        self.assertIn(".pack/write-v01-U1.md", ctx)
+        self.assertIn("forbid:", ctx)
+        self.assertTrue(
+            (self.root / "novel/demo/.pack/write-v01-U1.md").is_file(),
+            proc.stderr,
+        )
+
+    def test_novel_hook_planning_no_eager_pack(self):
+        import subprocess
+
+        script = Path(__file__).resolve().parent / "novel_hook_context.py"
+        payload = json.dumps(
+            {
+                "event": "userPromptSubmit",
+                "agent_id": "novel",
+                "workdir": str(self.root),
+                "goal": "规划第1卷卷纲",
+            },
+            ensure_ascii=False,
+        )
+        proc = subprocess.run(
+            [sys.executable, str(script)],
+            input=payload,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        ctx = json.loads(proc.stdout).get("additionalContext") or ""
+        self.assertIn("goal_kind=none", ctx)
+        self.assertNotIn("PACK ready: novel/", ctx)
 
     def test_preflight_crime_subgenre_adds_flavor_article(self):
         self._edit("novel-state.yaml", "genre: 玄幻", "genre: 悬疑")

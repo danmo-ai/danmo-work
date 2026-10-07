@@ -35,7 +35,7 @@ python3 "$G" --workdir . --book-id <slug> --action migrate
 | `outline-pack` | 一批细纲写前 | `--volume vNN`。薄包（**非**写正文 CONTEXT）：本卷时间线、本卷人物、Cast snapshot 身份行、open loops、锁词、proposed≤4 的接钩/上一时钟。填完再 `lint-units`。 |
 | `lint-units` | 一批细纲写完 | `--volume vNN`。shape + 卷纲对准 + `on_stage` + **时钟硬门**（accepted+：`gap_from_prev` 必填；`story_day`\|`time_label` 至少其一）+ `timeline_monotonic`。`### UNITS` 逐单元 PASS/FAIL。 |
 | `preflight` | 写正文前 | `--unit`。exit ≠ 0 不写。`### CONTEXT` **状态优先**：书级 → 卷索引+本卷时间线 → 本/上单元时钟 → 单元卡 → 接钩 → identity@unit（无重复 snapshot 行）→ 身份转变目标 → 债务/锁词 → **题材文截断(~1200字)** → 风格指纹 → 纪律。 |
-| `prompt-pack` | 写/细纲/定稿（短 stdout） | `--stage write\|outline\|finalize`。内部跑 preflight / outline-pack / qc-pack，把正文包写到 `.pack/`，stdout 只留 `### PACK`（file + write 目标）。agent 应 `read_file` 该路径，不要依赖 stdout CONTEXT。 |
+| `prompt-pack` | 写/细纲/定稿（短 stdout） | `--stage write\|outline\|finalize`。内部跑 preflight / outline-pack / qc-pack，把正文包写到 `.pack/`，stdout 只留 `### PACK`（file + write 目标）。**Hook 可能已预跑**：ephemeral 有 `PACK ready` 时 agent 直接 `read_file`，不要再找脚本。否则只用本页钉死的 `G=` 一行；禁止 `find`/`glob`。 |
 | `qc-pack` | 定稿轮 | `--unit`。precommit + scan-deslop + `### LENGTH` + **`### CONTINUITY`**（开场 identity / 结束 to / 时钟 / 伏笔对照）。 |
 | `postcommit` | Commit 后 | 摘要五要素；delta who ∈ snapshot；**title/location `to` 与 snapshot 不一致 → blocking**（age advisory）；FS-id ∈ Open loops；关系回写 warning；`last_committed_ch`。 |
 | `migrate` | 旧书 | facts `## chNNN` 按章归卷写 `summaries/vNN.md`（facts 留索引行）；state 缺 `genre` 猜一次 + blocker「确认 genre」；细纲缺 `on_stage` 从 `state_deltas` 预填、`pov` 留空 warning；卡缺 `role` 推断；卷纲缺「本卷人物」由细纲 `on_stage` 并集生成。写 `continuity/commits/migrate-<date>.md`。layout / encoding blocking 时不迁。 |

@@ -1,7 +1,7 @@
 ---
 name: novel-write
 source: builtin
-description: Two intents — 一批细纲 (prompt-pack --stage outline, fill ≤4 proposed unit YAML, lint-units) and 写单元 (prompt-pack --stage write, read pack file only, draft one units/vNN-U#.md). Not for 扩写, deslop, review, or Commit — those are novel-review (new session).
+description: Triggers on 写细纲 / 重写细纲 / 一批细纲 / 写单元正文 / 重写正文 / 正文写作. Prefer hook PACK ready → read_file → write. Else prompt-pack --stage outline|write. Not for 定稿/扩写/审稿 — novel-review.
 license: MIT
 compatibility: Requires write, edit, read_file, grep, glob, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
@@ -12,16 +12,16 @@ metadata:
 
 # Novel Write（一批细纲 · 写单元）
 
-**Stage 3–4/5.** 生产路径（工作台新会话）：**exec prompt-pack → read_file 包文件 → write 目标 → 停。** 禁止 `read_skill` 长文、扫树、二读 YAML、`search_kb`。
+**Stage 3–4/5.** 生产路径（工作台新会话）：**若 hook 已 PACK ready → 直接 `read_file` 包文件 → write → 停。** 否则钉死 `G="$WORK_HOME/plugins/novel/skills/novel-setup/scripts/novel_gate.py"` 跑 prompt-pack。禁止 `find`/`glob`、`read_skill` 长文、扫树、二读 YAML、`search_kb`。
 
-- **一批细纲**：`--action prompt-pack --stage outline --volume vNN`，填 ≤4 个 `proposed`，再 `lint-units`。
-- **写单元**：`--action prompt-pack --stage write --unit vNN-U#`，只读 pack，一份 `units/vNN-U#.md`，不定稿。
+- **一批细纲 / 写细纲 / 重写细纲**：只读 pack，填或覆盖 YAML，`lint-units` 一次；FAIL 再补一次然后停。不读人物卡。
+- **写单元 / 重写正文**：只读 pack CONTEXT，`write` 一份正文（不先读旧稿），不定稿，不跑 `preflight`/`qc-pack`。
 
 卡文 / 续写例外才 `read_skill` `continuation.md`。
 
 ## When to load
 
-写细纲 / 写一批细纲 / 写单元正文 / 续写 / 接手 / 卡文救援.
+写细纲 / 重写细纲 / 写一批细纲 / 写单元正文 / 重写正文 / 正文写作 / 续写 / 接手 / 卡文救援.
 
 **不要**在本技能回合做：字数扩写、去 AI 味、审稿、Commit。不要写 `chapters/chNNN.md` 或章纲。
 
@@ -45,5 +45,5 @@ metadata:
 
 ## Stop
 
-一批细纲：`lint-units` 全 PASS → 报 `### UNITS`。
-写单元：`units/vNN-U#.md` on disk → `drafted` → 定稿另开**新会话**（`prompt-pack --stage finalize`）。
+一批细纲：`lint-units` ≤2 次。全 PASS → 报 `### UNITS` 并停。
+写单元：`units/vNN-U#.md` on disk → `drafted` → 停。定稿另开**新会话**。

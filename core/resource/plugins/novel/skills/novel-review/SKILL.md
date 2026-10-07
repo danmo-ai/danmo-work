@@ -1,7 +1,7 @@
 ---
 name: novel-review
 source: builtin
-description: 定稿 round for one drafted unit — prompt-pack --stage finalize (word/HITS/COUNTS/CONTINUITY on disk), skip expansion when length is fine, 10-dim review, one-patch Commit and postcommit. Prefer a new session (no chat history). Not for opening a book or first drafts.
+description: Triggers on 定稿 / 重新定稿 / 审阅定稿 / finalize. Prefer hook PACK ready → read_file → patch → postcommit. Else prompt-pack --stage finalize. New session. Not for first drafts (novel-write).
 license: MIT
 compatibility: Requires write, edit, read_file, grep, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
@@ -14,33 +14,34 @@ metadata:
 
 ## Pipeline system
 
-定稿只读本 pack。禁止写首稿、扫树、`search_kb`（人味对照已在 pack）。
+定稿只读本 pack。`qc-pack` 就是审。禁止写首稿、扫树、`search_kb`、`find` gate、通读正文、二读 facts/YAML。
 
-1. `exec_shell` gate `--action prompt-pack --stage finalize --unit vNN-U#`。
-2. 按 pack 的 LENGTH / HITS / COUNTS / CONTINUITY 选路：`expand_needed` 才扩写；HITS 非空才按行号润色；10 维审。PASS 不写 `reviews/`。
-3. 一次 Commit 补丁后 `postcommit --unit`。exit ≠ 0 停。不要第三轮自动重试。
+1. 若 ephemeral 已 `PACK ready`：直接 `read_file`。否则钉死 `G=` 跑 `--action prompt-pack --stage finalize --unit`。
+2. **EXPAND**：`expand_needed: no` 则不扩写。否则只按 pack 的锚点做 **一次** `edit_batch`（含 HITS 行号）。不要 `offset` 通读 `units/*.md`。
+3. **验证一次** `qc-pack`。
+4. **PASS → 正文冻结。** 禁止再改 `units/*.md`，禁止第二次 `qc-pack`。按 pack `## COMMIT` 只改 summaries / facts 游标 / 细纲 `reviewed` / state / commits 日志，然后 `postcommit`。
+5. **FAIL → 停**（可写 `reviews/`）。不要「再改再 qc」。不要「直到 exit 0」。
 
-**Stage 5/5.** 一个单元一轮定稿（可与写作分模）：`qc-pack --unit` 一份 stdout → 字数够则跳扩写、HITS 空则跳润色 → 10 维审 → 修 P0 → 一次补丁 Commit → `postcommit --unit`。**与 novel-write 分开**：禁止在首稿 turn 定稿。本技能不换模型。
+**Stage 5/5.** 与 novel-write 分开。本技能不换模型。
 
 ## When to load
 
-定稿 / 扩→审→润→Commit / 审稿 / 去 AI 味 / Continuity Commit / 卷收束. 对象是 **一个单元的一份正文**。
+定稿 / 重新定稿 / 审阅定稿 / 扩→审→润→Commit / 审稿 / 去 AI 味 / Continuity Commit / 卷收束. 对象是 **一个单元的一份正文**。
 
 **不要**用本技能写首稿正文（→ `novel-write`）。
 
 ## Do
 
-先跑 `exec_shell` gate `--action prompt-pack --stage finalize --unit vNN-U#`，`read_file` stdout 的 `file:`（LENGTH / HITS / COUNTS / CONTINUITY）。按 pack 选路。
+优先读 hook/`PACK ready` 包文件（LENGTH / HITS / COUNTS / CONTINUITY）。无 PACK 才 `prompt-pack --stage finalize`。按 pack 选路——**不要**把 `qc-pack` 当循环条件。
 
-| 步 | 触发 | Load | search_kb（≤1，整轮共用） |
-|----|------|------|-----------------|
-| 扩写 | pack `expand_needed: yes` 或 `word_floor` blocking | 仅 pack 不足才 `expansion.md` | 默认不查 |
-| 审本单元 | 总是 | 仅 pack 不足才 `review-gates.md` | 默认不查 |
-| 去 AI 味 | pack HITS 非空、审稿 P0 | 仅 pack 不足才 `polish-deslop.md` | 默认不查 |
-| Commit | 审 PASS | 优先 pack CONTINUITY + `state_deltas`；不足才 `continuity-commit.md` | — |
-| 卷收束 | 卷末单元 Commit 后，人确认 | `continuity-commit.md` 卷收束节 | — |
+| 步 | 触发 | 做什么 |
+|----|------|--------|
+| 扩写+润色 | EXPAND / HITS | 一次 edit；只用锚点与行号 |
+| 验证 | 改完后 | `qc-pack` **恰好 1 次** |
+| Commit | 该次 PASS | 正文冻结；只按 `## COMMIT` 改账本 → `postcommit` |
+| 停 | 该次 FAIL | 报告后停；不改完再验 |
 
-改完正文再跑一次 `qc-pack` 直到 exit 0，再 Commit。**PASS：不写 `reviews/` 文件**，只更新 `gates.qc`。**FAIL / 深审：写 `reviews/vNN-U#-review.md`** 并停（human stop）。
+**PASS 后禁止再改正文。** 十维审不另开一轮改稿。不要为 Commit 去读 facts / YAML / 人物卡。
 
 **Commit = 一次 patch：**
 - `continuity/summaries/vNN.md`：该单元每一章 `## chNNN` 五要素块（新卷新建文件 + facts 索引行）
@@ -51,8 +52,8 @@ metadata:
 - 细纲 `status=reviewed` + `novel-state.yaml`（`last_committed_ch` = 章范围末章，`active_unit` 指向下一单元）
 - `postcommit --unit` exit 0
 
-反 AI 量化硬检 exit 0 才可宣称定稿；报告 GATES 段引用 `### COUNTS`。一轮只定稿一个单元。不要按章拆成多次 Commit。
+验证 `qc-pack` PASS（或仅 advisory）才可宣称定稿；报告 GATES 段引用 `### COUNTS`。一轮只定稿一个单元。不要按章拆成多次 Commit。二次验证仍 blocking → 停，不要循环。
 
 ## Stop
 
-Completion = tool evidence（qc-pack + postcommit VERDICT）。卷末单元 → 提示「可做卷收束」；下一卷卷纲 → `novel-plan`。Do not start the next unit's first draft here.
+Completion = tool evidence（至多 1 次验证 qc-pack + postcommit VERDICT，或 FAIL 报告）。卷末单元 → 提示「可做卷收束」；下一卷卷纲 → `novel-plan`。Do not start the next unit's first draft here.

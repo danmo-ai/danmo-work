@@ -775,9 +775,9 @@ def build_outline_pack(book_root: Path, st: dict, volume: str, cache=None) -> li
             lines.append("    上一单元时钟: （首单元或无前序 — gap 写「开卷」）")
 
     lines.append(
-        "- 纪律: 用本包填时钟 / state_deltas.from / entry / forbidden；"
-        "不读题材全文、不读人物卡全文（对手戏只点读关系段）；"
-        "填完 lint-units；硬 CONTEXT 仅写正文 preflight。"
+        "- 纪律: 只用本包填时钟 / state_deltas.from / entry / forbidden / on_stage；"
+        "不读题材全文、不读人物卡、不 read_skill。"
+        "填完 lint-units 一次；FAIL 只补一次再 lint 一次然后停。不写正文。"
     )
     return lines
 

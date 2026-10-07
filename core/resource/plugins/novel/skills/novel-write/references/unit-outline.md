@@ -2,11 +2,11 @@
 
 ## Pipeline system
 
-一批细纲只读本 pack。禁止扫树、读题材全文、读人物卡全文、写正文。
+一批细纲 / 写细纲 / 重写细纲只读本 pack。禁止扫树、`find` gate、`read_skill`、读题材全文、读人物卡、写正文。
 
-1. `exec_shell` gate `--action prompt-pack --stage outline --volume vNN`。exit ≠ 0 → 停。
-2. 读 pack：把本批 ≤4 个 `proposed` 填成 `accepted`（`on_stage` / `pov` / 时钟 / 合同 / scenes / chapters / `state_deltas`）。不改卷纲已定的 `function` 与 `next_hook.type`。
-3. `lint-units --volume vNN`。FAIL 只补失败单元。停。
+1. 若 ephemeral 已 `PACK ready`：直接 `read_file`。否则钉死 `G="$WORK_HOME/plugins/novel/skills/novel-setup/scripts/novel_gate.py"` 跑 `--action prompt-pack --stage outline --volume vNN`。exit ≠ 0 → 停。
+2. 按 pack 把本批 ≤4 个 `proposed` 填成 `accepted`（或覆盖已有 YAML）。不改卷纲已定的 `function` 与 `next_hook.type`。头已由 accept-volume 种下，不要另抄模板。
+3. `lint-units --volume vNN` **一次**。全 PASS → 停，不再改这些 YAML。FAIL → 只补失败单元，再 lint **一次**；仍 FAIL → 停。禁止第三次 lint。
 
 **No prose without an accepted 单元细纲** for that unit.
 
@@ -17,7 +17,7 @@ Official name: **单元细纲**. Do not introduce other product names. This file
 | Rule | Value |
 |------|--------|
 | Path | `novel/<book-id>/outline/units/vNN-U#.yaml` (id matches the volume **单元索引表**, e.g. `v01-U1.yaml`) |
-| Format | **YAML only** — copy `assets/templates/unit-outline.yaml` via `read_skill` |
+| Format | **YAML only** — heads already seeded; fill fields from the pack. Do not `read_skill` the template on a production turn. |
 | Forbidden | Markdown unit outlines, per-chapter outline files, copying scene/`cut_hook` text into the volume outline |
 
 **本文件是单元级唯一事实源。** 卷纲只分配（unit_id / 章范围 / 一句话功能 / 终局边界短语 / 钩子类型 / 本卷人物），不重复本文件字段。
@@ -26,7 +26,7 @@ Official name: **单元细纲**. Do not introduce other product names. This file
 
 ## 一批细纲
 
-一轮填 **≤4 个** `proposed` 单元（按 unit 顺序），写完 `exec_shell` gate `--action lint-units --volume vNN`，读 `### UNITS` 逐单元 PASS/FAIL；FAIL 只补失败的那几个再跑。本卷仍有 `proposed` → 下一轮再发一批。不要在同一轮写正文。
+一轮填 **≤4 个** `proposed` 单元（按 unit 顺序），写完 `lint-units --volume vNN` 一次。PASS 则停。FAIL 只补失败单元再 lint 一次，仍 FAIL 则停。本卷仍有 `proposed` → 下一轮再发一批。不要在同一轮写正文。
 
 ## 上场人物
 

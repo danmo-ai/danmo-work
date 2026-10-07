@@ -23,8 +23,11 @@ import {
   opensFreshSession,
   novelFreshSessionTitle,
   novelActionSkillId,
+  novelGateCmd,
   novelUnitOutlinePath,
   novelUnitProsePath,
+  unitDeskActions,
+  recommendedUnitAction,
   parseBookOutlineVolumeRows,
   parseChapterRange,
   parseNovelStateExtended,
@@ -411,7 +414,34 @@ assert.ok(writeBlocked.blockers.includes('blocker.noCast'))
 assert.equal(canRunAction('write', readyBook, 'v01-U1').allowed, true)
 assert.equal(canRunAction('review', draftedBook, 'v01-U1').allowed, true)
 assert.ok(canRunAction('expand', readyBook, 'v01-U1').blockers.includes('blocker.needDraft'))
-assert.ok(canRunAction('finalize', { ...draftedBook, unitPhases: { 'v01-U1': 'finalized' } }, 'v01-U1').blockers.includes('blocker.alreadyFinalized'))
+assert.ok(canRunAction('finalize', { ...draftedBook, unitPhases: { 'v01-U1': 'finalized' } }, 'v01-U1').blockers.includes('blocker.useRefinalize'))
+assert.equal(canRunAction('re-finalize', { ...draftedBook, unitPhases: { 'v01-U1': 'finalized' } }, 'v01-U1').allowed, true)
+assert.equal(canRunAction('rewrite', { ...draftedBook, unitPhases: { 'v01-U1': 'finalized' }, cast: [lin], unitOutlines: { 'v01-U1': { ...parsed, onStage: ['lin'], pov: 'lin' } } }, 'v01-U1').allowed, true)
+assert.equal(canRunAction('rewrite-outline', readyBook, 'v01-U1').allowed, true)
+assert.ok(canRunAction('contract-one', readyBook, 'v01-U1').blockers.includes('blocker.useRewriteOutline'))
+// Book-level state.blockers must NOT grey out unit redo
+const blockedBook = { ...draftedBook, cast: [lin], state: { ...draftedBook.state, blockers: ['confirm genre'] }, unitOutlines: { 'v01-U1': { ...parsed, onStage: ['lin'], pov: 'lin' } } }
+assert.equal(canRunAction('rewrite', blockedBook, 'v01-U1').allowed, true)
+assert.equal(canRunAction('re-finalize', blockedBook, 'v01-U1').allowed, true)
+
+const deskReady = unitDeskActions(readyBook, 'v01-U1')
+assert.equal(deskReady.length, 6)
+assert.equal(recommendedUnitAction('ready'), 'write')
+assert.ok(deskReady.find((d) => d.action === 'write' && d.recommended && d.allowed))
+assert.ok(deskReady.find((d) => d.action === 'rewrite-outline' && d.allowed))
+assert.ok(deskReady.find((d) => d.action === 'rewrite' && !d.allowed))
+
+const finalizedCtx = {
+  ...draftedBook,
+  unitPhases: { 'v01-U1': 'finalized', 'v01-U2': 'ready' },
+  cast: [lin],
+  unitOutlines: { 'v01-U1': { ...parsed, onStage: ['lin'], pov: 'lin' } },
+}
+const deskFin = unitDeskActions(finalizedCtx, 'v01-U1')
+assert.ok(deskFin.find((d) => d.action === 're-finalize' && d.recommended && d.allowed))
+assert.ok(deskFin.find((d) => d.action === 'rewrite' && d.allowed))
+assert.ok(deskFin.find((d) => d.action === 'rewrite-outline' && d.allowed))
+assert.ok(deskFin.find((d) => d.action === 'finalize' && !d.allowed))
 
 const constrained = buildConstrainedPrefill('write', {
   bookId: 'star-inn',
@@ -428,9 +458,14 @@ assert.ok(constrained.includes('delegate_agent.goal'))
 assert.equal(opensFreshSession('write'), true)
 assert.equal(opensFreshSession('outline-batch'), true)
 assert.equal(opensFreshSession('finalize'), true)
+assert.equal(opensFreshSession('rewrite'), true)
+assert.equal(opensFreshSession('rewrite-outline'), true)
+assert.equal(opensFreshSession('re-finalize'), true)
 assert.equal(opensFreshSession('plan'), false)
 assert.equal(opensFreshSession('init'), false)
 assert.equal(novelFreshSessionTitle('write', { unitId: 'v01-U1' }), '写 v01-U1')
+assert.equal(novelFreshSessionTitle('rewrite', { unitId: 'v01-U1' }), '重写 v01-U1')
+assert.ok(novelGateCmd('--book-id x --action prompt-pack --stage write --unit v01-U1').includes('$WORK_HOME/plugins/novel'))
 
 assert.equal(novelActionSkillId('init'), 'novel-setup')
 assert.equal(novelActionSkillId('migrate'), 'novel-setup')
@@ -451,8 +486,11 @@ const stages = [
   'next-volume',
   'outline-batch',
   'contract-one',
+  'rewrite-outline',
   'write',
+  'rewrite',
   'finalize',
+  're-finalize',
   'expand',
   'review',
   'polish',
@@ -491,9 +529,37 @@ assert.equal(novelUnitProsePath('star-inn', 'v01-U1'), 'novel/star-inn/units/v01
 const writePrefill = buildNovelStagePrefill('write', { bookId: 'star-inn', unitId: 'v01-U1' })
 assert.ok(writePrefill.includes('units/v01-U1.md'))
 assert.ok(writePrefill.includes('prompt-pack --stage write --unit'))
+assert.ok(writePrefill.includes('$WORK_HOME/plugins/novel'))
+assert.ok(writePrefill.includes('PACK ready'))
 assert.ok(writePrefill.includes('---'))
-assert.ok(writePrefill.includes('停下'))
+assert.ok(writePrefill.includes('落盘后停'))
+assert.ok(writePrefill.includes('preflight'))
 assert.ok(!writePrefill.includes('### CONTEXT'))
+
+const rewriteOutlinePrefill = buildNovelStagePrefill('rewrite-outline', {
+  bookId: 'star-inn',
+  unitId: 'v01-U1',
+  hasProse: true,
+})
+assert.ok(rewriteOutlinePrefill.includes('重写'))
+assert.ok(rewriteOutlinePrefill.includes('正文可能过期'))
+assert.ok(rewriteOutlinePrefill.includes('prompt-pack --stage outline'))
+
+const rewritePrefill = buildNovelStagePrefill('rewrite', { bookId: 'star-inn', unitId: 'v01-U1' })
+assert.ok(rewritePrefill.includes('覆盖'))
+assert.ok(rewritePrefill.includes('prompt-pack --stage write'))
+
+const refinalizePrefill = buildNovelStagePrefill('re-finalize', { bookId: 'star-inn', unitId: 'v01-U1' })
+assert.ok(refinalizePrefill.includes('重新定稿'))
+assert.ok(refinalizePrefill.includes('prompt-pack --stage finalize'))
+assert.ok(refinalizePrefill.includes('qc-pack≤1') || refinalizePrefill.includes('qc-pack'))
+assert.ok(refinalizePrefill.includes('直到 exit 0') || refinalizePrefill.includes('硬停损'))
+
+const finalizePrefill = buildNovelStagePrefill('finalize', { bookId: 'star-inn', unitId: 'v01-U1' })
+assert.ok(finalizePrefill.includes('硬停损'))
+assert.ok(finalizePrefill.includes('正文冻结'))
+assert.ok(formatLoadProtocol('finalize').includes('正文冻结'))
+assert.ok(formatLoadProtocol('finalize').includes('直到 exit 0'))
 
 const md = `## 第1章 夜雨
 
