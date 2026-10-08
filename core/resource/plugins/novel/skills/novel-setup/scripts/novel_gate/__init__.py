@@ -1,14 +1,10 @@
 """Deterministic novel write-gate (package). Stdlib only. Invoked via exec_shell:
 
-python3 novel_gate.py --action ACTION --workdir PROJECT [--book-id SLUG] [--unit vNN-U#] [--volume vNN] [--json]
+python3 novel_gate.py <subcommand> --workdir PROJECT --book-id SLUG [--unit vNN-U#] [--volume vNN]
 
-Actions: doctor | init | accept-volume | lint-units | outline-pack | cast-lint | preflight | prompt-pack |
-qc-pack | precommit | scan-deslop | postcommit | migrate. Exit 0 PASS, 1 FAIL, 2 usage/error.
-
-Modules: common (YAML/IO/Report), outline (unit YAML + volume index, accept-volume,
-lint-units), cast (cards, cast-lint, promote), ledger (facts / summaries / postcommit),
-context (state, KB articles, preflight CONTEXT, outline-pack), deslop + qc (scans, precommit, qc-pack),
-doctor, init, migrate, book (cache), cli.
+Primary: pack-outline | pack-write | pack-finalize | lint-outline | check-length |
+check-deslop | check-commit | seal-write | seal-commit | accept-volume.
+Exit 0 PASS, 1 FAIL, 2 usage/error.
 """
 from __future__ import annotations
 
@@ -85,10 +81,9 @@ from .identity import (
     state_delta_who,
 )
 from .pack import (
-    extract_pipeline_system,
     materialize_pack,
     pack_filename,
-    pipeline_system_for,
+    pack_project_rel,
 )
 from .outline import (
     BEAT_NAMES,

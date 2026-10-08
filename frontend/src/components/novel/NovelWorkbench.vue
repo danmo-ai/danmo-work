@@ -14,6 +14,7 @@ import NovelInspector from '@/components/novel/NovelInspector.vue'
 import type { DeskAction, InjectionPreview } from '@/components/novel/NovelInspector.vue'
 import {
   buildConstrainedPrefill,
+  buildProductionSessionContent,
   buildUnitPhases,
   canRunAction,
   castLintIssues,
@@ -648,21 +649,18 @@ async function runAction(desk: DeskAction) {
   const unitPhase = desk.unitId ? unitPhases.value[desk.unitId] : undefined
   const hasProse =
     unitPhase === 'drafted' || unitPhase === 'review_fail' || unitPhase === 'finalized'
-  const text = buildConstrainedPrefill(
-    action,
-    {
-      bookId,
-      unitId: desk.unitId,
-      unitPath,
-      volume: desk.volume,
-      batchUnits: desk.batchUnits,
-      stem: desk.stem,
-      volumeOutlineExists: selectedOrCurrentVolumeExists(desk.volume),
-      hasProse,
-    },
-    pipe && ctx && action !== 'init' ? pipe : undefined,
-    desk.blockers,
-  )
+  const prefillCtx = {
+    bookId,
+    unitId: desk.unitId,
+    unitPath,
+    volume: desk.volume,
+    batchUnits: desk.batchUnits,
+    stem: desk.stem,
+    volumeOutlineExists: selectedOrCurrentVolumeExists(desk.volume),
+    hasProse,
+  }
+  const pipeArg = pipe && ctx && action !== 'init' ? pipe : undefined
+  const text = buildConstrainedPrefill(action, prefillCtx, pipeArg, desk.blockers)
 
   if (opensFreshSession(action)) {
     if (!hasNovelExpert.value) {
@@ -675,7 +673,8 @@ async function runAction(desk: DeskAction) {
       return
     }
     try {
-      await sessions.createSession(text, pid, undefined, {
+      const sessionText = buildProductionSessionContent(action, prefillCtx, pipeArg, desk.blockers)
+      await sessions.createSession(sessionText, pid, undefined, {
         agentId: 'novel',
         title: novelFreshSessionTitle(action, { unitId: desk.unitId, volume: desk.volume }),
         skipAutoTitle: true,

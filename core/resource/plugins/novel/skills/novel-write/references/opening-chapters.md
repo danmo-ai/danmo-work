@@ -2,18 +2,20 @@
 
 第 1–3 章专用。与 KB「节奏与结构 → 黄金开篇 / 露一藏九 / 黄金三章执行清单」对照使用。它们通常落在开篇单元的同一份正文里，不另写章纲。
 
-## When to load
+## When to load（卡文 / 开篇救援例外）
 
-- 单元章范围含 **ch001–ch003**，写或审该单元正文前。只加载一次，不要按章重复。
+**不是** `unit-write` 短路径的默认步骤。短路径只读 pack（题材 bullet 已在包里）→ 一次 write → seal，**0 次 `search_kb`**。
 
-## Preflight add-on
+仅当：开篇单元（章范围含 **ch001–ch003**）**卡文、用户点名黄金三章救援、或短路径写砸需重开**时，才 `read_skill` 本文。只加载一次，不要按章重复。
 
-在 `unit-write.md` gate CONTEXT 之外：
+## Preflight add-on（仅上述例外）
+
+在已有 write pack 之外（仍禁止另搜题材/人味/爽点全文）：
 
 1. `read_skill` 本文。
-2. `search_kb` **节奏与结构**（黄金三章 + 露一藏九 + 章内节奏）。开篇不再另查人味 / 题材 / 爽点。
+2. `search_kb` **至多一次**「节奏与结构」（黄金三章 + 露一藏九 + 章内节奏）。
 3. 确认开篇单元细纲 `function` 或第一章场面能让读者闻见承诺气味（爽 / 虐 / 悬疑 / 情感——写进细纲，不写进正文口号）。
-4. `subgenre=刑侦探案` 时只记三条（不 `search_kb`）：禁档案进场；不用天气当纯开篇（雾参与发现尸体合法）；过程人味、章尾出钩。
+4. `subgenre=刑侦探案` 时只记三条（不另 `search_kb`）：禁档案进场；不用天气当纯开篇（雾参与发现尸体合法）；过程人味、章尾出钩。
 
 ## 开篇三步（信息进场，可删不可乱）
 
@@ -70,7 +72,7 @@
 
 ## 与场景沉浸
 
-beats 含 `scene:establish` / `scene:transition` / 地点切换时 → `search_kb` **情绪与场景 → 场景沉浸**（见 KB `06`）。
+仅本例外轮且本 turn 尚未用过那 1 次 `search_kb` 时：beats 含 `scene:establish` / `scene:transition` / 地点切换 → 可改查「情绪与场景 → 场景沉浸」（见 `scene-routing.md`）。短路径写单元不走本条。
 
 ## Handoff
 

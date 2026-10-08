@@ -54,7 +54,7 @@
 - Use the templates: `assets/templates/book-outline.md`, `assets/templates/volume-outline.md` — fixed sections, no free-form reinvention.
 - 总纲批准前勾 **锁纲 checklist**；卷纲批准前勾 **锁卷 checklist**。全书结构钩/双线在总纲；本卷结构钩/双线在卷纲。
 - **规划「情绪/人物弧」前，先读本卷点名人物卡**（四件套/矛盾/弧光/关系表）——卷纲的人物走向必须与卡的弧光、关系现状兼容；卷纲批准时一并核对。关键选择等单元级字段在写 yaml 细纲时再对齐人物卡。
-- `search_kb` **至多一次**「节奏与结构」before locking volume shape. 终局细节只写 `canon/author-lore.md`；unlock 卷号只维护在圣经；锁词只在 `canon/locked-terms.yaml`。
+- `search_kb` **至多一次**「节奏与结构」before locking volume shape。只用来**指导**分卷、钩子、单元功能等故事决策；**不得**把 KB 段落复制进总纲 / 卷纲 / `world.md` / 细纲。终局细节只写 `canon/author-lore.md`；unlock 卷号只维护在圣经；锁词只在 `canon/locked-terms.yaml`。
 - After user OK on volume outline, update `novel-state.yaml` (`stage: outline`, artifacts).
 - Do not write unit prose until asset_gate: core cast + world skeleton are `canon`.
 - **Next stage:** `novel-write` 单元细纲（从索引行下推），然后一份 `units/vNN-U#.md`。

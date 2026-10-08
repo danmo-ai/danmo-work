@@ -723,28 +723,207 @@ class GateTests(unittest.TestCase):
         self.assertEqual(rep.verdict, "PASS", rep.format())
         blob = rep.format()
         self.assertIn("### PACK", blob)
-        self.assertIn("file: .pack/write-v01-U1.md", blob)
+        self.assertIn("file: novel/demo/.pack/write-v01-U1.md", blob)
+        self.assertIn("lines:", blob)
+        self.assertIn("bytes:", blob)
+        self.assertNotIn("offset=", blob)
         self.assertIn("write: units/v01-U1.md", blob)
-        self.assertNotIn("题材专有文", blob)
+        self.assertNotIn("题材专有文", blob)  # genre lives on disk pack, not stdout
         self.assertNotIn("identity@unit:", blob)
         self.assertNotIn("### CONTEXT", blob)
         pack = self._book() / ".pack/write-v01-U1.md"
         self.assertTrue(pack.is_file(), pack)
         text = pack.read_text(encoding="utf-8")
-        self.assertIn("## Pipeline system", text)
+        self.assertNotIn("## Pipeline system", text)
         self.assertIn("## CONTEXT", text)
         self.assertNotIn("先跑 gate preflight", text)
-        self.assertIn("No preflight", blob)
+        self.assertIn("seal-write", blob)
+        self.assertIn("one write", blob)
         self.assertIn("identity@unit:", text)
-        self.assertIn("题材专有文", text)
+        self.assertIn("题材写时约束「玄幻」", text)
+        self.assertIn("章级beat", text)
+        self.assertNotIn("场面序:", text)
+        self.assertNotIn("  - id: S1", text)
+        self.assertNotIn("本 turn", text)
+        self.assertNotIn("配额", text)
+        self.assertNotIn("加载纪律", text)
+        self.assertNotIn("share=", text)
+        self.assertLess(len(text.encode("utf-8")), 45000, f"bytes={len(text.encode('utf-8'))}")
         self.assertLess(len(blob), 2500, blob)
+
+    def test_write_pack_slims_long_cut_hook(self):
+        from novel_gate.context import WRITE_CUT_MAX_RUNES, clip_runes, render_unit_card
+
+        long_cut = "甲" * (WRITE_CUT_MAX_RUNES + 40)
+        unit = {
+            "unit_id": "v01-U9",
+            "chapter_range": [1, 1],
+            "scenes": [],
+            "chapters": [{"chapter": 1, "title_working": "测", "cut_hook": long_cut, "word_share": 3000}],
+            "next_hook": {"out": "钩"},
+        }
+        slim = "\n".join(render_unit_card(unit, omit_word_share=True, slim=True))
+        full = "\n".join(render_unit_card(unit, omit_word_share=True, slim=False))
+        self.assertIn("…", slim)
+        self.assertNotIn(long_cut, slim)
+        self.assertIn(long_cut, full)
+        self.assertNotIn("share=", slim)
+        self.assertIn("章级beat", slim)
+        self.assertNotIn("场面序:", slim)
+        self.assertEqual(clip_runes(long_cut, WRITE_CUT_MAX_RUNES), slim.split("cut=")[1].split("\n")[0])
+
+    def test_write_pack_prev_prose_tail_and_filtered_deltas(self):
+        from novel_gate.common import Report
+        from novel_gate.context import build_preflight_context
+        from novel_gate.outline import load_unit
+
+        book = self._book()
+        # Add U2 after U1 so prev prose exists
+        vol = book / "outline/volumes/v01.md"
+        vol.write_text(
+            vol.read_text(encoding="utf-8").replace(
+                "| v01-U1 | ch1–ch1 | 开局立冲突 | 宿敌真身 | 未兑现承诺 |\n",
+                "| v01-U1 | ch1–ch1 | 开局立冲突 | 宿敌真身 | 未兑现承诺 |\n"
+                "| v01-U2 | ch2–ch2 | 验骨 | 宿敌真身 | 悬念 |\n",
+            ),
+            encoding="utf-8",
+        )
+        u2 = """unit_id: v01-U2
+chapter_range: [2, 2]
+title_working: 验骨
+word_target: 4000
+status: accepted
+on_stage: [zhu-jue]
+pov: zhu-jue
+story_day: 1
+gap_from_prev: 次日
+flashback: false
+function: 验骨
+entry: 接钩
+desire: 验骨
+obstacle: 阻挠
+choice: 是否公开
+payoff: 证据落地
+pleasure: 反转
+forbidden: ["宿敌真身"]
+endgame_boundary: 宿敌真身
+next_hook:
+  type: 悬念
+  out: 下一钩
+scenes:
+  - id: S1
+    beat: 建立期待
+    chapter: 2
+    where: 主角 | 午 | 验骨场
+    want: 验骨
+    turn: 受阻
+    must_land: ["FS-001"]
+    emotional_beat: 稳→紧
+    reader_effect: 紧张
+    subtext: 无
+  - id: S2
+    beat: 兑现
+    chapter: 2
+    where: 主角 | 午 | 验骨场
+    want: 证据
+    turn: 落地
+    must_land: ["亮证"]
+    emotional_beat: 紧→定
+    reader_effect: 解气
+    subtext: 无
+chapters:
+  - chapter: 2
+    title_working: 验骨
+    opens_on: S1
+    ends_on: S2
+    cut_hook: 下一钩
+    word_share: 4000
+state_deltas:
+  - stem: zhu-jue
+    field: title
+    from: 落魄捕快
+    to: 临时验官
+  - stem: zhu-jue
+    field: other
+    from: ""
+    to: "这是一段很长的叙事说明，不是身份字段，应该被写包过滤掉%s"
+info_control:
+  reveals: []
+  foreshadowing: ["FS-001: plant"]
+""" % ("甲" * 40)
+        (book / "outline/units/v01-U2.yaml").write_text(u2, encoding="utf-8")
+        (book / "units/v01-U1.md").write_text(
+            "## 第1章 客栈\n\n" + ("尾声句。" * 80) + "\n验骨前夜他没睡。\n",
+            encoding="utf-8",
+        )
+        u, _ = load_unit(book, "v01-U2")
+        r = Report("pack-write", "demo", book, unit="v01-U2")
+        st = {"genre": "玄幻", "active_unit": "v01-U2", "time_system": "relative_days"}
+        lines = build_preflight_context(book, u, r, None, st, write_pack=True)
+        blob = "\n".join(lines)
+        self.assertIn("上章文末", blob)
+        self.assertIn("验骨前夜他没睡", blob)
+        self.assertLessEqual(blob.count("上章文末"), 1)
+        # filtered identity: title kept, narrative other skipped
+        self.assertIn("临时验官", blob)
+        self.assertIn("skipped", blob)
+        self.assertNotIn("很长的叙事说明", blob)
+        self.assertIn("题材写时约束", blob)
+        self.assertNotIn("题材专有文", blob)
+        self.assertIn("章级beat", blob)
+        self.assertNotIn("场面序:", blob)
+        # FS narrow: FS-001 present
+        self.assertIn("FS-001", blob)
+
+    def test_write_pack_byte_budget_truncates(self):
+        from novel_gate.common import Report
+        from novel_gate.pack import PACK_WRITE_MAX_BYTES, materialize_pack
+
+        book = self._book()
+        r = Report("pack-write", "demo", book, unit="v01-U9")
+        # Fat CONTEXT that would exceed PACK_WRITE_MAX_BYTES
+        fat_beats = ["- 单元卡 v01-U9:", "  章级beat（每章一行；勿再读细纲 YAML）:"]
+        for i in range(1, 80):
+            fat_beats.append(
+                f"    ch{i} | 标题{i} | {'甲' * 120} | land:{'乙' * 80} | 情→读 | cut={'丙' * 100}"
+            )
+        fat_debt = ["- 开放债务（本单元相关 FS）:"] + [
+            f"  | FS-{i:03d} | FS | {'债' * 200} |" for i in range(1, 40)
+        ]
+        fat_genre = ["- 题材写时约束「玄幻」（≤400字；勿 search_kb）:"] + [
+            f"  - {'题材约束句' * 40}" for _ in range(40)
+        ]
+        r.context_lines = (
+            ["- 书级: genre=玄幻"]
+            + fat_beats
+            + fat_debt
+            + fat_genre
+            + ["- 风格指纹:", "  pov=近"]
+        )
+        raw_before = len(("\n".join(r.context_lines)).encode("utf-8"))
+        self.assertGreater(raw_before, PACK_WRITE_MAX_BYTES, raw_before)
+        rel = materialize_pack(r, book, "write", unit_id="v01-U9")
+        self.assertTrue(rel)
+        pack = book / ".pack/write-v01-U9.md"
+        text = pack.read_text(encoding="utf-8")
+        n_bytes = len(text.encode("utf-8"))
+        self.assertLessEqual(n_bytes, PACK_WRITE_MAX_BYTES, n_bytes)
+        blob = r.format()
+        self.assertIn(f"bytes: {n_bytes}", blob)
+        self.assertTrue(
+            "truncated for pack budget" in text
+            or "hard-truncated" in text
+            or "beat truncated" in text,
+            text[-400:],
+        )
 
     def test_prompt_pack_outline_disk(self):
         self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: proposed")
         rep = ng.run(str(self.root), "demo", "prompt-pack", "", "v01", stage="outline")
         self.assertEqual(rep.verdict, "PASS", rep.format())
         blob = rep.format()
-        self.assertIn(".pack/outline-v01.md", blob)
+        self.assertIn("file: novel/demo/.pack/outline-v01.md", blob)
+        self.assertIn("lines:", blob)
         self.assertNotIn("### OUTLINE_PACK", blob)
         text = (self._book() / ".pack/outline-v01.md").read_text(encoding="utf-8")
         self.assertIn("## OUTLINE_PACK", text)
@@ -754,17 +933,84 @@ class GateTests(unittest.TestCase):
         rep = ng.run(str(self.root), "demo", "prompt-pack", "v01-U1", stage="finalize")
         blob = rep.format()
         self.assertIn("### PACK", blob)
-        self.assertIn(".pack/finalize-v01-U1.md", blob)
+        self.assertIn("file: novel/demo/.pack/finalize-v01-U1.md", blob)
+        self.assertIn("lines:", blob)
+        self.assertIn("bytes:", blob)
+        self.assertNotIn("offset=", blob)
         self.assertNotIn("### CONTINUITY", blob)
         self.assertNotIn("### LENGTH", blob)
         pack = self._book() / ".pack/finalize-v01-U1.md"
         self.assertTrue(pack.is_file(), blob)
         text = pack.read_text(encoding="utf-8")
-        self.assertIn("## Pipeline system", text)
+        self.assertNotIn("## Pipeline system", text)
         self.assertIn("## COMMIT", text)
-        self.assertIn("prose is FROZEN", text)
+        self.assertIn("seal-commit", text)
         self.assertIn("## EXPAND", text)
         self.assertTrue("LENGTH" in text or "CONTINUITY" in text or "HITS" in text, text[:400])
+
+    def test_commit_card_skips_non_cast_stem(self):
+        from novel_gate.outline import load_unit
+        from novel_gate.qc import build_commit_card_for_book
+
+        book = self._book()
+        u, _ = load_unit(book, "v01-U1")
+        u["state_deltas"] = [
+            {
+                "stem": "附件那一页（v07-U1 ch310 新埋·信息缺口）",
+                "field": "other",
+                "from": "",
+                "to": "缺口",
+            },
+            {
+                "stem": "FS-052（卷末附件编号·非人物）",
+                "field": "other",
+                "from": "",
+                "to": "未核验",
+            },
+        ]
+        st = {"last_committed_ch": 0}
+        lines = build_commit_card_for_book(book, u, st)
+        blob = "\n".join(lines)
+        self.assertNotIn("附件那一页", blob)
+        self.assertNotIn("| 附件那一页", blob)
+        self.assertNotIn("FS-052", blob)
+        self.assertNotIn("continuity/facts.md", blob)
+
+    def test_pack_finalize_clean_ledger_omits_facts_path(self):
+        self._write_summary()
+        (self._book() / "continuity/commits/v01-U1.md").write_text("# log\n", encoding="utf-8")
+        self._edit("outline/units/v01-U1.yaml", "word_target: 4000", "word_target: 20\nword_floor: 10")
+        (self._book() / "units/v01-U1.md").write_text(
+            "## 第1章 客栈\n\n他推门进去，掌柜抬了抬眼。桌上只剩一只空碗。\n",
+            encoding="utf-8",
+        )
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: drafted")
+        rep = ng.run(str(self.root), "demo", "pack-finalize", "v01-U1")
+        pack = (self._book() / ".pack/finalize-v01-U1.md").read_text(encoding="utf-8")
+        self.assertIn("账本已齐", pack)
+        self.assertNotIn("continuity/facts.md", pack)
+        self.assertNotIn("| 附件那一页", pack)
+        self.assertNotIn("COMMIT_SKELETON", pack)
+        blob = rep.format()
+        self.assertIn("three checks then seal-commit", blob)
+
+    def test_pack_finalize_embeds_commit_skeleton_when_missing(self):
+        self._write_summary()
+        # no continuity/commits/v01-U1.md
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: drafted")
+        self._edit("outline/units/v01-U1.yaml", "word_target: 4000", "word_target: 20\nword_floor: 10")
+        (self._book() / "units/v01-U1.md").write_text(
+            "## 第1章 客栈\n\n他推门进去，掌柜抬了抬眼。桌上只剩一只空碗。\n",
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "pack-finalize", "v01-U1")
+        pack = (self._book() / ".pack/finalize-v01-U1.md").read_text(encoding="utf-8")
+        self.assertIn("### COMMIT_SKELETON", pack)
+        self.assertIn("path: continuity/commits/v01-U1.md", pack)
+        self.assertIn("# Commit log — v01-U1", pack)
+        self.assertIn("do not read_skill", pack)
+        self.assertNotIn("### COMMITS_PATH", pack)
+        self.assertIn("COMMIT skeletons", rep.format())
 
     def test_accepted_missing_gap_blocks(self):
         p = self.root / "novel/demo/outline/units/v01-U1.yaml"
@@ -825,64 +1071,173 @@ class GateTests(unittest.TestCase):
         self.assertEqual(r.kind, "write")
         self.assertEqual(r.unit_id, "v01-U1")
 
-    def test_novel_hook_script(self):
-        import subprocess
+    def test_intent_stage_kv_beats_finalize_word(self):
+        from novel_gate.intent import classify_goal
 
-        script = Path(__file__).resolve().parent / "novel_hook_context.py"
-        # Project root (not book root) — matches engine workdir
-        payload = json.dumps(
-            {
-                "event": "subagentStart",
-                "agent_id": "novel",
-                "workdir": str(self.root),
-                "goal": "v01-U1正文写作",
-            },
-            ensure_ascii=False,
+        goal = (
+            "【任务】\n写单元 v07-U2 正文 → novel/x/units/v07-U2.md\n"
+            "技能 novel-write\n"
+            "stage=write unit=v07-U2\n"
+            "定稿另开新会话\n"
         )
-        proc = subprocess.run(
-            [sys.executable, str(script)],
-            input=payload,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(proc.returncode, 0, proc.stderr)
-        out = json.loads(proc.stdout)
-        ctx = out.get("additionalContext") or ""
-        self.assertIn("NOVEL_ROUTE", ctx)
-        self.assertIn("stage=write", ctx)
-        self.assertIn("PACK ready:", ctx)
-        self.assertIn(".pack/write-v01-U1.md", ctx)
-        self.assertIn("forbid:", ctx)
-        self.assertTrue(
-            (self.root / "novel/demo/.pack/write-v01-U1.md").is_file(),
-            proc.stderr,
-        )
+        w = classify_goal(goal)
+        self.assertEqual(w.kind, "write", w)
+        self.assertEqual(w.unit_id, "v07-U2")
+        self.assertEqual(w.reason, "stage-kv")
+        f = classify_goal("定稿 v07-U1")
+        self.assertEqual(f.kind, "finalize")
+        f2 = classify_goal("--action prompt-pack --stage finalize --unit v01-U1")
+        self.assertEqual(f2.kind, "finalize")
+        self.assertEqual(f2.unit_id, "v01-U1")
 
-    def test_novel_hook_planning_no_eager_pack(self):
-        import subprocess
+    def test_seal_write_sets_drafted(self):
+        rep = ng.run(str(self.root), "demo", "seal-write", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertTrue(any(t == "SEAL" for t, _ in rep.extra_sections), rep.format())
+        raw = (self.root / "novel/demo/outline/units/v01-U1.yaml").read_text(encoding="utf-8")
+        self.assertIsNotNone(re.search(r"^status:\s*drafted\b", raw, re.M), raw[:200])
 
-        script = Path(__file__).resolve().parent / "novel_hook_context.py"
-        payload = json.dumps(
-            {
-                "event": "userPromptSubmit",
-                "agent_id": "novel",
-                "workdir": str(self.root),
-                "goal": "规划第1卷卷纲",
-            },
-            ensure_ascii=False,
+    def test_qc_pack_seal_sets_reviewed_and_cursor(self):
+        self._write_summary()
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: drafted")
+        # Clean prose so qc can PASS (avoid deslop / lock hits from fixture body)
+        (self.root / "novel/demo/units/v01-U1.md").write_text(
+            "## 第1章 客栈\n\n他推门进去，掌柜抬了抬眼。桌上只剩一只空碗。\n",
+            encoding="utf-8",
         )
-        proc = subprocess.run(
-            [sys.executable, str(script)],
-            input=payload,
-            capture_output=True,
-            text=True,
-            check=False,
+        self._edit("novel-state.yaml", "last_committed_ch: 0", "last_committed_ch: 0")
+        # Lower floor so short demo prose can PASS length gate
+        self._edit("outline/units/v01-U1.yaml", "word_target: 4000", "word_target: 20\nword_floor: 10")
+        rep = ng.run(str(self.root), "demo", "qc-pack", "v01-U1")
+        blob = rep.format()
+        self.assertIn("### SEAL", blob, blob)
+        raw = (self.root / "novel/demo/outline/units/v01-U1.yaml").read_text(encoding="utf-8")
+        self.assertIsNotNone(re.search(r"^status:\s*reviewed\b", raw, re.M), raw[:200])
+        st = (self.root / "novel/demo/novel-state.yaml").read_text(encoding="utf-8")
+        self.assertIsNotNone(re.search(r"^last_committed_ch:\s*1\b", st, re.M), st[:200])
+        # Second qc with same prose is frozen
+        rep2 = ng.run(str(self.root), "demo", "qc-pack", "v01-U1")
+        self.assertIn("### SEAL", rep2.format())
+
+    def test_qc_pack_commit_incomplete_reverts_status(self):
+        """Quality PASS must not keep reviewed/SEAL if Commit summaries are missing."""
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: drafted")
+        (self.root / "novel/demo/units/v01-U1.md").write_text(
+            "## 第1章 客栈\n\n他推门进去，掌柜抬了抬眼。桌上只剩一只空碗。\n",
+            encoding="utf-8",
         )
-        self.assertEqual(proc.returncode, 0, proc.stderr)
-        ctx = json.loads(proc.stdout).get("additionalContext") or ""
-        self.assertIn("goal_kind=none", ctx)
-        self.assertNotIn("PACK ready: novel/", ctx)
+        self._edit("outline/units/v01-U1.yaml", "word_target: 4000", "word_target: 20\nword_floor: 10")
+        self._edit("novel-state.yaml", "last_committed_ch: 0", "last_committed_ch: 0")
+        summ = self.root / "novel/demo/continuity/summaries/v01.md"
+        if summ.is_file():
+            summ.write_text("# v01\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "qc-pack", "v01-U1")
+        blob = rep.format()
+        self.assertIn("### COMMIT_INCOMPLETE", blob, blob)
+        self.assertFalse(any(t == "SEAL" for t, _ in rep.extra_sections), blob)
+        self.assertEqual(rep.verdict, "FAIL", blob)
+        raw = (self.root / "novel/demo/outline/units/v01-U1.yaml").read_text(encoding="utf-8")
+        self.assertIsNotNone(re.search(r"^status:\s*drafted\b", raw, re.M), raw[:200])
+        st = (self.root / "novel/demo/novel-state.yaml").read_text(encoding="utf-8")
+        self.assertIsNotNone(re.search(r"^last_committed_ch:\s*0\b", st, re.M), st[:200])
+
+    def test_stale_qc_freeze_does_not_skip_commit_gaps(self):
+        """Leftover seal-qc-*.json must not short-circuit into false PASS/SEAL."""
+        self._write_summary()
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: reviewed")
+        (self.root / "novel/demo/units/v01-U1.md").write_text(
+            "## 第1章 客栈\n\n他推门进去，掌柜抬了抬眼。桌上只剩一只空碗。\n",
+            encoding="utf-8",
+        )
+        self._edit("outline/units/v01-U1.yaml", "word_target: 4000", "word_target: 20\nword_floor: 10")
+        self._edit("novel-state.yaml", "last_committed_ch: 0", "last_committed_ch: 1")
+        # Fake a freeze as if a prior buggy SEAL wrote it
+        from novel_gate.seal import mark_qc_frozen
+
+        book = self.root / "novel/demo"
+        mark_qc_frozen(book, "v01-U1")
+        self.assertTrue((book / ".pack/seal-qc-v01-U1.json").is_file())
+        # Wipe summaries so Commit is incomplete
+        (book / "continuity/summaries/v01.md").write_text("# v01\n", encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "qc-pack", "v01-U1")
+        blob = rep.format()
+        self.assertNotIn("already frozen", blob, blob)
+        self.assertIn("### COMMIT_INCOMPLETE", blob, blob)
+        self.assertFalse((book / ".pack/seal-qc-v01-U1.json").is_file(), "stale freeze must clear")
+        raw = (book / "outline/units/v01-U1.yaml").read_text(encoding="utf-8")
+        self.assertIsNotNone(re.search(r"^status:\s*drafted\b", raw, re.M), raw[:200])
+
+    def test_subcommand_pack_write_cli(self):
+        rc = ng.main(
+            [
+                "pack-write",
+                "--workdir",
+                str(self.root),
+                "--book-id",
+                "demo",
+                "--unit",
+                "v01-U1",
+            ]
+        )
+        self.assertEqual(rc, 0)
+        self.assertTrue((self.root / "novel/demo/.pack/write-v01-U1.md").is_file())
+
+    def test_subcommand_check_deslop_fail(self):
+        (self.root / "novel/demo/units/v01-U1.md").write_text(
+            "## 第1章\n\n他不禁感到一种莫名的紧张——仿佛命运在低语。\n",
+            encoding="utf-8",
+        )
+        rc = ng.main(
+            [
+                "check-deslop",
+                "--workdir",
+                str(self.root),
+                "--book-id",
+                "demo",
+                "--unit",
+                "v01-U1",
+            ]
+        )
+        self.assertEqual(rc, 1)
+
+    def test_seal_commit_requires_all_checks(self):
+        """seal-commit must not write reviewed when summaries are missing."""
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: drafted")
+        (self.root / "novel/demo/units/v01-U1.md").write_text(
+            "## 第1章 客栈\n\n他推门进去，掌柜抬了抬眼。桌上只剩一只空碗。\n",
+            encoding="utf-8",
+        )
+        self._edit("outline/units/v01-U1.yaml", "word_target: 4000", "word_target: 20\nword_floor: 10")
+        self._edit("novel-state.yaml", "last_committed_ch: 0", "last_committed_ch: 0")
+        summ = self.root / "novel/demo/continuity/summaries/v01.md"
+        if summ.is_file():
+            summ.write_text("# v01\n", encoding="utf-8")
+        from novel_gate.seal import mark_qc_frozen
+
+        mark_qc_frozen(self.root / "novel/demo", "v01-U1")
+        rep = ng.run(str(self.root), "demo", "seal-commit", "v01-U1")
+        blob = rep.format()
+        self.assertEqual(rep.verdict, "FAIL", blob)
+        self.assertNotIn("### SEAL", blob)
+        self.assertNotIn("already frozen", blob)
+        raw = (self.root / "novel/demo/outline/units/v01-U1.yaml").read_text(encoding="utf-8")
+        self.assertIsNotNone(re.search(r"^status:\s*drafted\b", raw, re.M), raw[:200])
+
+    def test_seal_commit_pass_when_clean(self):
+        self._write_summary()
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: drafted")
+        (self.root / "novel/demo/units/v01-U1.md").write_text(
+            "## 第1章 客栈\n\n他推门进去，掌柜抬了抬眼。桌上只剩一只空碗。\n",
+            encoding="utf-8",
+        )
+        self._edit("outline/units/v01-U1.yaml", "word_target: 4000", "word_target: 20\nword_floor: 10")
+        self._edit("novel-state.yaml", "last_committed_ch: 0", "last_committed_ch: 0")
+        rep = ng.run(str(self.root), "demo", "seal-commit", "v01-U1")
+        blob = rep.format()
+        self.assertEqual(rep.verdict, "PASS", blob)
+        self.assertIn("### SEAL", blob)
+        raw = (self.root / "novel/demo/outline/units/v01-U1.yaml").read_text(encoding="utf-8")
+        self.assertIsNotNone(re.search(r"^status:\s*reviewed\b", raw, re.M), raw[:200])
 
     def test_preflight_crime_subgenre_adds_flavor_article(self):
         self._edit("novel-state.yaml", "genre: 玄幻", "genre: 悬疑")
@@ -1248,6 +1603,90 @@ note: |
         self.assertEqual(rows[1]["from"], "猜疑")
         self.assertEqual(rows[1]["to"], "信任")
         self.assertEqual(ng.state_delta_who(rows), ["zhu-jue", "lin-xue"])
+
+    def test_normalize_age_only_when_value_shaped(self):
+        from novel_gate.identity import looks_like_age_value, normalize_state_deltas
+
+        self.assertTrue(looks_like_age_value("34岁"))
+        self.assertTrue(looks_like_age_value("35"))
+        narrative = (
+            "陆沉: v07-U3 末＝链子排头→头、把省部级那一层按下去的人；"
+            "pack Cast snapshot 行＝34 岁（1972 年生）·打伞破网专项执行层"
+        )
+        rows = normalize_state_deltas(
+            [
+                narrative,
+                "zhu-jue: 34岁→35岁",
+                {
+                    "stem": "zhu-jue",
+                    "field": "age",
+                    "from": "开卷",
+                    "to": "本单元 ch338 换气一笔（茶馆）只问不推",
+                },
+            ]
+        )
+        self.assertEqual(rows[0]["field"], "other", rows[0])
+        self.assertEqual(rows[1]["field"], "age", rows[1])
+        self.assertEqual(rows[1]["from"], "34岁")
+        self.assertEqual(rows[1]["to"], "35岁")
+        self.assertEqual(rows[2]["field"], "other", rows[2])  # explicit age + narrative to → demote
+
+    def test_check_commit_skips_non_cast_quietly(self):
+        """FS-/prop stems must not spam ADVISORY; narrative-with-岁 must not refresh-facts."""
+        from novel_gate.outline import load_unit
+
+        book = self._book()
+        u, _ = load_unit(book, "v01-U1")
+        # Keep cast title delta for 主角 if any; inject FS + narrative age-shaped noise
+        u["state_deltas"] = [
+            {
+                "stem": "FS-060（云栖笔名）",
+                "field": "other",
+                "from": "",
+                "to": "回收",
+            },
+            "陆沉: pack Cast snapshot 行＝34 岁·专项执行层→本单元换气一笔只问不推",
+        ]
+        # Write unit file so check-commit loads these deltas
+        path = book / "outline/units/v01-U1.yaml"
+        # Use structured append via gate path: overwrite state_deltas in yaml lightly
+        text = path.read_text(encoding="utf-8")
+        import re
+
+        block = (
+            "state_deltas:\n"
+            "  - stem: FS-060（云栖笔名）\n"
+            "    field: other\n"
+            "    from: \"\"\n"
+            "    to: 回收\n"
+            "  - \"陆沉: pack Cast snapshot 行＝34 岁·专项执行层→本单元换气一笔只问不推\"\n"
+        )
+        text2, n = re.subn(
+            r"^state_deltas:.*?(?=^[a-z_]+:|\Z)",
+            block,
+            text,
+            count=1,
+            flags=re.M | re.S,
+        )
+        self.assertGreaterEqual(n, 1, "state_deltas block not replaced")
+        path.write_text(text2, encoding="utf-8")
+        self._write_summary()
+        (book / "continuity/commits/v01-U1.md").write_text("# log\n", encoding="utf-8")
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: drafted")
+        # enough prose length for commit path
+        (book / "units/v01-U1.md").write_text(
+            "## 第1章 客栈\n\n" + ("他推门进去。掌柜抬了抬眼。桌上只剩一只空碗。\n" * 80),
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "check-commit", "v01-U1")
+        blob = rep.format()
+        self.assertNotIn("skipped snapshot name check", blob, blob)
+        self.assertNotIn("refresh snapshot", blob, blob)
+        # FS stem must not block
+        self.assertFalse(
+            any("FS-060" in (f.get("message") or "") and f.get("severity") == "blocking" for f in rep.findings),
+            blob,
+        )
 
     def test_preflight_injects_identity_at_unit(self):
         rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")

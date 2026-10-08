@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 from .cast import cast_context_lines, cast_status_map
 from .common import (
@@ -52,7 +53,14 @@ from .outline import (
 )
 
 STYLE_MAX_RUNES = 480  # context hook: keep the injected style brief tiny
-GENRE_MAX_RUNES = 1200  # truncate genre KB articles in preflight
+GENRE_MAX_RUNES = 1200  # truncate genre KB articles in preflight (non-write)
+# write pack: scene packet budget (read_file output ~50k chars)
+WRITE_CUT_MAX_RUNES = 100
+WRITE_FIELD_MAX_RUNES = 160
+WRITE_BEAT_CELL_MAX = 72
+WRITE_GENRE_BULLET_MAX_RUNES = 400
+PREV_PROSE_TAIL_RUNES = 600
+_SEARCH_KB_NOISE = re.compile(r"search_kb|本\s*turn|配额|硬\s*：", re.I)
 QC_PROFILES = {"male_power", "female_emotion", "mystery", "general"}
 TIME_SYSTEMS = {"relative_days", "calendar"}
 GENRES = ("玄幻", "仙侠", "都市", "悬疑", "现代言情", "古代言情", "仕途扫黑", "系统穿越")
@@ -254,6 +262,24 @@ def truncate_article(text: str, max_runes: int = GENRE_MAX_RUNES) -> tuple[str, 
     return "\n".join(kept).strip(), True
 
 
+def clip_runes(text: str, max_runes: int) -> str:
+    """Hard-cap a single field for write-pack density; appends … when clipped."""
+    s = (text or "").strip()
+    if not s or max_runes <= 0 or rune_count(s) <= max_runes:
+        return s
+    out: list[str] = []
+    n = 0
+    for ch in s:
+        if ch in " \n\t\r":
+            out.append(ch)
+            continue
+        if n >= max_runes:
+            break
+        out.append(ch)
+        n += 1
+    return "".join(out).rstrip() + "…"
+
+
 def volume_timeline_brief(book_root: Path, unit_id: str, cache=None) -> str:
     """One-line summary of 卷纲「本卷时间线」section."""
     vol = unit_id.split("-")[0] if "-" in unit_id else ""
@@ -297,8 +323,68 @@ def volume_timeline_brief(book_root: Path, unit_id: str, cache=None) -> str:
     return "；".join(bits) if bits else "（未填）"
 
 
-def render_unit_card(unit: dict, *, include_clock: bool = False, include_deltas: bool = False) -> list[str]:
-    """Unit contract for CONTEXT. Clock/deltas default off (printed as separate blocks)."""
+def render_chapter_beat_table(unit: dict) -> list[str]:
+    """One row per chapter for write pack — replaces full 场面序 dump."""
+    by_ch: dict[Any, list[dict]] = {}
+    for s in scene_rows(unit):
+        ch = s.get("chapter")
+        try:
+            key = int(ch) if ch is not None and str(ch).isdigit() else ch
+        except (TypeError, ValueError):
+            key = ch
+        by_ch.setdefault(key, []).append(s)
+    lines = ["  章级beat（每章一行；勿再读细纲 YAML）:"]
+    rows = chapter_rows(unit)
+    if not rows:
+        a, b = chapter_range_of(unit)
+        if a and b:
+            rows = [{"chapter": n, "title_working": "", "cut_hook": ""} for n in range(a, b + 1)]
+    for c in rows:
+        ch = c.get("chapter")
+        try:
+            key = int(ch) if ch is not None and str(ch).isdigit() else ch
+        except (TypeError, ValueError):
+            key = ch
+        title = clip_runes(str(c.get("title_working") or ""), 24)
+        cut = clip_runes(str(c.get("cut_hook") or ""), WRITE_CUT_MAX_RUNES)
+        scs = by_ch.get(key) or by_ch.get(ch) or []
+        want_turn = "—"
+        lands: list[str] = []
+        emo = "—"
+        for s in scs:
+            w, t = str(s.get("want") or "").strip(), str(s.get("turn") or "").strip()
+            if w or t:
+                want_turn = clip_runes(f"{w}→{t}", WRITE_BEAT_CELL_MAX)
+            ml = s.get("must_land") or []
+            if isinstance(ml, list):
+                for x in ml:
+                    if x and len(lands) < 2:
+                        lands.append(str(x))
+            e = str(s.get("emotional_beat") or "").strip()
+            ef = str(s.get("reader_effect") or "").strip()
+            if emo == "—" and (e or ef):
+                emo = clip_runes(f"情:{e or '—'}→读:{ef or '—'}", WRITE_BEAT_CELL_MAX)
+        land_s = clip_runes("；".join(lands), WRITE_BEAT_CELL_MAX) if lands else "—"
+        lines.append(
+            f"    ch{ch} | {title or '—'} | {want_turn} | land:{land_s} | {emo} | cut={cut or '—'}"
+        )
+    if len(lines) == 1:
+        lines.append("    （无 chapters/scenes）")
+    return lines
+
+
+def render_unit_card(
+    unit: dict,
+    *,
+    include_clock: bool = False,
+    include_deltas: bool = False,
+    omit_word_share: bool = False,
+    slim: bool = False,
+) -> list[str]:
+    """Unit contract for CONTEXT. Clock/deltas default off (printed as separate blocks).
+
+    slim=True (write pack): chapter beat table instead of full 场面序; clip long fields.
+    """
     uid = str(unit.get("unit_id") or "").strip()
     a, b = chapter_range_of(unit)
     lines = [f"- 单元卡 {uid or '?'}（ch{a}–ch{b}）:"]
@@ -314,17 +400,29 @@ def render_unit_card(unit: dict, *, include_clock: bool = False, include_deltas:
     ):
         v = str(unit.get(key) or "").strip()
         if v:
+            if slim:
+                v = clip_runes(v, WRITE_FIELD_MAX_RUNES)
             lines.append(f"  {label}: {v}")
     forbidden = nonempty_list(unit.get("forbidden"))
-    lines.append(f"  forbidden: {forbidden if forbidden else '[]'}")
+    if slim and forbidden:
+        joined = clip_runes("；".join(str(x) for x in forbidden), WRITE_FIELD_MAX_RUNES)
+        lines.append(f"  forbidden: [{joined}]")
+    else:
+        lines.append(f"  forbidden: {forbidden if forbidden else '[]'}")
     info = unit.get("info_control") or {}
     if isinstance(info, dict):
         reveals = nonempty_list(info.get("reveals"))
         fs = nonempty_list(info.get("foreshadowing"))
         if reveals:
-            lines.append(f"  reveals: {'；'.join(reveals)}")
+            joined = "；".join(reveals)
+            if slim:
+                joined = clip_runes(joined, WRITE_FIELD_MAX_RUNES)
+            lines.append(f"  reveals: {joined}")
         if fs:
-            lines.append(f"  foreshadowing: {'；'.join(fs)}")
+            joined = "；".join(fs)
+            if slim:
+                joined = clip_runes(joined, WRITE_FIELD_MAX_RUNES)
+            lines.append(f"  foreshadowing: {joined}")
     if include_deltas:
         from .identity import format_delta_line, normalize_state_deltas
 
@@ -342,39 +440,47 @@ def render_unit_card(unit: dict, *, include_clock: bool = False, include_deltas:
         if clock != "（无时钟字段）":
             lines.append(f"  时钟: {clock}")
     lines.append(f"  on_stage: {stage if stage else '（未列上场人物）'}" + (f"  pov: {pov}" if pov else ""))
-    lines.append("  场面序:")
-    for s in scene_rows(unit):
-        landed = s.get("must_land") or []
-        facts = "；".join(str(x) for x in landed) if isinstance(landed, list) else str(landed)
-        who = nonempty_list(s.get("who"))
-        spov = str(s.get("pov") or "").strip()
-        when = str(s.get("when") or "").strip()
-        where = str(s.get("where") or "").strip()
-        tag = ""
-        if when:
-            tag += f" when={when}"
-        if where:
-            tag += f" where={where}"
-        if who:
-            tag += f" who={','.join(who)}"
-        if spov:
-            tag += f" pov={spov}"
-        emo = str(s.get("emotional_beat") or "").strip()
-        effect = str(s.get("reader_effect") or "").strip()
-        sub = str(s.get("subtext") or "").strip()
-        contract = ""
-        if emo or effect or sub:
-            contract = f" 情:{emo or '—'} →读:{effect or '—'} | 潜:{sub or '—'}"
-        lines.append(
-            f"    {s.get('id') or '?'} ch{s.get('chapter')} {s.get('beat')}: "
-            f"{s.get('want') or ''} → {s.get('turn') or ''} | {facts}{tag}{contract}"
-        )
-    lines.append("  章切口:")
-    for c in chapter_rows(unit):
-        lines.append(
-            f"    第{c.get('chapter')}章 {c.get('title_working') or ''} cut={c.get('cut_hook') or ''} share={c.get('word_share') or ''}"
-        )
+    if slim:
+        lines.extend(render_chapter_beat_table(unit))
+    else:
+        lines.append("  场面序:")
+        for s in scene_rows(unit):
+            landed = s.get("must_land") or []
+            facts = "；".join(str(x) for x in landed) if isinstance(landed, list) else str(landed)
+            who = nonempty_list(s.get("who"))
+            spov = str(s.get("pov") or "").strip()
+            when = str(s.get("when") or "").strip()
+            where = str(s.get("where") or "").strip()
+            tag = ""
+            if when:
+                tag += f" when={when}"
+            if where:
+                tag += f" where={where}"
+            if who:
+                tag += f" who={','.join(who)}"
+            if spov:
+                tag += f" pov={spov}"
+            emo = str(s.get("emotional_beat") or "").strip()
+            effect = str(s.get("reader_effect") or "").strip()
+            sub = str(s.get("subtext") or "").strip()
+            contract = ""
+            if emo or effect or sub:
+                contract = f" 情:{emo or '—'} →读:{effect or '—'} | 潜:{sub or '—'}"
+            body = (
+                f"{s.get('id') or '?'} ch{s.get('chapter')} {s.get('beat')}: "
+                f"{s.get('want') or ''} → {s.get('turn') or ''} | {facts}{tag}{contract}"
+            )
+            lines.append(f"    {body}")
+        lines.append("  章切口:")
+        for c in chapter_rows(unit):
+            share = "" if omit_word_share else f" share={c.get('word_share') or ''}"
+            cut = str(c.get("cut_hook") or "").strip()
+            lines.append(
+                f"    第{c.get('chapter')}章 {c.get('title_working') or ''} cut={cut}{share}"
+            )
     _, hout = next_hook_of(unit)
+    if slim and hout:
+        hout = clip_runes(str(hout), WRITE_CUT_MAX_RUNES)
     lines.append(f"  next_hook.out: {hout}")
     return lines
 
@@ -462,11 +568,125 @@ def build_continuity_lines(
     return lines
 
 
+def genre_write_bullets(text: str, max_runes: int = WRITE_GENRE_BULLET_MAX_RUNES) -> list[str]:
+    """Short write-time constraints from a KB article — no search_kb quota tables."""
+    bullets: list[str] = []
+    total = 0
+    for ln in (text or "").splitlines():
+        s = ln.strip()
+        if not s or _SEARCH_KB_NOISE.search(s):
+            continue
+        if s.startswith("#") or s.startswith("|"):
+            continue
+        if s.startswith("```"):
+            continue
+        piece = s.lstrip("-*• ").strip()
+        if not piece or rune_count(piece) < 4:
+            continue
+        piece = clip_runes(piece, 100)
+        n = rune_count(piece)
+        if total + n > max_runes and bullets:
+            break
+        bullets.append(f"  - {piece}")
+        total += n
+        if total >= max_runes:
+            break
+    return bullets
+
+
+def previous_prose_tail(book_root: Path, unit: dict, max_runes: int = PREV_PROSE_TAIL_RUNES) -> str:
+    """Last ~max_runes of previous unit prose for continuity glue."""
+    from .identity import previous_unit_dict
+    from .outline import unit_prose_rel
+
+    prev_id, _prev_u = previous_unit_dict(book_root, unit)
+    if not prev_id:
+        return ""
+    path = book_root / unit_prose_rel(prev_id)
+    if not path.is_file():
+        return ""
+    try:
+        text = read_book_text(path).strip()
+    except OSError:
+        return ""
+    if not text:
+        return ""
+    if rune_count(text) <= max_runes:
+        return text
+    # walk backward by runes
+    out: list[str] = []
+    n = 0
+    for ch in reversed(text):
+        if ch in " \n\t\r":
+            out.append(ch)
+            continue
+        if n >= max_runes:
+            break
+        out.append(ch)
+        n += 1
+    return "".join(reversed(out)).lstrip()
+
+
+def write_identity_goal_lines(book_root: Path, unit: dict) -> list[str]:
+    """Only cast-card identity deltas with value-shaped to — skip narrative other/FS."""
+    from .cast import load_cast_cards
+    from .identity import (
+        format_delta_line,
+        looks_like_age_value,
+        looks_like_identity_value,
+        normalize_state_deltas,
+    )
+
+    cards = load_cast_cards(book_root)
+    kept: list[str] = []
+    skipped = 0
+    for row in normalize_state_deltas(unit.get("state_deltas")):
+        stem = row.get("stem") or ""
+        field = row.get("field") or ""
+        to = row.get("to") or ""
+        if stem not in cards:
+            skipped += 1
+            continue
+        if field == "age" and looks_like_age_value(to):
+            kept.append(f"  - {format_delta_line(row)}")
+        elif field in ("title", "location") and looks_like_identity_value(to):
+            kept.append(f"  - {format_delta_line(row)}")
+        else:
+            skipped += 1
+    lines: list[str] = []
+    if kept:
+        lines.append("- 本单元身份转变目标（仅 title/age/location 真值；勿开场写穿 to）:")
+        lines.extend(kept)
+    if skipped:
+        lines.append(f"- 身份/其他 delta: skipped {skipped} narrative or non-cast rows")
+    return lines
+
+
+def unit_open_loop_rows(unit: dict, ledger_text: str) -> list[str]:
+    """Open loops filtered to FS ids referenced by this unit contract/scenes."""
+    from .ledger import FS_ID_RE, foreshadow_ids_from_contract
+
+    ids = set(foreshadow_ids_from_contract(unit))
+    blob = str(unit.get("info_control") or "") + "\n" + str(unit.get("forbidden") or "")
+    for s in scene_rows(unit):
+        blob += "\n" + " ".join(str(x) for x in (s.get("must_land") or []))
+        blob += "\n" + str(s.get("want") or "") + str(s.get("turn") or "")
+    for m in FS_ID_RE.finditer(blob):
+        ids.add(m.group(0).upper())
+    loops = open_loops_rows(ledger_text)
+    if not ids:
+        return loops[:8]
+    matched = [row for row in loops if any(i in row.upper() for i in ids)]
+    return (matched or loops)[:8]
+
+
 def build_preflight_context(
     book_root: Path, unit: dict, r: Report, cache=None, st: dict | None = None,
     volume_row: dict | None = None,
+    *,
+    write_pack: bool = False,
 ) -> list[str]:
-    """State-first CONTEXT: clock/identity before truncated genre articles."""
+    """State-first CONTEXT. write_pack = scene packet (beats, filtered deltas, genre bullets)."""
     from .identity import (
         deltas_end_goals_lines,
         format_unit_clock,
@@ -494,11 +714,25 @@ def build_preflight_context(
         lines.append(f"- 上一单元时钟: {prev_id} {format_unit_clock(prev_u)}")
     else:
         lines.append("- 上一单元时钟: （首单元或无前序）")
-    # 4. unit card (no embedded deltas/clock)
-    lines.extend(render_unit_card(unit, include_clock=False, include_deltas=False))
-    # 5. previous hook
+    # 4. unit card (write: chapter beats; preflight: full scenes)
+    lines.extend(
+        render_unit_card(
+            unit,
+            include_clock=False,
+            include_deltas=False,
+            omit_word_share=write_pack,
+            slim=write_pack,
+        )
+    )
+    # 5. previous hook (+ optional prev prose tail on write)
     prev_hook = previous_unit_hook(book_root, unit, cache)
     lines.append(f"- 接钩（上一单元）: {prev_hook or '（首单元或无上单元钩）'}")
+    if write_pack:
+        tail = previous_prose_tail(book_root, unit)
+        if tail:
+            lines.append(f"- 上章文末（{PREV_PROSE_TAIL_RUNES}字内，衔接口吻）:")
+            for ln in tail.splitlines():
+                lines.append(f"  {ln}")
     # 6. cast identity only
     if cache is not None:
         ledger_text = cache.ledger_text()
@@ -515,17 +749,23 @@ def build_preflight_context(
         lines.append("  （未列上场人物 — 细纲 on_stage 为空）")
     if not snap:
         lines.append("  （facts.md 无 Cast snapshot 表）")
-    # 7. single identity end-goals block
-    goals = deltas_end_goals_lines(unit.get("state_deltas"))
-    if goals:
-        lines.append("- 本单元身份转变目标（写作约束；开场人设已在 identity@unit，勿提前写穿 to）:")
-        for g in goals:
-            lines.append(f"  - {g}")
+    # 7. identity end-goals
+    if write_pack:
+        lines.extend(write_identity_goal_lines(book_root, unit))
+    else:
+        goals = deltas_end_goals_lines(unit.get("state_deltas"))
+        if goals:
+            lines.append("- 本单元身份转变目标（写作约束；开场人设已在 identity@unit，勿提前写穿 to）:")
+            for g in goals:
+                lines.append(f"  - {g}")
     # 8. open debts
-    loops = open_loops_rows(ledger_text)
-    lines.append("- 开放债务:")
+    if write_pack:
+        loops = unit_open_loop_rows(unit, ledger_text)
+    else:
+        loops = open_loops_rows(ledger_text)[:8]
+    lines.append("- 开放债务" + ("（本单元相关 FS）:" if write_pack else ":"))
     if loops:
-        for row in loops[:8]:
+        for row in loops:
             lines.append(f"  {row}")
     else:
         lines.append("  （无 open loops 行）")
@@ -548,9 +788,25 @@ def build_preflight_context(
                 lines.append("  永久合规: " + " / ".join(compliance[:15]))
     except Exception:
         pass
-    # 10. truncated genre articles
+    # 10. genre: write = short bullets; preflight = truncated article
     articles = genre_articles(st)
-    if articles:
+    if write_pack:
+        if articles:
+            for title, text in articles:
+                kind = "子类写时约束" if title == CRIME_FLAVOR_ARTICLE else "题材写时约束"
+                bullets = genre_write_bullets(text)
+                lines.append(f"- {kind}「{title}」（≤{WRITE_GENRE_BULLET_MAX_RUNES}字；勿 search_kb）:")
+                if bullets:
+                    lines.extend(bullets)
+                else:
+                    lines.append("  （无可用 bullet）")
+        elif genre:
+            lines.append(f"- 题材写时约束: （知识库无「{genre}」）")
+            r.advisory("genre", f"knowledge article 「{genre}」 not found under {KB_REL}")
+        else:
+            lines.append("- 题材写时约束: （novel-state.genre 未填）")
+            r.advisory("genre", "novel-state.yaml genre empty — set one of " + " / ".join(GENRES))
+    elif articles:
         for title, text in articles:
             kind = "子类专有文" if title == CRIME_FLAVOR_ARTICLE else "题材专有文"
             body, truncated = truncate_article(text, GENRE_MAX_RUNES)
@@ -570,11 +826,6 @@ def build_preflight_context(
         lines.append("- 风格指纹（本书固定，写入时对齐 POV/语域/句式/禁语/章末钩）:")
         for ln in style.splitlines():
             lines.append(f"  {ln}")
-    # 12. loading discipline
-    lines.append(
-        "- 加载纪律: 只消费本 CONTEXT；不再读人物卡 / 卷纲 / 账本；禁止扫树；禁止 author-lore；禁止 chapters/。"
-        "至多一次 search_kb（仅含 ch1–3 查「节奏与结构」；题材全文不足时才查 KB 同名篇）。"
-    )
     return lines
 
 
@@ -596,7 +847,9 @@ def asset_gate(book_root: Path, stage: list[str], cache=None) -> list[str]:
     return msgs
 
 
-def check_preflight(book_root: Path, st: dict, unit_id: str, r: Report, cache=None) -> None:
+def check_preflight(
+    book_root: Path, st: dict, unit_id: str, r: Report, cache=None, *, write_pack: bool = False
+) -> None:
     if not UNIT_ID_RE.match(unit_id or ""):
         r.blocking("unit", f"--unit {unit_id!r} must match vNN-U#")
         return
@@ -644,7 +897,9 @@ def check_preflight(book_root: Path, st: dict, unit_id: str, r: Report, cache=No
     debts = open_debt_count(book_root, u, cache)
     if debts > MAX_OPEN_DEBTS:
         r.blocking("reader_debt", f"open foreshadows+reader_debt={debts} exceeds {MAX_OPEN_DEBTS}")
-    r.context_lines = build_preflight_context(book_root, u, r, cache, st, row)
+    r.context_lines = build_preflight_context(
+        book_root, u, r, cache, st, row, write_pack=write_pack
+    )
 
 
 # --- outline-pack (thin; 一批细纲写前) ---

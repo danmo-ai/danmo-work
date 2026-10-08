@@ -1,7 +1,7 @@
 ---
 name: novel-plan
 source: builtin
-description: One planning round for a scaffolded novel — cast cards, book outline and the next volume outline (单元索引 + 本卷人物) in one turn; after human approval run gate --action accept-volume to promote cast and seed unit YAML heads. Also cast-lint / 补人物卡 / 下一卷卷纲. Not for 单元细纲, unit prose, or review.
+description: One planning round for a scaffolded novel — cast cards, book outline and the next volume outline (单元索引 + 本卷人物) in one turn; after human approval run gate accept-volume to promote cast and seed unit YAML heads. Also cast-lint / 补人物卡 / 下一卷卷纲. Not for 单元细纲, unit prose, or review.
 license: MIT
 compatibility: Requires write, edit, read_file, glob, exec_shell; Core table_*, memory_*, search_kb; ask_user
 metadata:
@@ -32,12 +32,14 @@ metadata:
 
 | Intent | Load | search_kb（≤1） | Script |
 |--------|------|-----------------|--------|
-| 规划一轮（默认） | `novel-plan/references/outline.md` + 模板 `book-outline.md` / `volume-outline.md` / `cast-card.md` | 节奏与结构 | 写完 `--action cast-lint`；批准后 `--action accept-volume --volume vNN` |
+| 规划一轮（默认） | `novel-plan/references/outline.md` + 模板 `book-outline.md` / `volume-outline.md` / `cast-card.md` | 节奏与结构 | 写完 `cast-lint`；批准后 `accept-volume --volume vNN` |
 | 下一卷卷纲 | `outline.md` + `volume-outline.md`（锁卷 checklist / 单元索引 / 本卷人物） | 节奏与结构 | 批准后 `accept-volume --volume vNN` |
-| 补人物卡 / 改关系 | `cast-card.md`（卡首 `role` 定完整度；关系表只写质态+节点，对方写 stem，**两边都要有行**） | 人设与群像（含取名反 AI）；仅 `subgenre=刑侦探案` 且写反派来路/配角执念时改查「刑侦人味文风」 | `--action cast-lint` |
+| 补人物卡 / 改关系 | `cast-card.md`（卡首 `role` 定完整度；关系表只写质态+节点，对方写 stem，**两边都要有行**） | 人设与群像（含取名反 AI）；仅 `subgenre=刑侦探案` 且写反派来路/配角执念时改查「刑侦人味文风」 | `cast-lint` |
 | 金手指 | `cast-card.md` 「金手指」段（主角卡） | 世界观与金手指 | — |
 
 **规划一轮顺序：** 人物卡 → 总纲 → 本卷卷纲，三样同一 turn 写完；`cast-lint` exit 0（对边存在 / stem 存在 / `role` 合法）后再 `ask_user` 一次请人批准卷纲。批准 → `accept-volume`：本卷人物全部 `candidate → canon`，按索引每行种 `outline/units/vNN-U#.yaml` 头（`status: proposed`）。不要逐张卡改状态，不要手写细纲头。
+
+节奏等 KB 只指导分卷/钩子/单元功能；**勿**把教材段落粘进总纲、卷纲、`world.md` 或细纲。
 
 **人物卡最小必填**：`protagonist` / `volume_antagonist` = 四件套 + 矛盾弧光 + 知识边界 + 三锚点 + 语言习惯 + 台词 3 条 + 退场（主角另加金手指）；`recurring` = 欲望 + 相交点 + 功能六型 1 + 视觉锚或行为锚 1 + 口头禅 + 台词 1 条 + 退场。龙套用工称不建卡。必须存在一张 `role: protagonist` 的卡，否则 asset 门不放正文。
 

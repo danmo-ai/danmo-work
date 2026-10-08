@@ -9,9 +9,11 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .common import nonempty_list, read_book_text
+from .common import nonempty_list, read_book_text, rune_count
 
 IDENTITY_FIELDS = ("title", "age", "location", "power", "relation", "status", "other")
+IDENTITY_VALUE_MAX_RUNES = 80  # longer "to" is narrative, not a snapshot cell
+AGE_VALUE_MAX_RUNES = 24
 FROM_TO_RE = re.compile(
     r"^(?:从\s*)?(.+?)\s*(?:→|->|⇒|=>|到|至)\s*(.+)$"
 )
@@ -23,6 +25,26 @@ AGE_START_RE = re.compile(
 TITLE_BASE_RE = re.compile(
     r"^\s*[-*]\s*\*?\*?(?:本职\s*/\s*开卷身份|本职|开卷身份)[^：:]*[：:]\s*(.*)"
 )
+# Short age cell: "34" / "34岁" / "34岁（1972年生）"
+AGE_VALUE_RE = re.compile(
+    r"^\d{1,3}\s*岁?(?:\s*[（(][^）)]{0,20}[）)])?\s*$"
+)
+
+
+def looks_like_age_value(text: str) -> bool:
+    """True only for short age-shaped values — not narrative that mentions 岁."""
+    t = (text or "").strip()
+    if not t or rune_count(t) > AGE_VALUE_MAX_RUNES:
+        return False
+    if re.fullmatch(r"\d{1,3}", t):
+        return True
+    return bool(AGE_VALUE_RE.match(t))
+
+
+def looks_like_identity_value(text: str, *, max_runes: int = IDENTITY_VALUE_MAX_RUNES) -> bool:
+    """Title/location snapshot cells are short; long prose is not comparable."""
+    t = (text or "").strip()
+    return bool(t) and rune_count(t) <= max_runes
 
 
 def normalize_state_deltas(items: list[Any] | None) -> list[dict[str, str]]:
@@ -30,6 +52,8 @@ def normalize_state_deltas(items: list[Any] | None) -> list[dict[str, str]]:
 
     Structured: {stem, field, from, to, note?}
     Legacy string: "stem: from→to" or "stem: note"
+
+    Age is only assigned when from/to look like ages (not any string containing 岁).
     """
     out: list[dict[str, str]] = []
     for item in items or []:
@@ -40,13 +64,18 @@ def normalize_state_deltas(items: list[Any] | None) -> list[dict[str, str]]:
             field = str(item.get("field") or "other").strip().lower() or "other"
             if field not in IDENTITY_FIELDS:
                 field = "other"
+            frm = str(item.get("from") or item.get("old") or "").strip()
+            to = str(item.get("to") or item.get("new") or "").strip()
+            note = str(item.get("note") or "").strip()
+            if field == "age" and not (looks_like_age_value(frm) or looks_like_age_value(to)):
+                field = "other"
             out.append(
                 {
                     "stem": stem,
                     "field": field,
-                    "from": str(item.get("from") or item.get("old") or "").strip(),
-                    "to": str(item.get("to") or item.get("new") or "").strip(),
-                    "note": str(item.get("note") or "").strip(),
+                    "from": frm,
+                    "to": to,
+                    "note": note,
                 }
             )
             continue
@@ -67,11 +96,11 @@ def normalize_state_deltas(items: list[Any] | None) -> list[dict[str, str]]:
         if m:
             frm, to = m.group(1).strip(), m.group(2).strip()
             note = ""
-        # Heuristic field from Chinese keywords
+        # Heuristic field from Chinese keywords (age only if values look like ages)
         low = rest
         if re.search(r"职位|官职|本职|头衔|称号|升职|贬职|捕头|捕快|官升|官贬", low):
             field = "title"
-        elif re.search(r"年龄|岁", low):
+        elif looks_like_age_value(frm) or looks_like_age_value(to):
             field = "age"
         elif re.search(r"位置|抵达|离开|赶往|身在", low):
             field = "location"

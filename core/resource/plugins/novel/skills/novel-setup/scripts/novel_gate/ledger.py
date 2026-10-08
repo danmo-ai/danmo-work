@@ -392,13 +392,21 @@ def relation_deltas(items: list) -> list[str]:
 # --- postcommit ---
 
 
-def check_postcommit(book_root: Path, st: dict, unit_id: str, r: Report) -> None:
+def check_postcommit(
+    book_root: Path,
+    st: dict,
+    unit_id: str,
+    r: Report,
+    *,
+    require_reviewed: bool = True,
+    require_cursor: bool = True,
+) -> None:
     try:
         u, rel = load_unit(book_root, unit_id)
     except OSError as e:
         r.blocking("contract", f"{unit_outline_rel(unit_id)}: {e}")
         return
-    if str(u.get("status") or "").strip() != "reviewed":
+    if require_reviewed and str(u.get("status") or "").strip() != "reviewed":
         r.blocking("contract", f"{rel} status={u.get('status')} (Commit requires reviewed)")
     if not file_exists(book_root, unit_prose_rel(unit_id)):
         r.blocking("prose", f"{unit_prose_rel(unit_id)} missing")
@@ -437,20 +445,44 @@ def check_postcommit(book_root: Path, st: dict, unit_id: str, r: Report) -> None
     deltas_norm = normalize_state_deltas(raw_deltas)
     who = state_delta_who(raw_deltas)
     if who and ledger_text:
+        from .seal import is_cast_person, who_in_snapshot
+
         names = parse_cast_snapshot_names(ledger_text)
         for w in who:
-            if not any(w in n or n in w for n in names):
+            if who_in_snapshot(names, w, book_root):
+                continue
+            if is_cast_person(book_root, w):
                 r.blocking(
                     "commit",
                     f"state_deltas who={w} not found in Cast snapshot after Commit",
                 )
+            # Non-cast stems (FS-*, props): skip quietly — no ADVISORY spam
     # Identity fields: title/location `to` must match Cast snapshot (blocking); age advisory
     if deltas_norm and ledger_text:
-        from .identity import parse_cast_snapshot_table, _snapshot_get
+        from .identity import (
+            looks_like_age_value,
+            looks_like_identity_value,
+            parse_cast_snapshot_table,
+            _snapshot_get,
+        )
+        from .seal import is_cast_person, resolve_who_aliases
 
         snap = parse_cast_snapshot_table(ledger_text)
+
+        def _identity_row_comparable(row: dict) -> bool:
+            field = row.get("field") or ""
+            to = row.get("to") or ""
+            if field == "age":
+                return looks_like_age_value(to)
+            if field in ("title", "location"):
+                return looks_like_identity_value(to)
+            return False
+
         needs_identity_cols = any(
-            row["field"] in ("title", "age") and row.get("to") for row in deltas_norm
+            row["field"] in ("title", "age")
+            and _identity_row_comparable(row)
+            and is_cast_person(book_root, row["stem"])
+            for row in deltas_norm
         )
         if needs_identity_cols and snap:
             sample = next(iter(snap.values()))
@@ -462,14 +494,27 @@ def check_postcommit(book_root: Path, st: dict, unit_id: str, r: Report) -> None
         for row in deltas_norm:
             if row["field"] not in ("title", "age", "location"):
                 continue
+            if not is_cast_person(book_root, row["stem"]):
+                continue
             to = row.get("to") or ""
             if not to:
                 continue
+            if row["field"] == "age" and not looks_like_age_value(to):
+                continue
+            if row["field"] in ("title", "location") and not looks_like_identity_value(to):
+                r.advisory(
+                    "identity",
+                    f"state_deltas {row['stem']}.{row['field']} to 不像身份值（过长）— skipped snapshot compare",
+                )
+                continue
             entry = snap.get(row["stem"]) or {}
             if not entry:
-                for k, v in snap.items():
-                    if row["stem"] in k or k in row["stem"]:
-                        entry = v
+                for alias in resolve_who_aliases(book_root, row["stem"]):
+                    for k, v in snap.items():
+                        if alias in k or k in alias:
+                            entry = v
+                            break
+                    if entry:
                         break
             col = {"title": ("职位", "本职"), "age": ("年龄",), "location": ("位置",)}[row["field"]]
             cur = _snapshot_get(entry, *col)
@@ -510,7 +555,7 @@ def check_postcommit(book_root: Path, st: dict, unit_id: str, r: Report) -> None
                     f"state_deltas mark a relation change for {stem} but no 关系 row's 最近变化点 mentions {unit_id}",
                 )
     last = _as_int(st.get("last_committed_ch"))
-    if last < b:
+    if require_cursor and last < b:
         r.blocking("state", f"last_committed_ch={last} want ≥{b} after Commit")
     if not has_reader_continuity(book_root):
         r.blocking(

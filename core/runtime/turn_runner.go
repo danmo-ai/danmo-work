@@ -208,8 +208,8 @@ type TurnRunner struct {
 	GrantSessionDomains func(sessionID string, domains []string)
 	GrantTurnDomains    func(turnID string, domains []string)
 	ClearTurnDomains    func(turnID string)
-	mu                  sync.Mutex
-	doomState           map[string]*doomTurnState
+	mu        sync.Mutex
+	doomState map[string]*doomTurnState
 }
 
 // doomTurnState tracks consecutive identical tool signatures (mainstream-style).
@@ -237,7 +237,7 @@ func NewTurnRunner(llm port.LLMProvider, stream port.EventStream, perm *permissi
 	return &TurnRunner{
 		LLM: llm, Stream: stream, Perm: perm, Registry: reg,
 		ConfigStore: configStore,
-		doomState:   make(map[string]*doomTurnState),
+		doomState: make(map[string]*doomTurnState),
 	}
 }
 

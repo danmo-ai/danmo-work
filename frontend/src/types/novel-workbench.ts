@@ -81,6 +81,34 @@ export function opensFreshSession(action: NovelStageAction): boolean {
   return (NOVEL_FRESH_SESSION_ACTIONS as readonly string[]).includes(action)
 }
 
+/** Desk production actions: short Composer prefill (task + skill + stage=). */
+export const NOVEL_PRODUCTION_SHORT_ACTIONS: readonly NovelStageAction[] = [
+  'outline-batch',
+  'contract-one',
+  'rewrite-outline',
+  'write',
+  'rewrite',
+  'finalize',
+  're-finalize',
+]
+
+export function isNovelProductionShortAction(action: NovelStageAction): boolean {
+  return (NOVEL_PRODUCTION_SHORT_ACTIONS as readonly string[]).includes(action)
+}
+
+export function novelProductionStage(action: NovelStageAction): 'write' | 'outline' | 'finalize' | '' {
+  if (action === 'write' || action === 'rewrite') return 'write'
+  if (
+    action === 'outline-batch' ||
+    action === 'contract-one' ||
+    action === 'rewrite-outline'
+  ) {
+    return 'outline'
+  }
+  if (action === 'finalize' || action === 're-finalize') return 'finalize'
+  return ''
+}
+
 export function novelFreshSessionTitle(
   action: NovelStageAction,
   ctx: { unitId?: string; volume?: number },
@@ -166,7 +194,34 @@ export function recommendedUnitAction(phase: NovelUnitPhase): NovelStageAction {
   }
 }
 
-export type NovelSkillId = 'novel-setup' | 'novel-plan' | 'novel-write' | 'novel-review'
+export type NovelSkillId =
+  | 'novel-setup'
+  | 'novel-plan'
+  | 'novel-outline'
+  | 'novel-write'
+  | 'novel-review'
+
+/** Display name used in skill-summon prefix (matches Composer useSkillLine). */
+export function novelSkillDisplayName(skillId: NovelSkillId): string {
+  switch (skillId) {
+    case 'novel-setup':
+      return '小说立项'
+    case 'novel-plan':
+      return '小说规划'
+    case 'novel-outline':
+      return '写单元细纲'
+    case 'novel-write':
+      return '写单元正文'
+    case 'novel-review':
+      return '定稿'
+  }
+}
+
+/** Same prefix Composer prependSkillSummon emits (zh). */
+export function novelSkillSummonPrefix(skillId: NovelSkillId): string {
+  const name = novelSkillDisplayName(skillId)
+  return `使用「${name}」技能完成以下任务。\n请先 read_skill 加载该技能说明，再执行。\n\n`
+}
 
 export interface NovelStagePrefillCtx {
   bookId?: string
@@ -1596,6 +1651,10 @@ export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
     case 'next-volume':
     case 'cast-fix':
       return 'novel-plan'
+    case 'outline-batch':
+    case 'contract-one':
+    case 'rewrite-outline':
+      return 'novel-outline'
     case 'finalize':
     case 're-finalize':
     case 'expand':
@@ -1608,26 +1667,19 @@ export function novelActionSkillId(action: NovelStageAction): NovelSkillId {
 }
 
 /**
- * Composer load line: skill + intent only.
- * Production paths prefer hook PACK ready → read_file; else exec the pinned G= line.
+ * Setup/plan Intent→Load hint. Production prefill has no skill line
+ * (Composer summon / fresh-session prefix handles it).
  */
 export function formatLoadProtocol(action: NovelStageAction): string {
   const skillId = novelActionSkillId(action)
-  if (action === 'write' || action === 'rewrite') {
-    return `技能 ${skillId} · 意图 ${action} — 若 ephemeral 已 PACK ready 则只 read_file 包文件；否则 exec 钉死的 G= prompt-pack --stage write。按 CONTEXT 写一份正文后停。禁止先读旧稿、preflight、qc-pack、find/glob/read_skill/search_kb。`
-  }
-  if (
-    action === 'outline-batch' ||
-    action === 'contract-one' ||
-    action === 'rewrite-outline'
-  ) {
-    return `技能 ${skillId} · 意图 ${action} — 若已 PACK ready 则只读 pack；否则 G= prompt-pack --stage outline。填 YAML 后 lint-units 一次；FAIL 只补一次再 lint 一次然后停。禁止读人物卡、read_skill、写正文、find/扫树。`
-  }
-  if (action === 'finalize' || action === 're-finalize' || skillId === 'novel-review') {
-    return `技能 ${skillId} · 意图 ${action} — 若已 PACK ready 则只读 pack（EXPAND 锚点，勿通读正文）。否则 G= prompt-pack --stage finalize。一次改稿后 qc-pack 恰好 1 次。PASS：正文冻结，只按 COMMIT 改账本再 postcommit，禁止再改 units/*.md、禁止第二次 qc。FAIL：停。禁止直到 exit 0、find/read_skill/search_kb。`
+  if (isNovelProductionShortAction(action)) {
+    return ''
   }
   if (action === 'plan' || action === 'next-volume') {
     return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill；卷纲批准后只跑 gate accept-volume --volume。`
+  }
+  if (action === 'expand' || action === 'review' || action === 'polish') {
+    return ''
   }
   return `技能 ${skillId} · 意图 ${action} — 按该技能 Intent→Load 表 read_skill。`
 }
@@ -1648,6 +1700,36 @@ export function buildConstraintFooter(
   return lines.join('\n')
 }
 
+/** Task params only: stage=write unit=v01-U1 book=slug (no commands). */
+export function novelStageParamLine(
+  action: NovelStageAction,
+  ctx: NovelStagePrefillCtx,
+): string {
+  const stage = novelProductionStage(action)
+  if (!stage) return ''
+  const book = (ctx.bookId ?? '').trim()
+  const bookPart = book ? ` book=${book}` : ''
+  const unitId = (ctx.unitId ?? '').trim()
+  const vol =
+    ctx.volume && ctx.volume > 0
+      ? volumeId(ctx.volume)
+      : unitId.includes('-')
+        ? unitId.split('-')[0]
+        : ''
+  if (stage === 'outline') {
+    const v = vol || 'vNN'
+    if (unitId && unitId !== 'vNN-U#') {
+      return `stage=${stage} volume=${v} unit=${unitId}${bookPart}`
+    }
+    return `stage=${stage} volume=${v}${bookPart}`
+  }
+  return `stage=${stage} unit=${unitId || 'vNN-U#'}${bookPart}`
+}
+
+/**
+ * Composer / shared body: task + stage params. No skill line, no $G / subcommands.
+ * Fresh sessions wrap with {@link buildProductionSessionContent}.
+ */
 export function buildConstrainedPrefill(
   action: NovelStageAction,
   ctx: NovelStagePrefillCtx,
@@ -1655,12 +1737,27 @@ export function buildConstrainedPrefill(
   blockers?: string[],
 ): string {
   const body = buildNovelStagePrefill(action, ctx)
+  if (isNovelProductionShortAction(action)) {
+    const stageLine = novelStageParamLine(action, ctx)
+    return [`【任务】\n${body}`, stageLine].filter(Boolean).join('\n')
+  }
   const skillLine = formatLoadProtocol(action)
-  const parts = [`【任务】\n${body}`, skillLine]
+  const parts = [`【任务】\n${body}`, skillLine].filter(Boolean)
   if (pipeline) {
     parts.push(buildConstraintFooter(pipeline, action, blockers ?? []))
   }
   return parts.join('\n\n')
+}
+
+/** Fresh production session: skill summon prefix + constrained prefill. */
+export function buildProductionSessionContent(
+  action: NovelStageAction,
+  ctx: NovelStagePrefillCtx,
+  pipeline?: NovelBookPipeline,
+  blockers?: string[],
+): string {
+  const skillId = novelActionSkillId(action)
+  return novelSkillSummonPrefix(skillId) + buildConstrainedPrefill(action, ctx, pipeline, blockers)
 }
 
 /** Intent + project paths only; no knowledge prose, no reference paths. */
@@ -1681,18 +1778,18 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
       return [
         '开一本新书并立项。',
         '用一次 ask_user 收齐：题材（八题材之一）、读者承诺、篇幅/平台、POV、禁忌。',
-        `exec_shell gate --action init --book-id <slug> --title <书名> --genre <题材> 建树到 ${root.replace(bookId, '<book-id>')}/，再填 bible / state / world。人物卡留给规划轮。`,
+        `exec_shell gate init --book-id <slug> --title <书名> --genre <题材> 建树到 ${root.replace(bookId, '<book-id>')}/，再填 bible / state / world。人物卡留给规划轮。`,
       ].join('\n')
     case 'migrate':
       return [
         `旧书迁移（${root}/）。`,
-        'exec_shell gate --action doctor 看 [migrate] 项，再 --action migrate --book-id；核对 continuity/commits/migrate-<date>.md，确认 genre 后清 blocker。',
+        'exec_shell gate doctor 看 [migrate] 项，再 migrate --book-id；核对 continuity/commits/migrate-<date>.md，确认 genre 后清 blocker。',
       ].join('\n')
     case 'plan':
       if (ctx.volumeOutlineExists) {
         return [
           `第 ${vol || 'N'} 卷卷纲已在 ${volumePath}。只跑 gate：`,
-          `exec_shell gate --action accept-volume --volume ${volTag}（本卷人物 candidate → canon，种 proposed 细纲头）。不要写细纲、不要写正文、不要 read_skill。`,
+          `exec_shell gate accept-volume --volume ${volTag}（本卷人物 candidate → canon，种 proposed 细纲头）。不要写细纲、不要写正文、不要 read_skill。`,
         ].join('\n')
       }
       return [
@@ -1705,87 +1802,32 @@ export function buildNovelStagePrefill(action: NovelStageAction, ctx: NovelStage
         '卷末先在 continuity/summaries/ 上一卷文件末尾写卷总结。写完停下等我批准，批准后跑 gate accept-volume --volume ' + volTag + '。',
       ].join('\n')
     case 'outline-batch':
-      return [
-        `一批细纲（卷 ${volTag}）：把 ${batchText} 从 proposed 填成 accepted → ${root}/outline/units/。`,
-        '若 ephemeral 已 PACK ready：直接 read_file 包文件。否则唯一允许的 exec_shell：',
-        novelGateCmd(`--book-id ${bookId} --action prompt-pack --stage outline --volume ${volTag}`),
-        `然后 lint-units 一次：${novelGateCmd(`--book-id ${bookId} --action lint-units --volume ${volTag}`)}。PASS 则停。FAIL 只补失败单元再 lint 一次然后停。禁止读人物卡、read_skill、写正文、find/扫树。`,
-      ].join('\n')
+      return `一批细纲（卷 ${volTag}）：${batchText} → ${root}/outline/units/`
     case 'contract-one':
-      return [
-        `只填单元 ${unitId} 的细纲 → ${outlinePath}（proposed → accepted）。`,
-        '若 ephemeral 已 PACK ready：直接 read_file。否则：',
-        novelGateCmd(
-          `--book-id ${bookId} --action prompt-pack --stage outline --volume ${unitId.split('-')[0] || volTag}`,
-        ),
-        'lint-units 一次；FAIL 再补一次然后停。禁止读人物卡、read_skill、写正文、find/扫树。',
-      ].join('\n')
+      return `写细纲 ${unitId} → ${outlinePath}`
     case 'rewrite-outline': {
-      const stale = ctx.hasProse
-        ? '警告：已有正文可能过期，本轮不删正文；完成后建议再点「重写正文」。'
-        : '本轮只改细纲，不写正文。'
-      return [
-        `重写单元 ${unitId} 细纲 → ${outlinePath}（覆盖已有 YAML）。`,
-        stale,
-        '若 ephemeral 已 PACK ready：直接 read_file。否则：',
-        novelGateCmd(
-          `--book-id ${bookId} --action prompt-pack --stage outline --volume ${unitId.split('-')[0] || volTag}`,
-        ),
-        '只改本单元细纲。lint-units 一次；FAIL 再补一次然后停。禁止读人物卡、read_skill、写正文、find/扫树。',
-      ].join('\n')
+      const stale = ctx.hasProse ? '（已有正文可能过期，不删正文）' : ''
+      return `重写细纲 ${unitId} → ${outlinePath}${stale}`
     }
     case 'write':
-      return [
-        `写单元 ${unitId} 正文，一份文件 ${unitPath}。`,
-        '若 ephemeral 已 PACK ready：直接 read_file 包文件（不要消费超长 stdout）。否则唯一允许的 exec_shell：',
-        novelGateCmd(`--book-id ${bookId} --action prompt-pack --stage write --unit ${unitId}`),
-        '章与章用单独一行 --- 分隔，标题为 ## 第N章。不要先读已有正文。落盘后停；禁止 preflight、qc-pack、find/glob/read_skill/search_kb/二读 YAML。定稿另开新会话。',
-      ].join('\n')
+      return `写单元 ${unitId} 正文 → ${unitPath}`
     case 'rewrite':
-      return [
-        `重写单元 ${unitId} 正文：覆盖已有 ${unitPath}（不定稿）。`,
-        '若 ephemeral 已 PACK ready：直接 read_file。否则：',
-        novelGateCmd(`--book-id ${bookId} --action prompt-pack --stage write --unit ${unitId}`),
-        '按 pack CONTEXT 覆盖整份正文，不要先通读旧稿。落盘后停。禁止 preflight、qc-pack、find/read_skill/search_kb。',
-      ].join('\n')
+      return `重写单元 ${unitId} 正文 → ${unitPath}`
     case 'finalize':
-      return [
-        `定稿单元 ${unitId}（${unitPath}）。`,
-        '若 ephemeral 已 PACK ready：直接 read_file（pack 已含 LENGTH/HITS，不要先跑 qc-pack）。否则：',
-        novelGateCmd(`--book-id ${bookId} --action prompt-pack --stage finalize --unit ${unitId}`),
-        '硬停损：只按 pack 的 EXPAND 锚点与 HITS 做一次 edit（不要通读全文）。然后 qc-pack 恰好 1 次。',
-        `PASS → 正文冻结（禁止再改 ${unitPath}、禁止第二次 qc）→ 只按 pack 的 COMMIT 改 summaries/facts/state/commits → ${novelGateCmd(`--book-id ${bookId} --action postcommit --unit ${unitId}`)}。FAIL → 停。禁止 find/read_skill/search_kb/二读 YAML。`,
-      ].join('\n')
+      return `定稿单元 ${unitId} → ${unitPath}`
     case 're-finalize':
-      return [
-        `重新定稿单元 ${unitId}（${unitPath}）。`,
-        '若 ephemeral 已 PACK ready：直接 read_file。否则：',
-        novelGateCmd(`--book-id ${bookId} --action prompt-pack --stage finalize --unit ${unitId}`),
-        '硬停损同定稿：EXPAND 锚点一次改稿；qc-pack 恰好 1 次；PASS 后正文冻结，只按 COMMIT 改账本。',
-        `PASS → postcommit --unit ${unitId}。FAIL → 停。禁止第二次 qc、禁止 find/read_skill/search_kb。`,
-      ].join('\n')
+      return `重新定稿单元 ${unitId} → ${unitPath}`
     case 'expand':
-      return [
-        `只扩写 ${unitPath}。若已 PACK ready 则读 pack；否则 ${novelGateCmd(`--book-id ${bookId} --action prompt-pack --stage finalize --unit ${unitId}`)}，按 LENGTH 扩场面。`,
-        '不 Commit。',
-      ].join('\n')
+      return `只扩写 ${unitPath}（按 pack LENGTH）。不 Commit。`
     case 'review':
-      return [
-        `只审单元 ${unitId}。prompt-pack --stage finalize 后 10 维审。`,
-        `PASS 只更新 gates.qc；FAIL 写 reviews/${unitId}-review.md。不 Commit。`,
-      ].join('\n')
+      return `只审单元 ${unitId}。PASS 只更新 gates.qc；FAIL 写 reviews/${unitId}-review.md。不 Commit。`
     case 'polish':
-      return [
-        `只给 ${unitPath} 去 AI 味：按 prompt-pack finalize 的 HITS 行号定点改。`,
-        '复扫后停下。不 Commit。',
-      ].join('\n')
+      return `只给 ${unitPath} 去 AI 味（按 HITS 行号）。复扫后停下。不 Commit。`
     case 'cast-fix': {
       const stem = (ctx.stem ?? '').trim() || '<stem>'
       return [
         `补人物卡 ${root}/canon/cast/${stem}.md：按 role 的完整度表补缺项（三锚点 / 语言习惯 / 台词样例 / 关系表对边）。`,
-        '不改 status（提升只由 accept-volume 做）。补完 ' +
-          novelGateCmd(`--book-id ${bookId} --action cast-lint`) +
-          '。',
+        '不改 status（提升只由 accept-volume 做）。补完后跑 cast-lint。',
       ].join('\n')
     }
     default:

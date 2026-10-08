@@ -64,7 +64,7 @@ gate `postcommit`：关系类 delta 而对应卡「最近变化点」无本单�
 
 ### 4. `continuity/commits/vNN-U#.md`（执行日志）
 
-模板见 `commit-log.md`。结构：
+定稿短路径：用 finalize pack 的 `### COMMIT_SKELETON` 整段 `write` 到 `path:`（勿 `read_skill` 猜 `assets/`，勿读旧 commits）。完整字段说明见同目录 `commit-log.md`（仅深审 / 人工查阅）。结构：
 
 - 本单元 commit 时间、unit_id、章范围
 - gate 结果（preflight / qc-pack / postcommit 的 VERDICT 摘要）

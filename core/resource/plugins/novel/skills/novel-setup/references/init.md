@@ -36,6 +36,7 @@ If platform = 番茄/免费网文, also `write` `canon/writing-rules.md` seeding
 3. `exec_shell` gate `--action init --book-id <slug> --title <书名> --genre <题材>`：脚本建 `canon/`(+`cast/`)、`outline/`(+`volumes/`+`units/`)、`units/`、`continuity/`(+`summaries/`+`commits/`)、`reviews/`，拷 state / bible / world / author-lore / locked-terms / facts / style-fingerprint / book-outline 模板并写好 `book_id` / `title` / `genre` / `stage: setup`。已存在文件不覆盖。Do not create `chapters/`.  
 4. 模型填 `book-bible.md`（读者承诺 / Style card / 终局储备表）与 `novel-state.yaml` 的 `subgenre` / `qc_profile`（`genre` 已由 init 写入）。`subgenre` 取「题材与平台」子类闭集里同一 genre 的一行。All text via `write`/`edit`/`apply_patch` — **UTF-8 only**.  
 5. 填 `canon/world.md` 四层骨架 + `canon/author-lore.md` 终局细节。术语稀少时写在 `world.md`。**人物卡留给 `novel-plan` 规划轮**（金手指写主角卡）。  
+   **蒸馏纪律：** KB 只定契约与气味（`genre` / `qc_profile` / writing-rules 摘要 / 指纹禁语）。**不得**把知识库段落粘进总纲、卷纲、`world.md`、`book-outline`、细纲 YAML——大纲与设定只写本书故事与世界，不写教材副本。  
 6. 填 `canon/locked-terms.yaml`（可先空 `locked_until` / `compliance`，不可缺文件）.  
 7. `continuity/facts.md` 由 init 落盘（可空表）；章摘要将写 `continuity/summaries/vNN.md`，不写 facts。**不要**再以 `ledger.md` 作为新书种子（旧书兼容见 Legacy）.  
 8. `memory_update` project: promise, genre, taboos, 终局储备卷号（不要把 author-lore 细节写入 memory）.  

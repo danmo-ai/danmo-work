@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import {
   applyUnitOutline,
   buildConstrainedPrefill,
+  buildProductionSessionContent,
   buildNovelStagePrefill,
   buildUnitEntries,
   buildUnitPhases,
@@ -449,11 +450,23 @@ const constrained = buildConstrainedPrefill('write', {
   unitPath: 'novel/star-inn/units/v01-U1.md',
 }, pipe, [])
 assert.ok(constrained.includes('【任务】'))
-assert.ok(constrained.includes('技能 novel-write · 意图 write'))
-assert.ok(constrained.includes('prompt-pack --stage write'))
-assert.ok(constrained.includes('意图 write'))
+assert.ok(!constrained.includes('技能 novel-write'))
+assert.ok(constrained.includes('stage=write unit=v01-U1 book=star-inn'))
+assert.ok(!constrained.includes('$G'))
+assert.ok(!constrained.includes('pack-write'))
+assert.ok(!constrained.includes('check-length'))
 assert.ok(!constrained.includes('chapter-write.md'))
-assert.ok(constrained.includes('delegate_agent.goal'))
+assert.ok(!constrained.includes('delegate_agent.goal'))
+assert.ok(!constrained.includes('定稿另开'))
+
+const sessionWrite = buildProductionSessionContent('write', {
+  bookId: 'star-inn',
+  unitId: 'v01-U1',
+})
+assert.ok(sessionWrite.includes('使用「写单元正文」技能完成以下任务。'))
+assert.ok(sessionWrite.includes('请先 read_skill'))
+assert.ok(sessionWrite.includes('stage=write unit=v01-U1 book=star-inn'))
+assert.ok(!sessionWrite.includes('技能 novel-write'))
 
 assert.equal(opensFreshSession('write'), true)
 assert.equal(opensFreshSession('outline-batch'), true)
@@ -465,19 +478,21 @@ assert.equal(opensFreshSession('plan'), false)
 assert.equal(opensFreshSession('init'), false)
 assert.equal(novelFreshSessionTitle('write', { unitId: 'v01-U1' }), '写 v01-U1')
 assert.equal(novelFreshSessionTitle('rewrite', { unitId: 'v01-U1' }), '重写 v01-U1')
-assert.ok(novelGateCmd('--book-id x --action prompt-pack --stage write --unit v01-U1').includes('$WORK_HOME/plugins/novel'))
+assert.ok(novelGateCmd('pack-write --book-id x --unit v01-U1').includes('$WORK_HOME/plugins/novel'))
 
 assert.equal(novelActionSkillId('init'), 'novel-setup')
 assert.equal(novelActionSkillId('migrate'), 'novel-setup')
 assert.equal(novelActionSkillId('plan'), 'novel-plan')
 assert.equal(novelActionSkillId('write'), 'novel-write')
-assert.equal(novelActionSkillId('outline-batch'), 'novel-write')
+assert.equal(novelActionSkillId('outline-batch'), 'novel-outline')
+assert.equal(novelActionSkillId('rewrite-outline'), 'novel-outline')
 assert.equal(novelActionSkillId('finalize'), 'novel-review')
 assert.equal(novelActionSkillId('review'), 'novel-review')
-assert.ok(formatLoadProtocol('write').includes('prompt-pack --stage write'))
-assert.ok(formatLoadProtocol('outline-batch').includes('lint-units'))
-assert.ok(formatLoadProtocol('finalize').includes('prompt-pack --stage finalize'))
-assert.ok(!formatLoadProtocol('write').includes('chapter-write.md'))
+assert.equal(formatLoadProtocol('write'), '')
+assert.equal(formatLoadProtocol('outline-batch'), '')
+assert.equal(formatLoadProtocol('finalize'), '')
+assert.ok(formatLoadProtocol('plan').includes('novel-plan'))
+assert.ok(!formatLoadProtocol('write').includes('prompt-pack'))
 
 const stages = [
   'init',
@@ -511,7 +526,24 @@ for (const action of stages) {
     bookId: 'star-inn',
     unitId: 'v01-U1',
   })
-  assert.ok(constrainedText.includes(`技能 ${novelActionSkillId(/** @type {any} */ (action))} · 意图 ${action}`), action)
+  const productionish = [
+    'outline-batch',
+    'contract-one',
+    'rewrite-outline',
+    'write',
+    'rewrite',
+    'finalize',
+    're-finalize',
+    'expand',
+    'review',
+    'polish',
+  ]
+  if (productionish.includes(action)) {
+    assert.ok(!constrainedText.includes(`技能 ${novelActionSkillId(/** @type {any} */ (action))}`), action)
+    assert.ok(!constrainedText.includes('$WORK_HOME'), action)
+  } else {
+    assert.ok(constrainedText.includes(`技能 ${novelActionSkillId(/** @type {any} */ (action))}`), action)
+  }
   assert.ok(!constrainedText.includes('/references/'), action)
   assert.ok(!constrainedText.includes('/assets/templates/'), action)
 }
@@ -519,7 +551,6 @@ for (const action of stages) {
 const contractPrefill = buildNovelStagePrefill('contract-one', { bookId: 'star-inn', unitId: 'v01-U1' })
 assert.ok(contractPrefill.includes('细纲'))
 assert.ok(contractPrefill.includes('outline/units/v01-U1.yaml'))
-assert.ok(contractPrefill.includes('lint-units'))
 const planPrefill = buildNovelStagePrefill('plan', { bookId: 'star-inn', volume: 1, volumeOutlineExists: true })
 assert.ok(planPrefill.includes('accept-volume'))
 assert.ok(!planPrefill.includes('kb-novel'))
@@ -528,13 +559,15 @@ assert.equal(novelUnitProsePath('star-inn', 'v01-U1'), 'novel/star-inn/units/v01
 
 const writePrefill = buildNovelStagePrefill('write', { bookId: 'star-inn', unitId: 'v01-U1' })
 assert.ok(writePrefill.includes('units/v01-U1.md'))
-assert.ok(writePrefill.includes('prompt-pack --stage write --unit'))
-assert.ok(writePrefill.includes('$WORK_HOME/plugins/novel'))
-assert.ok(writePrefill.includes('PACK ready'))
-assert.ok(writePrefill.includes('---'))
-assert.ok(writePrefill.includes('落盘后停'))
-assert.ok(writePrefill.includes('preflight'))
+assert.ok(!writePrefill.includes('定稿另开'))
+assert.ok(!writePrefill.includes('preflight'))
 assert.ok(!writePrefill.includes('### CONTEXT'))
+
+const writeConstrained = buildConstrainedPrefill('write', { bookId: 'star-inn', unitId: 'v01-U1' })
+assert.ok(writeConstrained.includes('stage=write unit=v01-U1 book=star-inn'))
+assert.ok(!writeConstrained.includes('技能 novel-write'))
+assert.ok(!writeConstrained.includes('PACK ready'))
+assert.ok(!writeConstrained.includes('禁止'))
 
 const rewriteOutlinePrefill = buildNovelStagePrefill('rewrite-outline', {
   bookId: 'star-inn',
@@ -543,23 +576,23 @@ const rewriteOutlinePrefill = buildNovelStagePrefill('rewrite-outline', {
 })
 assert.ok(rewriteOutlinePrefill.includes('重写'))
 assert.ok(rewriteOutlinePrefill.includes('正文可能过期'))
-assert.ok(rewriteOutlinePrefill.includes('prompt-pack --stage outline'))
 
 const rewritePrefill = buildNovelStagePrefill('rewrite', { bookId: 'star-inn', unitId: 'v01-U1' })
-assert.ok(rewritePrefill.includes('覆盖'))
-assert.ok(rewritePrefill.includes('prompt-pack --stage write'))
+assert.ok(rewritePrefill.includes('重写'))
 
 const refinalizePrefill = buildNovelStagePrefill('re-finalize', { bookId: 'star-inn', unitId: 'v01-U1' })
 assert.ok(refinalizePrefill.includes('重新定稿'))
-assert.ok(refinalizePrefill.includes('prompt-pack --stage finalize'))
-assert.ok(refinalizePrefill.includes('qc-pack≤1') || refinalizePrefill.includes('qc-pack'))
-assert.ok(refinalizePrefill.includes('直到 exit 0') || refinalizePrefill.includes('硬停损'))
 
 const finalizePrefill = buildNovelStagePrefill('finalize', { bookId: 'star-inn', unitId: 'v01-U1' })
-assert.ok(finalizePrefill.includes('硬停损'))
-assert.ok(finalizePrefill.includes('正文冻结'))
-assert.ok(formatLoadProtocol('finalize').includes('正文冻结'))
-assert.ok(formatLoadProtocol('finalize').includes('直到 exit 0'))
+assert.ok(finalizePrefill.includes('定稿'))
+assert.ok(!finalizePrefill.includes('硬停损'))
+const finalizeConstrained = buildConstrainedPrefill('finalize', { bookId: 'star-inn', unitId: 'v01-U1' })
+assert.ok(finalizeConstrained.includes('stage=finalize unit=v01-U1 book=star-inn'))
+assert.ok(!finalizeConstrained.includes('技能 novel-review'))
+const finalizeSession = buildProductionSessionContent('finalize', { bookId: 'star-inn', unitId: 'v01-U1' })
+assert.ok(finalizeSession.includes('使用「定稿」技能完成以下任务。'))
+const outlineSession = buildProductionSessionContent('outline-batch', { bookId: 'star-inn', volume: 1 })
+assert.ok(outlineSession.includes('使用「写单元细纲」技能完成以下任务。'))
 
 const md = `## 第1章 夜雨
 

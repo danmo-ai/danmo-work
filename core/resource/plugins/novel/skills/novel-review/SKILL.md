@@ -1,59 +1,60 @@
 ---
 name: novel-review
 source: builtin
-description: Triggers on 定稿 / 重新定稿 / 审阅定稿 / finalize. Prefer hook PACK ready → read_file → patch → postcommit. Else prompt-pack --stage finalize. New session. Not for first drafts (novel-write).
+description: Triggers on 定稿 / 重新定稿 / 审阅定稿 / finalize. pack-finalize → patch listed gaps → parallel check-* → seal-commit. New session. Not for first drafts (novel-write) or 细纲 (novel-outline).
 license: MIT
-compatibility: Requires write, edit, read_file, grep, exec_shell; Core table_*, memory_*, search_kb; ask_user
+compatibility: Requires write, edit, read_file, exec_shell; ask_user
 metadata:
   author: danmo-work
-  version: "4.0"
+  version: "5.2"
   category: creative-writing
 ---
 
-# Novel Review（定稿一轮 · 卷收束）
+# Novel Review（定稿）
 
-## Pipeline system
+**Stage 5/5.** 短路径：读本次 pack → 只改标明缺口 → 三条 `exec_shell` 同发 → `seal-commit`。字数 / 去 AI 味 / Commit 都在本技能。
 
-定稿只读本 pack。`qc-pack` 就是审。禁止写首稿、扫树、`search_kb`、`find` gate、通读正文、二读 facts/YAML。
-
-1. 若 ephemeral 已 `PACK ready`：直接 `read_file`。否则钉死 `G=` 跑 `--action prompt-pack --stage finalize --unit`。
-2. **EXPAND**：`expand_needed: no` 则不扩写。否则只按 pack 的锚点做 **一次** `edit_batch`（含 HITS 行号）。不要 `offset` 通读 `units/*.md`。
-3. **验证一次** `qc-pack`。
-4. **PASS → 正文冻结。** 禁止再改 `units/*.md`，禁止第二次 `qc-pack`。按 pack `## COMMIT` 只改 summaries / facts 游标 / 细纲 `reviewed` / state / commits 日志，然后 `postcommit`。
-5. **FAIL → 停**（可写 `reviews/`）。不要「再改再 qc」。不要「直到 exit 0」。
-
-**Stage 5/5.** 与 novel-write 分开。本技能不换模型。
+钉死 `G="$WORK_HOME/plugins/novel/skills/novel-setup/scripts/novel_gate.py"`。
 
 ## When to load
 
-定稿 / 重新定稿 / 审阅定稿 / 扩→审→润→Commit / 审稿 / 去 AI 味 / Continuity Commit / 卷收束. 对象是 **一个单元的一份正文**。
+定稿 / 重新定稿 / 审阅定稿 / 扩→审→润→Commit / 审稿 / 去 AI 味 / Continuity Commit.
 
-**不要**用本技能写首稿正文（→ `novel-write`）。
+**不要**用本技能写首稿或细纲。
 
 ## Do
 
-优先读 hook/`PACK ready` 包文件（LENGTH / HITS / COUNTS / CONTINUITY）。无 PACK 才 `prompt-pack --stage finalize`。按 pack 选路——**不要**把 `qc-pack` 当循环条件。
+| 步 | 命令 / 动作 |
+|----|-------------|
+| 1 | `python3 "$G" pack-finalize --workdir . --book-id <slug> --unit vNN-U#` |
+| 2 | `read_file` stdout 的 `file:`；若输出带截断提示，**同一步**对同一路径按工具说明用 `offset`/`limit` 并行续读。只改 pack **标明仍缺**的段（HITS 行 / LENGTH 短板 / COMMIT 粘贴块） |
+| 3 | 无缺口，或改完后：同一助手消息发 **三条** `exec_shell`（`check-length` / `check-deslop` / `check-commit`，同 book/unit）。不要拼进一条 shell |
+| 4 | 三个都 exit 0 → `python3 "$G" seal-commit --workdir . --book-id <slug> --unit vNN-U#` |
 
-| 步 | 触发 | 做什么 |
-|----|------|--------|
-| 扩写+润色 | EXPAND / HITS | 一次 edit；只用锚点与行号 |
-| 验证 | 改完后 | `qc-pack` **恰好 1 次** |
-| Commit | 该次 PASS | 正文冻结；只按 `## COMMIT` 改账本 → `postcommit` |
-| 停 | 该次 FAIL | 报告后停；不改完再验 |
+只消费本次 pack 与 pack 列出的缺口文件；不扫书树补上下文。COMMIT / SUMMARY 骨架在 pack 的 `### COMMIT_SKELETON` / `### SUMMARY_SKELETONS`——**直接 `write`/`edit` 到 `paths`**。不 `search_kb`、不读旧 `continuity/commits/*.md`、不 `read_skill` 猜 `assets/commit-log.md` / `novel-setup/...`（模板已在 pack）。check-* 的 **ADVISORY 不挡 seal**，也不单开改 `facts.md`（除非 pack `paths` 含 `continuity/facts.md`）。审稿 FAIL / 深审才 `search_kb`。
 
-**PASS 后禁止再改正文。** 十维审不另开一轮改稿。不要为 Commit 去读 facts / YAML / 人物卡。
+**`pack-finalize` exit ≠ 0 且 stdout 有 `### PACK` / `file:` = 有缺口，正常**：继续第 2 步读 pack 改缺口，不是工具坏了。
 
-**Commit = 一次 patch：**
-- `continuity/summaries/vNN.md`：该单元每一章 `## chNNN` 五要素块（新卷新建文件 + facts 索引行）
-- `continuity/facts.md`：Public facts + cursor + Cast snapshot 增量（含年龄/职位，按 `state_deltas` 重放）+ Open loops（**不写章摘要**）
-- 相关 `canon/cast/<stem>.md` 关系表「当前质态」「最近变化点（含本单元 id）」两列（仅当 `state_deltas` 涉及关系变化；两张卡都改；**不改**开卷身份基线）
-- 细纲结构化 `state_deltas` 与正文身份变迁对齐；commits 日志可写身份转变摘要
-- `continuity/commits/vNN-U#.md`：执行日志（gate 结果 / 四计数 / 锁词 / 字数 / 扩写 / 偏离）
-- 细纲 `status=reviewed` + `novel-state.yaml`（`last_committed_ch` = 章范围末章，`active_unit` 指向下一单元）
-- `postcommit --unit` exit 0
+第 3 步是三个独立 tool call，例如：
 
-验证 `qc-pack` PASS（或仅 advisory）才可宣称定稿；报告 GATES 段引用 `### COUNTS`。一轮只定稿一个单元。不要按章拆成多次 Commit。二次验证仍 blocking → 停，不要循环。
+- `exec_shell`: `python3 "$G" check-length --workdir . --book-id <slug> --unit vNN-U#`
+- `exec_shell`: `python3 "$G" check-deslop --workdir . --book-id <slug> --unit vNN-U#`
+- `exec_shell`: `python3 "$G" check-commit --workdir . --book-id <slug> --unit vNN-U#`
+
+HITS / LENGTH 无缺口且 COMMIT 写「账本已齐」→ 第 2 步无文件可改，直接第 3 步。单章配额（约 2000–3500）以 pack LENGTH 为准。
+
+## Fail
+
+| 情况 | 做法 |
+|------|------|
+| pack-finalize exit ≠ 0 **且有** `file:` PACK | **继续**第 2 步（缺口包）；勿当工具失败去猜路径 / `search_kb` |
+| pack-finalize 无 PACK / 无 `file:` / 脚本崩 | **停** |
+| 任务缺 `unit` / `book` | **停** |
+| 某 check exit 1 | 只改对应文件，**只重跑该项**（改正文 → length+deslop；改账本 → commit） |
+| 三检未齐就 seal | `seal-commit` 拒绝；状态不动 |
+| 脚本无 `### VERDICT` | 停，写报告 |
+| 同一检查连续 3 次 FAIL | 停 |
 
 ## Stop
 
-Completion = tool evidence（至多 1 次验证 qc-pack + postcommit VERDICT，或 FAIL 报告）。卷末单元 → 提示「可做卷收束」；下一卷卷纲 → `novel-plan`。Do not start the next unit's first draft here.
+`seal-commit` 给出 `### SEAL`（reviewed + cursor）→ 停。一轮一个单元。卷末 → 提示卷收束；下一卷 → `novel-plan`。
