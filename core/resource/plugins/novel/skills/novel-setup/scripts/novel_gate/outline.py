@@ -435,8 +435,8 @@ def _norm_sentence(s: str) -> str:
 
 # Emotional flatline: same emotional_beat start state repeated ≥3 scenes in a row.
 EMOTION_FLATLINE_MAX = 3
-# Scene without pressure: beat not in {加压, 决断, 兑现} and turn has no negative consequence.
-PRESSURE_BEATS = {"加压", "决断", "兑现", "余波"}
+# Choice must name a cost / price — reversible choices are not choices.
+_CHOICE_COST_RE = re.compile(r"代价|放弃|失去|牺牲|暴露|得罪|赌|押上|换|断|摊牌|冒|承担|付出")
 
 
 def validate_scene_contracts(unit: dict, r: Report, rel: str) -> None:
@@ -621,6 +621,17 @@ def validate_unit_shape(unit: dict, r: Report, rel: str, *, time_system: str = "
         r.blocking("word_target", f"{rel} word_share sum {sum(shares)} != word_target {wt}")
     if is_blank(unit.get("function")):
         r.blocking("contract", f"{rel} function empty")
+    # Choice must name a cost — 「是否公开反证」alone is not a choice.
+    status_c = str(unit.get("status") or "").strip()
+    if status_c in ("accepted", "drafted", "reviewed"):
+        choice = str(unit.get("choice") or "").strip()
+        if choice and not _CHOICE_COST_RE.search(choice):
+            _flag(
+                r,
+                _contract_severity(status_c),
+                "contract",
+                f"{rel} choice「{choice[:24]}」无代价词 — 选择须写出代价（放弃/失去/暴露/得罪/赌…）",
+            )
     htype, hout = next_hook_of(unit)
     if htype not in HOOK_TYPES:
         r.blocking("hook", f"next_hook.type must be one of KB 爽点与追读 types, got {htype}")
@@ -884,4 +895,27 @@ def lint_units(book_root: Path, st: dict, volume: str, r: Report, cache=None) ->
                     "hook",
                     f"{volume}: next_hook.type「{htype}」×{n}（≥6）— 卷内钩子类型宜换压力",
                 )
+    # Volume-level emotion curve: emotional_beat start states should not cluster
+    # into one temperature across consecutive units.
+    starts: list[str] = []
+    for uid in unit_ids:
+        try:
+            u, _rel = load_unit(book_root, uid)
+        except (OSError, UnicodeDecodeError):
+            continue
+        for s in scene_rows(u):
+            emo = str(s.get("emotional_beat") or "").strip()
+            start = emo.split("→", 1)[0].strip() if "→" in emo else ""
+            if start:
+                starts.append(start)
+                break  # one sample per unit (opening scene temperature)
+    if len(starts) >= 4:
+        from collections import Counter
+
+        top, n = Counter(starts).most_common(1)[0]
+        if n >= len(starts) * 2 // 3:
+            r.advisory(
+                "emotion",
+                f"{volume}: 单元开场情绪「{top}」占 {n}/{len(starts)} — 卷内情绪曲线宜有冷/热交替",
+            )
     return results

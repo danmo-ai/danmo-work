@@ -60,6 +60,16 @@ TELL_MAX_PER_1K = 6
 DUP_MIN_RUNES = 4
 # Repeated filler line (e.g. 「她把这一句，在心里过了一遍。」) — advisory per unit.
 TIC_MAX_PER_UNIT = 4
+# Dialogue monotony (structural, no word lists):
+# - run of pure-dialogue paragraphs with no action/narrative beat in between
+# - same attribution (「她说。」/「他说。」) repeated on consecutive dialogue lines
+DIALOGUE_RUN_MAX = 6
+ATTRIB_REPEAT_MAX = 4
+# A paragraph that is only quoted speech plus an optional short attribution tail.
+_PURE_DIALOGUE_RE = re.compile(
+    r"^[「“\"][^」”\"]*[」”\"][^。！？，；：]{0,10}(?:说|问|答|道|喊|笑)[。！？]?$|^[「“\"][^」”\"]*[」”\"]$"
+)
+_ATTRIB_RE = re.compile(r"([一-鿿]{0,4})(?:说|问|答|道|喊|笑)[。！？]?$")
 # Em-dash density ceiling per subgenre (crime-procedural keeps short punchy dashes).
 EM_DASH_MAX_BY_SUBGENRE = {
     "刑侦探案": 3,
@@ -68,7 +78,7 @@ EM_DASH_MAX_BY_SUBGENRE = {
 
 @dataclass(frozen=True)
 class DeslopHit:
-    kind: str  # toxic | level1 | soup | banned | english | emdash | simile | echo | tell | dup | tic
+    kind: str  # toxic | level1 | soup | banned | english | emdash | simile | echo | tell | dup | tic | dialogue
     line: int
     col: int
     match: str
@@ -136,6 +146,57 @@ def iter_echo_hits(prose: str) -> list[DeslopHit]:
         if prev and rune_count(s) <= ECHO_MAX_RUNES and s in prev and s != prev:
             hits.append(DeslopHit("echo", i, 1, s, "echo-prev"))
         prev = s
+    return hits
+
+
+def iter_dialogue_monotony_hits(prose: str) -> list[DeslopHit]:
+    """Advisory: dialogue with no action beats, or one attribution on repeat.
+
+    - Pure-dialogue run: ≥DIALOGUE_RUN_MAX consecutive paragraphs that are only
+      quoted speech (+ optional 「她说。」 tail). Action beats must interrupt.
+    - Attribution repeat: same attribution word on ≥ATTRIB_REPEAT_MAX consecutive
+      dialogue lines (遮名测试的机器层近似).
+    """
+    hits: list[DeslopHit] = []
+    run_start = 0
+    run_len = 0
+    prev_attrib = ""
+    attrib_n = 0
+    attrib_flagged = False
+    for i, line in enumerate(prose.splitlines(), start=1):
+        s = line.strip()
+        if not s:
+            continue
+        if _PURE_DIALOGUE_RE.match(s):
+            if run_len == 0:
+                run_start = i
+            run_len += 1
+            m = _ATTRIB_RE.search(s)
+            attrib = m.group(0) if m else ""
+            if attrib and attrib == prev_attrib:
+                attrib_n += 1
+                if attrib_n >= ATTRIB_REPEAT_MAX and not attrib_flagged:
+                    hits.append(
+                        DeslopHit("dialogue", i, 1, attrib, "attrib-repeat")
+                    )
+                    attrib_flagged = True
+            else:
+                attrib_n = 1 if attrib else 0
+                attrib_flagged = False
+            prev_attrib = attrib
+            continue
+        if run_len >= DIALOGUE_RUN_MAX:
+            hits.append(
+                DeslopHit("dialogue", run_start, 1, f"连续{run_len}段", "dialogue-run")
+            )
+        run_len = 0
+        prev_attrib = ""
+        attrib_n = 0
+        attrib_flagged = False
+    if run_len >= DIALOGUE_RUN_MAX:
+        hits.append(
+            DeslopHit("dialogue", run_start, 1, f"连续{run_len}段", "dialogue-run")
+        )
     return hits
 
 
@@ -225,6 +286,7 @@ def format_hit_line(rel: str, hit: DeslopHit, prose_line: str = "") -> str:
         "toxic": "毒句式", "level1": "一级词", "soup": "鸡汤尾",
         "banned": "禁词", "english": "英文泄漏", "emdash": "破折号", "simile": "比喻词",
         "echo": "短段复读", "tell": "讲述动词", "dup": "整句复读", "tic": "填充行",
+        "dialogue": "对白单调",
     }.get(hit.kind, hit.kind)
     excerpt = _excerpt(prose_line, hit.col) if prose_line else hit.match
     return f"{rel}:L{hit.line}: {kind_label}「{hit.match}」 | {excerpt}"
@@ -354,6 +416,21 @@ def apply_deslop_to_report(prose_rel: str, prose: str, r: Report, hint_limit: in
             + (f" @ {locs}" if locs else ""),
         )
         hits = list(hits) + tic_hits
+    dlg_hits = iter_dialogue_monotony_hits(prose)
+    if dlg_hits:
+        runs = [h for h in dlg_hits if h.rule == "dialogue-run"]
+        attribs = [h for h in dlg_hits if h.rule == "attrib-repeat"]
+        locs = format_deslop_locs(prose_rel, dlg_hits, hint_limit)
+        bits: list[str] = []
+        if runs:
+            bits.append(f"连续纯对白 {len(runs)} 处（≥{DIALOGUE_RUN_MAX} 段无动作打断）")
+        if attribs:
+            bits.append(f"称呼连发（如「{attribs[0].match}」≥{ATTRIB_REPEAT_MAX} 连）")
+        r.advisory(
+            "deslop",
+            "对白单调：" + "；".join(bits) + (f" @ {locs}" if locs else ""),
+        )
+        hits = list(hits) + dlg_hits
     return hits
 
 

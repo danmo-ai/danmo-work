@@ -62,7 +62,7 @@ state_deltas:
 - 上一单元 `next_hook.out` → `entry`（因果入口）
 - 你设计：主角局部目标 → `desire`
 - 你设计：得不到的具体原因 → `obstacle`
-- 你设计：关键选择（谁/在哪/代价）→ `choice`
+- 你设计：关键选择（谁/在哪/**代价**）→ `choice`（须含代价词：放弃/失去/暴露/得罪/赌/承担…；只写「是否 X」会被门禁拦）
 - 你设计：主兑现 → `payoff`；主爽点形态 → `pleasure`（单元一条，连续3单元不雷同）
 - 本单元禁碰（索引表 + bible unlock 卷 + `canon/locked-terms.yaml`）→ `forbidden` / `endgame_boundary`
 - `next_hook.type` 已种下（改了 blocking）；你设计：具体事件 → `next_hook.out`
@@ -81,6 +81,7 @@ state_deltas:
   - 可选 `prop`：本场引入的关键道具；若后续 `must_land` 未落地该道具 → advisory（契诃夫之枪）。
   - 情绪无平线：同一 `emotional_beat` 起点状态连续 ≥3 场 → advisory（情绪须有起伏）。
   - 尝试须受阻：`beat=尝试/建立期待` 的 `turn` 须含负面后果（失败/被/没有/未/拒绝/落空/受阻/断/停/退/输/败/错/罚），否则 advisory。
+  - 卷级情绪曲线：lint 汇总本卷各单元开场情绪，同一起点占 ≥2/3 → advisory（卷内宜冷热交替）。
 - **场面契约（`accepted+` 必填）**：
   - `emotional_beat`：本场主情绪从 X→Y（一句，如「镇定→羞怒」）
   - `reader_effect`：期望读者感受（一句，如「替主角窝火」）

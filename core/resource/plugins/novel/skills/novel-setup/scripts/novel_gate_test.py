@@ -171,7 +171,7 @@ function: 开局立冲突
 entry: 开卷切口
 desire: 活下来并反证身份
 obstacle: 当众羞辱
-choice: 是否公开反证
+choice: 是否公开反证——赌上捕快身份与今夜性命
 payoff: 主角声望可见回升
 pleasure: 当众打脸
 forbidden: ["宿敌真身"]
@@ -682,7 +682,7 @@ class GateTests(unittest.TestCase):
         self.assertNotIn("刑侦人味文风", blob.split("- 题材专有文")[0] if "- 题材专有文" in blob else blob)
         self.assertIn("卷纲索引行: v01-U1 | ch1–ch1 | 开局立冲突 | 钩子=未兑现承诺 | 终局边界=宿敌真身", blob)
         self.assertIn("单元卡 v01-U1", blob)
-        self.assertIn("choice: 是否公开反证", blob)
+        self.assertIn("choice: 是否公开反证——赌上捕快身份与今夜性命", blob)
         self.assertIn("payoff: 主角声望可见回升", blob)
         self.assertIn("三锚点: 视觉=左手缠布", blob)
         self.assertIn("台词: 说重点，谁的信。", blob)
@@ -2004,6 +2004,65 @@ constraint_checks:
         r2 = Report("lint", "demo", self._book())
         validate_scene_contracts(unit, r2, "u.yaml")
         self.assertFalse(any("无负面后果" in (f.get("message") or "") for f in r2.findings), r2.format())
+
+    def test_deslop_dialogue_monotony(self):
+        p = self.root / "novel/demo/units/v01-U1.md"
+        # 7 consecutive pure-dialogue paragraphs with no action beat
+        p.write_text(
+            "## 第1章 客栈\n\n他推门进去。\n"
+            "「你来了。」\n「我来了。」\n「坐。」\n「不坐。」\n"
+            "「喝茶。」\n「不喝。」\n「那你要什么。」\n",
+            encoding="utf-8",
+        )
+        rep, hits = ng.run_with_hits(str(self.root), "demo", "scan-deslop", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertTrue(
+            any("对白单调" in (f.get("message") or "") for f in rep.findings),
+            rep.format(),
+        )
+        self.assertTrue(any("对白单调" in h for h in hits), hits)
+
+    def test_deslop_dialogue_attrib_repeat(self):
+        p = self.root / "novel/demo/units/v01-U1.md"
+        # Same attribution on ≥4 consecutive dialogue lines
+        p.write_text(
+            "## 第1章 客栈\n\n他推门进去。\n"
+            "「你来了。」她说。\n「我来了。」她说。\n「坐。」她说。\n"
+            "「不坐。」她说。\n「那算了。」她说。\n他把包放下，坐进椅子里，半天没出声。\n",
+            encoding="utf-8",
+        )
+        rep, hits = ng.run_with_hits(str(self.root), "demo", "scan-deslop", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertTrue(
+            any("对白单调" in (f.get("message") or "") and "称呼连发" in (f.get("message") or "") for f in rep.findings),
+            rep.format(),
+        )
+
+    def test_scene_contract_choice_cost(self):
+        from novel_gate.common import Report
+        from novel_gate.outline import validate_unit_shape
+
+        unit = {
+            "unit_id": "v01-U9",
+            "chapter_range": [1, 1],
+            "status": "accepted",
+            "function": "开局",
+            "choice": "是否公开反证，不答则身份败露",
+            "next_hook": {"type": "未兑现承诺", "out": "明日验骨"},
+            "word_target": 4000,
+            "scenes": [
+                {"id": "S1", "chapter": 1, "beat": "建立期待", "turn": "被羞辱", "must_land": ["有人笑他"]},
+                {"id": "S2", "chapter": 1, "beat": "兑现", "turn": "亮出腰牌", "must_land": ["亮出腰牌"]},
+            ],
+            "chapters": [{"chapter": 1, "title_working": "客栈", "word_share": 4000}],
+        }
+        r = Report("lint", "demo", self._book())
+        validate_unit_shape(unit, r, "u.yaml")
+        self.assertTrue(any("无代价词" in (f.get("message") or "") for f in r.findings), r.format())
+        unit["choice"] = "是否公开反证——赌上官职与性命"
+        r2 = Report("lint", "demo", self._book())
+        validate_unit_shape(unit, r2, "u.yaml")
+        self.assertFalse(any("无代价词" in (f.get("message") or "") for f in r2.findings), r2.format())
 
     def test_seal_write_hook_alignment_advisory(self):
         book = self._book()
