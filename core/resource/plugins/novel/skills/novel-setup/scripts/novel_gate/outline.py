@@ -12,6 +12,7 @@ from .common import (
     load_yaml_map,
     nonempty_list,
     read_book_text,
+    rune_count,
     write_book_text,
 )
 
@@ -27,6 +28,43 @@ UNIT_BEAT_RE = re.compile(
     r"ch\s*(\d+)\s*(?:[-–—]\s*ch\s*(\d+))?\s*(建立期待|尝试|加压|决断|兑现|余波|切断)[：:]\s*(.*)",
     re.I,
 )
+# Scene-contract shape (generic; no per-book phrase lists).
+TURN_MAX_RUNES = 80
+MUST_LAND_MAX_RUNES = 48
+# Author-meta in must_land — not craft labels like 「章末切断」.
+_MUST_LAND_META = re.compile(r"读者|canon|作废|回写", re.I)
+# Unspoken thoughts attributed on the page (POV judgment should be a fact, not 「X心里」).
+_INNER_ATTRIB = re.compile(r"心证|(?:他|她)心里|[\u4e00-\u9fff]{2,4}(?:心里|心中|内心)")
+_QUOTE_PAIRS = (("“", "”"), ("「", "」"), ("『", "』"))
+
+
+def _contract_severity(status: str) -> str:
+    """proposed/accepted → blocking; drafted/reviewed → advisory (legacy units)."""
+    if status in ("proposed", "accepted"):
+        return "blocking"
+    return "advisory"
+
+
+def _flag(r: Report, severity: str, check: str, msg: str) -> None:
+    if severity == "blocking":
+        r.blocking(check, msg)
+    else:
+        r.advisory(check, msg)
+
+
+def _paired_quote_count(text: str) -> int:
+    n = 0
+    for a, b in _QUOTE_PAIRS:
+        n += min(text.count(a), text.count(b))
+    n += text.count('"') // 2
+    return n
+
+
+def _land_items(scene: dict) -> list[str]:
+    raw = scene.get("must_land") or []
+    if not isinstance(raw, list):
+        return []
+    return [str(x).strip() for x in raw if str(x).strip()]
 
 
 def unit_outline_rel(unit_id: str) -> str:
@@ -395,7 +433,116 @@ def _norm_sentence(s: str) -> str:
 # --- shape validation ---
 
 
-def validate_unit_shape(unit: dict, r: Report, rel: str) -> None:
+def validate_scene_contracts(unit: dict, r: Report, rel: str) -> None:
+    """Shape checks on turn / must_land — facts only, no dialogue screenplays."""
+    status = str(unit.get("status") or "").strip()
+    if status not in ("proposed", "accepted", "drafted", "reviewed"):
+        return
+    # proposed with no scenes: lint_units already advisories elsewhere
+    scenes = scene_rows(unit)
+    if not scenes:
+        return
+    sev = _contract_severity(status)
+    require_turn = status in ("accepted", "drafted", "reviewed") or (
+        status == "proposed" and scenes
+    )
+    seen_name_where: dict[tuple[str, str], list[str]] = {}
+    for s in scenes:
+        sid = s.get("id") or "?"
+        turn = str(s.get("turn") or "").strip()
+        if require_turn and not turn:
+            _flag(r, sev, "scenes", f"{rel} scene {sid} turn empty — 短事实转折必填")
+        elif turn:
+            if rune_count(turn) > TURN_MAX_RUNES:
+                _flag(
+                    r,
+                    sev,
+                    "scenes",
+                    f"{rel} scene {sid} turn {rune_count(turn)} runes > {TURN_MAX_RUNES}",
+                )
+            if _paired_quote_count(turn) > 1:
+                _flag(
+                    r,
+                    sev,
+                    "scenes",
+                    f"{rel} scene {sid} turn has >1 quote pair — 禁止对白剧本",
+                )
+            if _INNER_ATTRIB.search(turn):
+                _flag(
+                    r,
+                    sev,
+                    "scenes",
+                    f"{rel} scene {sid} turn attributes unspoken thought — 写可核对事实",
+                )
+        lands = _land_items(s)
+        for item in lands:
+            if rune_count(item) > MUST_LAND_MAX_RUNES:
+                _flag(
+                    r,
+                    sev,
+                    "scenes",
+                    f"{rel} scene {sid} must_land {rune_count(item)} runes > {MUST_LAND_MAX_RUNES}",
+                )
+            if _MUST_LAND_META.search(item):
+                _flag(
+                    r,
+                    sev,
+                    "scenes",
+                    f"{rel} scene {sid} must_land has author-meta (读者/canon/作废/回写)",
+                )
+            if _INNER_ATTRIB.search(item):
+                _flag(
+                    r,
+                    sev,
+                    "scenes",
+                    f"{rel} scene {sid} must_land attributes unspoken thought — 写可核对事实",
+                )
+        name = str(s.get("name") or "").strip()
+        where = str(s.get("where") or "").strip()
+        if name and where:
+            key = (name, where)
+            prev = seen_name_where.get(key)
+            if prev is not None:
+                prev_norm = {_norm_sentence(x) for x in prev}
+                new_facts = [x for x in lands if _norm_sentence(x) not in prev_norm]
+                if not new_facts:
+                    _flag(
+                        r,
+                        sev,
+                        "scenes",
+                        f"{rel} scene {sid} duplicates name+where「{name}」with no new must_land",
+                    )
+            else:
+                seen_name_where[key] = lands
+
+    # Unit arc: one conflict from 起 to 收 — need payoff/aftermath scene.
+    beats = [str(s.get("beat") or "").strip() for s in scenes]
+    if "兑现" not in beats and "余波" not in beats:
+        _flag(r, sev, "scenes", f"{rel} no 兑现/余波 scene — 矛盾须在本单元落地")
+    # Prop presence (契诃夫之枪): props introduced must be picked up by a later must_land.
+    all_lands: list[str] = []
+    for s in scenes:
+        all_lands.extend(_land_items(s))
+    for s in scenes:
+        intro = str(s.get("prop") or "").strip()
+        if not intro:
+            continue
+        sid = s.get("id") or "?"
+        ch = _as_int(s.get("chapter"))
+        later = [
+            x for x in all_lands
+            if intro in x and _as_int(s.get("chapter")) <= ch
+        ]
+        if not later:
+            _flag(
+                r,
+                sev,
+                "scenes",
+                f"{rel} scene {sid} prop「{intro[:24]}」未在后续 must_land 落地",
+            )
+
+
+def validate_unit_shape(unit: dict, r: Report, rel: str, *, time_system: str = "") -> None:
     uid = str(unit.get("unit_id") or "").strip()
     if not uid:
         r.blocking("unit_id", f"{rel} unit_id empty — return to novel-plan")
@@ -441,9 +588,10 @@ def validate_unit_shape(unit: dict, r: Report, rel: str) -> None:
         r.blocking("hook", f"next_hook.type must be one of KB 爽点与追读 types, got {htype}")
     if not hout:
         r.blocking("hook", "next_hook.out empty (need a concrete event)")
+    validate_scene_contracts(unit, r, rel)
     from .identity import normalize_state_deltas, validate_timeline_fields
 
-    validate_timeline_fields(unit, r, rel)
+    validate_timeline_fields(unit, r, rel, time_system=time_system)
     for row_d in normalize_state_deltas(unit.get("state_deltas")):
         if not row_d.get("stem"):
             r.blocking("state_deltas", f"{rel} state_deltas entry missing stem/who")
@@ -654,7 +802,9 @@ def lint_units(book_root: Path, st: dict, volume: str, r: Report, cache=None) ->
     for uid in by_id:
         if uid not in unit_ids:
             r.advisory("volume", f"{uid} indexed in 卷纲 but {unit_outline_rel(uid)} missing (run accept-volume)")
+    ts = str((st or {}).get("time_system") or "relative_days").strip() or "relative_days"
     results: list[tuple[str, str, list[str]]] = []
+    hook_types: list[str] = []
     for uid in unit_ids:
         sub = Report("lint-units", r.book_id, book_root, 0, uid)
         try:
@@ -674,14 +824,26 @@ def lint_units(book_root: Path, st: dict, volume: str, r: Report, cache=None) ->
         if status == "proposed" and not scene_rows(u):
             sub.advisory("contract", f"{rel} status=proposed, no scenes yet — 待细纲")
         else:
-            validate_unit_shape(u, sub, rel)
+            validate_unit_shape(u, sub, rel, time_system=ts)
             from .identity import check_timeline_monotonic
 
             check_timeline_monotonic(book_root, u, sub, rel)
         validate_unit_against_volume(u, by_id.get(uid), sub, rel)
         if scene_rows(u) or on_stage_of(u):
             validate_on_stage(u, volume_cast, status_map, sub, rel)
+        ht, _ = next_hook_of(u)
+        if ht:
+            hook_types.append(ht)
         sub.finalize()
         results.append((uid, sub.verdict, [f"[{f['check']}] {f['message']}" for f in sub.findings]))
         r.findings.extend(sub.findings)
+    if hook_types:
+        from collections import Counter
+
+        for htype, n in Counter(hook_types).items():
+            if n >= 6:
+                r.advisory(
+                    "hook",
+                    f"{volume}: next_hook.type「{htype}」×{n}（≥6）— 卷内钩子类型宜换压力",
+                )
     return results

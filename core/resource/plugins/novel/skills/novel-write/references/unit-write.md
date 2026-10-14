@@ -3,7 +3,7 @@
 ## Pipeline system
 
 1. `python3 "$G" pack-write --workdir . --book-id <slug> --unit vNN-U#`。exit ≠ 0 → 停。
-2. `read_file` stdout 的 `file:`（含题材写时 bullet + 风格指纹）；若输出带截断提示，同一步对同一路径按工具说明用 `offset`/`limit` 并行续读。
+2. `read_file` stdout 的 `file:`（含题材写时 bullet + 风格指纹 + 结构约束 + 开篇规则）；若输出带截断提示，同一步对同一路径按工具说明用 `offset`/`limit` 并行续读。
 3. **一次** `write` 一份 `units/vNN-U#.md`（全部章，章间 `---`；重写可覆盖）。
 4. `python3 "$G" seal-write --workdir . --book-id <slug> --unit vNN-U#` → 细纲 `drafted` → 停。
 

@@ -43,6 +43,8 @@ metadata:
 
 HITS / LENGTH 无缺口且 COMMIT 写「账本已齐」→ 第 2 步无文件可改，直接第 3 步。单章配额（约 2000–3500）以 pack LENGTH 为准。
 
+**细纲纪律（禁止合同回写）：** 不得把正文句子回写进 `turn` / `must_land` / `on_stage`。事实变了才改细纲。`on_stage` 只收本场开口的人，不把路过人名从正文扫进名单。
+
 ## Fail
 
 | 情况 | 做法 |

@@ -741,7 +741,11 @@ class GateTests(unittest.TestCase):
         self.assertIn("one write", blob)
         self.assertIn("identity@unit:", text)
         self.assertIn("题材写时约束「玄幻」", text)
-        self.assertIn("章级beat", text)
+        self.assertIn("场级beat", text)
+        self.assertIn("want:", text)
+        self.assertIn("turn:", text)
+        self.assertIn("land:", text)
+        self.assertIn("写时结构约束", text)
         self.assertNotIn("场面序:", text)
         self.assertNotIn("  - id: S1", text)
         self.assertNotIn("本 turn", text)
@@ -768,7 +772,7 @@ class GateTests(unittest.TestCase):
         self.assertNotIn(long_cut, slim)
         self.assertIn(long_cut, full)
         self.assertNotIn("share=", slim)
-        self.assertIn("章级beat", slim)
+        self.assertIn("场级beat", slim)
         self.assertNotIn("场面序:", slim)
         self.assertEqual(clip_runes(long_cut, WRITE_CUT_MAX_RUNES), slim.split("cut=")[1].split("\n")[0])
 
@@ -870,7 +874,8 @@ info_control:
         self.assertNotIn("很长的叙事说明", blob)
         self.assertIn("题材写时约束", blob)
         self.assertNotIn("题材专有文", blob)
-        self.assertIn("章级beat", blob)
+        self.assertIn("场级beat", blob)
+        self.assertIn("写时结构约束", blob)
         self.assertNotIn("场面序:", blob)
         # FS narrow: FS-001 present
         self.assertIn("FS-001", blob)
@@ -882,10 +887,10 @@ info_control:
         book = self._book()
         r = Report("pack-write", "demo", book, unit="v01-U9")
         # Fat CONTEXT that would exceed PACK_WRITE_MAX_BYTES
-        fat_beats = ["- 单元卡 v01-U9:", "  章级beat（每章一行；勿再读细纲 YAML）:"]
+        fat_beats = ["- 单元卡 v01-U9:", "  场级beat（每场一行；勿再读细纲 YAML）:"]
         for i in range(1, 80):
             fat_beats.append(
-                f"    ch{i} | 标题{i} | {'甲' * 120} | land:{'乙' * 80} | 情→读 | cut={'丙' * 100}"
+                f"    ch{i} S{i} | want:{'甲' * 80} | turn:{'乙' * 80} | land:{'丙' * 80}"
             )
         fat_debt = ["- 开放债务（本单元相关 FS）:"] + [
             f"  | FS-{i:03d} | FS | {'债' * 200} |" for i in range(1, 40)
@@ -1790,6 +1795,227 @@ constraint_checks:
             any(f.get("check") == "timeline" and f.get("severity") == "blocking" for f in rep.findings),
             rep.format(),
         )
+
+    def test_scene_contract_blocks_long_must_land_and_dialogue_turn(self):
+        from novel_gate.common import Report
+        from novel_gate.outline import validate_scene_contracts
+
+        unit = {
+            "status": "accepted",
+            "scenes": [
+                {
+                    "id": "S1",
+                    "name": "审讯",
+                    "where": "局里",
+                    "turn": "他说「甲」又说「乙」再答「丙」",
+                    "must_land": ["甲" * 60, "读者应感到紧张"],
+                },
+                {
+                    "id": "S2",
+                    "name": "审讯",
+                    "where": "局里",
+                    "turn": "亮出腰牌",
+                    "must_land": ["读者应感到紧张"],
+                },
+            ],
+        }
+        r = Report("lint", "demo", self._book())
+        validate_scene_contracts(unit, r, "outline/units/v01-U1.yaml")
+        msgs = " ".join(f["message"] for f in r.findings)
+        self.assertTrue(any(f["severity"] == "blocking" for f in r.findings), r.format())
+        self.assertIn("quote pair", msgs)
+        self.assertIn("must_land", msgs)
+        self.assertIn("author-meta", msgs)
+        self.assertIn("duplicates name+where", msgs)
+
+    def test_scene_contract_advisory_on_drafted(self):
+        from novel_gate.common import Report
+        from novel_gate.outline import validate_scene_contracts
+
+        unit = {
+            "status": "drafted",
+            "scenes": [
+                {
+                    "id": "S1",
+                    "turn": "甲" * 90,
+                    "must_land": ["亮出腰牌"],
+                }
+            ],
+        }
+        r = Report("lint", "demo", self._book())
+        validate_scene_contracts(unit, r, "u.yaml")
+        self.assertTrue(any(f["severity"] == "advisory" and "turn" in f["message"] for f in r.findings), r.format())
+        self.assertFalse(any(f["severity"] == "blocking" for f in r.findings), r.format())
+
+    def test_relative_days_requires_integer_story_day(self):
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
+        text = p.read_text(encoding="utf-8")
+        text = text.replace("story_day: 0", "story_day: null")
+        text = text.replace("gap_from_prev: 开卷", "gap_from_prev: 开卷\ntime_label: 某年某月某日深夜派出所值班室")
+        p.write_text(text, encoding="utf-8")
+        # ensure state has relative_days
+        st = self.root / "novel/demo/novel-state.yaml"
+        st.write_text(
+            st.read_text(encoding="utf-8") + "\ntime_system: relative_days\n",
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "preflight", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(
+            any("integer story_day" in (f.get("message") or "") for f in rep.findings),
+            rep.format(),
+        )
+
+    def test_deslop_echo_advisory(self):
+        p = self.root / "novel/demo/units/v01-U1.md"
+        p.write_text(
+            "## 第1章 客栈\n\n他亮出腰牌，对面的人脸色变了。\n嗯。\n门外有人递来失踪信。\n",
+            encoding="utf-8",
+        )
+        # Make "嗯。" appear as echo of previous — need substring of prev
+        p.write_text(
+            "## 第1章 客栈\n\n对面的人只回了一句嗯。\n嗯。\n门外有人递来失踪信。\n",
+            encoding="utf-8",
+        )
+        rep, hits = ng.run_with_hits(str(self.root), "demo", "scan-deslop", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertTrue(
+            any(f["check"] == "deslop" and f["severity"] == "advisory" and "短段复读" in f["message"] for f in rep.findings),
+            rep.format(),
+        )
+        self.assertTrue(any("短段复读" in h for h in hits), hits)
+
+    def test_deslop_tell_density_advisory(self):
+        p = self.root / "novel/demo/units/v01-U1.md"
+        p.write_text(
+            "## 第1章 客栈\n\n"
+            + "他感到不安。\n她意识到不对。\n他决定离开。\n她觉得有问题。\n"
+            + "他心想不能停。\n她暗想要走。\n"
+            + "他亮出腰牌，对面的人脸色变了。\n门外有人递来失踪信。\n",
+            encoding="utf-8",
+        )
+        rep, hits = ng.run_with_hits(str(self.root), "demo", "scan-deslop", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertTrue(
+            any("讲述动词" in (f.get("message") or "") for f in rep.findings),
+            rep.format(),
+        )
+        self.assertTrue(any("讲述动词" in h for h in hits), hits)
+
+    def test_deslop_dup_line_advisory(self):
+        p = self.root / "novel/demo/units/v01-U1.md"
+        p.write_text(
+            "## 第1章 客栈\n\n他亮出腰牌。\n对面的人脸色变了。\n他亮出腰牌。\n门外有人递来失踪信。\n",
+            encoding="utf-8",
+        )
+        rep, hits = ng.run_with_hits(str(self.root), "demo", "scan-deslop", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertTrue(
+            any("整句复读" in (f.get("message") or "") for f in rep.findings),
+            rep.format(),
+        )
+        self.assertTrue(any("整句复读" in h for h in hits), hits)
+
+    def test_scene_contract_prop_must_land(self):
+        from novel_gate.common import Report
+        from novel_gate.outline import validate_scene_contracts
+
+        unit = {
+            "status": "accepted",
+            "scenes": [
+                {"id": "S1", "chapter": 1, "beat": "建立期待", "prop": "旧怀表", "turn": "亮出怀表", "must_land": ["亮出腰牌"]},
+                {"id": "S2", "chapter": 2, "beat": "兑现", "turn": "怀表指针停了", "must_land": ["旧怀表指针停了"]},
+            ],
+        }
+        r = Report("lint", "demo", self._book())
+        validate_scene_contracts(unit, r, "u.yaml")
+        self.assertFalse(any("prop" in (f.get("message") or "") for f in r.findings), r.format())
+        unit["scenes"][1]["must_land"] = ["亮出腰牌"]
+        r2 = Report("lint", "demo", self._book())
+        validate_scene_contracts(unit, r2, "u.yaml")
+        self.assertTrue(any("prop" in (f.get("message") or "") for f in r2.findings), r2.format())
+
+    def test_scene_contract_missing_payoff(self):
+        from novel_gate.common import Report
+        from novel_gate.outline import validate_scene_contracts
+
+        unit = {
+            "status": "accepted",
+            "scenes": [
+                {"id": "S1", "chapter": 1, "beat": "建立期待", "turn": "a", "must_land": ["a"]},
+                {"id": "S2", "chapter": 1, "beat": "尝试", "turn": "b", "must_land": ["b"]},
+            ],
+        }
+        r = Report("lint", "demo", self._book())
+        validate_scene_contracts(unit, r, "u.yaml")
+        self.assertTrue(any("兑现/余波" in (f.get("message") or "") for f in r.findings), r.format())
+
+    def test_seal_write_hook_alignment_advisory(self):
+        book = self._book()
+        # Add U2 with entry that does not match U1 hook
+        vol = book / "outline/volumes/v01.md"
+        vol.write_text(
+            vol.read_text(encoding="utf-8").replace(
+                "| v01-U1 | ch1–ch1 | 开局立冲突 | 宿敌真身 | 未兑现承诺 |\n",
+                "| v01-U1 | ch1–ch1 | 开局立冲突 | 宿敌真身 | 未兑现承诺 |\n"
+                "| v01-U2 | ch2–ch2 | 验骨 | 宿敌真身 | 悬念 |\n",
+            ),
+            encoding="utf-8",
+        )
+        (book / "outline/units/v01-U2.yaml").write_text(
+            """unit_id: v01-U2
+chapter_range: [2, 2]
+title_working: 验骨
+word_target: 4000
+status: proposed
+on_stage: [zhu-jue]
+pov: zhu-jue
+story_day: 1
+gap_from_prev: 次日
+flashback: false
+function: 验骨
+entry: 完全不同的入口
+desire: 验骨
+obstacle: 阻挠
+choice: 是否公开
+payoff: 证据落地
+pleasure: 反转
+forbidden: ["宿敌真身"]
+endgame_boundary: 宿敌真身
+next_hook:
+  type: 悬念
+  out: 下一钩
+scenes: []
+chapters: []
+state_deltas: []
+info_control:
+  reveals: []
+  foreshadowing: []
+""",
+            encoding="utf-8",
+        )
+        rep = ng.run(str(self.root), "demo", "seal-write", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertTrue(
+            any("next_hook.out" in (f.get("message") or "") and "entry" in (f.get("message") or "") for f in rep.findings),
+            rep.format(),
+        )
+
+    def test_opening_unit_pack_injects_opening_rules(self):
+        rep = ng.run(str(self.root), "demo", "pack-write", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        text = (self._book() / ".pack/write-v01-U1.md").read_text(encoding="utf-8")
+        self.assertIn("开篇三步", text)
+        self.assertIn("前 3 句有画面或冲突", text)
+
+    def test_pack_write_fails_on_bad_scene_contract(self):
+        p = self.root / "novel/demo/outline/units/v01-U1.yaml"
+        text = p.read_text(encoding="utf-8")
+        text = text.replace('must_land: ["亮出腰牌"]', 'must_land: ["' + ("甲" * 60) + '"]')
+        p.write_text(text, encoding="utf-8")
+        rep = ng.run(str(self.root), "demo", "pack-write", "v01-U1")
+        self.assertEqual(rep.verdict, "FAIL", rep.format())
+        self.assertTrue(any("must_land" in (f.get("message") or "") for f in rep.findings), rep.format())
 
 
 if __name__ == "__main__":

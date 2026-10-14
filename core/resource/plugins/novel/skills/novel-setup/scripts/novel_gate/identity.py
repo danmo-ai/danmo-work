@@ -303,22 +303,56 @@ def is_flashback(unit: dict) -> bool:
     return str(v or "").strip().lower() in ("true", "yes", "1")
 
 
-def validate_timeline_fields(unit: dict, r, rel: str, *, require_clock: bool = False) -> None:
-    """accepted+ : gap_from_prev blocking; story_day|time_label at least one blocking."""
+def validate_timeline_fields(
+    unit: dict,
+    r,
+    rel: str,
+    *,
+    require_clock: bool = False,
+    time_system: str = "",
+) -> None:
+    """accepted+ : gap_from_prev blocking; story_day|time_label at least one blocking.
+    relative_days: accepted/proposed need integer story_day (null + time_label alone fails).
+    drafted/reviewed with null story_day → advisory only (legacy)."""
     from .common import Report, is_blank
 
     assert isinstance(r, Report)
     status = str(unit.get("status") or "").strip()
-    if status not in ("accepted", "drafted", "reviewed") and not require_clock:
+    if status not in ("accepted", "drafted", "reviewed", "proposed") and not require_clock:
         return
-    if is_blank(unit.get("gap_from_prev")):
-        r.blocking("timeline", f"{rel} gap_from_prev empty — 与上单元时间差必填（accepted+）")
+    if status in ("accepted", "drafted", "reviewed") or require_clock:
+        if is_blank(unit.get("gap_from_prev")):
+            r.blocking("timeline", f"{rel} gap_from_prev empty — 与上单元时间差必填（accepted+）")
+        day = story_day_of(unit)
+        if day is None and is_blank(unit.get("time_label")):
+            r.blocking(
+                "timeline",
+                f"{rel} story_day/time_label both empty — 本单元时钟锚点必填（accepted+）",
+            )
+    ts = (time_system or "").strip() or "relative_days"
     day = story_day_of(unit)
-    if day is None and is_blank(unit.get("time_label")):
-        r.blocking(
-            "timeline",
-            f"{rel} story_day/time_label both empty — 本单元时钟锚点必填（accepted+）",
-        )
+    if ts == "relative_days" and day is None and status in (
+        "proposed",
+        "accepted",
+        "drafted",
+        "reviewed",
+    ):
+        from .outline import scene_rows
+
+        # Empty proposed shells stay soft; accepted+ and proposed-with-scenes need integer day.
+        has_scenes = bool(scene_rows(unit))
+        if status == "accepted" or (status == "proposed" and has_scenes):
+            r.blocking(
+                "timeline",
+                f"{rel} time_system=relative_days requires integer story_day "
+                f"(null + time_label alone is not a clock)",
+            )
+        elif status in ("drafted", "reviewed"):
+            r.advisory(
+                "timeline",
+                f"{rel} time_system=relative_days requires integer story_day "
+                f"(null + time_label alone is not a clock)",
+            )
     checks = unit.get("constraint_checks") or {}
     if isinstance(checks, dict) and checks.get("timeline_monotonic") is False and not is_flashback(unit):
         r.advisory(
@@ -370,6 +404,57 @@ def previous_unit_dict(book_root: Path, unit: dict) -> tuple[str, dict] | tuple[
         if ob >= best_end:
             best_id, best, best_end = path.stem, other, ob
     return best_id, best
+
+
+def _next_unit_in_volume(book_root: Path, unit: dict) -> tuple[str, dict] | tuple[str, None]:
+    """Next unit in the same volume by chapter_range start > current end."""
+    from .common import load_yaml_map
+    from .outline import chapter_range_of
+
+    uid = str(unit.get("unit_id") or "").strip()
+    if "-" not in uid:
+        return "", None
+    vol = uid.split("-")[0]
+    _a, cur_b = chapter_range_of(unit)
+    units_dir = book_root / "outline" / "units"
+    if not units_dir.is_dir() or cur_b <= 0:
+        return "", None
+    best_id, best, best_start = "", None, 10**9
+    for path in sorted(units_dir.glob(f"{vol}-U*.yaml")):
+        if path.stem == uid:
+            continue
+        try:
+            other = load_yaml_map(read_book_text(path))
+        except OSError:
+            continue
+        oa, _ob = chapter_range_of(other)
+        if oa <= cur_b or oa >= best_start:
+            continue
+        best_id, best, best_start = path.stem, other, oa
+    return best_id, best
+
+
+def check_next_hook_alignment(book_root: Path, unit: dict, r, rel: str) -> None:
+    """Advisory when this unit's next_hook.out does not match the next unit's entry."""
+    from .common import is_blank
+    from .outline import next_hook_of
+
+    uid = str(unit.get("unit_id") or "").strip()
+    _htype, hout = next_hook_of(unit)
+    if not hout:
+        return
+    next_id, nxt = _next_unit_in_volume(book_root, unit)
+    if nxt is None:
+        return
+    entry = str(nxt.get("entry") or "").strip()
+    if not entry:
+        r.advisory("hook", f"{rel} next unit {next_id} entry empty — 接钩断裂")
+        return
+    if entry != hout:
+        r.advisory(
+            "hook",
+            f"{rel} next_hook.out「{hout[:40]}」 != next unit {next_id} entry「{entry[:40]}」",
+        )
 
 
 def check_timeline_monotonic(book_root: Path, unit: dict, r, rel: str) -> None:

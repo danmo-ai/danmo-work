@@ -299,6 +299,10 @@ def seal_write(book_root: Path, unit_id: str, r: Report) -> None:
     changed = False
     if status in ("accepted", "proposed", "drafted", ""):
         changed = set_outline_status(book_root, unit_id, "drafted")
+    # Next-unit hook alignment (rewrite glue check)
+    from .identity import check_next_hook_alignment
+
+    check_next_hook_alignment(book_root, u, r, rel)
     r.section(
         "SEAL",
         [

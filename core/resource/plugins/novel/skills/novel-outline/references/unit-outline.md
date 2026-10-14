@@ -37,7 +37,8 @@ Official name: **单元细纲**. Do not introduce other product names. This file
 
 ## 故事时钟与身份跃迁
 
-- `story_day`：本单元开场相对日序（整数；与 `novel-state.time_system` / 卷纲「本卷时间线」对齐）。`time_label` 可读锚点可选。
+- `story_day`：本单元开场相对日序（**整数**；与 `novel-state.time_system` / 卷纲「本卷时间线」对齐）。`time_system=relative_days` 时，`accepted`（及已写场面的 `proposed`）**禁止**用 `null` + 长 `time_label` 顶替日序（blocking）；旧 `drafted`/`reviewed` 仅 advisory。
+- `time_label`：可读锚点可选，不能单独当时钟。
 - `gap_from_prev`：与上一单元时间差（「三日后」/「开卷」）；`accepted+` 空则 **blocking**。
 - `flashback: true`：允许 `story_day` 回跳；正文明示闪回。否则 gate 对前序单元做 `timeline_monotonic` 硬检。
 - 场面拆 `when`（故事时）与 `where`（地点）；旧稿 `where: "time | location"` 仍可读。
@@ -71,7 +72,13 @@ state_deltas:
 
 场面是写作骨架。一条 `scenes` = 一个可写场面，不是一章。
 
-- 每章至少 2 场。`must_land` 是可在正文落地的动作或对白事实，禁止口号。
+- 每章至少 2 场。
+- **场面合同（形状检查；`proposed`/`accepted` blocking，旧 `drafted`/`reviewed` advisory）**：
+  - `turn`：≤80 字的短事实转折；`accepted+` 必填。禁止对白剧本（成对引号超过一对）。禁止写非视角人物的未出口内心（「X心里」「心证」等）；视角人物的判断写成可核对事实。
+  - `must_land`：每条 ≤48 字、正文里能核对的事实。禁止作者注 / 元话语（「读者」「canon」「作废」「回写」）；「章末切断」等写法说明不算作者注。
+  - 同名且同 `where` 的第二场：`must_land` 必须含第一场没有的新事实（禁止同名凑「每章两场」）。
+  - 本单元必须含 `兑现` 或 `余波` 场（一次矛盾从起到收）。
+  - 可选 `prop`：本场引入的关键道具；若后续 `must_land` 未落地该道具 → advisory（契诃夫之枪）。
 - **场面契约（`accepted+` 必填）**：
   - `emotional_beat`：本场主情绪从 X→Y（一句，如「镇定→羞怒」）
   - `reader_effect`：期望读者感受（一句，如「替主角窝火」）
@@ -82,6 +89,7 @@ state_deltas:
 - **`word_floor` = 章数 × 2000，`word_ceiling` = 章数 × 3500**。precommit 实测 runes 硬检。
 - **单元规模**：默认 3–8 章，硬上限 10 章。详见 `unit-scale.md`。
 - `status: proposed` 且尚无场面 → lint 只 advisory；一旦有场面或升为 `accepted`，契约字段与 `must_land` 同级 blocking。
+- 同一卷 ≥6 个单元的 `next_hook.type` 相同 → advisory（钩子类型宜换压力）。
 
 ## 锁词与终局边界
 

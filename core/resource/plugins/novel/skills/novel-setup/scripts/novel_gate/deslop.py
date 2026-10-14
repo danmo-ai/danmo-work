@@ -41,21 +41,76 @@ MAX_SIMILES_PER_CH = 8
 MAX_SIMILES_PER_PARA = 2
 EM_DASH_TOKEN = "——"
 MAX_EM_DASH_PER_1K = 5
+# Structural echo: standalone short paragraph that already appeared in the previous one.
+ECHO_MAX_RUNES = 12
 ENGLISH_LEAK_RE = re.compile(r"[A-Za-z]{2,}")
 ENGLISH_WHITELIST = {
     "OK", "APP", "WiFi", "WIFI", "VIP", "CEO", "CFO", "CTO", "NPC", "HP", "MP",
     "GPS", "AI", "ID", "TV", "KTV", "DNA", "IQ", "EQ", "UFO", "CBD", "LED",
     "USB", "PDF", "PPT", "VS", "SPA", "KPI", "NBA", "CBA", "SUV", "MV", "BGM",
 }
+# Narrative tell verbs (show vs tell signal; advisory only, never blocking).
+TELL_VERBS = [
+    "他感到", "她感到", "他意识到", "她意识到", "他知道", "她知道",
+    "他决定", "她决定", "他觉得", "她觉得", "他发现", "她发现",
+    "他心想", "她心想", "他暗想", "她暗想",
+]
+TELL_MAX_PER_1K = 6
+# Same sentence repeated verbatim in the same unit (dialogue echo).
+DUP_MIN_RUNES = 4
 
 
 @dataclass(frozen=True)
 class DeslopHit:
-    kind: str  # toxic | level1 | soup | banned | english | emdash | simile
+    kind: str  # toxic | level1 | soup | banned | english | emdash | simile | echo | tell | dup
     line: int
     col: int
     match: str
     rule: str
+
+
+def iter_tell_hits(prose: str) -> list[DeslopHit]:
+    """Advisory: narrative tell-verb density (他感到 / 她意识到 / …)."""
+    hits: list[DeslopHit] = []
+    for i, line in enumerate(prose.splitlines(), start=1):
+        for w in TELL_VERBS:
+            start = 0
+            while True:
+                j = line.find(w, start)
+                if j < 0:
+                    break
+                hits.append(DeslopHit("tell", i, j + 1, w, "tell-verb"))
+                start = j + len(w)
+    return hits
+
+
+def iter_dup_hits(prose: str) -> list[DeslopHit]:
+    """Advisory: same non-trivial line repeated verbatim in the unit."""
+    hits: list[DeslopHit] = []
+    seen: dict[str, int] = {}
+    for i, line in enumerate(prose.splitlines(), start=1):
+        s = line.strip()
+        if not s or rune_count(s) < DUP_MIN_RUNES:
+            continue
+        if s in seen:
+            hits.append(DeslopHit("dup", i, 1, s, "dup-line"))
+        else:
+            seen[s] = i
+    return hits
+
+
+def iter_echo_hits(prose: str) -> list[DeslopHit]:
+    """Advisory: a ≤12-rune paragraph that is a verbatim substring of the previous paragraph."""
+    hits: list[DeslopHit] = []
+    prev = ""
+    for i, line in enumerate(prose.splitlines(), start=1):
+        s = line.strip()
+        if not s:
+            continue
+        if prev and rune_count(s) <= ECHO_MAX_RUNES and s in prev and s != prev:
+            hits.append(DeslopHit("echo", i, 1, s, "echo-prev"))
+        prev = s
+    return hits
 
 
 def offset_to_line_col(text: str, offset: int) -> tuple[int, int]:
@@ -143,6 +198,7 @@ def format_hit_line(rel: str, hit: DeslopHit, prose_line: str = "") -> str:
     kind_label = {
         "toxic": "毒句式", "level1": "一级词", "soup": "鸡汤尾",
         "banned": "禁词", "english": "英文泄漏", "emdash": "破折号", "simile": "比喻词",
+        "echo": "短段复读", "tell": "讲述动词", "dup": "整句复读",
     }.get(hit.kind, hit.kind)
     excerpt = _excerpt(prose_line, hit.col) if prose_line else hit.match
     return f"{rel}:L{hit.line}: {kind_label}「{hit.match}」 | {excerpt}"
@@ -156,6 +212,7 @@ def format_deslop_locs(rel: str, hits: list[DeslopHit], limit: int = 5) -> str:
 
 def apply_deslop_to_report(prose_rel: str, prose: str, r: Report, hint_limit: int = 5) -> list[DeslopHit]:
     hits = iter_deslop_hits(prose)
+    echo_hits = iter_echo_hits(prose)
     toxic = [h for h in hits if h.kind == "toxic"]
     level1 = [h for h in hits if h.kind == "level1"]
     soup = [h for h in hits if h.kind == "soup"]
@@ -233,6 +290,34 @@ def apply_deslop_to_report(prose_rel: str, prose: str, r: Report, hint_limit: in
     if soup:
         locs = format_deslop_locs(prose_rel, soup, hint_limit)
         r.blocking("deslop", "chicken-soup ending (P0)" + (f" @ {locs}" if locs else ""))
+    if echo_hits:
+        locs = format_deslop_locs(prose_rel, echo_hits, hint_limit)
+        r.advisory(
+            "deslop",
+            f"短段复读上一句 ×{len(echo_hits)}（≤{ECHO_MAX_RUNES}字独立段）"
+            + (f" @ {locs}" if locs else ""),
+        )
+        hits = list(hits) + echo_hits
+    tell_hits = iter_tell_hits(prose)
+    if tell_hits and rune_count(prose) > 0:
+        per_1k = len(tell_hits) * 1000.0 / rune_count(prose)
+        if per_1k > TELL_MAX_PER_1K:
+            locs = format_deslop_locs(prose_rel, tell_hits, hint_limit)
+            r.advisory(
+                "deslop",
+                f"讲述动词 {len(tell_hits)} 个（{per_1k:.1f}/千字，目标 ≤{TELL_MAX_PER_1K}）"
+                + (f" @ {locs}" if locs else ""),
+            )
+            hits = list(hits) + tell_hits
+    dup_hits = iter_dup_hits(prose)
+    if dup_hits:
+        locs = format_deslop_locs(prose_rel, dup_hits, hint_limit)
+        r.advisory(
+            "deslop",
+            f"整句复读 ×{len(dup_hits)}（同一非空行重复出现）"
+            + (f" @ {locs}" if locs else ""),
+        )
+        hits = list(hits) + dup_hits
     return hits
 
 

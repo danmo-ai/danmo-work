@@ -181,9 +181,9 @@ def check_qc_pack(
         return []
     prose = read_text(book_root, prose_rel)
     # precommit already added deslop findings + counts; only line-level HITS are missing.
-    from .deslop import iter_deslop_hits
+    from .deslop import iter_deslop_hits, iter_echo_hits
 
-    hits = hit_lines_for(prose_rel, prose, iter_deslop_hits(prose))
+    hits = hit_lines_for(prose_rel, prose, iter_deslop_hits(prose) + iter_echo_hits(prose))
     try:
         u, _ = load_unit(book_root, unit_id)
     except OSError:

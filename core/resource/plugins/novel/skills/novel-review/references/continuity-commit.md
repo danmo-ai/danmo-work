@@ -22,7 +22,7 @@ After review PASS (and optional polish) for the active unit. PASS 不要求 `rev
 | `continuity/summaries/vNN.md` | 每章 `## chNNN` 块（五要素）；卷收束时末尾追加 `### vNN 卷总结` | 执行日志、事实表 |
 | `continuity/facts.md` | Public facts 新增 / 升级；cursor；Cast snapshot 增量（**年龄 / 职位 / 位置** 等按 `state_deltas` 重放到本单元末）；Open loops；每卷一行 `vNN → continuity/summaries/vNN.md` 索引 | `## chNNN` 块（旧书跑 `--action migrate` 拆出） |
 | `canon/cast/<stem>.md` | 「当前质态」「最近变化点（含本单元 id）」两列；**不改**开卷年龄/本职基线 | 编年史、逐章流水、用改「本职」冒充当前职位 |
-| `outline/units/vNN-U#.yaml` | 核对并必要时改写结构化 `state_deltas`（`stem`/`field`/`from`/`to`）与正文一致 | 把 `to` 写进人物卡基线 |
+| `outline/units/vNN-U#.yaml` | 核对并必要时改写结构化 `state_deltas`（`stem`/`field`/`from`/`to`）与正文一致；**仅当事情变了**才改 `turn`/`must_land` | 把正文句子回写进 `turn`/`must_land`；把路过人名扫进 `on_stage`；把 `to` 写进人物卡基线 |
 | `continuity/commits/vNN-U#.md` | gate 结果、四计数、锁词、字数、扩写 / deslop 处置、偏离登记、**本单元身份转变摘要** | 读者事实 |
 
 ### 1. `continuity/summaries/vNN.md`
@@ -73,7 +73,7 @@ gate `postcommit`：关系类 delta 而对应卡「最近变化点」无本单�
 - 字数实测（单元 runes / 各章 runes vs floor/ceiling）
 - 扩写技术（若用了）：用了哪几种、每章≤3 种
 - deslop 处置（若用了）：删了哪类 AI 味
-- 偏离登记（若有）：正文与细纲哪里不一致、如何回写
+- 偏离登记（若有）：正文与细纲哪里不一致；**只改事实不符处**，禁止把正文句子贴回 `turn`/`must_land`/`on_stage`
 - 下一单元指引（一句话）
 
 **facts.md 不重复这些**。facts 只回答"读者现在知道什么"，commits 回答"我们这一轮做了什么"。

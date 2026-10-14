@@ -60,6 +60,20 @@ WRITE_FIELD_MAX_RUNES = 160
 WRITE_BEAT_CELL_MAX = 72
 WRITE_GENRE_BULLET_MAX_RUNES = 400
 PREV_PROSE_TAIL_RUNES = 600
+# Structural prose constraints injected into every write pack (not a word list).
+WRITE_STRUCT_CONSTRAINTS = (
+    "上一句里已经出现的话，不得再单独成段。",
+    "同一事实在本单元只兑现一次。",
+    "不改变下一步的物件，一场最多留一处。",
+    "一个意思写成一句完整的话；下一句接上一句的结果；同一动词不在相邻两句里各说一遍。",
+)
+# Opening-unit craft rules (ch1–3) injected into write pack only for opening units.
+OPENING_RULES = (
+    "前 3 句有画面或冲突，不用天气/作息/回顾开场。",
+    "露一藏九：只露冲突、异常气味、半句身份；履历与体系后置。",
+    "章末钩是具体事件，不是口号。",
+)
+OPENING_MAX_CHAPTER = 3
 _SEARCH_KB_NOISE = re.compile(r"search_kb|本\s*turn|配额|硬\s*：", re.I)
 QC_PROFILES = {"male_power", "female_emotion", "mystery", "general"}
 TIME_SYSTEMS = {"relative_days", "calendar"}
@@ -324,53 +338,34 @@ def volume_timeline_brief(book_root: Path, unit_id: str, cache=None) -> str:
 
 
 def render_chapter_beat_table(unit: dict) -> list[str]:
-    """One row per chapter for write pack — replaces full 场面序 dump."""
-    by_ch: dict[Any, list[dict]] = {}
-    for s in scene_rows(unit):
+    """One row per scene for write pack — full want/turn/must_land (no last-scene collapse)."""
+    lines = ["  场级beat（每场一行；勿再读细纲 YAML）:"]
+    scenes = scene_rows(unit)
+    for s in scenes:
+        sid = s.get("id") or "?"
         ch = s.get("chapter")
-        try:
-            key = int(ch) if ch is not None and str(ch).isdigit() else ch
-        except (TypeError, ValueError):
-            key = ch
-        by_ch.setdefault(key, []).append(s)
-    lines = ["  章级beat（每章一行；勿再读细纲 YAML）:"]
-    rows = chapter_rows(unit)
-    if not rows:
-        a, b = chapter_range_of(unit)
-        if a and b:
-            rows = [{"chapter": n, "title_working": "", "cut_hook": ""} for n in range(a, b + 1)]
-    for c in rows:
+        want = clip_runes(str(s.get("want") or "").strip(), WRITE_FIELD_MAX_RUNES) or "—"
+        turn = clip_runes(str(s.get("turn") or "").strip(), WRITE_FIELD_MAX_RUNES) or "—"
+        ml = s.get("must_land") or []
+        lands = [str(x).strip() for x in ml if str(x).strip()] if isinstance(ml, list) else []
+        land_s = "；".join(lands) if lands else "—"
+        where = str(s.get("where") or "").strip()
+        where_bit = f" @{clip_runes(where, 24)}" if where else ""
+        lines.append(f"    ch{ch} {sid}{where_bit} | want:{want} | turn:{turn} | land:{land_s}")
+    for c in chapter_rows(unit):
         ch = c.get("chapter")
-        try:
-            key = int(ch) if ch is not None and str(ch).isdigit() else ch
-        except (TypeError, ValueError):
-            key = ch
         title = clip_runes(str(c.get("title_working") or ""), 24)
         cut = clip_runes(str(c.get("cut_hook") or ""), WRITE_CUT_MAX_RUNES)
-        scs = by_ch.get(key) or by_ch.get(ch) or []
-        want_turn = "—"
-        lands: list[str] = []
-        emo = "—"
-        for s in scs:
-            w, t = str(s.get("want") or "").strip(), str(s.get("turn") or "").strip()
-            if w or t:
-                want_turn = clip_runes(f"{w}→{t}", WRITE_BEAT_CELL_MAX)
-            ml = s.get("must_land") or []
-            if isinstance(ml, list):
-                for x in ml:
-                    if x and len(lands) < 2:
-                        lands.append(str(x))
-            e = str(s.get("emotional_beat") or "").strip()
-            ef = str(s.get("reader_effect") or "").strip()
-            if emo == "—" and (e or ef):
-                emo = clip_runes(f"情:{e or '—'}→读:{ef or '—'}", WRITE_BEAT_CELL_MAX)
-        land_s = clip_runes("；".join(lands), WRITE_BEAT_CELL_MAX) if lands else "—"
-        lines.append(
-            f"    ch{ch} | {title or '—'} | {want_turn} | land:{land_s} | {emo} | cut={cut or '—'}"
-        )
+        if cut or title:
+            lines.append(f"    cut ch{ch} {title or '—'} | cut={cut or '—'}")
     if len(lines) == 1:
         lines.append("    （无 chapters/scenes）")
     return lines
+
+
+def _is_opening_unit(unit: dict) -> bool:
+    a, b = chapter_range_of(unit)
+    return a > 0 and a <= OPENING_MAX_CHAPTER
 
 
 def render_unit_card(
@@ -758,6 +753,14 @@ def build_preflight_context(
             lines.append("- 本单元身份转变目标（写作约束；开场人设已在 identity@unit，勿提前写穿 to）:")
             for g in goals:
                 lines.append(f"  - {g}")
+    if write_pack:
+        lines.append("- 写时结构约束（通顺；非禁词表）:")
+        for rule in WRITE_STRUCT_CONSTRAINTS:
+            lines.append(f"  - {rule}")
+        if _is_opening_unit(unit):
+            lines.append("- 开篇三步（黄金三章精简）:")
+            for rule in OPENING_RULES:
+                lines.append(f"  - {rule}")
     # 8. open debts
     if write_pack:
         loops = unit_open_loop_rows(unit, ledger_text)
@@ -883,7 +886,8 @@ def check_preflight(
         r.blocking("contract", f"{rel} status={status} (need accepted before prose)")
     if filed and UNIT_ID_RE.match(filed) and not unit_listed(book_root / "outline", filed, cache):
         r.blocking("unit_id", f"{filed} not found in outline/ — return to novel-plan")
-    validate_unit_shape(u, r, rel)
+    ts = str((st or {}).get("time_system") or "relative_days").strip() or "relative_days"
+    validate_unit_shape(u, r, rel, time_system=ts)
     row = volume_index_row(book_root, unit_id, cache)
     validate_unit_against_volume(u, row, r, rel)
     validate_on_stage(u, volume_cast_for(book_root, unit_id, cache), cast_status_map(book_root, cache), r, rel)
