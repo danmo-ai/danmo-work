@@ -433,6 +433,12 @@ def _norm_sentence(s: str) -> str:
 # --- shape validation ---
 
 
+# Emotional flatline: same emotional_beat start state repeated ≥3 scenes in a row.
+EMOTION_FLATLINE_MAX = 3
+# Scene without pressure: beat not in {加压, 决断, 兑现} and turn has no negative consequence.
+PRESSURE_BEATS = {"加压", "决断", "兑现", "余波"}
+
+
 def validate_scene_contracts(unit: dict, r: Report, rel: str) -> None:
     """Shape checks on turn / must_land — facts only, no dialogue screenplays."""
     status = str(unit.get("status") or "").strip()
@@ -519,6 +525,38 @@ def validate_scene_contracts(unit: dict, r: Report, rel: str) -> None:
     beats = [str(s.get("beat") or "").strip() for s in scenes]
     if "兑现" not in beats and "余波" not in beats:
         _flag(r, sev, "scenes", f"{rel} no 兑现/余波 scene — 矛盾须在本单元落地")
+    # Emotional flatline: same emotional_beat start state ≥3 scenes in a row.
+    prev_emo = ""
+    flat_n = 0
+    for s in scenes:
+        emo = str(s.get("emotional_beat") or "").strip()
+        start = emo.split("→", 1)[0].strip() if "→" in emo else emo
+        if start and start == prev_emo:
+            flat_n += 1
+            if flat_n >= EMOTION_FLATLINE_MAX - 1:
+                _flag(
+                    r,
+                    sev,
+                    "scenes",
+                    f"{rel} scene {s.get('id') or '?'} emotional_beat start「{start}」×{flat_n + 1} — 情绪无起伏",
+                )
+        else:
+            flat_n = 0
+        prev_emo = start
+    # Pressure check: 尝试/建立期待 scenes need a turn with negative consequence (not just success).
+    # Only when turn is a short fact (≤80); long screenplay turns are caught elsewhere.
+    for s in scenes:
+        beat = str(s.get("beat") or "").strip()
+        turn = str(s.get("turn") or "").strip()
+        if beat in ("尝试", "建立期待") and turn and rune_count(turn) <= TURN_MAX_RUNES:
+            # Negative consequence markers: 失败/被/没有/未/拒绝/落空/受阻/断/停/退
+            if not re.search(r"[失败被]|没有|未[成达]|拒绝|落空|受阻|断|停|退|输|败|错|罚", turn):
+                _flag(
+                    r,
+                    sev,
+                    "scenes",
+                    f"{rel} scene {s.get('id') or '?'} beat={beat} turn「{turn[:24]}」无负面后果 — 尝试须受阻",
+                )
     # Prop presence (契诃夫之枪): props introduced must be picked up by a later must_land.
     all_lands: list[str] = []
     for s in scenes:

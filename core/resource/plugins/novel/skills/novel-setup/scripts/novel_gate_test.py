@@ -1969,6 +1969,42 @@ constraint_checks:
         validate_scene_contracts(unit, r, "u.yaml")
         self.assertTrue(any("兑现/余波" in (f.get("message") or "") for f in r.findings), r.format())
 
+    def test_scene_contract_emotion_flatline(self):
+        from novel_gate.common import Report
+        from novel_gate.outline import validate_scene_contracts
+
+        unit = {
+            "status": "accepted",
+            "scenes": [
+                {"id": "S1", "chapter": 1, "beat": "建立期待", "emotional_beat": "镇定→羞怒", "turn": "被羞辱", "must_land": ["有人笑他"]},
+                {"id": "S2", "chapter": 1, "beat": "尝试", "emotional_beat": "镇定→愤怒", "turn": "反证失败", "must_land": ["亮出腰牌"]},
+                {"id": "S3", "chapter": 1, "beat": "加压", "emotional_beat": "镇定→崩溃", "turn": "被围攻", "must_land": ["被围攻"]},
+                {"id": "S4", "chapter": 1, "beat": "兑现", "emotional_beat": "镇定→平静", "turn": "真相大白", "must_land": ["真相大白"]},
+            ],
+        }
+        r = Report("lint", "demo", self._book())
+        validate_scene_contracts(unit, r, "u.yaml")
+        self.assertTrue(any("情绪无起伏" in (f.get("message") or "") for f in r.findings), r.format())
+
+    def test_scene_contract_pressure_turn(self):
+        from novel_gate.common import Report
+        from novel_gate.outline import validate_scene_contracts
+
+        unit = {
+            "status": "accepted",
+            "scenes": [
+                {"id": "S1", "chapter": 1, "beat": "尝试", "turn": "顺利进入", "must_land": ["进入"]},
+                {"id": "S2", "chapter": 1, "beat": "兑现", "turn": "成功", "must_land": ["成功"]},
+            ],
+        }
+        r = Report("lint", "demo", self._book())
+        validate_scene_contracts(unit, r, "u.yaml")
+        self.assertTrue(any("无负面后果" in (f.get("message") or "") for f in r.findings), r.format())
+        unit["scenes"][0]["turn"] = "被拦下"
+        r2 = Report("lint", "demo", self._book())
+        validate_scene_contracts(unit, r2, "u.yaml")
+        self.assertFalse(any("无负面后果" in (f.get("message") or "") for f in r2.findings), r2.format())
+
     def test_seal_write_hook_alignment_advisory(self):
         book = self._book()
         # Add U2 with entry that does not match U1 hook
