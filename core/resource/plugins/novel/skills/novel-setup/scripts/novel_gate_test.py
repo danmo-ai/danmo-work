@@ -1902,6 +1902,25 @@ constraint_checks:
         )
         self.assertTrue(any("讲述动词" in h for h in hits), hits)
 
+    def test_deslop_tic_line_advisory(self):
+        p = self.root / "novel/demo/units/v01-U1.md"
+        p.write_text(
+            "## 第1章 客栈\n\n"
+            + "他亮出腰牌。\n她把这一句，在心里过了一遍。\n对面的人脸色变了。\n"
+            + "她把这一句，在心里过了一遍。\n门外有人递来失踪信。\n"
+            + "她把这一句，在心里过了一遍。\n他把信拆开。\n"
+            + "她把这一句，在心里过了一遍。\n信上只有一行字。\n"
+            + "她把这一句，在心里过了一遍。\n",
+            encoding="utf-8",
+        )
+        rep, hits = ng.run_with_hits(str(self.root), "demo", "scan-deslop", "v01-U1")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        self.assertTrue(
+            any("填充行" in (f.get("message") or "") for f in rep.findings),
+            rep.format(),
+        )
+        self.assertTrue(any("填充行" in h for h in hits), hits)
+
     def test_deslop_dup_line_advisory(self):
         p = self.root / "novel/demo/units/v01-U1.md"
         p.write_text(

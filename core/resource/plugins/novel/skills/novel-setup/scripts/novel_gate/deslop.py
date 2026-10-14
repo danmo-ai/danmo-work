@@ -58,11 +58,17 @@ TELL_VERBS = [
 TELL_MAX_PER_1K = 6
 # Same sentence repeated verbatim in the same unit (dialogue echo).
 DUP_MIN_RUNES = 4
+# Repeated filler line (e.g. 「她把这一句，在心里过了一遍。」) — advisory per unit.
+TIC_MAX_PER_UNIT = 4
+# Em-dash density ceiling per subgenre (crime-procedural keeps short punchy dashes).
+EM_DASH_MAX_BY_SUBGENRE = {
+    "刑侦探案": 3,
+}
 
 
 @dataclass(frozen=True)
 class DeslopHit:
-    kind: str  # toxic | level1 | soup | banned | english | emdash | simile | echo | tell | dup
+    kind: str  # toxic | level1 | soup | banned | english | emdash | simile | echo | tell | dup | tic
     line: int
     col: int
     match: str
@@ -96,6 +102,26 @@ def iter_dup_hits(prose: str) -> list[DeslopHit]:
             hits.append(DeslopHit("dup", i, 1, s, "dup-line"))
         else:
             seen[s] = i
+    return hits
+
+
+def iter_tic_hits(prose: str) -> list[DeslopHit]:
+    """Advisory: a filler/tic line repeated >TIC_MAX_PER_UNIT times in one unit.
+
+    Generic shape: any line whose normalized form appears often is a tic
+    (e.g. 「她把这一句，在心里过了一遍。」). No per-book phrase list.
+    """
+    counts: dict[str, list[int]] = {}
+    for i, line in enumerate(prose.splitlines(), start=1):
+        s = line.strip()
+        if not s or rune_count(s) > 24:
+            continue
+        counts.setdefault(s, []).append(i)
+    hits: list[DeslopHit] = []
+    for s, lines in counts.items():
+        if len(lines) > TIC_MAX_PER_UNIT:
+            for ln in lines:
+                hits.append(DeslopHit("tic", ln, 1, s, "tic-line"))
     return hits
 
 
@@ -198,7 +224,7 @@ def format_hit_line(rel: str, hit: DeslopHit, prose_line: str = "") -> str:
     kind_label = {
         "toxic": "毒句式", "level1": "一级词", "soup": "鸡汤尾",
         "banned": "禁词", "english": "英文泄漏", "emdash": "破折号", "simile": "比喻词",
-        "echo": "短段复读", "tell": "讲述动词", "dup": "整句复读",
+        "echo": "短段复读", "tell": "讲述动词", "dup": "整句复读", "tic": "填充行",
     }.get(hit.kind, hit.kind)
     excerpt = _excerpt(prose_line, hit.col) if prose_line else hit.match
     return f"{rel}:L{hit.line}: {kind_label}「{hit.match}」 | {excerpt}"
@@ -318,6 +344,16 @@ def apply_deslop_to_report(prose_rel: str, prose: str, r: Report, hint_limit: in
             + (f" @ {locs}" if locs else ""),
         )
         hits = list(hits) + dup_hits
+    tic_hits = iter_tic_hits(prose)
+    if tic_hits:
+        uniq = list(dict.fromkeys(h.match for h in tic_hits))
+        locs = format_deslop_locs(prose_rel, tic_hits, hint_limit)
+        r.advisory(
+            "deslop",
+            f"填充行 ×{len(tic_hits)}（{uniq[0][:12]}… 重复 {len([h for h in tic_hits if h.match == uniq[0]])} 次）"
+            + (f" @ {locs}" if locs else ""),
+        )
+        hits = list(hits) + tic_hits
     return hits
 
 
