@@ -6,10 +6,40 @@ import (
 	"path/filepath"
 	"strings"
 
+	"danmo-work/core/paths"
 	"danmo-work/core/runtime/tool"
 )
 
 func resolvePath(workDir, path string) (string, error) {
+	resolved, err := normalizeToolPath(workDir, path)
+	if err != nil {
+		return "", err
+	}
+	if underRoot(workDir, resolved) {
+		return resolved, nil
+	}
+	return "", fmt.Errorf("path %q is outside project directory. Use relative paths (e.g., 'src/main.go') or start with read_file to explore the project structure", path)
+}
+
+// resolveReadPath is resolvePath plus read-only access to $WORK_HOME/plugins
+// (plugin packs / skill scripts). Mutating tools must keep using resolvePath /
+// resolveWritePath so agents cannot edit the synced plugin tree.
+func resolveReadPath(workDir, path string) (string, error) {
+	resolved, err := normalizeToolPath(workDir, path)
+	if err != nil {
+		return "", err
+	}
+	if underRoot(workDir, resolved) {
+		return resolved, nil
+	}
+	if plugins := pluginsRoot(); plugins != "" && underRoot(plugins, resolved) {
+		return resolved, nil
+	}
+	return "", fmt.Errorf("path %q is outside project directory (and not under $WORK_HOME/plugins). Use project-relative paths, or an absolute path under $WORK_HOME/plugins for plugin scripts", path)
+}
+
+func normalizeToolPath(workDir, path string) (string, error) {
+	path = expandWorkHomeRefs(path)
 	// Normalize path separators: convert any mix of / and \ to the OS-native format.
 	// This handles models outputting Windows-style paths on Unix or vice versa.
 	path = filepath.FromSlash(filepath.ToSlash(path))
@@ -19,15 +49,43 @@ func resolvePath(workDir, path string) (string, error) {
 		resolved = filepath.Join(workDir, path)
 	}
 	resolved = filepath.Clean(resolved)
-
-	rel, err := filepath.Rel(workDir, resolved)
-	if err != nil {
-		return "", fmt.Errorf("cannot resolve path %q: use relative paths from project root, or use read_file to discover valid paths", path)
-	}
-	if strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
-		return "", fmt.Errorf("path %q is outside project directory. Use relative paths (e.g., 'src/main.go') or start with read_file to explore the project structure", path)
+	if workDir == "" {
+		return "", fmt.Errorf("cannot resolve path %q: missing project root", path)
 	}
 	return resolved, nil
+}
+
+func expandWorkHomeRefs(path string) string {
+	home := paths.Home()
+	if home == "" || path == "" {
+		return path
+	}
+	for _, prefix := range []string{"$WORK_HOME", "${WORK_HOME}"} {
+		if path == prefix {
+			return home
+		}
+		if strings.HasPrefix(path, prefix+"/") || strings.HasPrefix(path, prefix+string(filepath.Separator)) {
+			return filepath.Join(home, path[len(prefix)+1:])
+		}
+	}
+	return path
+}
+
+func pluginsRoot() string {
+	home := paths.Home()
+	if home == "" {
+		return ""
+	}
+	return filepath.Clean(filepath.Join(home, "plugins"))
+}
+
+func underRoot(root, resolved string) bool {
+	root = filepath.Clean(root)
+	rel, err := filepath.Rel(root, resolved)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (!strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel))
 }
 
 // resolveWritePath is resolvePath plus a symlink-escape check for mutating
@@ -123,7 +181,7 @@ func checkBinary(data []byte, path string) error {
 }
 
 func readFilePath(workDir, pathName string) (string, os.FileInfo, error) {
-	resolvedPath, err := resolvePath(workDir, pathName)
+	resolvedPath, err := resolveReadPath(workDir, pathName)
 	if err != nil {
 		return "", nil, err
 	}

@@ -38,7 +38,7 @@ func (h *ReadFile) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
 		Name: "read_file",
 		Description: "Reads a file or directory from the local filesystem. If the path does not exist, an error is returned.\n\n" +
-			"**Important**: All paths are relative to the project root directory. Use relative paths like 'src/main.go' instead of absolute paths.\n\n" +
+			"**Important**: Paths are relative to the project root (e.g. 'src/main.go'). Absolute paths under $WORK_HOME/plugins are also allowed (read-only plugin packs / skill scripts). Other locations outside the project are rejected.\n\n" +
 			"Usage:\n" +
 			"- By default, this tool returns up to " + fmt.Sprintf("%d", defaultReadLimit) + " lines from the start of the file.\n" +
 			"- The offset parameter is the line number to start from (1-indexed).\n" +
@@ -53,7 +53,7 @@ func (h *ReadFile) Schema() domain.ToolSchema {
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"path":   map[string]any{"type": "string", "description": "Relative file or directory path from project root (e.g., 'src/main.go')"},
+				"path":   map[string]any{"type": "string", "description": "Relative path from project root, or absolute path under $WORK_HOME/plugins"},
 				"offset": map[string]any{"type": "integer", "description": "1-based line number to start reading from (default: 1)"},
 				"limit":  map[string]any{"type": "integer", "description": "Maximum number of lines to read (default: " + fmt.Sprintf("%d", defaultReadLimit) + ")"},
 			},

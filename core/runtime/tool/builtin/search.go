@@ -32,7 +32,7 @@ func (h *Grep) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
 		Name: "grep",
 		Description: "Fast content search tool that searches file contents using regular expressions.\n\n" +
-			"**Important**: Searches within the project root directory by default. Use relative paths when specifying a search location.\n\n" +
+			"**Important**: Searches within the project root by default. Absolute paths under $WORK_HOME/plugins are also allowed (read-only).\n\n" +
 			"- Supports full regex syntax (e.g. \"log.*Error\", \"function\\s+\\w+\").\n" +
 			"- Returns file paths, line numbers, and matching lines.\n" +
 			"- Filter files by pattern with the include parameter (e.g. \"*.js\", \"*.{ts,tsx}\").\n" +
@@ -84,7 +84,7 @@ func (h *Grep) Execute(ctx context.Context, input map[string]any) (domain.ToolRe
 		root = "."
 	}
 	workDir := workDirFromInput(input)
-	root, err = resolvePath(workDir, root)
+	root, err = resolveReadPath(workDir, root)
 	if err != nil {
 		return domain.ToolResult{}, err
 	}
@@ -298,7 +298,7 @@ func (h *Glob) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 	searchRoot, _ := input["path"].(string)
 	if searchRoot != "" {
 		workDir := workDirFromInput(input)
-		resolved, err := resolvePath(workDir, searchRoot)
+		resolved, err := resolveReadPath(workDir, searchRoot)
 		if err != nil {
 			return domain.ToolResult{}, err
 		}
@@ -310,7 +310,7 @@ func (h *Glob) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 		maxResults = 50
 	}
 
-	pattern, err := resolvePath(workDirFromInput(input), pattern)
+	pattern, err := resolveReadPath(workDirFromInput(input), pattern)
 	if err != nil {
 		pattern, err = resolveGlobPattern(workDirFromInput(input), pattern)
 		if err != nil {
@@ -347,7 +347,7 @@ func (h *Glob) Execute(_ context.Context, input map[string]any) (domain.ToolResu
 
 func resolveGlobPattern(workDir, pattern string) (string, error) {
 	if !strings.Contains(pattern, "**") {
-		resolved, err := resolvePath(workDir, pattern)
+		resolved, err := resolveReadPath(workDir, pattern)
 		if err != nil {
 			return "", err
 		}
@@ -360,7 +360,7 @@ func resolveGlobPattern(workDir, pattern string) (string, error) {
 	if parts[0] == "**" {
 		return filepath.Join(workDir, pattern), nil
 	}
-	firstPart, err := resolvePath(workDir, parts[0])
+	firstPart, err := resolveReadPath(workDir, parts[0])
 	if err != nil {
 		return "", err
 	}
