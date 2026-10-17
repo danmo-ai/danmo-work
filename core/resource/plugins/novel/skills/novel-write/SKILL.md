@@ -16,6 +16,8 @@ metadata:
 
 钉死 `G="$WORK_HOME/plugins/novel/skills/novel-setup/scripts/novel_gate.py"`。
 
+**本轮边界**：只读 `pack-write` 落盘的 `file:`（重写已存在正文 → 先 `read_file` 同路径再 `write`）；只写 `write:` 指向的 `units/vNN-U#.md`；只跑 `pack-write` 与 `seal-write`，FAIL 只重跑该项。此三条之外（源码 / 目录扫描 / 其它技能 / KB / lint-outline / 细纲）均属越界。
+
 卡文 / 续写例外才 `read_skill` `continuation.md`。开篇卡文才 `opening-chapters`；场景卡文才 `scene-routing`——二者都会教 `search_kb`，**不要**在短路径默认加载。
 
 ## When to load
@@ -32,7 +34,9 @@ metadata:
 | 2 | **一次** `write` 一份正文（全部章；重写可覆盖） | **只**本次 pack | `units/vNN-U#.md` |
 | 3 | `python3 "$G" seal-write --workdir . --book-id <slug> --unit vNN-U#` | — | 细纲 `drafted` |
 
-只消费本次 pack：**0 次 `search_kb`**、不扫书目录 / canon / 旧单元、不自跑字数脚本或对标章配额。题材与风格以 pack 为准。
+**重写已存在文件 → 先 `read_file` 同路径再 `write`**（工具硬性要求；不重跑 `pack-write`）。
+
+只消费本次 pack：题材与风格以 pack 为准。
 
 **One unit per turn.** 单元 3–8 章默认，硬上限 10 章。
 

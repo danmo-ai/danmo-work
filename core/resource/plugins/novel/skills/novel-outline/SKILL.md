@@ -16,6 +16,8 @@ metadata:
 
 钉死 `G="$WORK_HOME/plugins/novel/skills/novel-setup/scripts/novel_gate.py"`。
 
+**本轮边界**：只读 `pack-outline` 落盘的 `file:`（含细纲字段速查）；只写 `outline/units/*.yaml`；只跑 `pack-outline` 与 `lint-outline`（≤3 次），FAIL 只补失败单元重跑该项。此三条之外（源码 / 目录扫描 / 其它技能 / KB / 正文）均属越界。
+
 ## When to load
 
 写细纲 / 重写细纲 / 一批细纲 / 单元细纲.
@@ -38,9 +40,9 @@ metadata:
 |------|------|
 | pack-outline exit ≠ 0 | **停**。不写 YAML |
 | 任务缺 `volume` / `book` | **停**，不猜 |
-| lint-outline FAIL | 只补失败单元，再 lint **一次**；仍 FAIL → 停并报告 |
+| lint-outline FAIL | 只补失败单元，再 lint；最多 **3 次**。仍 FAIL → 停并报告 |
 | 想写正文 | 换 `novel-write` 新会话 |
 
 ## Stop
 
-`lint-outline` ≤2 次后停。全 PASS → 报 `### UNITS`。不写正文。
+`lint-outline` ≤3 次后停。全 PASS → 报 `### UNITS`。不写正文。

@@ -563,6 +563,12 @@ def check_postcommit(
             "Commit must refresh continuity/facts.md (or legacy ledger.md)",
         )
 
+    if any(
+        f.get("check") == "identity" and f.get("severity") == "blocking" for f in r.findings
+    ):
+        from .common import IDENTITY_FIX_HINT
+
+        r.section("IDENTITY_FIX", [IDENTITY_FIX_HINT])
     # Re-check lock/scale as safety net (primary hard gate is precommit).
     prose_rel = unit_prose_rel(unit_id)
     if file_exists(book_root, prose_rel):

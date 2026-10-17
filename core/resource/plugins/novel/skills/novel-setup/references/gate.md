@@ -34,7 +34,7 @@ python3 "$G" migrate --workdir . --book-id <slug>
 | `cast-lint` | 规划 / 补卡后 | 人物卡与关系表。 |
 | `accept-volume` | 卷纲批准后 | 提升 canon + 种 proposed 细纲头。 |
 | `pack-outline` | 细纲 | 薄包写到 `.pack/`；只读 pack 填 YAML。 |
-| `lint-outline` | 细纲写完 | 结构/合同；最多再跑一次。 |
+| `lint-outline` | 细纲写完 | 结构/合同；最多 3 次。 |
 | `pack-write` | 写正文 | CONTEXT 包；含场级 beat、结构约束、开篇单元精简规则；随后 `seal-write`。 |
 | `seal-write` | 写正文后 | 细纲 `drafted`。 |
 | `pack-finalize` | 定稿 | LENGTH / HITS / COMMIT 骨架包（缺 commits 文件时含 `COMMIT_SKELETON`）。exit≠0 且有 PACK = 有缺口，继续改包。 |

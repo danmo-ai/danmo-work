@@ -179,7 +179,7 @@ def _do_line(stage: str, r: Report) -> str:
     if st == STAGE_OUTLINE:
         return (
             "do: read PACK only (if truncated parallel offset) "
-            "→ fill ≤4 proposed YAML → lint-outline (retry once if FAIL)"
+            "→ fill ≤4 proposed YAML → lint-outline (≤3 attempts if FAIL)"
         )
     sm = _section_map(r)
     need_prose = _length_needs_expand(sm.get("LENGTH") or []) or _hits_need_work(sm.get("HITS") or [])

@@ -16,6 +16,8 @@ metadata:
 
 钉死 `G="$WORK_HOME/plugins/novel/skills/novel-setup/scripts/novel_gate.py"`。
 
+**本轮边界**：只读 `pack-finalize` 落盘的 `file:` 与其 `paths` 列出的缺口文件；只写这些 `paths`；只跑 `pack-finalize`、三条 `check-*`（并行）、`seal-commit`，FAIL 只重跑该项。此三条之外（源码 / 目录扫描 / 其它技能 / KB / 细纲）均属越界。
+
 ## When to load
 
 定稿 / 重新定稿 / 审阅定稿 / 扩→审→润→Commit / 审稿 / 去 AI 味 / Continuity Commit.
@@ -31,7 +33,7 @@ metadata:
 | 3 | 无缺口，或改完后：同一助手消息发 **三条** `exec_shell`（`check-length` / `check-deslop` / `check-commit`，同 book/unit）。不要拼进一条 shell |
 | 4 | 三个都 exit 0 → `python3 "$G" seal-commit --workdir . --book-id <slug> --unit vNN-U#` |
 
-只消费本次 pack 与 pack 列出的缺口文件；不扫书树补上下文。COMMIT / SUMMARY 骨架在 pack 的 `### COMMIT_SKELETON` / `### SUMMARY_SKELETONS`——**直接 `write`/`edit` 到 `paths`**。不 `search_kb`、不读旧 `continuity/commits/*.md`、不 `read_skill` 猜 `assets/commit-log.md` / `novel-setup/...`（模板已在 pack）。check-* 的 **ADVISORY 不挡 seal**，也不单开改 `facts.md`（除非 pack `paths` 含 `continuity/facts.md`）。审稿 FAIL / 深审才 `search_kb`。
+只消费本次 pack 与 pack 列出的缺口文件。COMMIT / SUMMARY 骨架在 pack 的 `### COMMIT_SKELETON` / `### SUMMARY_SKELETONS`——**直接 `write`/`edit` 到 `paths`**。check-* 的 **ADVISORY 不挡 seal**。审稿 FAIL / 深审才 `search_kb`。
 
 **`pack-finalize` exit ≠ 0 且 stdout 有 `### PACK` / `file:` = 有缺口，正常**：继续第 2 步读 pack 改缺口，不是工具坏了。
 

@@ -9,6 +9,7 @@ from typing import Any
 
 from .cast import cast_context_lines, cast_status_map
 from .common import (
+    BOUNDARY_OUTLINE,
     UNIT_ID_RE,
     Report,
     file_exists,
@@ -1034,9 +1035,21 @@ def build_outline_pack(book_root: Path, st: dict, volume: str, cache=None) -> li
             lines.append("    上一单元时钟: （首单元或无前序 — gap 写「开卷」）")
 
     lines.append(
-        "- 纪律: 只用本包填时钟 / state_deltas.from / entry / forbidden / on_stage；"
-        "不读题材全文、不读人物卡、不 read_skill。"
-        "填完 lint-units 一次；FAIL 只补一次再 lint 一次然后停。不写正文。"
+        "- 细纲字段速查（填 proposed/accepted 所需全部规则）:\n"
+        "  scenes[]: 每章≥2场；必填 when/where/beat/emotional_beat/turn/must_land/reader_effect/subtext。\n"
+        "    beat 只许 建立期待|尝试|加压|决断|兑现|余波；turn ≤80字（短事实转折，禁对白剧本）；\n"
+        "    must_land 每条 ≤48字、可核对事实；本单元须含 兑现 或 余波 场。\n"
+        "  chapters[]: 只记 从哪场到哪场/cut_hook/word_share；word_share 2000–3500；\n"
+        "    word_target=Σword_share，word_floor=章数×2000，word_ceiling=章数×3500。\n"
+        "  时钟: time_system=relative_days 时 story_day 必填整数；gap_from_prev 必填；\n"
+        "    flashback:true 才允许 story_day 回跳。\n"
+        "  合同: desire/obstacle/choice(须含代价词)/payoff/pleasure；forbidden/endgame_boundary\n"
+        "    在终局边界格非空时不得皆空；next_hook.type 不改，只填 next_hook.out。\n"
+        "  state_deltas: 结构化 - stem/field(title|age|location|power|relation|status|other)/from/to；\n"
+        "    from 对齐本包 Cast snapshot 行；to 是单元结束目标。"
+    )
+    lines.append(
+        "- " + BOUNDARY_OUTLINE
     )
     return lines
 

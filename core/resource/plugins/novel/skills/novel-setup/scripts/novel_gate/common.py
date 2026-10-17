@@ -15,6 +15,34 @@ MIGRATE_HINT = (
 BOOK_TEXT_SUFFIXES = {".md", ".yaml", ".yml", ".txt", ".json"}
 
 
+# --- 本轮边界（single source of truth; SKILL.md / pack do:/ context 纪律 all derive) ---
+#
+# Positive contract: what this turn reads / writes / runs. Anything outside is off-limits.
+# Keep as ONE paragraph per stage; do not stack negative lists elsewhere.
+
+BOUNDARY_OUTLINE = (
+    "本轮边界：只读 pack-outline 落盘的 file:（含细纲字段速查）；只写 outline/units/*.yaml；"
+    "只跑 pack do: 列出的 pack-outline 与 lint-outline（≤3 次），FAIL 只补失败单元重跑该项。"
+)
+
+BOUNDARY_WRITE = (
+    "本轮边界：只读 pack-write 落盘的 file:（重写已存在正文 → 先 read_file 同路径）；"
+    "只写 write: 指向的 units/vNN-U#.md；只跑 pack-write 与 seal-write，FAIL 只重跑该项。"
+)
+
+BOUNDARY_FINALIZE = (
+    "本轮边界：只读 pack-finalize 落盘的 file: 与其 paths 列出的缺口文件；"
+    "只写这些 paths；只跑 pack-finalize、三条 check-*（并行）、seal-commit，FAIL 只重跑该项。"
+)
+
+# Fix hint for check-commit identity blockers (Cast snapshot table in continuity/facts.md).
+IDENTITY_FIX_HINT = (
+    "fix: continuity/facts.md 的 Cast snapshot 表——表头首格须恰为『角色』；"
+    "identity state_deltas 的 to 字面须写进该行『职位』列（title）或『年龄』列（age）。"
+    "改完重跑 check-commit。"
+)
+
+
 # --- YAML (PyYAML optional; indentation fallback covers the shapes we emit) ---
 
 

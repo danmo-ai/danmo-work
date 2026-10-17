@@ -718,6 +718,51 @@ class GateTests(unittest.TestCase):
         self.assertNotIn("风格指纹", blob)
         self.assertNotIn("identity@unit:", blob)
 
+    def test_outline_pack_includes_field_cheatsheet(self):
+        """Outline pack must embed scene/clock/contract rules so agent needn't read gate source."""
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: proposed")
+        rep = ng.run(str(self.root), "demo", "outline-pack", "", "v01")
+        self.assertEqual(rep.verdict, "PASS", rep.format())
+        blob = rep.format()
+        self.assertIn("细纲字段速查", blob)
+        self.assertIn("scenes[]", blob)
+        self.assertIn("emotional_beat", blob)
+        self.assertIn("word_floor", blob)
+        self.assertIn("story_day 必填整数", blob)
+        self.assertIn("state_deltas", blob)
+        self.assertIn("本轮边界", blob)
+
+    def test_outline_pack_boundary_contract(self):
+        """Pack must carry the single 本轮边界 line (positive contract)."""
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: proposed")
+        rep = ng.run(str(self.root), "demo", "outline-pack", "", "v01")
+        blob = rep.format()
+        self.assertIn("只读 pack-outline 落盘的 file:", blob)
+        self.assertIn("只写 outline/units/*.yaml", blob)
+        self.assertIn("lint-outline（≤3 次）", blob)
+
+    def test_check_commit_identity_block_emits_fix_hint(self):
+        """check-commit identity blocker must surface IDENTITY_FIX path (no source reading needed)."""
+        from novel_gate.common import Report
+        from novel_gate.ledger import check_postcommit
+
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: drafted")
+        self._edit("outline/units/v01-U1.yaml", "word_target: 4000", "word_target: 20\nword_floor: 10")
+        self._edit("outline/units/v01-U1.yaml",
+            'state_deltas: ["主角: 被辱→声望回升"]',
+            'state_deltas:\n  - stem: 主角\n    field: title\n    from: "落魄捕快"\n    to: "试用捕头"\n')
+        (self._book() / "units/v01-U1.md").write_text(
+            "## 第1章 客栈\n\n他推门进去，掌柜抬了抬眼。\n", encoding="utf-8")
+        self._write_summary()
+        # snapshot header is 角色（stem）→ header cell not exactly 角色 → identity block
+        self._edit("continuity/facts.md", "| 角色 |", "| 角色（stem） |")
+        r = Report("check-commit", "demo", self._book(), unit="v01-U1")
+        check_postcommit(self._book(), {"last_committed_ch": 0}, "v01-U1", r, require_reviewed=False, require_cursor=False)
+        blob = r.format()
+        self.assertTrue(any(f["check"] == "identity" and f["severity"] == "blocking" for f in r.findings), blob)
+        self.assertIn("### IDENTITY_FIX", blob)
+        self.assertIn("表头首格须恰为『角色』", blob)
+
     def test_prompt_pack_write_short_stdout_and_disk(self):
         rep = ng.run(str(self.root), "demo", "prompt-pack", "v01-U1", stage="write")
         self.assertEqual(rep.verdict, "PASS", rep.format())
@@ -1243,6 +1288,57 @@ info_control:
         self.assertIn("### SEAL", blob)
         raw = (self.root / "novel/demo/outline/units/v01-U1.yaml").read_text(encoding="utf-8")
         self.assertIsNotNone(re.search(r"^status:\s*reviewed\b", raw, re.M), raw[:200])
+
+    def test_seal_commit_rewrite_does_not_rewind_cursor(self):
+        """Re-finalizing an early unit must keep a higher last_committed_ch.
+
+        Otherwise Workbench treats every later reviewed unit as 待定稿
+        (reviewed + rangeTo > last_committed_ch → drafted phase).
+        """
+        self._write_summary()
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: drafted")
+        (self.root / "novel/demo/units/v01-U1.md").write_text(
+            "## 第1章 客栈\n\n他推门进去，掌柜抬了抬眼。桌上只剩一只空碗。\n",
+            encoding="utf-8",
+        )
+        self._edit("outline/units/v01-U1.yaml", "word_target: 4000", "word_target: 20\nword_floor: 10")
+        self._edit("novel-state.yaml", "last_committed_ch: 0", "last_committed_ch: 284")
+        rep = ng.run(str(self.root), "demo", "seal-commit", "v01-U1")
+        blob = rep.format()
+        self.assertEqual(rep.verdict, "PASS", blob)
+        self.assertIn("### SEAL", blob)
+        self.assertIn("kept higher cursor", blob)
+        raw = (self.root / "novel/demo/outline/units/v01-U1.yaml").read_text(encoding="utf-8")
+        self.assertIsNotNone(re.search(r"^status:\s*reviewed\b", raw, re.M), raw[:200])
+        st = (self.root / "novel/demo/novel-state.yaml").read_text(encoding="utf-8")
+        self.assertIsNotNone(re.search(r"^last_committed_ch:\s*284\b", st, re.M), st[:200])
+
+    def test_seal_after_qc_pass_incomplete_preserves_higher_cursor(self):
+        """COMMIT_INCOMPLETE must not rewind cursor past later committed chapters.
+
+        Invokes seal_after_qc_pass directly (same helper seal-commit / qc-pack use)
+        with missing summaries so postcommit fails after the temporary cursor write.
+        """
+        from novel_gate.common import Report
+        from novel_gate.seal import seal_after_qc_pass
+
+        self._edit("outline/units/v01-U1.yaml", "status: accepted", "status: drafted")
+        (self.root / "novel/demo/units/v01-U1.md").write_text(
+            "## 第1章 客栈\n\n他推门进去，掌柜抬了抬眼。桌上只剩一只空碗。\n",
+            encoding="utf-8",
+        )
+        self._edit("outline/units/v01-U1.yaml", "word_target: 4000", "word_target: 20\nword_floor: 10")
+        self._edit("novel-state.yaml", "last_committed_ch: 0", "last_committed_ch: 284")
+        summ = self.root / "novel/demo/continuity/summaries/v01.md"
+        if summ.is_file():
+            summ.write_text("# v01\n", encoding="utf-8")
+        book = self.root / "novel/demo"
+        r = Report("seal-commit", "demo", book, unit="v01-U1")
+        seal_after_qc_pass(book, {"last_committed_ch": 284}, "v01-U1", r)
+        blob = r.format()
+        self.assertIn("### COMMIT_INCOMPLETE", blob, blob)
+        st = (self.root / "novel/demo/novel-state.yaml").read_text(encoding="utf-8")
+        self.assertIsNotNone(re.search(r"^last_committed_ch:\s*284\b", st, re.M), st[:200])
 
     def test_preflight_crime_subgenre_adds_flavor_article(self):
         self._edit("novel-state.yaml", "genre: 玄幻", "genre: 悬疑")

@@ -2,11 +2,11 @@
 
 ## Pipeline system
 
-一批细纲 / 写细纲 / 重写细纲只读本 pack。禁止扫树、`find` gate、读题材全文、读人物卡、写正文。
-
 1. `python3 "$G" pack-outline --workdir . --book-id <slug> --volume vNN`。exit ≠ 0 → 停。
 2. 按 pack 把本批 ≤4 个 `proposed` 填成 `accepted`（或覆盖已有 YAML）。不改卷纲已定的 `function` 与 `next_hook.type`。头已由 accept-volume 种下，不要另抄模板。
-3. `python3 "$G" lint-outline --workdir . --book-id <slug> --volume vNN` **一次**。全 PASS → 停。FAIL → 只补失败单元，再 lint **一次**；仍 FAIL → 停。禁止第三次 lint。
+3. `python3 "$G" lint-outline --workdir . --book-id <slug> --volume vNN` **一次**。全 PASS → 停。FAIL → 只补失败单元，再 lint；最多 **3 次**。仍 FAIL → 停。禁止第四次 lint。
+
+本轮边界以 `novel-outline/SKILL.md` 顶部「本轮边界」为准。
 
 **No prose without an accepted 单元细纲** for that unit.
 
@@ -26,7 +26,7 @@ Official name: **单元细纲**. Do not introduce other product names. This file
 
 ## 一批细纲
 
-一轮填 **≤4 个** `proposed` 单元（按 unit 顺序），写完 `lint-outline --volume vNN` 一次。PASS 则停。FAIL 只补失败单元再 lint 一次，仍 FAIL 则停。本卷仍有 `proposed` → 下一轮再发一批。不要在同一轮写正文。
+一轮填 **≤4 个** `proposed` 单元（按 unit 顺序），写完 `lint-outline --volume vNN` 一次。PASS 则停。FAIL 只补失败单元再 lint（最多 3 次），仍 FAIL 则停。本卷仍有 `proposed` → 下一轮再发一批。不要在同一轮写正文。
 
 ## 上场人物
 

@@ -101,6 +101,13 @@ def set_last_committed_ch(book_root: Path, chapter: int) -> None:
         write_book_text(sp, new)
 
 
+def _as_committed_ch(value) -> int:
+    try:
+        return int(value) if value is not None else 0
+    except (TypeError, ValueError):
+        return 0
+
+
 def stem_display_names(book_root: Path) -> dict[str, str]:
     """stem → Chinese title from cast cards (title first line)."""
     out: dict[str, str] = {}
@@ -354,35 +361,40 @@ def seal_after_qc_pass(book_root: Path, st: dict, unit_id: str, r: Report) -> No
         r.blocking("contract", str(e))
         return
     prev_status = str(u.get("status") or "drafted").strip() or "drafted"
-    prev_ch = st.get("last_committed_ch")
+    prev_ch_i = _as_committed_ch(st.get("last_committed_ch"))
     a, b = chapter_range_of(u)
     set_outline_status(book_root, unit_id, "reviewed")
+    # Monotonic cursor: re-sealing an earlier unit must not rewind last_committed_ch.
+    # Workbench maps reviewed + rangeTo > last_committed_ch → 待定稿; a rewind makes
+    # every later unit look unfinalized even though their YAML status is still reviewed.
+    committed_ch = prev_ch_i
     if b > 0:
-        set_last_committed_ch(book_root, b)
+        committed_ch = max(prev_ch_i, b)
+        set_last_committed_ch(book_root, committed_ch)
         st = dict(st)
-        st["last_committed_ch"] = b
+        st["last_committed_ch"] = committed_ch
     notes = append_cast_snapshot_rows(book_root, u, unit_id)
     n_before = sum(1 for f in r.findings if f.get("severity") == "blocking")
     check_postcommit(book_root, st, unit_id, r)
     n_after = sum(1 for f in r.findings if f.get("severity") == "blocking")
+    cursor_note = f"state: last_committed_ch candidate={committed_ch}"
+    if b > 0 and committed_ch > b:
+        cursor_note += f" (unit end={b}, kept higher cursor)"
     head = [
         f"unit: {unit_id}",
         f"outline: {rel}",
-        f"state: last_committed_ch candidate={b or '?'}",
+        cursor_note,
     ]
     if notes:
         head.extend(f"ledger: {n}" for n in notes[:8])
     if n_after > n_before:
         # Never keep a false "定稿通过". If status was already wrongly reviewed,
-        # force drafted. Cursor must not sit inside this unit without Commit.
+        # force drafted. Cursor must not sit inside this unit without Commit —
+        # but never rewind past chapters already committed beyond this unit.
         restore_status = prev_status if prev_status not in ("reviewed",) else "drafted"
         set_outline_status(book_root, unit_id, restore_status)
-        restore_ch = 0
-        try:
-            restore_ch = int(prev_ch) if prev_ch is not None else 0
-        except (TypeError, ValueError):
-            restore_ch = 0
-        if a > 0 and restore_ch >= a:
+        restore_ch = prev_ch_i
+        if a > 0 and a <= restore_ch <= b:
             restore_ch = a - 1
         set_last_committed_ch(book_root, restore_ch)
         clear_qc_frozen(book_root, unit_id)
@@ -398,13 +410,16 @@ def seal_after_qc_pass(book_root: Path, st: dict, unit_id: str, r: Report) -> No
         )
         return
     mark_qc_frozen(book_root, unit_id)
+    sealed_cursor = f"state: last_committed_ch={committed_ch}"
+    if b > 0 and committed_ch > b:
+        sealed_cursor += f" (unit end={b}, kept higher cursor)"
     r.section(
         "SEAL",
         head
         + [
             f"commit sealed: {unit_id}",
             f"outline: {rel} status=reviewed",
-            f"state: last_committed_ch={b or '?'}",
+            sealed_cursor,
             "stop — quality + Commit both clean.",
         ],
     )
@@ -423,14 +438,23 @@ def report_qc_frozen(book_root: Path, unit_id: str, r: Report) -> None:
 
 
 def maybe_seal_lint(book_root: Path, volume: str, r: Report, unit_results: list) -> None:
-    """Emit ### SEAL when all units PASS or this is the 2nd lint for the volume."""
+    """Emit ### SEAL only when all units PASS, or on 3rd+ lint for the volume."""
     count = bump_lint_count(book_root, volume)
     all_pass = bool(unit_results) and all(v == "PASS" for _, v, _ in unit_results)
-    if all_pass or count >= 2:
+    if all_pass or count >= 3:
         r.section(
             "SEAL",
             [
                 f"lint sealed: {volume} (pass={all_pass} call={count})",
                 "stop — do not lint-units again this turn.",
+            ],
+        )
+    else:
+        remaining = 3 - count
+        r.section(
+            "RETRY_HINT",
+            [
+                f"lint attempt {count}/3 — fix listed units, then lint-outline again.",
+                f"remaining retries: {remaining}",
             ],
         )
