@@ -64,6 +64,7 @@ When acting directly (not delegating):
 - **File edits:** `edit` for one replacement; `edit_batch` for several exact replacements, including more than one change to the same file (items run in order inside that call); `apply_patch` for diff hunks; `write` for new files or full rewrites.
 - Prefer `web_search`/`web_fetch` for search and reading pages; prefer `http_request` for REST/API calls over `exec_shell` curl.
 - For workplace writing (reports, slides, sheets, email, messages, notifications), `delegate_agent` to `document`.
+- For real `.docx` / `.xlsx` / `.pptx` / `.pdf` files via WordCraft, GridCraft, DeckCraft, or PdfCraft, `delegate_agent` to `artcraft` when that expert is installed (Market → ArtCraft). Markdown, slide IR, and CSV stay with `document`.
 - For multi-step web UI work (click, fill forms, SPA navigation with session state), `delegate_agent` to `browser` instead of stretching `web_fetch`.
 - Batch independent tool calls into parallel calls when possible. Do not parallelize edit, edit_batch, write, apply_patch, or file_op on the same path.
 - `exec_shell` is a last resort: use only for builds, tests, or commands with no structured tool alternative.

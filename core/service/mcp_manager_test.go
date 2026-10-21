@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -148,9 +149,14 @@ func (s *mockMCPSession) Close() error { return nil }
 
 type mockMCPDialer struct {
 	tools []port.MCPToolInfo
+	mu    sync.Mutex
+	args  []string
 }
 
-func (d *mockMCPDialer) Dial(_ context.Context, _ domain.MCPServer) (port.MCPSession, error) {
+func (d *mockMCPDialer) Dial(_ context.Context, srv domain.MCPServer) (port.MCPSession, error) {
+	d.mu.Lock()
+	d.args = append(d.args, srv.Args)
+	d.mu.Unlock()
 	return &mockMCPSession{tools: d.tools}, nil
 }
 
@@ -259,6 +265,53 @@ func TestCreateRefreshesTools(t *testing.T) {
 	bindings := syncer.bindings("my-mcp")
 	if len(bindings) != 1 || bindings[0].ToolName != "list_issues" {
 		t.Fatalf("unexpected sync bindings: %+v", bindings)
+	}
+}
+
+func TestStripUnresolvedWorkDirRoots(t *testing.T) {
+	got := stripUnresolvedWorkDirRoots("mcp --compact --automation-read-root ${WORKDIR} --automation-write-root ${WORKDIR}")
+	if got != "mcp --compact" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestWorkDirMCPDiscoveryStripsRootsThenCallRedials(t *testing.T) {
+	dialer := &mockMCPDialer{tools: []port.MCPToolInfo{{Name: "list_commands"}}}
+	m := testMCPManager(t, dialer, nil)
+	ctx := context.Background()
+	full := "mcp --automation-read-root ${WORKDIR} --automation-write-root ${WORKDIR}"
+	m.mu.Lock()
+	m.servers["wordcraft"] = domain.MCPServer{
+		ID: "wordcraft", Name: "WordCraft", Transport: "stdio",
+		Command: "wordcraft-cli", Args: full, Enabled: true,
+	}
+	m.mu.Unlock()
+
+	if _, err := m.RefreshTools(ctx, "wordcraft"); err != nil {
+		t.Fatal(err)
+	}
+	m.mu.Lock()
+	_, stillOpen := m.sessions["wordcraft"]
+	m.mu.Unlock()
+	if stillOpen {
+		t.Fatal("discovery session should be closed")
+	}
+	dialer.mu.Lock()
+	if len(dialer.args) != 1 || strings.Contains(dialer.args[0], "${WORKDIR}") || !strings.Contains(dialer.args[0], "mcp") {
+		t.Fatalf("discovery args = %#v", dialer.args)
+	}
+	dialer.mu.Unlock()
+
+	if _, err := m.CallTool(domain.WithMCPWorkDir(ctx, "/proj/app"), "wordcraft", "list_commands", nil); err != nil {
+		t.Fatal(err)
+	}
+	dialer.mu.Lock()
+	defer dialer.mu.Unlock()
+	if len(dialer.args) != 2 || dialer.args[1] != full {
+		t.Fatalf("call args = %#v", dialer.args)
+	}
+	if m.sessionRoots["wordcraft"] != "/proj/app" {
+		t.Fatalf("root = %q", m.sessionRoots["wordcraft"])
 	}
 }
 

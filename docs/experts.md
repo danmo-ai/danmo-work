@@ -105,7 +105,7 @@ delegate_agent(agent_id="<id>", goal="...")
 
 - **内置插件（Builtin plugins）**：所有内置**子专家**均以 Agent Plugins 布局落在 `~/.danmo-work/plugins/<name>/`。能力包可同带 `skills/`、`mcp.json`、knowledge；薄专家只带 `ai.danmo.work/experts/`，共享技能仍从 home 解析。
 - **孤儿技能 / 连接器**：跨专家复用的 SOP（TDD、debugging、document-writing…）与产品连接器目录仍走原 home / catalog 模式，不强制塞进某个专家插件。
-- **市场（Market）**：安装 `kind: plugin`（推荐）或 `skill` / `connector`。历史上的 `kind: expert` / `bundle` 已由插件取代。
+- **市场（Market）**：安装 `kind: plugin`（推荐）或 `skill` / `connector`。历史上的 `kind: expert` / `bundle` 已由插件取代。**ArtCraft** 是市场插件（专家 + 技能 + 绑定 MCP）：安装时按操作系统下载 WordCraft / GridCraft / DeckCraft / PdfCraft 的无头 CLI 到 `$WORK_HOME/bin`，不使用桌面 `.app`。
 - **自定义**：在 Teams 新建子专家，绑定技能、工具、知识库与 MCP；主专家开启协作后即可被 `@` / 图标召唤。
 - **Ambient**：子专家不继承全量 Ambient（磁盘技能 / ambient MCP）；需要的连接器应写在专家的 `mcpServers` 绑定里（如 GitHub、Danmo Make）。
 

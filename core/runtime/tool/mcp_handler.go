@@ -87,6 +87,11 @@ func (h *MCPHandler) Execute(ctx context.Context, input map[string]any) (domain.
 	}
 	args := sanitizeMCPArgs(input)
 	injectCodeGraphProjectPath(h.ServerID, args, input)
+	if ctx != nil {
+		if wd, _ := input["__work_dir"].(string); strings.TrimSpace(wd) != "" {
+			ctx = domain.WithMCPWorkDir(ctx, wd)
+		}
+	}
 	out, err := h.Call(ctx, h.ServerID, h.ToolName, args)
 	if err != nil {
 		return domain.ToolResult{}, err

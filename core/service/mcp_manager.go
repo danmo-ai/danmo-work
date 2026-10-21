@@ -50,13 +50,16 @@ type MCPManager struct {
 
 	mu       sync.Mutex
 	sessions map[string]port.MCPSession
+	// sessionRoots records the ${WORKDIR} a cached stdio session was started with.
+	sessionRoots map[string]string
 }
 
 func NewMCPManager(dataDir string) *MCPManager {
 	m := &MCPManager{
-		mcpFile:  filepath.Join(dataDir, "mcp.json"),
-		servers:  make(map[string]domain.MCPServer),
-		sessions: make(map[string]port.MCPSession),
+		mcpFile:      filepath.Join(dataDir, "mcp.json"),
+		servers:      make(map[string]domain.MCPServer),
+		sessions:     make(map[string]port.MCPSession),
+		sessionRoots: make(map[string]string),
 	}
 	m.loadFromDisk()
 	return m
@@ -518,9 +521,20 @@ func (m *MCPManager) RefreshTools(ctx context.Context, id string) ([]domain.MCPT
 	defer cancel()
 
 	m.closeSession(id)
-	sess, err := m.openSession(ctx, srv)
+	dialSrv := srv
+	// Startup discovery has no project yet. List tools without baking a fake
+	// root, then drop the process so a later call redials inside ${WORKDIR}.
+	discoveryOnly := false
+	if strings.Contains(srv.Args, "${WORKDIR}") && strings.TrimSpace(domain.MCPWorkDir(ctx)) == "" {
+		dialSrv.Args = stripUnresolvedWorkDirRoots(srv.Args)
+		discoveryOnly = true
+	}
+	sess, err := m.openSession(ctx, dialSrv)
 	if err != nil {
 		return nil, fmt.Errorf("connect: %w", err)
+	}
+	if discoveryOnly {
+		defer m.closeSession(id)
 	}
 	discoveredInfo, err := sess.ListTools(ctx)
 	if err != nil {
@@ -669,12 +683,23 @@ func (m *MCPManager) openSession(ctx context.Context, srv domain.MCPServer) (por
 	if m.dialer == nil {
 		return nil, fmt.Errorf("MCP dialer not configured")
 	}
+	wd := strings.TrimSpace(domain.MCPWorkDir(ctx))
+	needsWD := strings.Contains(srv.Args, "${WORKDIR}")
+	if needsWD && wd == "" {
+		return nil, fmt.Errorf("mcp server %s: ${WORKDIR} is unset", srv.ID)
+	}
+
 	m.mu.Lock()
 	if sess, ok := m.sessions[srv.ID]; ok && sess != nil {
-		m.mu.Unlock()
-		return sess, nil
+		if !needsWD || m.sessionRoots[srv.ID] == wd {
+			m.mu.Unlock()
+			return sess, nil
+		}
 	}
 	m.mu.Unlock()
+	if needsWD {
+		m.closeSession(srv.ID)
+	}
 
 	resolved := m.resolveAuthHeaders(ctx, srv)
 	srv.Headers = resolved
@@ -687,7 +712,18 @@ func (m *MCPManager) openSession(ctx context.Context, srv domain.MCPServer) (por
 	if old, ok := m.sessions[srv.ID]; ok && old != nil {
 		_ = old.Close()
 	}
+	if m.sessions == nil {
+		m.sessions = make(map[string]port.MCPSession)
+	}
+	if m.sessionRoots == nil {
+		m.sessionRoots = make(map[string]string)
+	}
 	m.sessions[srv.ID] = sess
+	if needsWD {
+		m.sessionRoots[srv.ID] = wd
+	} else {
+		delete(m.sessionRoots, srv.ID)
+	}
 	m.mu.Unlock()
 	return sess, nil
 }
@@ -699,6 +735,24 @@ func (m *MCPManager) closeSession(id string) {
 		_ = sess.Close()
 		delete(m.sessions, id)
 	}
+	delete(m.sessionRoots, id)
+}
+
+// stripUnresolvedWorkDirRoots removes automation-root flags whose value is still
+// the ${WORKDIR} placeholder, so tool discovery can start before a project exists.
+func stripUnresolvedWorkDirRoots(args string) string {
+	fields := strings.Fields(args)
+	out := make([]string, 0, len(fields))
+	for i := 0; i < len(fields); i++ {
+		f := fields[i]
+		if (f == "--automation-read-root" || f == "--automation-write-root") &&
+			i+1 < len(fields) && fields[i+1] == "${WORKDIR}" {
+			i++
+			continue
+		}
+		out = append(out, f)
+	}
+	return strings.Join(out, " ")
 }
 
 func (m *MCPManager) resolveAuthHeaders(ctx context.Context, srv domain.MCPServer) map[string]string {

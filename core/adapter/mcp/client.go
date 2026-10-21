@@ -73,6 +73,11 @@ func (d *Dialer) dialStdio(ctx context.Context, srv domain.MCPServer) (port.MCPS
 	if d.PrepareStdio != nil {
 		command, args, env = d.PrepareStdio(srv, env)
 	}
+	var err error
+	args, err = applyMCPWorkDir(args, domain.MCPWorkDir(ctx))
+	if err != nil {
+		return nil, err
+	}
 	if filepath.Base(command) == command {
 		if lp, err := exec.LookPath(command); err == nil {
 			command = lp
@@ -538,6 +543,26 @@ func readJSONLine(reader *bufio.Reader) (json.RawMessage, error) {
 		}
 		return json.RawMessage(line), nil
 	}
+}
+
+// applyMCPWorkDir replaces ${WORKDIR} in already-split argv so paths that
+// contain spaces stay one argument. An unset directory is an error when the
+// placeholder is present; callers that only need tool discovery strip the
+// automation-root flags first.
+func applyMCPWorkDir(args []string, workDir string) ([]string, error) {
+	workDir = strings.TrimSpace(workDir)
+	out := make([]string, len(args))
+	for i, a := range args {
+		if !strings.Contains(a, "${WORKDIR}") {
+			out[i] = a
+			continue
+		}
+		if workDir == "" {
+			return nil, fmt.Errorf("mcp arg ${WORKDIR} requires the session project directory")
+		}
+		out[i] = strings.ReplaceAll(a, "${WORKDIR}", workDir)
+	}
+	return out, nil
 }
 
 func splitArgs(args string) []string {

@@ -266,14 +266,27 @@
   max_output: 384000
   available_efforts:
   - 'off'
+  - low
   - high
   - max
-- model: deepseek-v4-flash
+- model: deepseek-flash
   reasoning_dialect: deepseek
+  vision: true
   context_window: 1000000
   max_output: 384000
   available_efforts:
   - 'off'
+  - low
+  - high
+  - max
+- model: deepseek-v4-flash
+  reasoning_dialect: deepseek
+  vision: true
+  context_window: 1000000
+  max_output: 384000
+  available_efforts:
+  - 'off'
+  - low
   - high
   - max
 - model: deepseek-v4-flash-vision-exp
@@ -283,22 +296,27 @@
   max_output: 384000
   available_efforts:
   - 'off'
+  - low
   - high
   - max
 - model: deepseek-chat
   reasoning_dialect: deepseek
+  vision: true
   context_window: 1000000
   max_output: 384000
   available_efforts:
   - 'off'
+  - low
   - high
   - max
 - model: deepseek-reasoner
   reasoning_dialect: deepseek
+  vision: true
   context_window: 1000000
   max_output: 384000
   available_efforts:
   - 'off'
+  - low
   - high
   - max
 - model: glm-5.3
@@ -530,17 +548,19 @@
   - high
   - max
 - model: kimi-for-coding
-  reasoning_dialect: kimi_code
+  reasoning_dialect: kimi_k3
   vision: true
-  context_window: 256000
-  max_output: 32768
+  context_window: 1048576
+  max_output: 128000
   temperature: 1.0
   available_efforts:
+  - low
   - high
+  - max
 - model: kimi-for-coding-highspeed
   reasoning_dialect: kimi_code
   vision: true
-  context_window: 256000
+  context_window: 262144
   max_output: 32768
   temperature: 1.0
   available_efforts:
@@ -548,7 +568,7 @@
 - model: kimi-k2.7-code
   reasoning_dialect: kimi_code
   vision: true
-  context_window: 256000
+  context_window: 262144
   max_output: 32768
   temperature: 1.0
   available_efforts:
@@ -556,7 +576,7 @@
 - model: kimi-k2.7-code-highspeed
   reasoning_dialect: kimi_code
   vision: true
-  context_window: 256000
+  context_window: 262144
   max_output: 32768
   temperature: 1.0
   available_efforts:

@@ -16,15 +16,17 @@ func InferReasoningDialect(modelID string) string {
 		return ReasoningDialectDeepSeek
 	case strings.Contains(s, "qwen"):
 		return ReasoningDialectQwen
-	// K3 before other kimi* ids.
+	// K3 / K2.8 Preview before other kimi* ids (same reasoning_effort API).
 	case base == "k3",
 		base == "k3-256k",
+		base == "kimi-for-coding",
 		strings.Contains(s, "kimi-k3"),
+		strings.Contains(s, "kimi-k2.8"),
 		strings.HasPrefix(base, "k3-"):
 		return ReasoningDialectKimiK3
-	// K2.7 Code / Kimi Code coding SKUs — disabled thinking is rejected.
+	// K2.7 Code / HighSpeed — always-on thinking object; disabled is rejected.
 	case strings.Contains(s, "kimi-k2.7"),
-		strings.Contains(s, "kimi-for-coding"):
+		strings.Contains(s, "kimi-for-coding-highspeed"):
 		return ReasoningDialectKimiCode
 	case strings.Contains(s, "kimi"), strings.Contains(s, "moonshot"):
 		return ReasoningDialectKimi

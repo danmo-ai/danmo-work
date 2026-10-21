@@ -45,13 +45,13 @@ func applyReasoningDialectRequest(body map[string]any, dialect, effort string, g
 			body["thinking"] = map[string]any{"type": "disabled"}
 		}
 	case domain.ReasoningDialectKimiCode:
-		// K2.7 Code / kimi-for-coding — always on; disabled is rejected by API.
+		// K2.7 Code / kimi-for-coding-highspeed — always on; disabled is rejected by API.
 		body["thinking"] = map[string]any{
 			"type": "enabled",
 			"keep": "all",
 		}
 	case domain.ReasoningDialectKimiK3:
-		// Kimi K3 (k3 / k3-256k / kimi-k3): thinking always on; control via reasoning_effort.
+		// K3 / K2.8 Preview (kimi-for-coding): thinking always on; control via reasoning_effort.
 		e := effort
 		if !on {
 			e = "low"
@@ -83,7 +83,7 @@ func applyReasoningDialectRequest(body map[string]any, dialect, effort string, g
 			body["reasoning_effort"] = "none"
 		}
 	case domain.ReasoningDialectDeepSeek:
-		// api-docs.deepseek.com — V4: thinking.type + reasoning_effort high|max.
+		// api-docs.deepseek.com — thinking.type + reasoning_effort low|high|max.
 		if on {
 			body["thinking"] = map[string]any{"type": "enabled"}
 			body["reasoning_effort"] = mapDeepSeekEffort(effort)
@@ -106,11 +106,13 @@ func applyReasoningDialectRequest(body map[string]any, dialect, effort string, g
 }
 
 func mapDeepSeekEffort(effort string) string {
+	// Official mapping (Thinking Mode): minimal→low, low→low, medium/high/xhigh→high, max/ultra→max.
 	switch strings.ToLower(effort) {
-	case "max", "xhigh":
+	case "minimal", "low":
+		return "low"
+	case "max", "ultra":
 		return "max"
 	default:
-		// Official V4 documents high | max; map low/medium → high.
 		return "high"
 	}
 }

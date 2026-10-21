@@ -77,8 +77,8 @@ const (
 	ReasoningDialectDeepSeek = "deepseek"  // thinking.type + reasoning_effort + echo
 	ReasoningDialectQwen     = "qwen"      // enable_thinking (+ thinking_budget)
 	ReasoningDialectKimi     = "kimi"      // K2.6/K2.5: thinking.type / thinking.keep
-	ReasoningDialectKimiCode = "kimi_code" // K2.7 Code / kimi-for-coding: always-on preserved thinking
-	ReasoningDialectKimiK3   = "kimi_k3"   // K3: always-on via reasoning_effort + echo
+	ReasoningDialectKimiCode = "kimi_code" // K2.7 Code / kimi-for-coding-highspeed: always-on preserved thinking
+	ReasoningDialectKimiK3   = "kimi_k3"   // K3 / K2.8 Preview (kimi-for-coding): reasoning_effort + echo
 	ReasoningDialectGLM      = "glm"       // Zhipu: thinking.type (+ clear_thinking) + optional reasoning_effort
 	ReasoningDialectMiniMax  = "minimax"   // reasoning_split + optional thinking.type
 	ReasoningDialectGemini   = "gemini"    // reasoning_effort (incl. "none" when off)

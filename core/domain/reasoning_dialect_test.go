@@ -5,10 +5,13 @@ import "testing"
 func TestInferReasoningDialect(t *testing.T) {
 	cases := map[string]string{
 		"deepseek/deepseek-chat":       ReasoningDialectDeepSeek,
+		"deepseek/deepseek-flash":      ReasoningDialectDeepSeek,
 		"qwen/qwen3-max":               ReasoningDialectQwen,
 		"moonshot/kimi-k2.6":           ReasoningDialectKimi,
 		"kimi-k2.7-code":               ReasoningDialectKimiCode,
 		"kimi-for-coding-highspeed":    ReasoningDialectKimiCode,
+		"kimi-for-coding":              ReasoningDialectKimiK3,
+		"kimi-k2.8-preview":            ReasoningDialectKimiK3,
 		"k3":                           ReasoningDialectKimiK3,
 		"k3-256k":                      ReasoningDialectKimiK3,
 		"moonshot/kimi-k3":             ReasoningDialectKimiK3,

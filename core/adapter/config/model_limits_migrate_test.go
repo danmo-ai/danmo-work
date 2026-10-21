@@ -201,26 +201,44 @@ func TestModelConfigsDivergedFromBuiltinDetectsStaleParams(t *testing.T) {
 	}
 }
 
-func TestDefaultModelConfigsDeepSeekVisionExp(t *testing.T) {
+func TestDefaultModelConfigsDeepSeekFlash(t *testing.T) {
 	defaults := DefaultModelConfigs()
-	var vision *domain.ModelConfig
-	for i := range defaults {
-		if defaults[i].Model == "deepseek-v4-flash-vision-exp" {
-			vision = &defaults[i]
+	byModel := make(map[string]domain.ModelConfig, len(defaults))
+	for _, m := range defaults {
+		byModel[m.Model] = m
+	}
+	flash, ok := byModel["deepseek-flash"]
+	if !ok {
+		t.Fatal("missing deepseek-flash in built-in catalog")
+	}
+	if !flash.Vision {
+		t.Fatal("expected vision=true for deepseek-flash (V4.1 Flash native multimodal)")
+	}
+	if flash.ContextWindow != 1_000_000 || flash.MaxOutput != 384_000 {
+		t.Fatalf("limits: context=%d max_output=%d", flash.ContextWindow, flash.MaxOutput)
+	}
+	if flash.ReasoningDialect != "deepseek" {
+		t.Fatalf("dialect: %q", flash.ReasoningDialect)
+	}
+	hasLow := false
+	for _, e := range flash.AvailableEfforts {
+		if e == "low" {
+			hasLow = true
 			break
 		}
 	}
-	if vision == nil {
-		t.Fatal("missing deepseek-v4-flash-vision-exp in built-in catalog")
+	if !hasLow {
+		t.Fatal("deepseek-flash should expose low reasoning effort")
 	}
-	if !vision.Vision {
-		t.Fatal("expected vision=true for deepseek-v4-flash-vision-exp")
-	}
-	if vision.ContextWindow != 1_000_000 || vision.MaxOutput != 384_000 {
-		t.Fatalf("limits: context=%d max_output=%d", vision.ContextWindow, vision.MaxOutput)
-	}
-	if vision.ReasoningDialect != "deepseek" {
-		t.Fatalf("dialect: %q", vision.ReasoningDialect)
+	// Legacy aliases should remain and inherit V4.1 Flash vision.
+	for _, id := range []string{"deepseek-v4-flash", "deepseek-v4-flash-vision-exp"} {
+		m, ok := byModel[id]
+		if !ok {
+			t.Fatalf("missing legacy alias %s", id)
+		}
+		if !m.Vision {
+			t.Fatalf("expected vision=true for %s", id)
+		}
 	}
 }
 
@@ -240,6 +258,7 @@ func TestDefaultModelConfigsHeadVendorLatest(t *testing.T) {
 		{"claude-opus-5", true, 1_000_000, 128_000, ""},
 		{"claude-fable-5-1", true, 1_000_000, 128_000, ""},
 		{"gpt-5.6-sol", true, 1_050_000, 128_000, "openai"},
+		{"deepseek-flash", true, 1_000_000, 384_000, "deepseek"},
 		{"glm-5.3", false, 1_048_576, 131_072, "glm"},
 		{"glm-5.3-flash", true, 1_048_576, 131_072, "glm"},
 		{"gemini-3.6-flash", true, 1_048_576, 65_536, "gemini"},

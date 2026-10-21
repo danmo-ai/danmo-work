@@ -78,8 +78,13 @@ func TestApplyReasoningDialectRequest_DeepSeek(t *testing.T) {
 
 	bodyLow := map[string]any{}
 	applyReasoningDialectRequest(bodyLow, domain.ReasoningDialectDeepSeek, "low", nil)
-	if bodyLow["reasoning_effort"] != "high" {
-		t.Fatalf("low maps to high: %v", bodyLow["reasoning_effort"])
+	if bodyLow["reasoning_effort"] != "low" {
+		t.Fatalf("low maps to low: %v", bodyLow["reasoning_effort"])
+	}
+	bodyMed := map[string]any{}
+	applyReasoningDialectRequest(bodyMed, domain.ReasoningDialectDeepSeek, "medium", nil)
+	if bodyMed["reasoning_effort"] != "high" {
+		t.Fatalf("medium maps to high: %v", bodyMed["reasoning_effort"])
 	}
 
 	bodyOff := map[string]any{}
@@ -201,8 +206,11 @@ func TestResolveReasoningDialect(t *testing.T) {
 	if got := resolveReasoningDialect(nil, "k3-256k"); got != domain.ReasoningDialectKimiK3 {
 		t.Fatalf("infer k3-256k: %s", got)
 	}
-	if got := resolveReasoningDialect(nil, "kimi-for-coding"); got != domain.ReasoningDialectKimiCode {
-		t.Fatalf("infer kimi_code: %s", got)
+	if got := resolveReasoningDialect(nil, "kimi-for-coding"); got != domain.ReasoningDialectKimiK3 {
+		t.Fatalf("infer kimi_k3 for kimi-for-coding: %s", got)
+	}
+	if got := resolveReasoningDialect(nil, "kimi-for-coding-highspeed"); got != domain.ReasoningDialectKimiCode {
+		t.Fatalf("infer kimi_code for highspeed: %s", got)
 	}
 	if got := resolveReasoningDialect(nil, "grok-4.5"); got != domain.ReasoningDialectGrok {
 		t.Fatalf("infer grok: %s", got)

@@ -8,6 +8,23 @@ import (
 	"danmo-work/core/service"
 )
 
+func TestMCPHandlerPropagatesWorkDir(t *testing.T) {
+	var got string
+	h := &MCPHandler{
+		ServerID: "wordcraft",
+		Call: func(ctx context.Context, _, _ string, _ map[string]any) (string, error) {
+			got = domain.MCPWorkDir(ctx)
+			return "ok", nil
+		},
+	}
+	if _, err := h.Execute(context.Background(), map[string]any{"__work_dir": "/proj/app"}); err != nil {
+		t.Fatal(err)
+	}
+	if got != "/proj/app" {
+		t.Fatalf("work dir = %q", got)
+	}
+}
+
 func TestMCPHandlerStripsInternalArgsAndInjectsProjectPath(t *testing.T) {
 	var gotArgs map[string]any
 	h := &MCPHandler{

@@ -220,6 +220,13 @@ func (pm *PluginManager) UninstallPlugin(ctx context.Context, name, depsScript s
 		return fmt.Errorf("cannot uninstall builtin plugin %q", name)
 	}
 
+	if depsScript == "" {
+		if rel, _, ok, rerr := ResolveConnectorUninstallScript(p.RootPath, nil); rerr != nil {
+			log.Printf("[plugins] %s: uninstall deps: %v", name, rerr)
+		} else if ok {
+			depsScript = rel
+		}
+	}
 	if depsScript != "" {
 		scriptPath := filepath.Join(p.RootPath, filepath.FromSlash(depsScript))
 		if logOut, err := RunConnectorDepsScript(ctx, p.RootPath, scriptPath, name); err != nil {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -84,6 +85,38 @@ func TestStdioListAndCall(t *testing.T) {
 	}
 	if out != "echo:hi" {
 		t.Fatalf("out = %q", out)
+	}
+}
+
+func TestApplyMCPWorkDir(t *testing.T) {
+	got, err := applyMCPWorkDir(
+		[]string{"mcp", "--automation-read-root", "${WORKDIR}", "--automation-write-root", "${WORKDIR}"},
+		"/Users/nil luo/proj",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[2] != "/Users/nil luo/proj" || got[4] != "/Users/nil luo/proj" {
+		t.Fatalf("args = %#v", got)
+	}
+	if _, err := applyMCPWorkDir([]string{"${WORKDIR}"}, "  "); err == nil {
+		t.Fatal("expected error when work dir is empty")
+	}
+	plain, err := applyMCPWorkDir([]string{"mcp"}, "")
+	if err != nil || len(plain) != 1 || plain[0] != "mcp" {
+		t.Fatalf("plain = %#v err=%v", plain, err)
+	}
+}
+
+func TestDialRejectsUnsetWorkDir(t *testing.T) {
+	d := NewDialer()
+	_, err := d.Dial(context.Background(), domain.MCPServer{
+		Transport: "stdio",
+		Command:   "python3",
+		Args:      "mcp --automation-read-root ${WORKDIR}",
+	})
+	if err == nil || !strings.Contains(err.Error(), "${WORKDIR}") {
+		t.Fatalf("err = %v", err)
 	}
 }
 
