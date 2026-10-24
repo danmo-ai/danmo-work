@@ -56,6 +56,9 @@ type LLMChatRequest struct {
 
 // ModelGenParams carries per-model generation parameters.
 // Zero values mean "use provider default" (do not send to API).
+// ProtocolDialect is resolved from the provider×model binding (not YAML).
+// ThinkingMode / EffortBudgetTokens are filled by the dispatcher for Anthropic
+// / budget dialects when the client needs them (built-in defaults).
 type ModelGenParams struct {
 	MaxTokens          int
 	Temperature        float64
@@ -63,10 +66,10 @@ type ModelGenParams struct {
 	FrequencyPenalty   float64
 	PresencePenalty    float64
 	Stop               []string
-	ThinkingMode       string         // "adaptive" or "enabled"; for Anthropic thinking
-	EffortBudgetTokens map[string]int // effort → budget_tokens mapping
-	// ReasoningDialect: see domain.ReasoningDialectInfos / REASONING_DIALECTS.md
-	ReasoningDialect string
+	ThinkingMode       string         // Anthropic: "adaptive" (default) or "enabled"
+	EffortBudgetTokens map[string]int // effort → budget_tokens (Qwen / Anthropic enabled)
+	// ProtocolDialect: see domain.ProtocolDialectInfos / PROTOCOL_DIALECTS.md
+	ProtocolDialect string
 }
 
 type LLMChatResponse struct {

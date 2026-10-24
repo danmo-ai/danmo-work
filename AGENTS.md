@@ -19,7 +19,7 @@
 | Builtin home pack | `core/resource/home/` (primary `team` + shared/orphan skills; `SyncBuiltinToFS`) |
 | Builtin plugins | `core/resource/plugins/` (all builtin subagent experts; `SyncBuiltinPlugins`) |
 | Plugin hooks | `<plugin>/hooks.json` — Codex-style context hooks (`userPromptSubmit`/`subagentStart`, command handler, stdin JSON → stdout `additionalContext`); builtin-only, output joins `TurnContext.EphemeralContext` |
-| Reasoning dialects | `core/adapter/llm/REASONING_DIALECTS.md` + `domain.ReasoningDialectInfos` |
+| Protocol dialects | `core/adapter/llm/PROTOCOL_DIALECTS.md` + `domain.ProtocolDialectInfos` |
 | Optional OCI env | `environments/agent-base/` → CI Release asset (not in app packs); `make build-env-tar` locally |
 | Bundled ripgrep | `scripts/fetch_ripgrep.sh` → `out/rg/<target>/rg` + `~/.danmo-work/bin/rg`; desktop packs stage it into the bundle (`resources/rg/`); `make fetch-ripgrep` locally |
 | First-launch hooks | `scripts/first_launch/{darwin,linux,windows}/` — staged per platform; CodeGraph CLI via **market connector deps scripts** |

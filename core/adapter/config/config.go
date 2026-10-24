@@ -200,9 +200,10 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 	// catalogDiverged and require an explicit reset (POST /model-configs/refresh).
 	if len(cfg.LLM.Models) == 0 {
 		cfg.LLM.Models = defaultModelConfigs()
-	} else {
-		cfg.LLM.Models = fillInferredDialects(cfg.LLM.Models)
 	}
+	// Legacy reasoning_dialect / thinking_mode / effort_budget_tokens stay on
+	// ModelConfig only until MigrateDialectsFromModelConfigs runs (bootstrap);
+	// they are stripped on the next model-config save.
 
 	if cfg.Market.CacheTTLHours <= 0 {
 		cfg.Market.CacheTTLHours = 6
@@ -364,14 +365,16 @@ func defaultMarketSources() []domain.MarketSource {
 // model vendors. Users can override these in ~/.danmo-work/config.yaml.
 func defaultLLMPresets() []domain.LLMProviderPreset {
 	return []domain.LLMProviderPreset{
-		{ID: "openai", Name: "OpenAI", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.openai.com/v1", Description: "GPT 系列、o 系列推理模型"},
+		{ID: "openai", Name: "OpenAI", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.openai.com/v1", DefaultProtocolDialect: domain.ProtocolDialectOpenAI, Description: "GPT 系列、o 系列推理模型"},
 		{ID: "anthropic", Name: "Anthropic", Provider: domain.LLMProviderAnthropic, BaseURL: "https://api.anthropic.com/v1", Description: "Claude Sonnet、Opus、Haiku"},
-		{ID: "deepseek", Name: "DeepSeek", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.deepseek.com/v1", Description: "DeepSeek：deepseek-flash、deepseek-v4-pro"},
-		{ID: "google", Name: "Google Gemini", Provider: domain.LLMProviderOpenAI, BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", Description: "Gemini Pro、Flash"},
-		{ID: "zhipu", Name: "智谱 (Zhipu)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://open.bigmodel.cn/api/paas/v4", Description: "GLM-5.1、GLM-5、GLM-4.7"},
-		{ID: "qwen", Name: "通义千问 (Qwen)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", Description: "Qwen3.8 Max、3.7 Max、Plus、Flash、Coder"},
+		{ID: "deepseek", Name: "DeepSeek", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.deepseek.com/v1", DefaultProtocolDialect: domain.ProtocolDialectDeepSeek, Description: "DeepSeek：deepseek-flash、deepseek-v4-pro"},
+		{ID: "google", Name: "Google Gemini", Provider: domain.LLMProviderOpenAI, BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", DefaultProtocolDialect: domain.ProtocolDialectGemini, Description: "Gemini Pro、Flash"},
+		{ID: "zhipu", Name: "智谱 (Zhipu)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://open.bigmodel.cn/api/paas/v4", DefaultProtocolDialect: domain.ProtocolDialectGLM, Description: "GLM-5.1、GLM-5、GLM-4.7"},
+		{ID: "qwen", Name: "通义千问 (Qwen)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", DefaultProtocolDialect: domain.ProtocolDialectQwen, Description: "Qwen3.8 Max、3.7 Max、Plus、Flash、Coder"},
+		// Moonshot / aggregators: leave DefaultProtocolDialect empty so InferProtocolDialect
+		// can pick kimi vs kimi_k3 vs kimi_code (or deepseek/qwen on gateways) per model id.
 		{ID: "moonshot", Name: "Moonshot (Kimi)", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.kimi.com/coding/v1", Description: "Kimi Code：k3、k3-256k、kimi-for-coding (K2.8 Preview)"},
-		{ID: "minimax", Name: "MiniMax", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.minimaxi.com/v1", Description: "MiniMax M3、M2.7"},
+		{ID: "minimax", Name: "MiniMax", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.minimaxi.com/v1", DefaultProtocolDialect: domain.ProtocolDialectMiniMax, Description: "MiniMax M3、M2.7"},
 		{ID: "ollama", Name: "Ollama (Local)", Provider: domain.LLMProviderOpenAI, BaseURL: "http://localhost:11434/v1", Description: "本地模型，通过 Ollama 运行"},
 		{ID: "siliconflow", Name: "SiliconFlow", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.siliconflow.cn/v1", Description: "SiliconFlow 云模型平台"},
 		{ID: "openrouter", Name: "OpenRouter", Provider: domain.LLMProviderOpenAI, BaseURL: "https://openrouter.ai/api/v1", Description: "多模型路由，统一接口"},
@@ -379,7 +382,7 @@ func defaultLLMPresets() []domain.LLMProviderPreset {
 		{ID: "fireworks", Name: "Fireworks AI", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.fireworks.ai/inference/v1", Description: "高性能推理服务"},
 		{ID: "groq", Name: "Groq", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.groq.com/openai/v1", Description: "超快推理速度"},
 		{ID: "deepinfra", Name: "DeepInfra", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.deepinfra.com/v1/openai", Description: "开源模型部署平台"},
-		{ID: "xai", Name: "xAI", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.x.ai/v1", Description: "Grok 系列模型"},
+		{ID: "xai", Name: "xAI", Provider: domain.LLMProviderOpenAI, BaseURL: "https://api.x.ai/v1", DefaultProtocolDialect: domain.ProtocolDialectGrok, Description: "Grok 系列模型"},
 	}
 }
 
@@ -446,6 +449,9 @@ func mergeLLMPresets(existing, defaults []domain.LLMProviderPreset, legacyBaseUR
 			if p.Description == "" {
 				p.Description = def.Description
 			}
+			if strings.TrimSpace(p.DefaultProtocolDialect) == "" {
+				p.DefaultProtocolDialect = def.DefaultProtocolDialect
+			}
 		}
 		if strings.TrimSpace(p.BaseURL) == "" {
 			if u := legacyBaseURLs[p.ID]; u != "" {
@@ -469,19 +475,6 @@ func mergeLLMPresets(existing, defaults []domain.LLMProviderPreset, legacyBaseUR
 	return out
 }
 
-// fillInferredDialects sets ReasoningDialect from model id when still empty.
-func fillInferredDialects(models []domain.ModelConfig) []domain.ModelConfig {
-	for i := range models {
-		if models[i].ReasoningDialect != "" {
-			continue
-		}
-		if d := domain.InferReasoningDialect(models[i].Model); d != "" {
-			models[i].ReasoningDialect = d
-		}
-	}
-	return models
-}
-
 // modelConfigsDiffer reports whether two catalogs differ in length or in
 // fields that RefreshModelConfigs overlays from the built-in catalog.
 func modelConfigsDiffer(before, after []domain.ModelConfig) bool {
@@ -497,25 +490,16 @@ func modelConfigsDiffer(before, after []domain.ModelConfig) bool {
 		if !ok {
 			return true
 		}
-		if m.ReasoningDialect != b.ReasoningDialect {
-			return true
-		}
 		if m.ContextWindow != b.ContextWindow || m.MaxOutput != b.MaxOutput {
 			return true
 		}
 		if m.Vision != b.Vision {
 			return true
 		}
-		if m.ThinkingMode != b.ThinkingMode {
-			return true
-		}
 		if m.Temperature != b.Temperature {
 			return true
 		}
 		if !stringSlicesEqual(m.AvailableEfforts, b.AvailableEfforts) {
-			return true
-		}
-		if !intMapsEqual(m.EffortBudgetTokens, b.EffortBudgetTokens) {
 			return true
 		}
 	}
@@ -534,20 +518,8 @@ func stringSlicesEqual(a, b []string) bool {
 	return true
 }
 
-func intMapsEqual(a, b map[string]int) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, v := range a {
-		if b[k] != v {
-			return false
-		}
-	}
-	return true
-}
-
-// refreshModelConfigs overlays built-in dialect/efforts/limits onto matching models
-// (user-only entries kept), then appends any missing built-in models.
+// refreshModelConfigs overlays built-in capacity/efforts/sampling onto matching
+// models (user-only entries kept), then appends any missing built-in models.
 func refreshModelConfigs(existing, defaults []domain.ModelConfig) []domain.ModelConfig {
 	if len(defaults) == 0 {
 		return existing
@@ -562,13 +534,6 @@ func refreshModelConfigs(existing, defaults []domain.ModelConfig) []domain.Model
 	out := make([]domain.ModelConfig, 0, len(existing)+len(defaults))
 	for _, m := range existing {
 		if def, ok := byModel[m.Model]; ok {
-			if def.ReasoningDialect != "" {
-				m.ReasoningDialect = def.ReasoningDialect
-			} else if m.ReasoningDialect == "" {
-				if d := domain.InferReasoningDialect(m.Model); d != "" {
-					m.ReasoningDialect = d
-				}
-			}
 			if def.ContextWindow > 0 {
 				m.ContextWindow = def.ContextWindow
 			}
@@ -578,21 +543,27 @@ func refreshModelConfigs(existing, defaults []domain.ModelConfig) []domain.Model
 			if len(def.AvailableEfforts) > 0 {
 				m.AvailableEfforts = append([]string(nil), def.AvailableEfforts...)
 			}
-			if def.ThinkingMode != "" {
-				m.ThinkingMode = def.ThinkingMode
-			}
-			if len(def.EffortBudgetTokens) > 0 {
-				m.EffortBudgetTokens = def.EffortBudgetTokens
-			}
 			m.Vision = def.Vision
 			if def.Temperature != 0 {
 				m.Temperature = def.Temperature
 			}
-		} else if m.ReasoningDialect == "" {
-			if d := domain.InferReasoningDialect(m.Model); d != "" {
-				m.ReasoningDialect = d
+			if def.TopP != 0 {
+				m.TopP = def.TopP
+			}
+			if def.FrequencyPenalty != 0 {
+				m.FrequencyPenalty = def.FrequencyPenalty
+			}
+			if def.PresencePenalty != 0 {
+				m.PresencePenalty = def.PresencePenalty
+			}
+			if len(def.Stop) > 0 {
+				m.Stop = append([]string(nil), def.Stop...)
 			}
 		}
+		// Drop legacy dialect / Anthropic fields from the catalog.
+		m.LegacyProtocolDialect = ""
+		m.LegacyThinkingMode = ""
+		m.LegacyEffortBudgetTokens = nil
 		out = append(out, m)
 		if m.Model != "" {
 			seen[m.Model] = true

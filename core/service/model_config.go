@@ -122,31 +122,24 @@ func (r *ModelConfigRegistry) GenParams(modelID string) *port.ModelGenParams {
 
 func modelConfigToGenParams(c domain.ModelConfig) *port.ModelGenParams {
 	p := &port.ModelGenParams{
-		MaxTokens:          c.MaxOutput,
-		Temperature:        c.Temperature,
-		TopP:               c.TopP,
-		FrequencyPenalty:   c.FrequencyPenalty,
-		PresencePenalty:    c.PresencePenalty,
-		Stop:               c.Stop,
-		ThinkingMode:       c.ThinkingMode,
-		EffortBudgetTokens: c.EffortBudgetTokens,
-		ReasoningDialect:   c.ReasoningDialect,
-	}
-	if p.ReasoningDialect == "" {
-		p.ReasoningDialect = domain.InferReasoningDialect(c.Model)
+		MaxTokens:        c.MaxOutput,
+		Temperature:      c.Temperature,
+		TopP:             c.TopP,
+		FrequencyPenalty: c.FrequencyPenalty,
+		PresencePenalty:  c.PresencePenalty,
+		Stop:             c.Stop,
 	}
 	if p.MaxTokens == 0 && p.Temperature == 0 && p.TopP == 0 &&
 		p.FrequencyPenalty == 0 && p.PresencePenalty == 0 &&
-		len(p.Stop) == 0 && p.ThinkingMode == "" && len(p.EffortBudgetTokens) == 0 &&
-		p.ReasoningDialect == "" {
+		len(p.Stop) == 0 {
 		return nil
 	}
 	return p
 }
 
-// InferReasoningDialect is kept as an alias for callers in this package.
-func InferReasoningDialect(modelID string) string {
-	return domain.InferReasoningDialect(modelID)
+// InferProtocolDialect is kept as an alias for callers in this package.
+func InferProtocolDialect(modelID string) string {
+	return domain.InferProtocolDialect(modelID)
 }
 
 // AllModels returns the current config-based model configs.

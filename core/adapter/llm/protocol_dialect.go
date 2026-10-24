@@ -10,23 +10,23 @@ import (
 
 var thinkTagRe = regexp.MustCompile(`(?is)<think>(.*?)</think>`)
 
-// resolveReasoningDialect returns a concrete dialect for Chat Completions.
-func resolveReasoningDialect(gp *port.ModelGenParams, model string) string {
-	if gp != nil && gp.ReasoningDialect != "" {
-		return gp.ReasoningDialect
+// resolveProtocolDialect returns a concrete protocol dialect for Chat Completions.
+func resolveProtocolDialect(gp *port.ModelGenParams, model string) string {
+	if gp != nil && gp.ProtocolDialect != "" {
+		return gp.ProtocolDialect
 	}
-	if d := domain.InferReasoningDialect(model); d != "" {
+	if d := domain.InferProtocolDialect(model); d != "" {
 		return d
 	}
-	return domain.ReasoningDialectOpenAI
+	return domain.ProtocolDialectOpenAI
 }
 
-// applyReasoningDialectRequest mutates the Chat Completions body with
-// vendor-specific thinking fields. See REASONING_DIALECTS.md for the matrix.
-func applyReasoningDialectRequest(body map[string]any, dialect, effort string, gp *port.ModelGenParams) {
+// applyProtocolDialectRequest mutates the Chat Completions body with
+// vendor-specific thinking fields. See PROTOCOL_DIALECTS.md for the matrix.
+func applyProtocolDialectRequest(body map[string]any, dialect, effort string, gp *port.ModelGenParams) {
 	on := effort != "" && effort != "off"
 	switch dialect {
-	case domain.ReasoningDialectQwen:
+	case domain.ProtocolDialectQwen:
 		// Alibaba Model Studio / DashScope compatible-mode.
 		body["enable_thinking"] = on
 		if on && gp != nil && len(gp.EffortBudgetTokens) > 0 {
@@ -34,7 +34,7 @@ func applyReasoningDialectRequest(body map[string]any, dialect, effort string, g
 				body["thinking_budget"] = budget
 			}
 		}
-	case domain.ReasoningDialectKimi:
+	case domain.ProtocolDialectKimi:
 		// platform.kimi.ai K2.6 / K2.5 — thinking.type + keep for preserved CoT.
 		if on {
 			body["thinking"] = map[string]any{
@@ -44,20 +44,20 @@ func applyReasoningDialectRequest(body map[string]any, dialect, effort string, g
 		} else {
 			body["thinking"] = map[string]any{"type": "disabled"}
 		}
-	case domain.ReasoningDialectKimiCode:
+	case domain.ProtocolDialectKimiCode:
 		// K2.7 Code / kimi-for-coding-highspeed — always on; disabled is rejected by API.
 		body["thinking"] = map[string]any{
 			"type": "enabled",
 			"keep": "all",
 		}
-	case domain.ReasoningDialectKimiK3:
+	case domain.ProtocolDialectKimiK3:
 		// K3 / K2.8 Preview (kimi-for-coding): thinking always on; control via reasoning_effort.
 		e := effort
 		if !on {
 			e = "low"
 		}
 		body["reasoning_effort"] = e
-	case domain.ReasoningDialectGLM:
+	case domain.ProtocolDialectGLM:
 		// docs.z.ai — thinking.type; clear_thinking:false preserves CoT for tools.
 		if on {
 			body["thinking"] = map[string]any{
@@ -68,7 +68,7 @@ func applyReasoningDialectRequest(body map[string]any, dialect, effort string, g
 		} else {
 			body["thinking"] = map[string]any{"type": "disabled"}
 		}
-	case domain.ReasoningDialectMiniMax:
+	case domain.ProtocolDialectMiniMax:
 		// platform.minimax.io — reasoning_split exposes reasoning_content.
 		body["reasoning_split"] = true
 		if on {
@@ -76,13 +76,13 @@ func applyReasoningDialectRequest(body map[string]any, dialect, effort string, g
 		} else {
 			body["thinking"] = map[string]any{"type": "disabled"}
 		}
-	case domain.ReasoningDialectGemini:
+	case domain.ProtocolDialectGemini:
 		if on {
 			body["reasoning_effort"] = effort
 		} else {
 			body["reasoning_effort"] = "none"
 		}
-	case domain.ReasoningDialectDeepSeek:
+	case domain.ProtocolDialectDeepSeek:
 		// api-docs.deepseek.com — thinking.type + reasoning_effort low|high|max.
 		if on {
 			body["thinking"] = map[string]any{"type": "enabled"}
@@ -90,7 +90,7 @@ func applyReasoningDialectRequest(body map[string]any, dialect, effort string, g
 		} else {
 			body["thinking"] = map[string]any{"type": "disabled"}
 		}
-	case domain.ReasoningDialectGrok:
+	case domain.ProtocolDialectGrok:
 		// docs.x.ai — reasoning_effort; grok-4.5 cannot disable (off→low).
 		// grok-4.3 accepts none|low|medium|high — pass through when not off.
 		if effort == "" || effort == "off" {
@@ -133,13 +133,13 @@ func mapGLMEffort(effort string) string {
 // reasoning_content when talking to this dialect (tool multi-turn).
 func dialectEchoesReasoning(dialect string) bool {
 	switch dialect {
-	case domain.ReasoningDialectDeepSeek,
-		domain.ReasoningDialectQwen,
-		domain.ReasoningDialectKimi,
-		domain.ReasoningDialectKimiCode,
-		domain.ReasoningDialectKimiK3,
-		domain.ReasoningDialectGLM,
-		domain.ReasoningDialectMiniMax:
+	case domain.ProtocolDialectDeepSeek,
+		domain.ProtocolDialectQwen,
+		domain.ProtocolDialectKimi,
+		domain.ProtocolDialectKimiCode,
+		domain.ProtocolDialectKimiK3,
+		domain.ProtocolDialectGLM,
+		domain.ProtocolDialectMiniMax:
 		return true
 	default:
 		return false
@@ -154,7 +154,7 @@ func normalizeChatCompletionsReasoning(content, reasoningContent, reasoning stri
 		reasoningOut = strings.TrimSpace(reasoning)
 	}
 	answer = content
-	if reasoningOut == "" && (dialect == domain.ReasoningDialectMiniMax || dialect == domain.ReasoningDialectDeepSeek) {
+	if reasoningOut == "" && (dialect == domain.ProtocolDialectMiniMax || dialect == domain.ProtocolDialectDeepSeek) {
 		if m := thinkTagRe.FindStringSubmatch(content); len(m) == 2 {
 			reasoningOut = strings.TrimSpace(m[1])
 			answer = strings.TrimSpace(thinkTagRe.ReplaceAllString(content, ""))

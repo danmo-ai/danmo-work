@@ -195,8 +195,28 @@ const form = ref({
   name: '',
   apiKey: '',
   baseUrl: '',
+  defaultProtocolDialect: '',
   models: [] as LLMModelRef[],
 })
+
+const protocolDialectOptions = computed(() => [
+  { value: '', label: t('settings.modelProtocolDialectInherit') },
+  { value: 'openai', label: t('settings.modelProtocolDialectOpenAI') },
+  { value: 'deepseek', label: t('settings.modelProtocolDialectDeepSeek') },
+  { value: 'qwen', label: t('settings.modelProtocolDialectQwen') },
+  { value: 'kimi', label: t('settings.modelProtocolDialectKimi') },
+  { value: 'kimi_code', label: t('settings.modelProtocolDialectKimiCode') },
+  { value: 'kimi_k3', label: t('settings.modelProtocolDialectKimiK3') },
+  { value: 'glm', label: t('settings.modelProtocolDialectGLM') },
+  { value: 'minimax', label: t('settings.modelProtocolDialectMiniMax') },
+  { value: 'gemini', label: t('settings.modelProtocolDialectGemini') },
+  { value: 'grok', label: t('settings.modelProtocolDialectGrok') },
+])
+
+const providerDefaultProtocolDialectOptions = computed(() => [
+  { value: '', label: t('settings.providerDefaultProtocolDialectAuto') },
+  ...protocolDialectOptions.value.filter((o) => o.value !== ''),
+])
 
 const searchForm = ref({
   provider: 'duckduckgo' as SearchProvider,
@@ -447,8 +467,6 @@ const newContextWindow = ref(0)
 const newMaxOutput = ref(0)
 const newTemperature = ref(0)
 const newAvailableEfforts = ref('')
-const newThinkingMode = ref('')
-const newEffortBudgetTokens = ref('')
 
 /** Keep editing index in sync with the select value (single source of truth). */
 watch(
@@ -474,24 +492,6 @@ const editingModel = computed(() => {
   if (idx === null) return null
   return modelConfigForm.value[idx] ?? null
 })
-
-function parseEffortBudgetTokens(raw: string): Record<string, number> | undefined {
-  if (!raw.trim()) return undefined
-  const map: Record<string, number> = {}
-  for (const line of raw.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    const [k, v] = trimmed.split(':')
-    const n = Number(v)
-    if (k && !isNaN(n)) map[k.trim()] = n
-  }
-  return Object.keys(map).length > 0 ? map : undefined
-}
-
-function formatEffortBudgetTokens(map: Record<string, number> | undefined): string {
-  if (!map) return ''
-  return Object.entries(map).map(([k, v]) => `${k}:${v}`).join('\n')
-}
 
 onMounted(async () => {
   void initAppVersion()
@@ -971,6 +971,7 @@ function openNewForm() {
     name: '',
     apiKey: '',
     baseUrl: '',
+    defaultProtocolDialect: '',
     models: [],
   }
   showForm.value = true
@@ -982,6 +983,7 @@ function selectPreset(preset: LLMProviderPreset) {
     name: preset.name,
     apiKey: '',
     baseUrl: preset.baseUrl,
+    defaultProtocolDialect: preset.defaultProtocolDialect ?? '',
     models: [],
   }
   dialogStep.value = 'configure'
@@ -993,6 +995,7 @@ function selectCustom() {
     name: '',
     apiKey: '',
     baseUrl: '',
+    defaultProtocolDialect: '',
     models: [],
   }
   dialogStep.value = 'configure'
@@ -1011,6 +1014,7 @@ function openEditForm(cfg: LLMProviderConfig) {
     name: cfg.name,
     apiKey: cfg.apiKey ?? '',
     baseUrl: cfg.baseUrl ?? '',
+    defaultProtocolDialect: cfg.defaultProtocolDialect ?? '',
     models: [...(cfg.models ?? [])],
   }
   showForm.value = true
@@ -1032,7 +1036,7 @@ function addManualModel() {
     toast.warning(t('settings.manualModelDuplicate'))
     return
   }
-  form.value.models = [...form.value.models, { name, enabled: true }]
+  form.value.models = [...form.value.models, { name, enabled: true, protocolDialect: '' }]
   manualModelName.value = ''
 }
 
@@ -1062,7 +1066,12 @@ async function handleSave() {
     name: form.value.name.trim(),
     apiKey: form.value.apiKey.trim() || undefined,
     baseUrl: form.value.baseUrl.trim() || undefined,
-    models,
+    defaultProtocolDialect: form.value.defaultProtocolDialect.trim() || undefined,
+    models: models.map((m) => ({
+      name: m.name,
+      enabled: m.enabled,
+      protocolDialect: m.protocolDialect?.trim() || undefined,
+    })),
   }
   try {
     if (editingId.value) {
@@ -1099,10 +1108,15 @@ async function handleRefreshModels() {
         models: [],
       })
     }
-    // Keep any manually added models that the remote list does not return.
+    // Keep any manually added models that the remote list does not return,
+    // and preserve in-form dialect overrides when remote rows omit them.
+    const prevByName = new Map(form.value.models.map((m) => [m.name, m]))
     const remoteNames = new Set(models.map((m) => m.name))
     const kept = form.value.models.filter((m) => !remoteNames.has(m.name))
-    form.value.models = [...models, ...kept]
+    form.value.models = [...models, ...kept].map((m) => ({
+      ...m,
+      protocolDialect: m.protocolDialect || prevByName.get(m.name)?.protocolDialect || undefined,
+    }))
   } catch {
     toast.warning(t('settings.refreshFailedManualHint'))
   } finally {
@@ -1158,8 +1172,6 @@ function addModelEntry() {
   newMaxOutput.value = 0
   newTemperature.value = 0
   newAvailableEfforts.value = ''
-  newThinkingMode.value = ''
-  newEffortBudgetTokens.value = ''
   showAddModelDialog.value = true
 }
 
@@ -1175,11 +1187,18 @@ function confirmAddModel() {
     max_output: newMaxOutput.value || undefined,
     temperature: newTemperature.value || undefined,
     available_efforts: efforts ? efforts.split(',').map(s => s.trim()).filter(Boolean) : undefined,
-    thinking_mode: newThinkingMode.value.trim() || undefined,
-    effort_budget_tokens: parseEffortBudgetTokens(newEffortBudgetTokens.value),
   })
   editingModelIdx.value = modelConfigForm.value.length - 1
   selectedModel.value = name
+}
+
+function setModelProtocolDialect(modelName: string, dialect: string) {
+  const idx = form.value.models.findIndex((m) => m.name === modelName)
+  if (idx < 0) return
+  form.value.models[idx] = {
+    ...form.value.models[idx],
+    protocolDialect: dialect || undefined,
+  }
 }
 
 function removeSelectedModel() {
@@ -2746,48 +2765,6 @@ onUnmounted(() => {
                 <DqInput :model-value="(editingModel.available_efforts ?? []).join(', ')" @update:model-value="editingModel.available_efforts = ($event as string).split(',').map(s => s.trim()).filter(Boolean)" placeholder="off, low, medium, high, xhigh" />
                 <span class="settings-field__hint">{{ $t('settings.modelAvailableEffortsHint') }}</span>
               </label>
-              <label class="settings-field">
-                <span class="settings-field__label">{{ $t('settings.modelReasoningDialect') }}</span>
-                <DqSelect
-                  :model-value="editingModel.reasoning_dialect ?? ''"
-                  @update:model-value="(v: string) => { if (editingModel) editingModel.reasoning_dialect = v || undefined }"
-                >
-                  <DqOption value="" :label="$t('settings.modelReasoningDialectAuto')" />
-                  <DqOption value="openai" :label="$t('settings.modelReasoningDialectOpenAI')" />
-                  <DqOption value="deepseek" :label="$t('settings.modelReasoningDialectDeepSeek')" />
-                  <DqOption value="qwen" :label="$t('settings.modelReasoningDialectQwen')" />
-                  <DqOption value="kimi" :label="$t('settings.modelReasoningDialectKimi')" />
-                  <DqOption value="kimi_code" :label="$t('settings.modelReasoningDialectKimiCode')" />
-                  <DqOption value="kimi_k3" :label="$t('settings.modelReasoningDialectKimiK3')" />
-                  <DqOption value="glm" :label="$t('settings.modelReasoningDialectGLM')" />
-                  <DqOption value="minimax" :label="$t('settings.modelReasoningDialectMiniMax')" />
-                  <DqOption value="gemini" :label="$t('settings.modelReasoningDialectGemini')" />
-                  <DqOption value="grok" :label="$t('settings.modelReasoningDialectGrok')" />
-                </DqSelect>
-                <span class="settings-field__hint">{{ $t('settings.modelReasoningDialectHint') }}</span>
-              </label>
-            </div>
-
-            <div class="settings-form-group settings-form-group--nested">
-              <h3 class="settings-form-group__title">{{ $t('settings.modelGroupAnthropic') }}</h3>
-              <p class="settings-form-group__desc">{{ $t('settings.modelGroupAnthropicDesc') }}</p>
-              <label class="settings-field">
-                <span class="settings-field__label">{{ $t('settings.modelThinkingMode') }}</span>
-                <DqSelect
-                  :model-value="editingModel.thinking_mode ?? ''"
-                  @update:model-value="(v: string) => { if (editingModel) editingModel.thinking_mode = v || undefined }"
-                >
-                  <DqOption value="" :label="$t('settings.modelThinkingModeUnset')" />
-                  <DqOption value="adaptive" :label="$t('settings.modelThinkingModeAdaptive')" />
-                  <DqOption value="enabled" :label="$t('settings.modelThinkingModeEnabled')" />
-                </DqSelect>
-                <span class="settings-field__hint">{{ $t('settings.modelThinkingModeHint') }}</span>
-              </label>
-              <label class="settings-field">
-                <span class="settings-field__label">{{ $t('settings.modelEffortBudgetTokens') }}</span>
-                <DqInput :model-value="formatEffortBudgetTokens(editingModel.effort_budget_tokens)" type="textarea" :rows="3" @update:model-value="editingModel.effort_budget_tokens = parseEffortBudgetTokens($event as string)" placeholder="high:16000&#10;max:32000" />
-                <span class="settings-field__hint">{{ $t('settings.modelEffortBudgetTokensHint') }}</span>
-              </label>
             </div>
           </template>
 
@@ -2958,14 +2935,6 @@ onUnmounted(() => {
             <span class="settings-field__label">{{ $t('settings.modelAvailableEfforts') }}</span>
             <DqInput v-model="newAvailableEfforts" placeholder="off, low, medium, high, xhigh" />
           </label>
-          <label class="settings-field">
-            <span class="settings-field__label">{{ $t('settings.modelThinkingMode') }}</span>
-            <DqInput v-model="newThinkingMode" placeholder="adaptive / enabled" />
-          </label>
-          <label class="settings-field">
-            <span class="settings-field__label">{{ $t('settings.modelEffortBudgetTokens') }}</span>
-            <DqInput v-model="newEffortBudgetTokens" type="textarea" :rows="3" placeholder="high:16000&#10;max:32000" />
-          </label>
           <div class="settings-actions">
             <DqButton type="primary" @click="confirmAddModel">{{ $t('common.save') }}</DqButton>
           </div>
@@ -3045,6 +3014,19 @@ onUnmounted(() => {
             <DqInput v-model="form.baseUrl" :placeholder="$t('settings.baseUrlPlaceholder')" />
           </label>
 
+          <label v-if="form.provider === 'openai' || form.provider === 'local'" class="settings-field">
+            <span class="settings-field__label">{{ $t('settings.providerDefaultProtocolDialect') }}</span>
+            <DqSelect v-model="form.defaultProtocolDialect">
+              <DqOption
+                v-for="opt in providerDefaultProtocolDialectOptions"
+                :key="opt.value || 'auto'"
+                :value="opt.value"
+                :label="opt.label"
+              />
+            </DqSelect>
+            <span class="settings-field__hint">{{ $t('settings.providerDefaultProtocolDialectHint') }}</span>
+          </label>
+
           <div class="settings-field settings-field--refresh">
             <div class="settings-field__refresh">
               <div class="settings-field__refresh-copy">
@@ -3086,6 +3068,19 @@ onUnmounted(() => {
               >
                 <span class="model-list__name">{{ m.name }}</span>
                 <div class="model-list__actions">
+                  <DqSelect
+                    v-if="form.provider === 'openai' || form.provider === 'local'"
+                    class="model-list__dialect"
+                    :model-value="m.protocolDialect ?? ''"
+                    @update:model-value="(v: string) => setModelProtocolDialect(m.name, v)"
+                  >
+                    <DqOption
+                      v-for="opt in protocolDialectOptions"
+                      :key="opt.value || 'inherit'"
+                      :value="opt.value"
+                      :label="opt.label"
+                    />
+                  </DqSelect>
                   <DqSwitch
                     :model-value="m.enabled"
                     size="sm"
@@ -3622,6 +3617,11 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.model-list__dialect {
+  width: 148px;
+  flex-shrink: 0;
 }
 
 .model-list__actions {

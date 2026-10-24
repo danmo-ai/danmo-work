@@ -83,38 +83,42 @@ func (c *DefaultLLMProviderClient) Chat(ctx context.Context, req port.LLMChatReq
 				if len(gp.Stop) == 0 {
 					gp.Stop = rp.Stop
 				}
-				if gp.ThinkingMode == "" {
-					gp.ThinkingMode = rp.ThinkingMode
-				}
-				if len(gp.EffortBudgetTokens) == 0 {
-					gp.EffortBudgetTokens = rp.EffortBudgetTokens
-				}
-				if gp.ReasoningDialect == "" {
-					gp.ReasoningDialect = rp.ReasoningDialect
-				}
 			}
 		}
 	}
 	if req.GenParams == nil {
 		req.GenParams = &port.ModelGenParams{}
 	}
-	if req.GenParams.ReasoningDialect == "" {
-		req.GenParams.ReasoningDialect = domain.InferReasoningDialect(modelID)
-	}
-	if req.GenParams.ReasoningDialect == "" {
-		req.GenParams.ReasoningDialect = domain.ReasoningDialectOpenAI
+
+	protocol := domain.NormalizeProtocol(cfg.Provider)
+	// Dialect is a Chat Completions concern — resolve from provider×model.
+	if protocol == domain.LLMProviderOpenAI || protocol == domain.LLMProviderLocal {
+		if req.GenParams.ProtocolDialect == "" {
+			req.GenParams.ProtocolDialect = domain.ResolveProtocolDialect(cfg, modelName)
+		}
+		if len(req.GenParams.EffortBudgetTokens) == 0 {
+			req.GenParams.EffortBudgetTokens = defaultEffortBudgetTokens(req.GenParams.ProtocolDialect)
+		}
 	}
 
 	var effortCfg *EffortConfig
-	if req.GenParams != nil {
+	if protocol == domain.LLMProviderAnthropic {
+		// Built-in Anthropic default: adaptive thinking + effort (no YAML).
+		mode := req.GenParams.ThinkingMode
+		if mode == "" {
+			mode = "adaptive"
+		}
+		budgets := req.GenParams.EffortBudgetTokens
+		if len(budgets) == 0 {
+			budgets = defaultAnthropicEffortBudgets()
+		}
 		effortCfg = &EffortConfig{
-			ThinkingMode:       req.GenParams.ThinkingMode,
-			EffortBudgetTokens: req.GenParams.EffortBudgetTokens,
+			ThinkingMode:       mode,
+			EffortBudgetTokens: budgets,
 		}
 	}
 
 	timeout := c.chatTimeout(ctx)
-	protocol := domain.NormalizeProtocol(cfg.Provider)
 	switch protocol {
 	case domain.LLMProviderAnthropic:
 		return NewAnthropicMessagesClientWithTimeout(cfg.BaseURL, cfg.APIKey, timeout).Chat(ctx, req, effort, effortCfg)
@@ -153,4 +157,28 @@ func stripImageParts(msgs []port.ChatMessage) []port.ChatMessage {
 		}
 	}
 	return out
+}
+
+// defaultEffortBudgetTokens returns built-in thinking_budget maps for dialects
+// that accept token budgets (currently Qwen). Empty for others.
+func defaultEffortBudgetTokens(dialect string) map[string]int {
+	switch dialect {
+	case domain.ProtocolDialectQwen:
+		return map[string]int{
+			"low":    4096,
+			"medium": 16384,
+			"high":   32768,
+			"xhigh":  262144,
+			"max":    262144,
+		}
+	default:
+		return nil
+	}
+}
+
+func defaultAnthropicEffortBudgets() map[string]int {
+	return map[string]int{
+		"high": 16000,
+		"max":  32000,
+	}
 }
