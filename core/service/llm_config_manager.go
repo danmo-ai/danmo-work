@@ -87,14 +87,19 @@ func (m *LLMConfigManager) Upsert(ctx context.Context, req domain.UpsertLLMProvi
 	existing := m.cache[fmt.Sprintf("llm-%s", req.Name)]
 	m.mu.RUnlock()
 
+	defaultDialect := strings.TrimSpace(req.DefaultProtocolDialect)
+	if defaultDialect == "" {
+		defaultDialect = strings.TrimSpace(req.DefaultDialect)
+	}
 	cfg := domain.LLMProviderConfig{
-		ID:        existing.ID,
-		Provider:  domain.NormalizeProtocol(req.Provider),
-		Name:      req.Name,
-		APIKey:    req.APIKey,
-		BaseURL:   req.BaseURL,
-		Models:    req.Models,
-		UpdatedAt: now,
+		ID:                     existing.ID,
+		Provider:               domain.NormalizeProtocol(req.Provider),
+		Name:                   req.Name,
+		APIKey:                 req.APIKey,
+		BaseURL:                req.BaseURL,
+		DefaultProtocolDialect: defaultDialect,
+		Models:                 normalizeModelRefDialects(req.Models),
+		UpdatedAt:              now,
 	}
 	if cfg.ID == "" {
 		cfg.ID = fmt.Sprintf("llm-%s", req.Name)
@@ -155,6 +160,7 @@ func (m *LLMConfigManager) ListModels(ctx context.Context) []domain.LLMModel {
 				Enabled:          ref.Enabled,
 				AvailableEfforts: efforts,
 				Vision:           vision,
+				ProtocolDialect: domain.ResolveProtocolDialect(cfg, ref.Name),
 			})
 		}
 	}
@@ -166,6 +172,95 @@ func (m *LLMConfigManager) SetModelConfigs(models []domain.ModelConfig) {
 	if m.modelCfg != nil {
 		m.modelCfg.SetModels(models)
 	}
+}
+
+// MigrateDialectsFromModelConfigs copies legacy YAML reasoning_dialect onto
+// matching provider model rows (when empty) and fills empty provider
+// DefaultProtocolDialect from presetsByName (name → dialect) or Infer. Returns true
+// when any model still carried legacy YAML fields that should be stripped.
+func (m *LLMConfigManager) MigrateDialectsFromModelConfigs(ctx context.Context, models []domain.ModelConfig, presetsByName map[string]string) (hadLegacy bool, err error) {
+	dialectByModel := map[string]string{}
+	for _, mc := range models {
+		if d := strings.TrimSpace(mc.LegacyProtocolDialect); d != "" {
+			hadLegacy = true
+			dialectByModel[strings.ToLower(mc.Model)] = d
+			if _, bare, _ := splitModelIDParts(mc.Model); bare != "" && bare != mc.Model {
+				dialectByModel[strings.ToLower(bare)] = d
+			}
+		}
+		if mc.LegacyThinkingMode != "" || len(mc.LegacyEffortBudgetTokens) > 0 {
+			hadLegacy = true
+		}
+	}
+
+	m.ensureCache(ctx)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	for id, cfg := range m.cache {
+		changed := false
+		if strings.TrimSpace(cfg.DefaultProtocolDialect) == "" {
+			if d := strings.TrimSpace(presetsByName[strings.ToLower(cfg.Name)]); d != "" {
+				cfg.DefaultProtocolDialect = d
+				changed = true
+			} else if d := strings.TrimSpace(presetsByName[strings.ToLower(strings.TrimPrefix(cfg.ID, "llm-"))]); d != "" {
+				cfg.DefaultProtocolDialect = d
+				changed = true
+			}
+		}
+		for i, ref := range cfg.Models {
+			if strings.TrimSpace(ref.ProtocolDialect) != "" {
+				continue
+			}
+			key := strings.ToLower(ref.Name)
+			full := strings.ToLower(cfg.Name + "/" + ref.Name)
+			d := dialectByModel[full]
+			if d == "" {
+				d = dialectByModel[key]
+			}
+			if d == "" {
+				continue
+			}
+			cfg.Models[i].ProtocolDialect = d
+			changed = true
+		}
+		if !changed {
+			continue
+		}
+		cfg.UpdatedAt = now
+		if err := m.store.Upsert(ctx, cfg); err != nil {
+			return hadLegacy, err
+		}
+		m.cache[id] = cfg
+	}
+	return hadLegacy, nil
+}
+
+func normalizeModelRefDialects(refs []domain.LLMModelRef) []domain.LLMModelRef {
+	if len(refs) == 0 {
+		return refs
+	}
+	out := make([]domain.LLMModelRef, len(refs))
+	copy(out, refs)
+	for i := range out {
+		out[i].ProtocolDialect = strings.TrimSpace(out[i].ProtocolDialect)
+	}
+	return out
+}
+
+func splitModelIDParts(modelID string) (provider, model, effort string) {
+	parts := strings.SplitN(modelID, "/", 3)
+	if len(parts) >= 1 {
+		provider = parts[0]
+	}
+	if len(parts) >= 2 {
+		model = parts[1]
+	}
+	if len(parts) >= 3 {
+		effort = parts[2]
+	}
+	return
 }
 
 func (m *LLMConfigManager) ResolveProvider(ctx context.Context, modelID string) (domain.LLMProviderConfig, string, error) {
@@ -200,16 +295,25 @@ func (m *LLMConfigManager) FetchModels(ctx context.Context, configID string) ([]
 		return nil, fmt.Errorf("fetch models from remote: %w", err)
 	}
 
-	existingEnabled := make(map[string]bool, len(cfg.Models))
+	existingByName := make(map[string]domain.LLMModelRef, len(cfg.Models))
 	for _, ref := range cfg.Models {
-		existingEnabled[ref.Name] = ref.Enabled
+		existingByName[ref.Name] = ref
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	merged := make([]domain.LLMModelRef, 0, len(remoteModels))
 	for _, name := range remoteModels {
-		enabled := existingEnabled[name]
-		merged = append(merged, domain.LLMModelRef{Name: name, Enabled: enabled})
+		prev, ok := existingByName[name]
+		enabled := ok && prev.Enabled
+		dialect := ""
+		if ok {
+			dialect = prev.ProtocolDialect
+		}
+		merged = append(merged, domain.LLMModelRef{
+			Name:             name,
+			Enabled:          enabled,
+			ProtocolDialect: dialect,
+		})
 	}
 
 	cfg.Models = merged

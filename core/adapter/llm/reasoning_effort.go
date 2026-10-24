@@ -8,24 +8,32 @@ func ApplyReasoningEffort(provider domain.LLMProviderType, effort string, genPar
 	}
 	switch provider {
 	case domain.LLMProviderAnthropic:
-		if genParams != nil && genParams.ThinkingMode == "adaptive" {
+		mode := ""
+		if genParams != nil {
+			mode = genParams.ThinkingMode
+		}
+		// Default (empty or adaptive): Anthropic adaptive thinking + effort.
+		if mode == "" || mode == "adaptive" {
 			body["thinking"] = map[string]any{
 				"type": "adaptive",
 			}
 			body["effort"] = effort
 			body["display"] = "summarized"
-		} else {
-			var budget int
-			if genParams != nil {
-				budget = genParams.EffortBudgetTokens[effort]
-			}
-			if budget == 0 {
-				return
-			}
-			body["thinking"] = map[string]any{
-				"type":          "enabled",
-				"budget_tokens": budget,
-			}
+			return
+		}
+		var budget int
+		if genParams != nil {
+			budget = genParams.EffortBudgetTokens[effort]
+		}
+		if budget == 0 {
+			budget = defaultAnthropicEffortBudgets()[effort]
+		}
+		if budget == 0 {
+			return
+		}
+		body["thinking"] = map[string]any{
+			"type":          "enabled",
+			"budget_tokens": budget,
 		}
 	default:
 		body["reasoning_effort"] = effort

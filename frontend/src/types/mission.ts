@@ -102,9 +102,24 @@ export interface AgentRun {
 /** Wire protocol for an LLM endpoint (not a vendor name). */
 export type LLMProviderType = 'openai' | 'openai_responses' | 'anthropic' | 'local' | 'mock'
 
+/** Chat Completions protocol dialect ids (provider default + per-model override). */
+export type ProtocolDialectId =
+  | 'openai'
+  | 'deepseek'
+  | 'qwen'
+  | 'kimi'
+  | 'kimi_code'
+  | 'kimi_k3'
+  | 'glm'
+  | 'minimax'
+  | 'gemini'
+  | 'grok'
+
 export interface LLMModelRef {
   name: string
   enabled: boolean
+  /** Override provider defaultProtocolDialect; empty = inherit. */
+  protocolDialect?: string
 }
 
 export interface LLMProviderConfig {
@@ -113,6 +128,8 @@ export interface LLMProviderConfig {
   name: string
   apiKey?: string
   baseUrl?: string
+  /** Default Chat Completions protocol dialect for models without override. */
+  defaultProtocolDialect?: string
   models?: LLMModelRef[]
   createdAt: string
   updatedAt: string
@@ -123,6 +140,7 @@ export interface UpsertLLMProviderConfigRequest {
   name: string
   apiKey?: string
   baseUrl?: string
+  defaultProtocolDialect?: string
   models?: LLMModelRef[]
 }
 
@@ -131,6 +149,7 @@ export interface LLMProviderPreset {
   name: string
   provider: LLMProviderType
   baseUrl: string
+  defaultProtocolDialect?: string
   icon: string
   description: string
 }
@@ -144,6 +163,8 @@ export interface LLMModel {
   availableEfforts: string[]
   /** True when the model accepts image / multimodal input. */
   vision?: boolean
+  /** Resolved protocol dialect for this provider×model. */
+  protocolDialect?: string
 }
 
 export interface ModelConfig {
@@ -156,10 +177,6 @@ export interface ModelConfig {
   presence_penalty?: number
   stop?: string[]
   available_efforts?: string[]
-  thinking_mode?: string
-  effort_budget_tokens?: Record<string, number>
-  /** Chat Completions thinking dialect — see GET /reasoning-dialects */
-  reasoning_dialect?: string
   /** Accepts image content parts when true. */
   vision?: boolean
 }

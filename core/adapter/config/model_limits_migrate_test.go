@@ -137,13 +137,13 @@ func TestLoadKeepsExplicitModels(t *testing.T) {
 	}
 }
 
-func TestRefreshModelConfigsOverlaysDialect(t *testing.T) {
+func TestRefreshModelConfigsOverlaysLimits(t *testing.T) {
 	existing := []domain.ModelConfig{
 		{Model: "k3", ContextWindow: 1, AvailableEfforts: []string{"off"}},
 		{Model: "custom-only", ContextWindow: 42},
 	}
 	out := RefreshModelConfigs(existing, DefaultModelConfigs())
-	if out[0].Model != "k3" || out[0].ReasoningDialect != "kimi_k3" {
+	if out[0].Model != "k3" {
 		t.Fatalf("k3: %+v", out[0])
 	}
 	if out[0].ContextWindow != 1000000 {
@@ -183,7 +183,7 @@ func TestModelConfigsDivergedFromBuiltinDetectsStaleParams(t *testing.T) {
 		t.Fatal("builtin k3 missing")
 	}
 	stale := []domain.ModelConfig{
-		{Model: "k3", ContextWindow: 1, ReasoningDialect: "openai", AvailableEfforts: []string{"off"}},
+		{Model: "k3", ContextWindow: 1, AvailableEfforts: []string{"off"}},
 	}
 	// Pad with all other built-ins so only k3 params differ.
 	for _, d := range defaults {
@@ -217,9 +217,6 @@ func TestDefaultModelConfigsDeepSeekFlash(t *testing.T) {
 	if flash.ContextWindow != 1_000_000 || flash.MaxOutput != 384_000 {
 		t.Fatalf("limits: context=%d max_output=%d", flash.ContextWindow, flash.MaxOutput)
 	}
-	if flash.ReasoningDialect != "deepseek" {
-		t.Fatalf("dialect: %q", flash.ReasoningDialect)
-	}
 	hasLow := false
 	for _, e := range flash.AvailableEfforts {
 		if e == "low" {
@@ -249,20 +246,19 @@ func TestDefaultModelConfigsHeadVendorLatest(t *testing.T) {
 		byModel[m.Model] = m
 	}
 	cases := []struct {
-		model   string
-		vision  bool
-		ctx     int
-		maxOut  int
-		dialect string
+		model  string
+		vision bool
+		ctx    int
+		maxOut int
 	}{
-		{"claude-opus-5", true, 1_000_000, 128_000, ""},
-		{"claude-fable-5-1", true, 1_000_000, 128_000, ""},
-		{"gpt-5.6-sol", true, 1_050_000, 128_000, "openai"},
-		{"deepseek-flash", true, 1_000_000, 384_000, "deepseek"},
-		{"glm-5.3", false, 1_048_576, 131_072, "glm"},
-		{"glm-5.3-flash", true, 1_048_576, 131_072, "glm"},
-		{"gemini-3.6-flash", true, 1_048_576, 65_536, "gemini"},
-		{"grok-4.6", true, 500_000, 128_000, "grok"},
+		{"claude-opus-5", true, 1_000_000, 128_000},
+		{"claude-fable-5-1", true, 1_000_000, 128_000},
+		{"gpt-5.6-sol", true, 1_050_000, 128_000},
+		{"deepseek-flash", true, 1_000_000, 384_000},
+		{"glm-5.3", false, 1_048_576, 131_072},
+		{"glm-5.3-flash", true, 1_048_576, 131_072},
+		{"gemini-3.6-flash", true, 1_048_576, 65_536},
+		{"grok-4.6", true, 500_000, 128_000},
 	}
 	for _, tc := range cases {
 		m, ok := byModel[tc.model]
@@ -274,9 +270,6 @@ func TestDefaultModelConfigsHeadVendorLatest(t *testing.T) {
 		}
 		if m.ContextWindow != tc.ctx || m.MaxOutput != tc.maxOut {
 			t.Fatalf("%s limits context=%d max_output=%d", tc.model, m.ContextWindow, m.MaxOutput)
-		}
-		if tc.dialect != "" && m.ReasoningDialect != tc.dialect {
-			t.Fatalf("%s dialect=%q want %q", tc.model, m.ReasoningDialect, tc.dialect)
 		}
 	}
 	gpt56 := byModel["gpt-5.6"]

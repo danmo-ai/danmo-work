@@ -176,7 +176,7 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/model-configs", getModelConfigs(h))
 	api.PUT("/model-configs", updateModelConfigs(h))
 	api.POST("/model-configs/refresh", refreshModelConfigsHandler(h))
-	api.GET("/reasoning-dialects", listReasoningDialects())
+	api.GET("/protocol-dialects", listProtocolDialects())
 	api.GET("/search/config", getSearchConfig(h))
 	api.PUT("/search/config", updateSearchConfig(h))
 	api.GET("/agents", listAgents(h))
@@ -1975,6 +1975,7 @@ func updateModelConfigs(h *Handler) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		models = domain.StripLegacyModelConfigFields(models)
 		cfg.LLM.Models = models
 		if _, err := h.Config.Update(c, domain.UpdateConfigFileRequest{LLM: &cfg.LLM}); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -2013,9 +2014,9 @@ func refreshModelConfigsHandler(h *Handler) gin.HandlerFunc {
 	}
 }
 
-func listReasoningDialects() gin.HandlerFunc {
+func listProtocolDialects() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.JSON(http.StatusOK, domain.ReasoningDialectInfos)
+		c.JSON(http.StatusOK, domain.ProtocolDialectInfos)
 	}
 }
 

@@ -7,9 +7,9 @@ import (
 	"danmo-work/core/port"
 )
 
-func TestApplyReasoningDialectRequest_Qwen(t *testing.T) {
+func TestApplyProtocolDialectRequest_Qwen(t *testing.T) {
 	body := map[string]any{}
-	applyReasoningDialectRequest(body, domain.ReasoningDialectQwen, "high", &port.ModelGenParams{
+	applyProtocolDialectRequest(body, domain.ProtocolDialectQwen, "high", &port.ModelGenParams{
 		EffortBudgetTokens: map[string]int{"high": 8000},
 	})
 	if body["enable_thinking"] != true {
@@ -23,15 +23,15 @@ func TestApplyReasoningDialectRequest_Qwen(t *testing.T) {
 	}
 
 	bodyOff := map[string]any{}
-	applyReasoningDialectRequest(bodyOff, domain.ReasoningDialectQwen, "off", nil)
+	applyProtocolDialectRequest(bodyOff, domain.ProtocolDialectQwen, "off", nil)
 	if bodyOff["enable_thinking"] != false {
 		t.Fatalf("off enable_thinking: %v", bodyOff["enable_thinking"])
 	}
 }
 
-func TestApplyReasoningDialectRequest_Kimi(t *testing.T) {
+func TestApplyProtocolDialectRequest_Kimi(t *testing.T) {
 	body := map[string]any{}
-	applyReasoningDialectRequest(body, domain.ReasoningDialectKimi, "high", nil)
+	applyProtocolDialectRequest(body, domain.ProtocolDialectKimi, "high", nil)
 	th, ok := body["thinking"].(map[string]any)
 	if !ok || th["type"] != "enabled" || th["keep"] != "all" {
 		t.Fatalf("thinking: %v", body["thinking"])
@@ -41,16 +41,16 @@ func TestApplyReasoningDialectRequest_Kimi(t *testing.T) {
 	}
 
 	bodyOff := map[string]any{}
-	applyReasoningDialectRequest(bodyOff, domain.ReasoningDialectKimi, "off", nil)
+	applyProtocolDialectRequest(bodyOff, domain.ProtocolDialectKimi, "off", nil)
 	thOff := bodyOff["thinking"].(map[string]any)
 	if thOff["type"] != "disabled" {
 		t.Fatalf("disabled: %v", thOff)
 	}
 }
 
-func TestApplyReasoningDialectRequest_KimiK3(t *testing.T) {
+func TestApplyProtocolDialectRequest_KimiK3(t *testing.T) {
 	body := map[string]any{}
-	applyReasoningDialectRequest(body, domain.ReasoningDialectKimiK3, "max", nil)
+	applyProtocolDialectRequest(body, domain.ProtocolDialectKimiK3, "max", nil)
 	if body["reasoning_effort"] != "max" {
 		t.Fatalf("reasoning_effort: %v", body["reasoning_effort"])
 	}
@@ -59,15 +59,15 @@ func TestApplyReasoningDialectRequest_KimiK3(t *testing.T) {
 	}
 
 	bodyOff := map[string]any{}
-	applyReasoningDialectRequest(bodyOff, domain.ReasoningDialectKimiK3, "off", nil)
+	applyProtocolDialectRequest(bodyOff, domain.ProtocolDialectKimiK3, "off", nil)
 	if bodyOff["reasoning_effort"] != "low" {
 		t.Fatalf("off maps to low: %v", bodyOff["reasoning_effort"])
 	}
 }
 
-func TestApplyReasoningDialectRequest_DeepSeek(t *testing.T) {
+func TestApplyProtocolDialectRequest_DeepSeek(t *testing.T) {
 	body := map[string]any{}
-	applyReasoningDialectRequest(body, domain.ReasoningDialectDeepSeek, "max", nil)
+	applyProtocolDialectRequest(body, domain.ProtocolDialectDeepSeek, "max", nil)
 	th, ok := body["thinking"].(map[string]any)
 	if !ok || th["type"] != "enabled" {
 		t.Fatalf("thinking: %v", body["thinking"])
@@ -77,18 +77,18 @@ func TestApplyReasoningDialectRequest_DeepSeek(t *testing.T) {
 	}
 
 	bodyLow := map[string]any{}
-	applyReasoningDialectRequest(bodyLow, domain.ReasoningDialectDeepSeek, "low", nil)
+	applyProtocolDialectRequest(bodyLow, domain.ProtocolDialectDeepSeek, "low", nil)
 	if bodyLow["reasoning_effort"] != "low" {
 		t.Fatalf("low maps to low: %v", bodyLow["reasoning_effort"])
 	}
 	bodyMed := map[string]any{}
-	applyReasoningDialectRequest(bodyMed, domain.ReasoningDialectDeepSeek, "medium", nil)
+	applyProtocolDialectRequest(bodyMed, domain.ProtocolDialectDeepSeek, "medium", nil)
 	if bodyMed["reasoning_effort"] != "high" {
 		t.Fatalf("medium maps to high: %v", bodyMed["reasoning_effort"])
 	}
 
 	bodyOff := map[string]any{}
-	applyReasoningDialectRequest(bodyOff, domain.ReasoningDialectDeepSeek, "off", nil)
+	applyProtocolDialectRequest(bodyOff, domain.ProtocolDialectDeepSeek, "off", nil)
 	if bodyOff["thinking"].(map[string]any)["type"] != "disabled" {
 		t.Fatalf("off: %v", bodyOff["thinking"])
 	}
@@ -97,31 +97,31 @@ func TestApplyReasoningDialectRequest_DeepSeek(t *testing.T) {
 	}
 }
 
-func TestApplyReasoningDialectRequest_KimiCode(t *testing.T) {
+func TestApplyProtocolDialectRequest_KimiCode(t *testing.T) {
 	body := map[string]any{}
-	applyReasoningDialectRequest(body, domain.ReasoningDialectKimiCode, "off", nil)
+	applyProtocolDialectRequest(body, domain.ProtocolDialectKimiCode, "off", nil)
 	th := body["thinking"].(map[string]any)
 	if th["type"] != "enabled" || th["keep"] != "all" {
 		t.Fatalf("always on: %v", th)
 	}
 }
 
-func TestApplyReasoningDialectRequest_Grok(t *testing.T) {
+func TestApplyProtocolDialectRequest_Grok(t *testing.T) {
 	body := map[string]any{}
-	applyReasoningDialectRequest(body, domain.ReasoningDialectGrok, "medium", nil)
+	applyProtocolDialectRequest(body, domain.ProtocolDialectGrok, "medium", nil)
 	if body["reasoning_effort"] != "medium" {
 		t.Fatalf("got %v", body["reasoning_effort"])
 	}
 	bodyOff := map[string]any{}
-	applyReasoningDialectRequest(bodyOff, domain.ReasoningDialectGrok, "off", nil)
+	applyProtocolDialectRequest(bodyOff, domain.ProtocolDialectGrok, "off", nil)
 	if bodyOff["reasoning_effort"] != "low" {
 		t.Fatalf("off→low: %v", bodyOff["reasoning_effort"])
 	}
 }
 
-func TestApplyReasoningDialectRequest_GLM(t *testing.T) {
+func TestApplyProtocolDialectRequest_GLM(t *testing.T) {
 	body := map[string]any{}
-	applyReasoningDialectRequest(body, domain.ReasoningDialectGLM, "high", nil)
+	applyProtocolDialectRequest(body, domain.ProtocolDialectGLM, "high", nil)
 	th, ok := body["thinking"].(map[string]any)
 	if !ok || th["type"] != "enabled" || th["clear_thinking"] != false {
 		t.Fatalf("thinking: %v", body["thinking"])
@@ -131,7 +131,7 @@ func TestApplyReasoningDialectRequest_GLM(t *testing.T) {
 	}
 
 	bodyOff := map[string]any{}
-	applyReasoningDialectRequest(bodyOff, domain.ReasoningDialectGLM, "off", nil)
+	applyProtocolDialectRequest(bodyOff, domain.ProtocolDialectGLM, "off", nil)
 	thOff := bodyOff["thinking"].(map[string]any)
 	if thOff["type"] != "disabled" {
 		t.Fatalf("disabled: %v", thOff)
@@ -141,9 +141,9 @@ func TestApplyReasoningDialectRequest_GLM(t *testing.T) {
 	}
 }
 
-func TestApplyReasoningDialectRequest_MiniMax(t *testing.T) {
+func TestApplyProtocolDialectRequest_MiniMax(t *testing.T) {
 	body := map[string]any{}
-	applyReasoningDialectRequest(body, domain.ReasoningDialectMiniMax, "high", nil)
+	applyProtocolDialectRequest(body, domain.ProtocolDialectMiniMax, "high", nil)
 	if body["reasoning_split"] != true {
 		t.Fatalf("reasoning_split: %v", body["reasoning_split"])
 	}
@@ -153,7 +153,7 @@ func TestApplyReasoningDialectRequest_MiniMax(t *testing.T) {
 	}
 
 	bodyOff := map[string]any{}
-	applyReasoningDialectRequest(bodyOff, domain.ReasoningDialectMiniMax, "off", nil)
+	applyProtocolDialectRequest(bodyOff, domain.ProtocolDialectMiniMax, "off", nil)
 	if bodyOff["reasoning_split"] != true {
 		t.Fatal("reasoning_split should stay on for format")
 	}
@@ -162,9 +162,9 @@ func TestApplyReasoningDialectRequest_MiniMax(t *testing.T) {
 	}
 }
 
-func TestApplyReasoningDialectRequest_Gemini(t *testing.T) {
+func TestApplyProtocolDialectRequest_Gemini(t *testing.T) {
 	body := map[string]any{}
-	applyReasoningDialectRequest(body, domain.ReasoningDialectGemini, "medium", nil)
+	applyProtocolDialectRequest(body, domain.ProtocolDialectGemini, "medium", nil)
 	if body["reasoning_effort"] != "medium" {
 		t.Fatalf("reasoning_effort: %v", body["reasoning_effort"])
 	}
@@ -173,7 +173,7 @@ func TestApplyReasoningDialectRequest_Gemini(t *testing.T) {
 	}
 
 	bodyOff := map[string]any{}
-	applyReasoningDialectRequest(bodyOff, domain.ReasoningDialectGemini, "off", nil)
+	applyProtocolDialectRequest(bodyOff, domain.ProtocolDialectGemini, "off", nil)
 	if bodyOff["reasoning_effort"] != "none" {
 		t.Fatalf("off: %v", bodyOff["reasoning_effort"])
 	}
@@ -181,7 +181,7 @@ func TestApplyReasoningDialectRequest_Gemini(t *testing.T) {
 
 func TestNormalizeChatCompletionsReasoning_MiniMaxThinkTags(t *testing.T) {
 	content := "<think>plan</think>\nanswer"
-	ans, reason := normalizeChatCompletionsReasoning(content, "", "", domain.ReasoningDialectMiniMax)
+	ans, reason := normalizeChatCompletionsReasoning(content, "", "", domain.ProtocolDialectMiniMax)
 	if reason != "plan" {
 		t.Fatalf("reason: %q", reason)
 	}
@@ -190,59 +190,59 @@ func TestNormalizeChatCompletionsReasoning_MiniMaxThinkTags(t *testing.T) {
 	}
 }
 
-func TestResolveReasoningDialect(t *testing.T) {
-	if got := resolveReasoningDialect(&port.ModelGenParams{ReasoningDialect: "qwen"}, "x"); got != "qwen" {
+func TestResolveProtocolDialect(t *testing.T) {
+	if got := resolveProtocolDialect(&port.ModelGenParams{ProtocolDialect: "qwen"}, "x"); got != "qwen" {
 		t.Fatalf("explicit: %s", got)
 	}
-	if got := resolveReasoningDialect(nil, "deepseek-chat"); got != domain.ReasoningDialectDeepSeek {
+	if got := resolveProtocolDialect(nil, "deepseek-chat"); got != domain.ProtocolDialectDeepSeek {
 		t.Fatalf("infer deepseek: %s", got)
 	}
-	if got := resolveReasoningDialect(nil, "glm-4.7"); got != domain.ReasoningDialectGLM {
+	if got := resolveProtocolDialect(nil, "glm-4.7"); got != domain.ProtocolDialectGLM {
 		t.Fatalf("infer glm: %s", got)
 	}
-	if got := resolveReasoningDialect(nil, "MiniMax-M3"); got != domain.ReasoningDialectMiniMax {
+	if got := resolveProtocolDialect(nil, "MiniMax-M3"); got != domain.ProtocolDialectMiniMax {
 		t.Fatalf("infer minimax: %s", got)
 	}
-	if got := resolveReasoningDialect(nil, "k3-256k"); got != domain.ReasoningDialectKimiK3 {
+	if got := resolveProtocolDialect(nil, "k3-256k"); got != domain.ProtocolDialectKimiK3 {
 		t.Fatalf("infer k3-256k: %s", got)
 	}
-	if got := resolveReasoningDialect(nil, "kimi-for-coding"); got != domain.ReasoningDialectKimiK3 {
+	if got := resolveProtocolDialect(nil, "kimi-for-coding"); got != domain.ProtocolDialectKimiK3 {
 		t.Fatalf("infer kimi_k3 for kimi-for-coding: %s", got)
 	}
-	if got := resolveReasoningDialect(nil, "kimi-for-coding-highspeed"); got != domain.ReasoningDialectKimiCode {
+	if got := resolveProtocolDialect(nil, "kimi-for-coding-highspeed"); got != domain.ProtocolDialectKimiCode {
 		t.Fatalf("infer kimi_code for highspeed: %s", got)
 	}
-	if got := resolveReasoningDialect(nil, "grok-4.5"); got != domain.ReasoningDialectGrok {
+	if got := resolveProtocolDialect(nil, "grok-4.5"); got != domain.ProtocolDialectGrok {
 		t.Fatalf("infer grok: %s", got)
 	}
-	if got := resolveReasoningDialect(nil, "gpt-4o"); got != domain.ReasoningDialectOpenAI {
+	if got := resolveProtocolDialect(nil, "gpt-4o"); got != domain.ProtocolDialectOpenAI {
 		t.Fatalf("default openai: %s", got)
 	}
 }
 
 func TestDialectEchoesReasoning(t *testing.T) {
-	if !dialectEchoesReasoning(domain.ReasoningDialectDeepSeek) {
+	if !dialectEchoesReasoning(domain.ProtocolDialectDeepSeek) {
 		t.Fatal("deepseek should echo")
 	}
-	if !dialectEchoesReasoning(domain.ReasoningDialectGLM) {
+	if !dialectEchoesReasoning(domain.ProtocolDialectGLM) {
 		t.Fatal("glm should echo")
 	}
-	if !dialectEchoesReasoning(domain.ReasoningDialectMiniMax) {
+	if !dialectEchoesReasoning(domain.ProtocolDialectMiniMax) {
 		t.Fatal("minimax should echo")
 	}
-	if !dialectEchoesReasoning(domain.ReasoningDialectKimiK3) {
+	if !dialectEchoesReasoning(domain.ProtocolDialectKimiK3) {
 		t.Fatal("kimi_k3 should echo")
 	}
-	if dialectEchoesReasoning(domain.ReasoningDialectOpenAI) {
+	if dialectEchoesReasoning(domain.ProtocolDialectOpenAI) {
 		t.Fatal("openai should not echo")
 	}
-	if dialectEchoesReasoning(domain.ReasoningDialectGemini) {
+	if dialectEchoesReasoning(domain.ProtocolDialectGemini) {
 		t.Fatal("gemini should not echo reasoning_content by default")
 	}
 }
 
 func TestOpenAIChatCompletions_EchoesReasoningContent(t *testing.T) {
-	echo := dialectEchoesReasoning(domain.ReasoningDialectKimi)
+	echo := dialectEchoesReasoning(domain.ProtocolDialectKimi)
 	if !echo {
 		t.Fatal("expected echo")
 	}

@@ -210,6 +210,28 @@ func New(cfg Config) *Core {
 
 	llmConfig := service.NewLLMConfigManager(llmConfigRepo, modelCfg)
 
+	// One-shot: lift legacy YAML reasoning_dialect onto provider model rows /
+	// DefaultProtocolDialect, then strip deprecated catalog fields from config.yaml.
+	if appCfg != nil && len(appCfg.LLM.Models) > 0 {
+		presetsByName := map[string]string{}
+		for _, p := range appCfg.LLM.Providers {
+			if d := strings.TrimSpace(p.DefaultProtocolDialect); d != "" {
+				presetsByName[strings.ToLower(p.ID)] = d
+				presetsByName[strings.ToLower(p.Name)] = d
+			}
+		}
+		hadLegacy, migErr := llmConfig.MigrateDialectsFromModelConfigs(context.Background(), appCfg.LLM.Models, presetsByName)
+		if migErr != nil {
+			log.Printf("[bootstrap] dialect migrate: %v", migErr)
+		} else if hadLegacy {
+			appCfg.LLM.Models = domain.StripLegacyModelConfigFields(appCfg.LLM.Models)
+			modelCfg.SetModels(appCfg.LLM.Models)
+			if _, err := configManager.Update(context.Background(), domain.UpdateConfigFileRequest{LLM: &appCfg.LLM}); err != nil {
+				log.Printf("[bootstrap] strip legacy model dialect fields: %v", err)
+			}
+		}
+	}
+
 	client := llm.NewDefaultLLMProvider(llmConfig, modelCfg, configManager)
 
 	// Always use the config-backed client so providers added after startup

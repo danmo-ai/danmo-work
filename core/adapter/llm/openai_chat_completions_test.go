@@ -335,7 +335,7 @@ func TestOpenAIChatCompletionsClient_QwenDialectRequest(t *testing.T) {
 	resp, err := p.Chat(context.Background(), port.LLMChatRequest{
 		Model: "qwen3-max",
 		GenParams: &port.ModelGenParams{
-			ReasoningDialect: domain.ReasoningDialectQwen,
+			ProtocolDialect: domain.ProtocolDialectQwen,
 		},
 		Messages: []port.ChatMessage{
 			{Role: "assistant", ReasoningContent: "prev", ToolCalls: []port.ChatToolCall{

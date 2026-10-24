@@ -51,7 +51,7 @@ func (p *OpenAIChatCompletionsClient) Chat(ctx context.Context, req port.LLMChat
 		return port.LLMChatResponse{}, fmt.Errorf("model not specified")
 	}
 
-	dialect := resolveReasoningDialect(req.GenParams, model)
+	dialect := resolveProtocolDialect(req.GenParams, model)
 	echoReasoning := dialectEchoesReasoning(dialect)
 
 	messages := make([]map[string]any, 0, len(req.Messages))
@@ -132,7 +132,7 @@ func (p *OpenAIChatCompletionsClient) Chat(ctx context.Context, req port.LLMChat
 		}
 	}
 
-	applyReasoningDialectRequest(body, dialect, effort, req.GenParams)
+	applyProtocolDialectRequest(body, dialect, effort, req.GenParams)
 
 	b, err := json.Marshal(body)
 	if err != nil {
