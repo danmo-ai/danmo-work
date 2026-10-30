@@ -69,6 +69,7 @@ func main() {
 		Sandbox:     core.Sandbox,
 		Execution:   core.Execution,
 		Browser:     core.Browser,
+		Computer:    core.Computer,
 		Store:       core.Store,
 		TableStore:  core.TableStore,
 		AIReview:      core.AIReview,

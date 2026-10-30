@@ -47,6 +47,7 @@ type Handler struct {
 	Sandbox       port.Sandbox
 	Execution     port.ExecutionBackend
 	Browser       port.Browser
+	Computer      port.Computer
 	Store         port.Repository
 	TableStore    port.TableStoreRepo
 	AIReview      *service.AIReviewManager
@@ -173,6 +174,7 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.GET("/environment/status", getEnvironmentStatus(h))
 	api.POST("/environment/tar/download", downloadEnvironmentTar(h))
 	api.GET("/browser/status", getBrowserStatus(h))
+	api.GET("/computer/status", getComputerStatus(h))
 	api.GET("/model-configs", getModelConfigs(h))
 	api.PUT("/model-configs", updateModelConfigs(h))
 	api.POST("/model-configs/refresh", refreshModelConfigsHandler(h))
@@ -1311,6 +1313,9 @@ func updateConfig(h *Handler) gin.HandlerFunc {
 		if h.Browser != nil && req.Runtime != nil {
 			h.Browser.Configure(cfg.Runtime.Browser)
 		}
+		if h.Computer != nil && req.Runtime != nil {
+			h.Computer.Configure(cfg.Runtime.Computer)
+		}
 		if h.Remote != nil && req.Remote != nil {
 			cur := h.Remote.Config()
 			h.Remote.Apply(connector.Config{
@@ -1412,6 +1417,26 @@ func getBrowserStatus(h *Handler) gin.HandlerFunc {
 			}
 		}
 		c.JSON(http.StatusOK, h.Browser.Status())
+	}
+}
+
+func getComputerStatus(h *Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.Computer == nil {
+			c.JSON(http.StatusOK, domain.ComputerStatus{
+				Available:      false,
+				Enabled:        false,
+				Backend:        "none",
+				DegradedReason: "computer not initialized",
+			})
+			return
+		}
+		if h.Config != nil {
+			if cfg, err := h.Config.Get(c); err == nil {
+				h.Computer.Configure(cfg.Runtime.Computer)
+			}
+		}
+		c.JSON(http.StatusOK, h.Computer.Status())
 	}
 }
 
