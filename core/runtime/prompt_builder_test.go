@@ -126,6 +126,27 @@ func TestBuildRuntimeEnvironmentContainer(t *testing.T) {
 		t.Fatalf("expected preinstalled list + apk hint:\n%s", got)
 	}
 
+	desk := buildRuntimeEnvironment(domain.SandboxStatus{}, domain.EnvironmentStatus{
+		Backend:  domain.EnvironmentBackendContainer,
+		Engine:   "docker",
+		Profile:  domain.SandboxProfileDesktop,
+		Image:    domain.EnvImageTagDesktop,
+		Display:  ":1",
+		CDPURL:   "http://127.0.0.1:49152",
+		NoVNCURL: "http://127.0.0.1:49153/vnc.html",
+	})
+	for _, want := range []string{
+		"OCI desktop container",
+		"Image profile: desktop",
+		"Xvfb",
+		"Chromium CDP: http://127.0.0.1:49152",
+		"noVNC: http://127.0.0.1:49153/vnc.html",
+	} {
+		if !strings.Contains(desk, want) {
+			t.Fatalf("missing %q in:\n%s", want, desk)
+		}
+	}
+
 	local := buildRuntimeEnvironment(domain.SandboxStatus{}, domain.EnvironmentStatus{})
 	if strings.Contains(local, "OCI container") {
 		t.Fatal("container block must not appear for local backend")

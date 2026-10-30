@@ -244,6 +244,7 @@ const runtimeForm = ref({
   sandboxNetwork: 'deny' as 'deny' | 'allow' | 'allowlist',
   sandboxAllowlistDomains: '',
   sandboxBackend: '',
+  envProfile: 'cli' as 'cli' | 'desktop',
   envImage: '',
   envTarPath: '',
   envWorkspaceMount: '',
@@ -287,13 +288,15 @@ const environmentStatusText = computed(() => {
   const st = runtimeConfig.environmentStatus
   if (!st) return ''
   const eng = st.engine ? ` · ${st.engine}` : ''
+  const profile = st.profile ? ` · ${st.profile}` : ''
   const tar = st.tarPresent ? ' · tar ok' : ' · tar missing'
   const img = st.imageLoaded ? ' · image loaded' : ''
   const res = [st.resources?.cpus && `cpus=${st.resources.cpus}`, st.resources?.memory && `mem=${st.resources.memory}`]
     .filter(Boolean)
     .join(' ')
   const resPart = res ? ` · ${res}` : ' · unlimited'
-  return `${st.backend}${eng}${tar}${img}${resPart}`
+  const cdp = st.cdpUrl ? ` · cdp ${st.cdpUrl}` : ''
+  return `${st.backend}${eng}${profile}${tar}${img}${resPart}${cdp}`
 })
 
 const showGitBashHint = computed(() => {
@@ -433,17 +436,25 @@ function formatTarBytes(n: number) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
-async function downloadEnvTar(arch?: string) {
-  await runtimeConfig.downloadEnvTar(arch)
+async function downloadEnvTar(arch?: string, profile?: string) {
+  await runtimeConfig.downloadEnvTar(arch, profile)
 }
 
 const envTarVariants = computed(() => {
   const list = runtimeConfig.environmentStatus?.tarVariants
   if (list?.length) return list
-  // Fallback until status loads
   return [
-    { arch: 'amd64', present: false, downloadUrl: '', assetName: 'danmo-work-env-linux-amd64.tar.gz' },
-    { arch: 'arm64', present: false, downloadUrl: '', assetName: 'danmo-work-env-linux-arm64.tar.gz' },
+    { arch: 'amd64', profile: 'cli', present: false, downloadUrl: '', assetName: 'danmo-work-env-linux-amd64.tar.gz' },
+    { arch: 'arm64', profile: 'cli', present: false, downloadUrl: '', assetName: 'danmo-work-env-linux-arm64.tar.gz' },
+  ]
+})
+
+const desktopTarVariants = computed(() => {
+  const list = runtimeConfig.environmentStatus?.desktopTarVariants
+  if (list?.length) return list
+  return [
+    { arch: 'amd64', profile: 'desktop', present: false, downloadUrl: '', assetName: 'danmo-work-env-desktop-linux-amd64.tar.gz' },
+    { arch: 'arm64', profile: 'desktop', present: false, downloadUrl: '', assetName: 'danmo-work-env-desktop-linux-arm64.tar.gz' },
   ]
 })
 
@@ -1559,12 +1570,22 @@ onUnmounted(() => {
               <template v-if="isContainerBackend">
                 <div class="settings-form-row">
                   <div class="settings-field settings-field--half">
+                    <span class="settings-field__label">{{ $t('settings.envProfile') }}</span>
+                    <DqSelect v-model="runtimeForm.envProfile">
+                      <DqOption value="cli" :label="$t('settings.envProfileCli')" />
+                      <DqOption value="desktop" :label="$t('settings.envProfileDesktop')" />
+                    </DqSelect>
+                  </div>
+                  <div class="settings-field settings-field--half">
                     <span class="settings-field__label">{{ $t('settings.envWorkspaceMount') }}</span>
                     <DqInput
                       v-model="runtimeForm.envWorkspaceMount"
                       :placeholder="$t('settings.envWorkspaceMountPlaceholder')"
                     />
                   </div>
+                </div>
+                <p class="settings-form-group__desc">{{ $t('settings.envProfileDesc') }}</p>
+                <div class="settings-form-row">
                   <div class="settings-field settings-field--half">
                     <span class="settings-field__label">{{ $t('settings.envTarPath') }}</span>
                     <DqInput
@@ -1576,20 +1597,20 @@ onUnmounted(() => {
                 <p class="settings-form-group__desc">{{ $t('settings.envTarVariantsDesc') }}</p>
                 <div
                   v-for="v in envTarVariants"
-                  :key="v.arch"
+                  :key="'cli-' + v.arch"
                   class="settings-form-row"
                   style="align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px"
                 >
                   <DqButton
                     size="sm"
-                    :loading="runtimeConfig.downloadingTar === v.arch"
+                    :loading="runtimeConfig.downloadingTar === `cli:${v.arch}`"
                     :disabled="!!runtimeConfig.downloadingTar"
-                    @click="downloadEnvTar(v.arch)"
+                    @click="downloadEnvTar(v.arch, 'cli')"
                   >
                     {{
                       (v.present
-                        ? $t('settings.envTarRedownloadArch', { arch: v.arch })
-                        : $t('settings.envTarDownloadArch', { arch: v.arch }))
+                        ? $t('settings.envTarRedownloadArch', { arch: 'cli/' + v.arch })
+                        : $t('settings.envTarDownloadArch', { arch: 'cli/' + v.arch }))
                         + (v.recommended ? ` (${$t('settings.envTarRecommended')})` : '')
                     }}
                   </DqButton>
@@ -1609,7 +1630,46 @@ onUnmounted(() => {
                     }) }}
                   </span>
                   <span v-else class="settings-form-group__desc" style="margin: 0">
-                    {{ $t('settings.envTarMissingArch', { arch: v.arch }) }}
+                    {{ $t('settings.envTarMissingArch', { arch: 'cli/' + v.arch }) }}
+                  </span>
+                </div>
+                <p class="settings-form-group__desc">{{ $t('settings.envDesktopTarVariantsDesc') }}</p>
+                <div
+                  v-for="v in desktopTarVariants"
+                  :key="'desktop-' + v.arch"
+                  class="settings-form-row"
+                  style="align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px"
+                >
+                  <DqButton
+                    size="sm"
+                    :loading="runtimeConfig.downloadingTar === `desktop:${v.arch}`"
+                    :disabled="!!runtimeConfig.downloadingTar"
+                    @click="downloadEnvTar(v.arch, 'desktop')"
+                  >
+                    {{
+                      (v.present
+                        ? $t('settings.envTarRedownloadArch', { arch: 'desktop/' + v.arch })
+                        : $t('settings.envTarDownloadArch', { arch: 'desktop/' + v.arch }))
+                        + (v.recommended ? ` (${$t('settings.envTarRecommended')})` : '')
+                    }}
+                  </DqButton>
+                  <a
+                    v-if="v.downloadUrl"
+                    class="settings-link"
+                    :href="v.downloadUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {{ v.assetName }}
+                  </a>
+                  <span v-if="v.present" class="settings-form-group__desc" style="margin: 0">
+                    {{ $t('settings.envTarInstalled', {
+                      path: v.path || '',
+                      size: formatTarBytes(v.bytes || 0),
+                    }) }}
+                  </span>
+                  <span v-else class="settings-form-group__desc" style="margin: 0">
+                    {{ $t('settings.envTarMissingArch', { arch: 'desktop/' + v.arch }) }}
                   </span>
                 </div>
                 <p class="settings-form-group__desc">{{ $t('settings.envResourcesDesc') }}</p>
@@ -1626,6 +1686,26 @@ onUnmounted(() => {
                 <div v-if="environmentStatusText" class="settings-sandbox-status">
                   <span class="settings-field__label">{{ $t('settings.envStatus') }}</span>
                   <code class="settings-sandbox-status__value">{{ environmentStatusText }}</code>
+                  <p
+                    v-if="runtimeConfig.environmentStatus?.novncUrl"
+                    class="settings-form-group__desc"
+                    style="margin-top: 6px"
+                  >
+                    {{ $t('settings.envNoVnc') }}:
+                    <a
+                      class="settings-link"
+                      :href="runtimeConfig.environmentStatus.novncUrl"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >{{ runtimeConfig.environmentStatus.novncUrl }}</a>
+                  </p>
+                  <p
+                    v-if="runtimeConfig.environmentStatus?.cdpUrl"
+                    class="settings-form-group__desc"
+                    style="margin-top: 4px"
+                  >
+                    {{ $t('settings.envCdp') }}: {{ runtimeConfig.environmentStatus.cdpUrl }}
+                  </p>
                   <p
                     v-if="runtimeConfig.environmentStatus?.degraded && runtimeConfig.environmentStatus.degradedReason"
                     class="settings-sandbox-status__degraded"

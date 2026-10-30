@@ -339,13 +339,3 @@ func (b *linuxBackend) cursorPosition(ctx context.Context) (int, int, error) {
 	return x, y, nil
 }
 
-func xdoButton(button domain.MouseButton) string {
-	switch button {
-	case domain.MouseRight:
-		return "3"
-	case domain.MouseMiddle:
-		return "2"
-	default:
-		return "1"
-	}
-}

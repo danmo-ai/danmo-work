@@ -1,8 +1,8 @@
 // Package computer implements the OS-agnostic desktop-control surface behind
 // the `computer` builtin tool. The Manager holds configuration and delegates to
 // a per-OS backend (X11 via xdotool, macOS via osascript/screencapture, Windows
-// via user32/PowerShell). When no backend is usable the Manager reports a
-// degraded status and returns structured errors.
+// via user32/PowerShell) or a sandbox desktop backend when
+// runtime.sandbox.profile=desktop.
 package computer
 
 import (
@@ -35,17 +35,44 @@ type backend interface {
 
 // Manager is the port.Computer implementation used by bootstrap.
 type Manager struct {
-	mu      sync.Mutex
-	cfg     domain.ConfigComputerSection
-	status  domain.ComputerStatus
-	backend backend
+	mu       sync.Mutex
+	cfg      domain.ConfigComputerSection
+	status   domain.ComputerStatus
+	host     backend
+	desktop  *desktopBackend
+	backend  backend
+	env      port.DesktopEnvironment
 }
 
 // New builds a Manager for the current OS and probes availability.
 func New(cfg domain.ConfigComputerSection) *Manager {
-	m := &Manager{backend: newBackend()}
+	m := &Manager{host: newBackend()}
+	m.backend = m.host
 	m.Configure(cfg)
 	return m
+}
+
+// SetDesktopEnvironment wires the sandbox desktop bridge. When the active
+// sandbox profile is "desktop", computer actions target the container DISPLAY.
+func (m *Manager) SetDesktopEnvironment(env port.DesktopEnvironment) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.env = env
+	if env != nil {
+		m.desktop = newDesktopBackend(env)
+	} else {
+		m.desktop = nil
+	}
+	m.reselectLocked()
+}
+
+// SetSession updates project/workdir for sandboxed desktop exec (from tool input).
+func (m *Manager) SetSession(opts port.SandboxRunOptions) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.desktop != nil {
+		m.desktop.SetSession(opts)
+	}
 }
 
 // Configure replaces policy and re-probes the backend.
@@ -54,20 +81,32 @@ func (m *Manager) Configure(cfg domain.ConfigComputerSection) {
 	defer m.mu.Unlock()
 	cfg.Display = strings.TrimSpace(cfg.Display)
 	m.cfg = cfg
-	m.status = m.backend.probe(cfg)
-	m.status.Enabled = cfg.Enabled
+	m.reselectLocked()
+}
+
+func (m *Manager) reselectLocked() {
+	if m.desktop != nil && m.env != nil && m.env.DesktopProfile() == domain.SandboxProfileDesktop {
+		m.backend = m.desktop
+	} else {
+		m.backend = m.host
+	}
+	m.status = m.backend.probe(m.cfg)
+	m.status.Enabled = m.cfg.Enabled
 }
 
 // Status returns the last probed capability surface.
 func (m *Manager) Status() domain.ComputerStatus {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	// Re-probe when desktop may have become available after config/tar load.
+	m.reselectLocked()
 	return m.status
 }
 
 // ready validates that control is both enabled and available before an action.
 func (m *Manager) ready() error {
 	m.mu.Lock()
+	m.reselectLocked()
 	st := m.status
 	enabled := m.cfg.Enabled
 	m.mu.Unlock()
@@ -88,35 +127,50 @@ func (m *Manager) ListWindows(ctx context.Context, query string) ([]domain.Windo
 	if err := m.ready(); err != nil {
 		return nil, err
 	}
-	return m.backend.listWindows(ctx, query)
+	m.mu.Lock()
+	b := m.backend
+	m.mu.Unlock()
+	return b.listWindows(ctx, query)
 }
 
 func (m *Manager) FocusWindow(ctx context.Context, id string) error {
 	if err := m.ready(); err != nil {
 		return err
 	}
-	return m.backend.focusWindow(ctx, id)
+	m.mu.Lock()
+	b := m.backend
+	m.mu.Unlock()
+	return b.focusWindow(ctx, id)
 }
 
 func (m *Manager) WindowBounds(ctx context.Context, id string) (domain.WindowInfo, error) {
 	if err := m.ready(); err != nil {
 		return domain.WindowInfo{}, err
 	}
-	return m.backend.windowBounds(ctx, id)
+	m.mu.Lock()
+	b := m.backend
+	m.mu.Unlock()
+	return b.windowBounds(ctx, id)
 }
 
 func (m *Manager) Screenshot(ctx context.Context, windowID string) (domain.ComputerImage, error) {
 	if err := m.ready(); err != nil {
 		return domain.ComputerImage{}, err
 	}
-	return m.backend.screenshot(ctx, windowID)
+	m.mu.Lock()
+	b := m.backend
+	m.mu.Unlock()
+	return b.screenshot(ctx, windowID)
 }
 
 func (m *Manager) MouseMove(ctx context.Context, x, y int) error {
 	if err := m.ready(); err != nil {
 		return err
 	}
-	return m.backend.mouseMove(ctx, x, y)
+	m.mu.Lock()
+	b := m.backend
+	m.mu.Unlock()
+	return b.mouseMove(ctx, x, y)
 }
 
 func (m *Manager) MouseClick(ctx context.Context, button domain.MouseButton, x, y, clicks int) error {
@@ -126,14 +180,20 @@ func (m *Manager) MouseClick(ctx context.Context, button domain.MouseButton, x, 
 	if clicks < 1 {
 		clicks = 1
 	}
-	return m.backend.mouseClick(ctx, button, x, y, clicks)
+	m.mu.Lock()
+	b := m.backend
+	m.mu.Unlock()
+	return b.mouseClick(ctx, button, x, y, clicks)
 }
 
 func (m *Manager) MouseDrag(ctx context.Context, x0, y0, x1, y1 int) error {
 	if err := m.ready(); err != nil {
 		return err
 	}
-	return m.backend.mouseDrag(ctx, x0, y0, x1, y1)
+	m.mu.Lock()
+	b := m.backend
+	m.mu.Unlock()
+	return b.mouseDrag(ctx, x0, y0, x1, y1)
 }
 
 func (m *Manager) Scroll(ctx context.Context, x, y int, dir domain.ScrollDirection, amount int) error {
@@ -143,26 +203,38 @@ func (m *Manager) Scroll(ctx context.Context, x, y int, dir domain.ScrollDirecti
 	if amount < 1 {
 		amount = 1
 	}
-	return m.backend.scroll(ctx, x, y, dir, amount)
+	m.mu.Lock()
+	b := m.backend
+	m.mu.Unlock()
+	return b.scroll(ctx, x, y, dir, amount)
 }
 
 func (m *Manager) TypeText(ctx context.Context, text string) error {
 	if err := m.ready(); err != nil {
 		return err
 	}
-	return m.backend.typeText(ctx, text)
+	m.mu.Lock()
+	b := m.backend
+	m.mu.Unlock()
+	return b.typeText(ctx, text)
 }
 
 func (m *Manager) Key(ctx context.Context, key string) error {
 	if err := m.ready(); err != nil {
 		return err
 	}
-	return m.backend.key(ctx, key)
+	m.mu.Lock()
+	b := m.backend
+	m.mu.Unlock()
+	return b.key(ctx, key)
 }
 
 func (m *Manager) CursorPosition(ctx context.Context) (int, int, error) {
 	if err := m.ready(); err != nil {
 		return 0, 0, err
 	}
-	return m.backend.cursorPosition(ctx)
+	m.mu.Lock()
+	b := m.backend
+	m.mu.Unlock()
+	return b.cursorPosition(ctx)
 }

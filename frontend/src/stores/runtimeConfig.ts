@@ -13,6 +13,7 @@ export interface RuntimeForm {
   sandboxNetwork: 'deny' | 'allow' | 'allowlist'
   sandboxAllowlistDomains: string
   sandboxBackend: string
+  envProfile: 'cli' | 'desktop'
   envImage: string
   envTarPath: string
   envWorkspaceMount: string
@@ -54,6 +55,7 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     sandboxNetwork: sb?.network ?? 'deny',
     sandboxAllowlistDomains: (sb?.allowlistDomains ?? []).join('\n'),
     sandboxBackend: sb?.backend ?? '',
+    envProfile: (sb?.profile === 'desktop' ? 'desktop' : 'cli'),
     envImage: sb?.image ?? '',
     envTarPath: sb?.tarPath ?? '',
     envWorkspaceMount: sb?.workspaceMount ?? '',
@@ -109,16 +111,23 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
 
   const downloadingTar = ref<string | null>(null)
 
-  async function downloadEnvTar(arch?: string) {
-    const key = arch || 'auto'
+  async function downloadEnvTar(arch?: string, profile?: string) {
+    const prof = profile || 'cli'
+    const key = `${prof}:${arch || 'auto'}`
     downloadingTar.value = key
     try {
+      const body: Record<string, string> = { profile: prof }
+      if (arch) body.arch = arch
       const res = await fetchJSON<{ status: EnvironmentStatus }>('/environment/tar/download', {
         method: 'POST',
-        body: JSON.stringify(arch ? { arch } : {}),
+        body: JSON.stringify(body),
       })
       environmentStatus.value = res.status
-      toast.success(arch ? i18n.global.t('settings.envTarDownloadedArch', { arch }) : i18n.global.t('settings.envTarDownloaded'))
+      toast.success(
+        arch
+          ? i18n.global.t('settings.envTarDownloadedArch', { arch: `${prof}/${arch}` })
+          : i18n.global.t('settings.envTarDownloaded'),
+      )
       return res.status
     } catch (e) {
       toast.error(e instanceof Error ? e.message : i18n.global.t('common.downloadFailed'))
@@ -165,6 +174,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
             .map((s) => s.trim())
             .filter(Boolean),
           backend: form.sandboxBackend || undefined,
+          profile: containerSelected ? (form.envProfile || 'cli') : undefined,
           image: containerSelected && form.envImage.trim() ? form.envImage.trim() : undefined,
           tarPath: containerSelected && form.envTarPath.trim() ? form.envTarPath.trim() : undefined,
           workspaceMount: containerSelected && form.envWorkspaceMount.trim() ? form.envWorkspaceMount.trim() : undefined,
