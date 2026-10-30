@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,6 +38,10 @@ type Manager struct {
 	cancelAlloc context.CancelFunc
 	allocMode   string // attach | launch | ""
 	stopSweep   chan struct{}
+
+	// Optional sandbox desktop (profile=desktop): prefer its published CDP.
+	desktop     port.DesktopEnvironment
+	desktopOpts port.SandboxRunOptions
 }
 
 // New creates a browser manager and probes availability.
@@ -62,13 +67,30 @@ func (m *Manager) Configure(cfg domain.ConfigBrowserSection) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.cfg = normalizeBrowserConfig(cfg)
-	m.status = probeStatus(m.cfg)
+	m.status = m.probeStatusLocked()
+}
+
+// SetDesktopEnvironment wires the sandbox desktop bridge so browser_* can
+// attach to Chromium inside the desktop container when profile=desktop.
+func (m *Manager) SetDesktopEnvironment(env port.DesktopEnvironment) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.desktop = env
+	m.status = m.probeStatusLocked()
+}
+
+// SetDesktopSession updates project/workdir used to ensure the desktop container.
+func (m *Manager) SetDesktopSession(opts port.SandboxRunOptions) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.desktopOpts = opts
 }
 
 // Status returns the last probed capability surface.
 func (m *Manager) Status() domain.BrowserStatus {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.status = m.probeStatusLocked()
 	return m.status
 }
 
@@ -151,7 +173,10 @@ func (m *Manager) AcquirePage(ctx context.Context, sessionID string) (port.Brows
 	if sessionID == "" {
 		return nil, fmt.Errorf("session id is required")
 	}
-	_ = ctx
+
+	if err := m.ensureDesktopCDP(ctx); err != nil {
+		return nil, err
+	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -159,6 +184,7 @@ func (m *Manager) AcquirePage(ctx context.Context, sessionID string) (port.Brows
 	if !m.cfg.Enabled {
 		return nil, fmt.Errorf("browser rendering is disabled")
 	}
+	m.status = m.probeStatusLocked()
 	if !m.status.Available {
 		reason := m.status.DegradedReason
 		if reason == "" {
@@ -259,6 +285,53 @@ func (m *Manager) removePage(sessionID string) {
 	m.maybeStopAllocatorLocked()
 }
 
+func (m *Manager) ensureDesktopCDP(ctx context.Context) error {
+	m.mu.Lock()
+	desktop := m.desktop
+	opts := m.desktopOpts
+	cfgCDP := m.cfg.CDPURL
+	m.mu.Unlock()
+	if cfgCDP != "" || desktop == nil || desktop.DesktopProfile() != domain.SandboxProfileDesktop {
+		return nil
+	}
+	if opts.ProjectID == "" {
+		opts.ProjectID = "default"
+	}
+	if opts.WorkDir == "" {
+		opts.WorkDir = "."
+	}
+	ep, err := desktop.EnsureDesktop(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("desktop browser: %w", err)
+	}
+	if ep.CDPURL == "" {
+		return fmt.Errorf("desktop browser: CDP port not published yet")
+	}
+	if err := waitHostCDP(ctx, ep.CDPURL, 30*time.Second); err != nil {
+		return fmt.Errorf("desktop browser: %w", err)
+	}
+	m.mu.Lock()
+	// Reset allocator if CDP URL changed so we re-attach.
+	if m.allocMode == "attach" && m.cfg.CDPURL == "" && (m.status.Path != ep.CDPURL) {
+		if m.cancelAlloc != nil {
+			m.cancelAlloc()
+			m.cancelAlloc = nil
+			m.allocCtx = nil
+			m.allocMode = ""
+		}
+	}
+	m.status = m.probeStatusLocked()
+	// Stash ephemeral CDP on status.Path for ensureAllocatorLocked.
+	if m.cfg.CDPURL == "" && ep.CDPURL != "" {
+		m.status.Available = true
+		m.status.Mode = "attach"
+		m.status.Engine = "cdp-sandbox"
+		m.status.Path = ep.CDPURL
+	}
+	m.mu.Unlock()
+	return nil
+}
+
 func (m *Manager) ensureAllocatorLocked() error {
 	if m.allocCtx != nil && m.cancelAlloc != nil {
 		return nil
@@ -266,11 +339,15 @@ func (m *Manager) ensureAllocatorLocked() error {
 	st := m.status
 	cfg := m.cfg
 	parent := context.Background()
+	cdpURL := cfg.CDPURL
+	if cdpURL == "" && st.Mode == "attach" {
+		cdpURL = st.Path
+	}
 
 	var allocCtx context.Context
 	var cancelAlloc context.CancelFunc
 	if st.Mode == "attach" {
-		allocCtx, cancelAlloc = chromedp.NewRemoteAllocator(parent, cfg.CDPURL)
+		allocCtx, cancelAlloc = chromedp.NewRemoteAllocator(parent, cdpURL)
 		m.allocMode = "attach"
 	} else {
 		profileDir := filepath.Join(paths.Home(), "browser", "profile")
@@ -333,6 +410,68 @@ func (m *Manager) sweepIdlePages() {
 	for _, id := range stale {
 		_ = m.ClosePage(context.Background(), id)
 	}
+}
+
+func waitHostCDP(ctx context.Context, cdpURL string, timeout time.Duration) error {
+	cdpURL = strings.TrimRight(strings.TrimSpace(cdpURL), "/")
+	if cdpURL == "" {
+		return fmt.Errorf("empty CDP URL")
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	deadline := time.Now().Add(timeout)
+	var last error
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, cdpURL+"/json/version", nil)
+		if err != nil {
+			return err
+		}
+		resp, err := client.Do(req)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return nil
+			}
+			last = fmt.Errorf("CDP HTTP %d", resp.StatusCode)
+		} else {
+			last = err
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	if last == nil {
+		last = fmt.Errorf("timeout")
+	}
+	return fmt.Errorf("CDP %s not ready: %w", cdpURL, last)
+}
+
+func (m *Manager) probeStatusLocked() domain.BrowserStatus {
+	st := probeStatus(m.cfg)
+	if st.Available {
+		return st
+	}
+	// Sandbox desktop Chromium is an attach target once the container is up.
+	if m.desktop != nil && m.desktop.DesktopProfile() == domain.SandboxProfileDesktop && m.cfg.Enabled {
+		if ep, ok := m.desktop.DesktopEndpoints(m.desktopOpts.ProjectID); ok && ep.CDPURL != "" {
+			st.Available = true
+			st.Mode = "attach"
+			st.Engine = "cdp-sandbox"
+			st.Path = ep.CDPURL
+			st.DegradedReason = ""
+			return st
+		}
+		// Desktop profile selected but container not started yet — still mark
+		// available so AcquirePage can EnsureDesktop on demand.
+		st.Available = true
+		st.Mode = "attach"
+		st.Engine = "cdp-sandbox"
+		st.DegradedReason = ""
+		return st
+	}
+	return st
 }
 
 func probeStatus(cfg domain.ConfigBrowserSection) domain.BrowserStatus {

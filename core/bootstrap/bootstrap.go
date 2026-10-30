@@ -308,8 +308,10 @@ func New(cfg Config) *Core {
 	// lifecycle + env tar status). Tools only face port.Sandbox + the factory.
 	eng.SetExecution(sb)
 	br := dqbrowser.New(appCfg.Runtime.Browser)
+	br.SetDesktopEnvironment(sb)
 	eng.SetBrowser(br)
 	computerCtl := dqcomputer.New(appCfg.Runtime.Computer)
+	computerCtl.SetDesktopEnvironment(sb)
 	eng.RegisterTool(&builtin.ExecShell{Sandbox: sb})
 	eng.RegisterTool(&builtin.ReadFile{})
 	eng.RegisterTool(&builtin.ReadImage{

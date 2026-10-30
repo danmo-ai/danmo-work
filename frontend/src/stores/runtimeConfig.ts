@@ -13,11 +13,15 @@ export interface RuntimeForm {
   sandboxNetwork: 'deny' | 'allow' | 'allowlist'
   sandboxAllowlistDomains: string
   sandboxBackend: string
+  envProfile: 'cli' | 'desktop'
   envImage: string
   envTarPath: string
   envWorkspaceMount: string
   envCpus: string
   envMemory: string
+  envDesktopWidth: number
+  envDesktopHeight: number
+  envDesktopMaxShotEdge: number
   browserEnabled: boolean
   browserExecutablePath: string
   browserCdpUrl: string
@@ -51,14 +55,20 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     permissionMode: rt.permissionMode || 'interactive',
     sandboxEnabled: sb?.enabled ?? true,
     sandboxMode: sb?.mode ?? 'workspace-write',
-    sandboxNetwork: sb?.network ?? 'deny',
+    sandboxNetwork: (sb?.network
+      || (sb?.profile === 'desktop' ? 'allow' : 'deny')) as RuntimeForm['sandboxNetwork'],
     sandboxAllowlistDomains: (sb?.allowlistDomains ?? []).join('\n'),
     sandboxBackend: sb?.backend ?? '',
+    envProfile: (sb?.profile === 'desktop' ? 'desktop' : 'cli'),
     envImage: sb?.image ?? '',
     envTarPath: sb?.tarPath ?? '',
     envWorkspaceMount: sb?.workspaceMount ?? '',
     envCpus: sb?.resources?.cpus ?? '',
     envMemory: sb?.resources?.memory ?? '',
+    envDesktopWidth: sb?.desktopWidth && sb.desktopWidth > 0 ? sb.desktopWidth : 1280,
+    envDesktopHeight: sb?.desktopHeight && sb.desktopHeight > 0 ? sb.desktopHeight : 800,
+    envDesktopMaxShotEdge:
+      sb?.desktopMaxShotEdge && sb.desktopMaxShotEdge > 0 ? sb.desktopMaxShotEdge : 1024,
     browserEnabled: br?.enabled ?? true,
     browserExecutablePath: br?.executablePath ?? '',
     browserCdpUrl: br?.cdpUrl ?? '',
@@ -109,16 +119,23 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
 
   const downloadingTar = ref<string | null>(null)
 
-  async function downloadEnvTar(arch?: string) {
-    const key = arch || 'auto'
+  async function downloadEnvTar(arch?: string, profile?: string) {
+    const prof = profile || 'cli'
+    const key = `${prof}:${arch || 'auto'}`
     downloadingTar.value = key
     try {
+      const body: Record<string, string> = { profile: prof }
+      if (arch) body.arch = arch
       const res = await fetchJSON<{ status: EnvironmentStatus }>('/environment/tar/download', {
         method: 'POST',
-        body: JSON.stringify(arch ? { arch } : {}),
+        body: JSON.stringify(body),
       })
       environmentStatus.value = res.status
-      toast.success(arch ? i18n.global.t('settings.envTarDownloadedArch', { arch }) : i18n.global.t('settings.envTarDownloaded'))
+      toast.success(
+        arch
+          ? i18n.global.t('settings.envTarDownloadedArch', { arch: `${prof}/${arch}` })
+          : i18n.global.t('settings.envTarDownloaded'),
+      )
       return res.status
     } catch (e) {
       toast.error(e instanceof Error ? e.message : i18n.global.t('common.downloadFailed'))
@@ -165,6 +182,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
             .map((s) => s.trim())
             .filter(Boolean),
           backend: form.sandboxBackend || undefined,
+          profile: containerSelected ? (form.envProfile || 'cli') : undefined,
           image: containerSelected && form.envImage.trim() ? form.envImage.trim() : undefined,
           tarPath: containerSelected && form.envTarPath.trim() ? form.envTarPath.trim() : undefined,
           workspaceMount: containerSelected && form.envWorkspaceMount.trim() ? form.envWorkspaceMount.trim() : undefined,
@@ -174,6 +192,18 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
                 memory: form.envMemory.trim() || undefined,
               }
             : undefined,
+          desktopWidth:
+            containerSelected && form.envProfile === 'desktop' && form.envDesktopWidth > 0
+              ? form.envDesktopWidth
+              : undefined,
+          desktopHeight:
+            containerSelected && form.envProfile === 'desktop' && form.envDesktopHeight > 0
+              ? form.envDesktopHeight
+              : undefined,
+          desktopMaxShotEdge:
+            containerSelected && form.envProfile === 'desktop' && form.envDesktopMaxShotEdge > 0
+              ? form.envDesktopMaxShotEdge
+              : undefined,
         },
         browser: {
           enabled: form.browserEnabled,

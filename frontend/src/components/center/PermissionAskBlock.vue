@@ -43,6 +43,8 @@ const reasonLabel = computed(() => {
       return t('sessions.perm.unsandboxed')
     case 'desktop_control':
       return t('sessions.perm.desktopControl')
+    case 'desktop_sandbox':
+      return t('sessions.perm.desktopSandbox')
     default:
       return t('sessions.perm.needConfirm')
   }

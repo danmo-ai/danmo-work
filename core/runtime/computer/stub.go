@@ -71,3 +71,14 @@ func hasBinary(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
 }
+
+func xdoButton(button domain.MouseButton) string {
+	switch button {
+	case domain.MouseRight:
+		return "3"
+	case domain.MouseMiddle:
+		return "2"
+	default:
+		return "1"
+	}
+}

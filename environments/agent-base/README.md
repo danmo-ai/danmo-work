@@ -1,6 +1,8 @@
 # Agent environment image (optional download)
 
-Ultra-light OCI image for `runtime.environment.backend=container`.
+Ultra-light OCI image for `runtime.sandbox` container backends with
+`profile=cli` (default). For GUI / browser / computer-use testing see
+[`../agent-desktop/`](../agent-desktop/) (`profile=desktop`).
 
 **Not packaged inside app/server releases.** CI publishes **two** gzipped GitHub
 Release assets (matrix build):

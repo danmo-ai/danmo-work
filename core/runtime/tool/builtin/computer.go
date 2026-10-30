@@ -49,16 +49,18 @@ func (h *Computer) Describe(args map[string]any) string {
 func (h *Computer) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
 		Name: "computer",
-		Description: "Control the local desktop GUI to operate applications a human would use.\n\n" +
+		Description: "Control a desktop GUI to operate applications a human would use.\n\n" +
 			"Drive real windows: find and focus a window, take a screenshot to SEE the screen, then move/click " +
 			"the mouse, type text, or press keys.\n\n" +
 			"Workflow: 1) `list_windows` to find the target, 2) `focus_window` to bring it forward, 3) `screenshot` " +
 			"to see it, 4) act with `left_click` / `type` / `key`, 5) `screenshot` again to verify.\n\n" +
 			"Coordinates: a full-display screenshot uses absolute screen pixels. A window screenshot returns pixels " +
 			"relative to that image; pass the same `window_id` on the follow-up action and coordinates are mapped " +
-			"back automatically.\n\n" +
-			"This controls the actual machine with no sandbox. Each call requires user approval. Prefer keyboard " +
-			"shortcuts (`key`) over fragile mouse clicks when possible.",
+			"back automatically. Screenshots may be JPEG-downscaled (see display_width/display_height in the result); " +
+			"always click using the image pixel coordinates — the runtime remaps them to the real display.\n\n" +
+			"When runtime.sandbox.profile=desktop with a container backend, actions target the sandboxed Xvfb " +
+			"desktop (not the host GUI). Otherwise this controls the host machine. Each call requires user approval. " +
+			"Prefer keyboard shortcuts (`key`) over fragile mouse clicks when possible. For web UI testing prefer browser_*.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -113,9 +115,24 @@ func (h *Computer) Schema() domain.ToolSchema {
 	}
 }
 
+// computerSessionSetter is optionally implemented by the computer manager when
+// sandbox desktop exec needs project/workdir.
+type computerSessionSetter interface {
+	SetSession(opts port.SandboxRunOptions)
+}
+
 func (h *Computer) Execute(ctx context.Context, input map[string]any) (domain.ToolResult, error) {
 	if h.Ctl == nil {
 		return domain.ToolResult{}, fmt.Errorf("desktop control is not configured")
+	}
+	if setter, ok := h.Ctl.(computerSessionSetter); ok {
+		projectID, _ := input["__project_id"].(string)
+		workDir := workDirFromInput(input)
+		setter.SetSession(port.SandboxRunOptions{
+			ProjectID: projectID,
+			WorkDir:   workDir,
+			Timeout:   60 * time.Second,
+		})
 	}
 	action, _ := input["action"].(string)
 	action = strings.TrimSpace(action)
@@ -212,7 +229,20 @@ func (h *Computer) screenshot(ctx context.Context, input map[string]any, windowI
 	if windowID != "" {
 		meta["window_id"] = windowID
 	}
-	desc := fmt.Sprintf("Captured screenshot (%dx%d, %s coordinates).", img.Width, img.Height, space)
+	dispW, dispH := img.DisplayWidth, img.DisplayHeight
+	if dispW == 0 {
+		dispW = img.Width
+	}
+	if dispH == 0 {
+		dispH = img.Height
+	}
+	meta["display_width"] = dispW
+	meta["display_height"] = dispH
+	desc := fmt.Sprintf("Captured screenshot (%dx%d image", img.Width, img.Height)
+	if img.Width != dispW || img.Height != dispH {
+		desc += fmt.Sprintf(", display %dx%d — use image-pixel coordinates; runtime maps them to the display", dispW, dispH)
+	}
+	desc += fmt.Sprintf(", %s coordinates).", space)
 
 	modelID, _ := input["__model_id"].(string)
 	if h.SupportsImage != nil && modelID != "" && !h.SupportsImage(modelID) {

@@ -24,6 +24,9 @@ type containerState interface {
 	DegradedReason() string
 	NotifyTarInstalled()
 	Teardown(ctx context.Context, projectID string) error
+	Profile() string
+	DesktopEndpoints(projectID string) (domain.DesktopEndpoints, bool)
+	ExecDesktop(ctx context.Context, opts port.SandboxRunOptions, command string, env []string) ([]byte, error)
 }
 
 type hostBackend struct{}

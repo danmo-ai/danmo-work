@@ -6,13 +6,17 @@ package domain
 // core/runtime/computer.
 
 // ConfigComputerSection is persisted under runtime.computer in config.yaml.
-// Desktop control is off by default and must be explicitly enabled because it
-// grants the agent full control of the host GUI (no sandbox boundary).
+// Desktop control is off by default and must be explicitly enabled. When
+// runtime.sandbox.profile=desktop with a container backend, actions target the
+// sandboxed Xvfb display instead of the host GUI.
 type ConfigComputerSection struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" yaml:"enabled"`
 	// Display optionally overrides the X11 DISPLAY used on Linux (e.g. ":1").
-	// Empty inherits the process environment.
+	// Empty inherits the process environment (host) or uses ":1" in desktop sandbox.
 	Display string `json:"display,omitempty" mapstructure:"display" yaml:"display,omitempty"`
+	// MaxShotEdge caps the longest screenshot edge sent to the model (JPEG
+	// downscale). Zero uses DefaultDesktopMaxShotEdge (1024). Negative disables.
+	MaxShotEdge int `json:"maxShotEdge,omitempty" mapstructure:"max_shot_edge" yaml:"max_shot_edge,omitempty"`
 }
 
 // ComputerStatus is the probed desktop-control capability surface.
@@ -50,6 +54,11 @@ type ComputerImage struct {
 	// image-relative coordinates back to absolute screen coordinates.
 	OriginX int `json:"originX"`
 	OriginY int `json:"originY"`
+	// DisplayWidth/DisplayHeight are the full virtual-screen size before any
+	// downscale for the model. When Width/Height differ, click coords from the
+	// image must be mapped: screen = image * (DisplayWidth/Width).
+	DisplayWidth  int `json:"displayWidth,omitempty"`
+	DisplayHeight int `json:"displayHeight,omitempty"`
 }
 
 // MouseButton identifies which mouse button an action targets.

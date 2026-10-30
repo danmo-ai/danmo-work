@@ -65,9 +65,24 @@ func isLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// browserDesktopSession is optionally implemented so browser_* can ensure the
+// sandbox desktop container for the current project before attaching CDP.
+type browserDesktopSession interface {
+	SetDesktopSession(opts port.SandboxRunOptions)
+}
+
 func acquireBrowserPage(ctx context.Context, br port.Browser, input map[string]any) (port.BrowserPage, error) {
 	if br == nil {
 		return nil, fmt.Errorf("browser engine is not configured")
+	}
+	if setter, ok := br.(browserDesktopSession); ok {
+		projectID, _ := input["__project_id"].(string)
+		workDir := workDirFromInput(input)
+		setter.SetDesktopSession(port.SandboxRunOptions{
+			ProjectID: projectID,
+			WorkDir:   workDir,
+			Timeout:   60 * time.Second,
+		})
 	}
 	sid := sessionIDFromInput(input)
 	if sid == "" {

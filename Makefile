@@ -14,7 +14,7 @@ export DQ_APP_NAME := $(APP_NAME)
 	frontend-install frontend-dev frontend-build frontend-typecheck \
 	check-layers test test-integration \
 	build-go build-server build-cli build-tui build-sidecar build build-all clean \
-	build-env-tar fetch-ripgrep \
+	build-env-tar build-env-tar-desktop fetch-ripgrep \
 	pack-prereqs pack-macos-desktop pack-linux-desktop pack-windows-desktop \
 	eval-harbor-bin eval-harbor-base eval-harbor-sync-tb2 eval-harbor-smoke eval-harbor-suite eval-harbor-compare
 
@@ -127,9 +127,15 @@ pack-macos-desktop: pack-prereqs frontend-build
 	@RELEASE_VERSION=$(RELEASE_VERSION) ./scripts/pack_desktop_macos.sh
 
 # Bundled agent OCI image → out/env/danmo-work-env-linux-<arch>.tar.gz (no registry).
+# Set DQ_ENV_PROFILE=desktop for the Ubuntu desktop + Chromium CDP image.
 build-env-tar:
 	@chmod +x scripts/*.sh
 	@./scripts/build_env_tar.sh
+
+# Desktop agent OCI image → out/env/danmo-work-env-desktop-linux-<arch>.tar.gz
+build-env-tar-desktop:
+	@chmod +x scripts/*.sh
+	@DQ_ENV_PROFILE=desktop ./scripts/build_env_tar.sh
 
 # Fetch the official ripgrep binary for the host platform → out/rg/<target>/ + ~/.danmo-work/bin/
 # (grep tool engine; release packs stage it into the desktop bundle automatically).

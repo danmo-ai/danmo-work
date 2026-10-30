@@ -30,6 +30,7 @@ const (
 	ReasonExternal         = "external"
 	ReasonModeDeny         = "mode_deny"
 	ReasonDesktopControl   = domain.ReasonDesktopControl // computer tool: host GUI control
+	ReasonDesktopSandbox   = domain.ReasonDesktopSandbox // computer tool: OCI desktop profile
 )
 
 // Request is the structured input for permission checks.
@@ -153,10 +154,19 @@ func (g *Gate) CheckRequest(req Request) Result {
 		return Result{Decision: DecisionAsk, Reason: ReasonUnsandboxed}
 	}
 
-	// Desktop control drives the host GUI with no sandbox boundary. Always ask,
-	// and never let auto_approve skip it (mirrors unsandboxed shell).
+	// Desktop control always asks; never let auto_approve skip it.
+	// Container desktop profile uses a distinct reason so the UI can say
+	// "sandbox desktop" instead of "host GUI".
 	if req.ToolName == "computer" {
-		return Result{Decision: DecisionAsk, Reason: ReasonDesktopControl}
+		reason := ReasonDesktopControl
+		iso := req.Isolation
+		if iso.Source == "" {
+			iso = domain.ComputeEffectiveIsolation(req.Sandbox, domain.EnvironmentStatus{})
+		}
+		if iso.Strong && iso.Source == domain.IsolationContainer {
+			reason = domain.ReasonDesktopSandbox
+		}
+		return Result{Decision: DecisionAsk, Reason: reason}
 	}
 
 	if mode == domain.PermModeAuto && req.Risk != domain.RiskExternal {

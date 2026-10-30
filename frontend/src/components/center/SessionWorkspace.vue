@@ -32,6 +32,7 @@ import {
   Library,
   Grid,
   ListOrdered,
+  Monitor,
   Check,
 } from '@danqing/dq-shell'
 import type { RightWorkspaceTab } from '@/stores/workspaceUi'
@@ -83,6 +84,7 @@ const rightDrawerTitle = computed(() => {
     tables: t('sessions.tabTables'),
     changes: t('sessions.tabChanges'),
     terminal: t('sessions.tabTerminal'),
+    desktop: t('sessions.tabDesktop'),
     trajectory: t('sessions.tabTrajectory'),
   }
   return map[rightTab.value]
@@ -112,6 +114,7 @@ const rightIconItems = computed(() => {
       badge: changesCount.value > 0 ? changesCount.value : undefined,
     },
     { value: 'terminal' as const, label: t('sessions.tabTerminal'), icon: Terminal },
+    { value: 'desktop' as const, label: t('sessions.tabDesktop'), icon: Monitor },
     { value: 'trajectory' as const, label: t('sessions.tabTrajectory'), icon: ListOrdered },
   ]
 })
@@ -1999,9 +2002,11 @@ function onTitleKeydown(e: KeyboardEvent) {
       :size="
         rightTab === 'trajectory'
           ? 'min(900px, 96vw)'
-          : rightTab === 'changes'
-            ? 'min(520px, 92vw)'
-            : 'min(380px, 92vw)'
+          : rightTab === 'desktop'
+            ? 'min(720px, 94vw)'
+            : rightTab === 'changes'
+              ? 'min(520px, 92vw)'
+              : 'min(380px, 92vw)'
       "
       :title="rightDrawerTitle"
       @update:open="workspaceUi.setRightDrawerOpen"

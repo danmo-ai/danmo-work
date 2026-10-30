@@ -242,6 +242,7 @@ export interface ConfigFile {
       network: 'deny' | 'allow' | 'allowlist'
       allowlistDomains?: string[]
       backend?: string
+      profile?: 'cli' | 'desktop' | string
       image?: string
       tarPath?: string
       workspaceMount?: string
@@ -250,6 +251,9 @@ export interface ConfigFile {
         memory?: string
         pids?: number
       }
+      desktopWidth?: number
+      desktopHeight?: number
+      desktopMaxShotEdge?: number
     }
     environment?: {
       backend?: 'local' | 'container' | string
@@ -387,6 +391,7 @@ export interface SandboxStatus {
 
 export interface EnvironmentTarVariant {
   arch: string
+  profile?: string
   present: boolean
   path?: string
   bytes?: number
@@ -398,6 +403,7 @@ export interface EnvironmentTarVariant {
 export interface EnvironmentStatus {
   backend: string
   engine?: string
+  profile?: string
   image?: string
   imageLoaded?: boolean
   tarPath?: string
@@ -407,11 +413,19 @@ export interface EnvironmentStatus {
   downloadUrl?: string
   assetName?: string
   tarVariants?: EnvironmentTarVariant[]
+  desktopTarVariants?: EnvironmentTarVariant[]
   workspaceMount?: string
   resources?: { cpus?: string; memory?: string; pids?: number }
   degraded?: boolean
   degradedReason?: string
   activeProjects?: string[]
+  display?: string
+  cdpUrl?: string
+  novncUrl?: string
+  cdpPort?: number
+  novncPort?: number
+  desktopWidth?: number
+  desktopHeight?: number
 }
 
 export interface BrowserStatus {

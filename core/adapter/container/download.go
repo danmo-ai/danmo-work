@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"danmo-work/core/domain"
 	"danmo-work/core/paths"
 )
 
@@ -53,14 +54,35 @@ func NormalizeArch(arch string) string {
 	}
 }
 
-// AssetFileName is danmo-work-env-linux-<arch>.tar.gz
+// NormalizeProfile maps aliases to cli|desktop; empty → cli.
+func NormalizeProfile(profile string) string {
+	return domain.NormalizeSandboxProfile(profile)
+}
+
+// AssetFileName is danmo-work-env-linux-<arch>.tar.gz (cli profile).
 func AssetFileName(arch string) string {
-	return "danmo-work-env-linux-" + NormalizeArch(arch) + ".tar.gz"
+	return AssetFileNameProfile(domain.SandboxProfileCLI, arch)
+}
+
+// AssetFileNameProfile returns the Release asset name for a profile+arch.
+func AssetFileNameProfile(profile, arch string) string {
+	arch = NormalizeArch(arch)
+	switch NormalizeProfile(profile) {
+	case domain.SandboxProfileDesktop:
+		return "danmo-work-env-desktop-linux-" + arch + ".tar.gz"
+	default:
+		return "danmo-work-env-linux-" + arch + ".tar.gz"
+	}
 }
 
 // InstallPath is the canonical download destination under ~/.danmo-work/env/.
 func InstallPath(arch string) string {
-	return filepath.Join(EnvDir(), AssetFileName(arch))
+	return InstallPathProfile(domain.SandboxProfileCLI, arch)
+}
+
+// InstallPathProfile is the canonical download destination for a profile.
+func InstallPathProfile(profile, arch string) string {
+	return filepath.Join(EnvDir(), AssetFileNameProfile(profile, arch))
 }
 
 // GitHubRepo returns owner/name (WORK_GITHUB_REPO or danmo-ai/danmo-work).
@@ -74,8 +96,13 @@ func GitHubRepo() string {
 // ReleaseDownloadURL builds the GitHub Releases asset URL for the env tar.
 // version is the app version (e.g. 0.9.2 or v0.9.2); "dev"/empty uses latest.
 func ReleaseDownloadURL(version, arch string) string {
+	return ReleaseDownloadURLProfile(version, domain.SandboxProfileCLI, arch)
+}
+
+// ReleaseDownloadURLProfile builds the Release asset URL for a profile.
+func ReleaseDownloadURLProfile(version, profile, arch string) string {
 	repo := GitHubRepo()
-	name := AssetFileName(arch)
+	name := AssetFileNameProfile(profile, arch)
 	v := strings.TrimSpace(version)
 	v = strings.TrimPrefix(v, "v")
 	if v == "" || v == "dev" || strings.Contains(v, "dirty") {
@@ -90,6 +117,7 @@ type TarInfo struct {
 	Path        string `json:"path,omitempty"`
 	Bytes       int64  `json:"bytes,omitempty"`
 	Arch        string `json:"arch"`
+	Profile     string `json:"profile,omitempty"`
 	DownloadURL string `json:"downloadUrl"`
 	AssetName   string `json:"assetName"`
 	Recommended bool   `json:"recommended,omitempty"`
@@ -100,26 +128,34 @@ func InspectTar(version string) TarInfo {
 	return InspectTarArch(version, LinuxArch())
 }
 
-// InspectTarArch reports install status for one linux arch.
+// InspectTarArch reports install status for one linux arch (cli profile).
 func InspectTarArch(version, arch string) TarInfo {
+	return InspectTarProfile(version, domain.SandboxProfileCLI, arch)
+}
+
+// InspectTarProfile reports install status for one profile+arch.
+func InspectTarProfile(version, profile, arch string) TarInfo {
+	profile = NormalizeProfile(profile)
 	arch = NormalizeArch(arch)
 	info := TarInfo{
 		Arch:        arch,
-		DownloadURL: ReleaseDownloadURL(version, arch),
-		AssetName:   AssetFileName(arch),
+		Profile:     profile,
+		DownloadURL: ReleaseDownloadURLProfile(version, profile, arch),
+		AssetName:   AssetFileNameProfile(profile, arch),
 		Recommended: arch == LinuxArch(),
-		Path:        InstallPath(arch),
+		Path:        InstallPathProfile(profile, arch),
 	}
-	p := InstallPath(arch)
+	p := InstallPathProfile(profile, arch)
 	if st, err := os.Stat(p); err == nil && !st.IsDir() {
 		info.Present = true
 		info.Path = p
 		info.Bytes = st.Size()
 		return info
 	}
-	// Host arch: also accept generic ResolveTarPath / alias.
+	// Host arch + matching profile: also accept ResolveTarPath / ResolveTarPathProfile.
 	if arch == LinuxArch() {
-		if rp := ResolveTarPath(""); rp != "" {
+		rp := ResolveTarPathProfile("", profile)
+		if rp != "" {
 			if st, err := os.Stat(rp); err == nil && !st.IsDir() {
 				info.Present = true
 				info.Path = rp
@@ -130,26 +166,37 @@ func InspectTarArch(version, arch string) TarInfo {
 	return info
 }
 
-// ListTarVariants returns amd64 + arm64 download options.
+// ListTarVariants returns amd64 + arm64 download options for the cli profile.
 func ListTarVariants(version string) []TarInfo {
+	return ListTarVariantsProfile(version, domain.SandboxProfileCLI)
+}
+
+// ListTarVariantsProfile returns amd64 + arm64 download options for a profile.
+func ListTarVariantsProfile(version, profile string) []TarInfo {
 	out := make([]TarInfo, 0, len(SupportedLinuxArches))
 	for _, a := range SupportedLinuxArches {
-		out = append(out, InspectTarArch(version, a))
+		out = append(out, InspectTarProfile(version, profile, a))
 	}
 	return out
 }
 
 // DownloadEnvTar fetches the Release asset for arch into ~/.danmo-work/env/.
-// Empty arch uses the host architecture.
+// Empty arch uses the host architecture. Downloads the cli profile.
 func DownloadEnvTar(ctx context.Context, version, arch string) (TarInfo, error) {
+	return DownloadEnvTarProfile(ctx, version, domain.SandboxProfileCLI, arch)
+}
+
+// DownloadEnvTarProfile fetches a profile-specific Release asset.
+func DownloadEnvTarProfile(ctx context.Context, version, profile, arch string) (TarInfo, error) {
+	profile = NormalizeProfile(profile)
 	arch = NormalizeArch(arch)
 	switch arch {
 	case "amd64", "arm64":
 	default:
 		return TarInfo{}, fmt.Errorf("download env tar: unsupported arch %q (amd64|arm64)", arch)
 	}
-	url := ReleaseDownloadURL(version, arch)
-	dest := InstallPath(arch)
+	url := ReleaseDownloadURLProfile(version, profile, arch)
+	dest := InstallPathProfile(profile, arch)
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return TarInfo{}, err
 	}
@@ -195,7 +242,7 @@ func DownloadEnvTar(ctx context.Context, version, arch string) (TarInfo, error) 
 		return TarInfo{}, err
 	}
 	// Host-arch download also refreshes the generic alias used by ResolveTarPath.
-	if arch == LinuxArch() {
+	if arch == LinuxArch() && profile == domain.SandboxProfileCLI {
 		alias := filepath.Join(EnvDir(), "danmo-work-env.tar.gz")
 		_ = os.Remove(alias)
 		if err := os.Symlink(dest, alias); err != nil {
@@ -203,7 +250,7 @@ func DownloadEnvTar(ctx context.Context, version, arch string) (TarInfo, error) 
 		}
 	}
 
-	info := InspectTarArch(version, arch)
+	info := InspectTarProfile(version, profile, arch)
 	info.Present = true
 	info.Path = dest
 	info.Bytes = n

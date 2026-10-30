@@ -214,14 +214,16 @@ jobs:
             ${{ env.REPO_DIR }}/out/desktop/bundle/**/*.deb
           if-no-files-found: error
 
-  # Optional OCI env image — separate Release assets (amd64 + arm64), NOT in app packages.
+  # Optional OCI env images — separate Release assets (amd64 + arm64), NOT in app packages.
+  # Profiles: cli (Alpine shell) and desktop (Xvfb + Chromium CDP + noVNC).
   linux-env-tar:
-    name: Linux env image tar (${{ matrix.arch }})
+    name: Linux env image tar (${{ matrix.profile }} ${{ matrix.arch }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         arch: [amd64, arm64]
+        profile: [cli, desktop]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -239,17 +241,27 @@ jobs:
         env:
           DQ_ENV_PLATFORM: linux/${{ matrix.arch }}
           DQ_ENV_OUT_ARCH: ${{ matrix.arch }}
+          DQ_ENV_PROFILE: ${{ matrix.profile }}
         run: |
           chmod +x scripts/*.sh
           # Prefer buildx for cross-arch; fall back handled inside script.
           docker buildx version
           make build-env-tar
 
-      - name: Upload env image tar
+      - name: Upload env image tar (cli)
+        if: matrix.profile == 'cli'
         uses: actions/upload-artifact@v6
         with:
           name: danmo-work-env-linux-${{ matrix.arch }}
           path: ${{ env.REPO_DIR }}/out/env/danmo-work-env-linux-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+
+      - name: Upload env image tar (desktop)
+        if: matrix.profile == 'desktop'
+        uses: actions/upload-artifact@v6
+        with:
+          name: danmo-work-env-desktop-linux-${{ matrix.arch }}
+          path: ${{ env.REPO_DIR }}/out/env/danmo-work-env-desktop-linux-${{ matrix.arch }}.tar.gz
           if-no-files-found: error
 
   windows-desktop:
@@ -458,16 +470,28 @@ jobs:
           name: danmo-work-desktop-linux
           path: release-assets/linux
 
-      - name: Download env image tar (amd64)
+      - name: Download env image tar (cli amd64)
         uses: actions/download-artifact@v7
         with:
           name: danmo-work-env-linux-amd64
           path: release-assets/env
 
-      - name: Download env image tar (arm64)
+      - name: Download env image tar (cli arm64)
         uses: actions/download-artifact@v7
         with:
           name: danmo-work-env-linux-arm64
+          path: release-assets/env
+
+      - name: Download env image tar (desktop amd64)
+        uses: actions/download-artifact@v7
+        with:
+          name: danmo-work-env-desktop-linux-amd64
+          path: release-assets/env
+
+      - name: Download env image tar (desktop arm64)
+        uses: actions/download-artifact@v7
+        with:
+          name: danmo-work-env-desktop-linux-arm64
           path: release-assets/env
 
       - name: Download Windows desktop artifact

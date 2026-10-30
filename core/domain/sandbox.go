@@ -1,5 +1,7 @@
 package domain
 
+import "strings"
+
 // SandboxMode controls filesystem/network policy for process execution.
 // Aligned with Codex CLI naming.
 type SandboxMode string
@@ -67,7 +69,11 @@ type ConfigSandboxSection struct {
 	// preferred, then Git Bash, else cmd on Windows; sh on Unix; bash in WSL2).
 	Backend string `json:"backend,omitempty" mapstructure:"backend" yaml:"backend,omitempty"`
 	// Container params (only used when Backend is a container engine):
-	// Image is the local tag after load (default localhost/danmo-work-env:bundled).
+	// Profile selects the OCI image family: "cli" (default Alpine shell) or
+	// "desktop" (Ubuntu Xvfb + Chromium CDP + noVNC for computer/browser use).
+	Profile string `json:"profile,omitempty" mapstructure:"profile" yaml:"profile,omitempty"`
+	// Image is the local tag after load (default depends on Profile:
+	// localhost/danmo-work-env:bundled or :desktop).
 	Image string `json:"image,omitempty" mapstructure:"image" yaml:"image,omitempty"`
 	// TarPath overrides discovery of the optional OCI env tar (user-downloaded
 	// Release asset, not shipped inside the app package). Empty = auto.
@@ -77,6 +83,39 @@ type ConfigSandboxSection struct {
 	WorkspaceMount string `json:"workspaceMount,omitempty" mapstructure:"workspace_mount" yaml:"workspace_mount,omitempty"`
 	// Resources: default unlimited; optional user overrides (Settings / config).
 	Resources EnvironmentResources `json:"resources,omitempty" mapstructure:"resources" yaml:"resources,omitempty"`
+	// DesktopWidth/DesktopHeight size the Xvfb virtual display (profile=desktop).
+	// Zero → 1280×800.
+	DesktopWidth  int `json:"desktopWidth,omitempty" mapstructure:"desktop_width" yaml:"desktop_width,omitempty"`
+	DesktopHeight int `json:"desktopHeight,omitempty" mapstructure:"desktop_height" yaml:"desktop_height,omitempty"`
+	// DesktopMaxShotEdge caps the longest screenshot edge sent to the model
+	// (profile=desktop or any computer backend). Zero → 1024. Clicks are mapped
+	// back to full display coordinates automatically.
+	DesktopMaxShotEdge int `json:"desktopMaxShotEdge,omitempty" mapstructure:"desktop_max_shot_edge" yaml:"desktop_max_shot_edge,omitempty"`
+}
+
+// Default desktop display geometry.
+const (
+	DefaultDesktopWidth       = 1280
+	DefaultDesktopHeight      = 800
+	DefaultDesktopMaxShotEdge = 1024
+)
+
+// Sandbox image profile constants.
+const (
+	SandboxProfileCLI     = "cli"
+	SandboxProfileDesktop = "desktop"
+)
+
+// NormalizeSandboxProfile returns cli|desktop (empty → cli).
+func NormalizeSandboxProfile(p string) string {
+	switch strings.ToLower(strings.TrimSpace(p)) {
+	case "", SandboxProfileCLI:
+		return SandboxProfileCLI
+	case SandboxProfileDesktop:
+		return SandboxProfileDesktop
+	default:
+		return strings.ToLower(strings.TrimSpace(p))
+	}
 }
 
 // SandboxBackendInfo describes one probed backend for the settings page.

@@ -291,15 +291,37 @@ func buildRuntimeEnvironment(st domain.SandboxStatus, envSt domain.EnvironmentSt
 		b.WriteString("Note: exec_shell runs under the OS sandbox when enabled (workspace-write by default).\n")
 	}
 	if envSt.Backend == domain.EnvironmentBackendContainer {
-		b.WriteString("Execution environment: OCI container (Alpine image)\n")
+		profile := domain.NormalizeSandboxProfile(envSt.Profile)
+		if profile == domain.SandboxProfileDesktop {
+			b.WriteString("Execution environment: OCI desktop container (Ubuntu Xvfb)\n")
+		} else {
+			b.WriteString("Execution environment: OCI container (Alpine image)\n")
+		}
 		if envSt.Engine != "" {
 			b.WriteString("Engine: " + envSt.Engine + "\n")
+		}
+		if envSt.Profile != "" {
+			b.WriteString("Image profile: " + profile + "\n")
 		}
 		if envSt.Image != "" {
 			b.WriteString("Image: " + envSt.Image + "\n")
 		}
-		b.WriteString("Preinstalled: " + domain.EnvImagePreinstalled + "\n")
-		b.WriteString("Note: exec_shell runs inside the per-project container. The project directory and $WORK_HOME (plugin packs, read-only) are bind-mounted at the same absolute host paths. WORK_HOME is set.\n")
+		if profile == domain.SandboxProfileDesktop {
+			b.WriteString("Preinstalled: " + domain.EnvDesktopImagePreinstalled + "\n")
+			if envSt.Display != "" {
+				b.WriteString("Display: " + envSt.Display + "\n")
+			}
+			if envSt.CDPURL != "" {
+				b.WriteString("Chromium CDP: " + envSt.CDPURL + "\n")
+			}
+			if envSt.NoVNCURL != "" {
+				b.WriteString("noVNC: " + envSt.NoVNCURL + "\n")
+			}
+			b.WriteString("Note: exec_shell, computer, and browser_* target this desktop sandbox. Project dir and $WORK_HOME are bind-mounted at the same absolute host paths. Prefer browser_* for web UI; use computer for native GUI.\n")
+		} else {
+			b.WriteString("Preinstalled: " + domain.EnvImagePreinstalled + "\n")
+			b.WriteString("Note: exec_shell runs inside the per-project container. The project directory and $WORK_HOME (plugin packs, read-only) are bind-mounted at the same absolute host paths. WORK_HOME is set.\n")
+		}
 	}
 	b.WriteString("</runtime-environment>")
 	return b.String()
