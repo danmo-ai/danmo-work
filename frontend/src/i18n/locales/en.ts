@@ -1266,7 +1266,7 @@ export default {
       inProgress: 'In progress',
       pending: 'Pending',
       empty: 'No plan yet',
-      emptyHint: 'In Plan mode the agent calls create_plan after research; review it here, then Execute',
+      emptyHint: 'Plan mode: create_plan after research, then Execute. While coding: todowrite for progress',
       progress: '{done}/{total} done · {active} in progress',
       execute: 'Execute',
       executePrefillIntro: 'Implement the following plan. Exit plan mode and start coding.',
