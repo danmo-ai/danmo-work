@@ -6,12 +6,13 @@ package domain
 // core/runtime/computer.
 
 // ConfigComputerSection is persisted under runtime.computer in config.yaml.
-// Desktop control is off by default and must be explicitly enabled because it
-// grants the agent full control of the host GUI (no sandbox boundary).
+// Desktop control is off by default and must be explicitly enabled. When
+// runtime.sandbox.profile=desktop with a container backend, actions target the
+// sandboxed Xvfb display instead of the host GUI.
 type ConfigComputerSection struct {
 	Enabled bool `json:"enabled" mapstructure:"enabled" yaml:"enabled"`
 	// Display optionally overrides the X11 DISPLAY used on Linux (e.g. ":1").
-	// Empty inherits the process environment.
+	// Empty inherits the process environment (host) or uses ":1" in desktop sandbox.
 	Display string `json:"display,omitempty" mapstructure:"display" yaml:"display,omitempty"`
 }
 

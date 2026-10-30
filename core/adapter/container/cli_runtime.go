@@ -78,7 +78,17 @@ func (e *CLIRuntime) EnsureTag(ctx context.Context, image string) error {
 	if err == nil {
 		for _, ref := range strings.Fields(out) {
 			ref = strings.Trim(ref, "'\"")
-			if ref == "" || ref == "<none>:<none>" || !strings.Contains(ref, "danmo-work-env") {
+			if ref == "" || ref == "<none>:<none>" {
+				continue
+			}
+			// Prefer refs that match the requested image family (bundled vs desktop).
+			if strings.Contains(image, ":desktop") && !strings.Contains(ref, "desktop") {
+				continue
+			}
+			if !strings.Contains(image, ":desktop") && strings.Contains(ref, "desktop") {
+				continue
+			}
+			if !strings.Contains(ref, "danmo-work-env") {
 				continue
 			}
 			if _, tagErr := e.run(ctx, "tag", ref, image); tagErr == nil {
@@ -127,12 +137,53 @@ func (e *CLIRuntime) CreateDetached(ctx context.Context, opts CreateOpts) error 
 		args = append(args, "-v", b.Host+":"+b.Container+":"+mode)
 	}
 	args = append(args, resourceFlagsDocker(opts.Resources)...)
+	if shm := strings.TrimSpace(opts.ShmSize); shm != "" {
+		args = append(args, "--shm-size", shm)
+	}
+	for _, p := range opts.Ports {
+		args = append(args, "-p", formatPortPublish(p))
+	}
 	for _, ev := range opts.Env {
 		args = append(args, "-e", ev)
 	}
-	args = append(args, opts.Image, "sleep", "infinity")
+	if opts.Entrypoint != nil && len(opts.Entrypoint) > 0 {
+		args = append(args, "--entrypoint", opts.Entrypoint[0])
+		// docker --entrypoint only takes the binary; remaining entrypoint args go after image.
+	}
+	args = append(args, opts.Image)
+	switch {
+	case opts.KeepImageCmd:
+		// leave image ENTRYPOINT/CMD as-is
+	case len(opts.Cmd) > 0:
+		args = append(args, opts.Cmd...)
+	default:
+		args = append(args, "sleep", "infinity")
+	}
 	_, err := e.run(ctx, args...)
 	return err
+}
+
+func formatPortPublish(p PortPublish) string {
+	hostIP := strings.TrimSpace(p.HostIP)
+	if hostIP == "" {
+		hostIP = "127.0.0.1"
+	}
+	proto := strings.TrimSpace(p.Proto)
+	if proto == "" {
+		proto = "tcp"
+	}
+	if p.HostPort > 0 {
+		return fmt.Sprintf("%s:%d:%d/%s", hostIP, p.HostPort, p.ContainerPort, proto)
+	}
+	return fmt.Sprintf("%s::%d/%s", hostIP, p.ContainerPort, proto)
+}
+
+func (e *CLIRuntime) InspectPublishedPorts(ctx context.Context, name string) (PublishedPorts, error) {
+	out, err := e.run(ctx, "inspect", "-f", "{{json .NetworkSettings.Ports}}", name)
+	if err != nil {
+		return nil, err
+	}
+	return parseDockerPortsJSON(out)
 }
 
 func resourceFlagsDocker(r domain.EnvironmentResources) []string {

@@ -16,6 +16,16 @@ type EnvironmentEngine string
 // container without probing. Keep in sync with the Dockerfile apk list.
 const EnvImagePreinstalled = "Alpine Linux (busybox coreutils) with bash, git, curl, jq, ca-certificates preinstalled; install more with: apk add --no-cache <pkg>"
 
+// EnvDesktopImagePreinstalled describes the desktop agent image
+// (environments/agent-desktop/Dockerfile). Keep in sync with that Dockerfile.
+const EnvDesktopImagePreinstalled = "Ubuntu 24.04 desktop sandbox with Xvfb :1, openbox, xterm, Chromium (CDP :9222), xdotool/scrot/ImageMagick, x11vnc + noVNC (:6080); bash/git/curl/jq preinstalled"
+
+// Default OCI image tags after local tar load (never registry pull).
+const (
+	EnvImageTagCLI     = "localhost/danmo-work-env:bundled"
+	EnvImageTagDesktop = "localhost/danmo-work-env:desktop"
+)
+
 const (
 	EnvironmentEngineAuto           EnvironmentEngine = "auto"
 	EnvironmentEnginePodman         EnvironmentEngine = "podman"
@@ -60,6 +70,7 @@ type ConfigEnvironmentSection struct {
 type EnvironmentStatus struct {
 	Backend     EnvironmentBackend `json:"backend"`
 	Engine      string             `json:"engine,omitempty"` // podman | docker | apple-container
+	Profile     string             `json:"profile,omitempty"` // cli | desktop
 	Image       string             `json:"image,omitempty"`
 	ImageLoaded bool               `json:"imageLoaded"`
 	TarPath     string             `json:"tarPath,omitempty"`
@@ -68,23 +79,42 @@ type EnvironmentStatus struct {
 	TarArch     string             `json:"tarArch,omitempty"`
 	DownloadURL string             `json:"downloadUrl,omitempty"`
 	AssetName   string             `json:"assetName,omitempty"`
-	// TarVariants lists linux/amd64 and linux/arm64 download options.
-	TarVariants    []EnvironmentTarVariant `json:"tarVariants,omitempty"`
-	WorkspaceMount string                  `json:"workspaceMount,omitempty"`
-	Resources      EnvironmentResources    `json:"resources,omitempty"`
-	Degraded       bool                    `json:"degraded"`
-	DegradedReason string                  `json:"degradedReason,omitempty"`
+	// TarVariants lists linux/amd64 and linux/arm64 download options for the active profile.
+	TarVariants []EnvironmentTarVariant `json:"tarVariants,omitempty"`
+	// DesktopTarVariants lists desktop-profile download options (always when useful for Settings).
+	DesktopTarVariants []EnvironmentTarVariant `json:"desktopTarVariants,omitempty"`
+	WorkspaceMount     string                 `json:"workspaceMount,omitempty"`
+	Resources          EnvironmentResources   `json:"resources,omitempty"`
+	Degraded           bool                   `json:"degraded"`
+	DegradedReason     string                 `json:"degradedReason,omitempty"`
 	// ActiveProjects lists project IDs with a running/created container.
 	ActiveProjects []string `json:"activeProjects,omitempty"`
+	// Desktop endpoints (profile=desktop only; populated when a container is running).
+	Display  string `json:"display,omitempty"`  // e.g. ":1"
+	CDPURL   string `json:"cdpUrl,omitempty"`   // host-mapped Chromium CDP
+	NoVNCURL string `json:"novncUrl,omitempty"` // host-mapped noVNC viewer
+	CDPPort  int    `json:"cdpPort,omitempty"`
+	NoVNCPort int   `json:"novncPort,omitempty"`
 }
 
 // EnvironmentTarVariant is one arch-specific env image download option.
 type EnvironmentTarVariant struct {
 	Arch        string `json:"arch"`
+	Profile     string `json:"profile,omitempty"` // cli | desktop
 	Present     bool   `json:"present"`
 	Path        string `json:"path,omitempty"`
 	Bytes       int64  `json:"bytes,omitempty"`
 	DownloadURL string `json:"downloadUrl"`
 	AssetName   string `json:"assetName"`
 	Recommended bool   `json:"recommended,omitempty"`
+}
+
+// DesktopEndpoints are published host-side URLs for a desktop sandbox container.
+type DesktopEndpoints struct {
+	Display   string `json:"display,omitempty"`
+	CDPURL    string `json:"cdpUrl,omitempty"`
+	NoVNCURL  string `json:"novncUrl,omitempty"`
+	CDPPort   int    `json:"cdpPort,omitempty"`
+	NoVNCPort int    `json:"novncPort,omitempty"`
+	Container string `json:"container,omitempty"`
 }

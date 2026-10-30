@@ -107,6 +107,73 @@ func (m *Manager) Teardown(ctx context.Context, projectID string) error {
 	return nil
 }
 
+// DesktopProfile returns the active sandbox image profile (cli|desktop).
+func (m *Manager) DesktopProfile() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return domain.NormalizeSandboxProfile(m.cfg.Profile)
+}
+
+// EnsureDesktop starts the project's desktop container and returns endpoints.
+func (m *Manager) EnsureDesktop(ctx context.Context, opts port.SandboxRunOptions) (domain.DesktopEndpoints, error) {
+	m.mu.RLock()
+	r := m.backend
+	cfg := m.cfg
+	m.mu.RUnlock()
+	cs, ok := r.(containerState)
+	if !ok {
+		return domain.DesktopEndpoints{}, fmt.Errorf("desktop: container sandbox backend required (set runtime.sandbox.backend to podman|docker|apple-container)")
+	}
+	if domain.NormalizeSandboxProfile(cfg.Profile) != domain.SandboxProfileDesktop {
+		return domain.DesktopEndpoints{}, fmt.Errorf("desktop: set runtime.sandbox.profile=desktop")
+	}
+	cfg.Profile = domain.SandboxProfileDesktop
+	if opts.Timeout <= 0 {
+		opts.Timeout = 30 * time.Second
+	}
+	// Kick ensure via a cheap probe command.
+	if _, err := cs.ExecDesktop(ctx, opts, "true", nil); err != nil {
+		return domain.DesktopEndpoints{}, err
+	}
+	ep, ok := cs.DesktopEndpoints(opts.ProjectID)
+	if !ok || ep.CDPURL == "" {
+		// Endpoints may lag; try default key.
+		ep, ok = cs.DesktopEndpoints("default")
+	}
+	if !ok {
+		return domain.DesktopEndpoints{Display: desktopDisplay}, nil
+	}
+	return ep, nil
+}
+
+// ExecDesktop runs a command in the desktop container.
+func (m *Manager) ExecDesktop(ctx context.Context, opts port.SandboxRunOptions, command string, env []string) ([]byte, error) {
+	m.mu.RLock()
+	r := m.backend
+	cfg := m.cfg
+	m.mu.RUnlock()
+	cs, ok := r.(containerState)
+	if !ok {
+		return nil, fmt.Errorf("desktop: container sandbox backend required")
+	}
+	if domain.NormalizeSandboxProfile(cfg.Profile) != domain.SandboxProfileDesktop {
+		return nil, fmt.Errorf("desktop: set runtime.sandbox.profile=desktop")
+	}
+	return cs.ExecDesktop(ctx, opts, command, env)
+}
+
+// DesktopEndpoints returns published CDP/noVNC endpoints when known.
+func (m *Manager) DesktopEndpoints(projectID string) (domain.DesktopEndpoints, bool) {
+	m.mu.RLock()
+	r := m.backend
+	m.mu.RUnlock()
+	cs, ok := r.(containerState)
+	if !ok {
+		return domain.DesktopEndpoints{}, false
+	}
+	return cs.DesktopEndpoints(projectID)
+}
+
 // NotifyTarInstalled re-resolves the env tar path after a Settings download.
 func (m *Manager) NotifyTarInstalled() {
 	m.mu.Lock()
@@ -332,21 +399,41 @@ func (m *Manager) EnvironmentStatus() domain.EnvironmentStatus {
 	if !ok {
 		return domain.EnvironmentStatus{Backend: domain.EnvironmentBackendLocal}
 	}
+	profile := domain.NormalizeSandboxProfile(cfg.Profile)
 	st := domain.EnvironmentStatus{
 		Backend:        domain.EnvironmentBackendContainer,
 		Engine:         cs.RuntimeName(),
+		Profile:        profile,
 		Image:          cfg.Image,
 		ImageLoaded:    cs.ImageReady(),
-		TarPath:        container.ResolveTarPath(cfg.TarPath),
+		TarPath:        container.ResolveTarPathProfile(cfg.TarPath, profile),
 		WorkspaceMount: cfg.WorkspaceMount,
 		Resources:      cfg.Resources,
 		ActiveProjects: cs.ActiveProjects(),
 	}
 	if strings.TrimSpace(st.Image) == "" {
-		st.Image = defaultContainerImage
+		st.Image = container.DefaultImageTag(profile)
 	}
 	if strings.TrimSpace(st.WorkspaceMount) == "" {
 		st.WorkspaceMount = "same-as-host"
+	}
+	if profile == domain.SandboxProfileDesktop {
+		st.Display = desktopDisplay
+		if eps := cs.ActiveProjects(); len(eps) > 0 {
+			if ep, ok := cs.DesktopEndpoints(eps[0]); ok {
+				st.CDPURL = ep.CDPURL
+				st.NoVNCURL = ep.NoVNCURL
+				st.CDPPort = ep.CDPPort
+				st.NoVNCPort = ep.NoVNCPort
+				st.Display = ep.Display
+			}
+		} else if ep, ok := cs.DesktopEndpoints("default"); ok {
+			st.CDPURL = ep.CDPURL
+			st.NoVNCURL = ep.NoVNCURL
+			st.CDPPort = ep.CDPPort
+			st.NoVNCPort = ep.NoVNCPort
+			st.Display = ep.Display
+		}
 	}
 	if cs.Degraded() {
 		st.Degraded = true
@@ -359,13 +446,18 @@ func (m *Manager) EnvironmentStatus() domain.EnvironmentStatus {
 // StatusWithTar fills tar download/install fields (version from server build).
 func (m *Manager) StatusWithTar(version string) domain.EnvironmentStatus {
 	st := m.EnvironmentStatus()
-	info := container.InspectTar(version)
+	profile := st.Profile
+	if profile == "" {
+		profile = domain.SandboxProfileCLI
+	}
+	info := container.InspectTarProfile(version, profile, container.LinuxArch())
 	st.TarPresent = info.Present
 	st.TarBytes = info.Bytes
 	st.TarArch = info.Arch
 	st.DownloadURL = info.DownloadURL
 	st.AssetName = info.AssetName
-	st.TarVariants = tarVariantsFrom(version)
+	st.TarVariants = tarVariantsFrom(version, profile)
+	st.DesktopTarVariants = tarVariantsFrom(version, domain.SandboxProfileDesktop)
 	if info.Path != "" {
 		st.TarPath = info.Path
 	}
@@ -377,7 +469,8 @@ func (m *Manager) StatusWithTar(version string) domain.EnvironmentStatus {
 		st.TarArch = info.Arch
 		st.DownloadURL = info.DownloadURL
 		st.AssetName = info.AssetName
-		st.TarVariants = tarVariantsFrom(version)
+		st.TarVariants = tarVariantsFrom(version, profile)
+		st.DesktopTarVariants = tarVariantsFrom(version, domain.SandboxProfileDesktop)
 		if info.Path != "" {
 			st.TarPath = info.Path
 		}
@@ -385,12 +478,13 @@ func (m *Manager) StatusWithTar(version string) domain.EnvironmentStatus {
 	return st
 }
 
-func tarVariantsFrom(version string) []domain.EnvironmentTarVariant {
-	list := container.ListTarVariants(version)
+func tarVariantsFrom(version, profile string) []domain.EnvironmentTarVariant {
+	list := container.ListTarVariantsProfile(version, profile)
 	out := make([]domain.EnvironmentTarVariant, 0, len(list))
 	for _, t := range list {
 		out = append(out, domain.EnvironmentTarVariant{
 			Arch:        t.Arch,
+			Profile:     t.Profile,
 			Present:     t.Present,
 			Path:        t.Path,
 			Bytes:       t.Bytes,

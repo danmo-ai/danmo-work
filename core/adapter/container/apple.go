@@ -380,12 +380,41 @@ func (e *AppleRuntime) CreateDetached(ctx context.Context, opts CreateOpts) erro
 		args = append(args, "--network", opts.Network)
 	}
 	args = append(args, resourceFlagsApple(opts.Resources)...)
+	if shm := strings.TrimSpace(opts.ShmSize); shm != "" {
+		args = append(args, "--shm-size", shm)
+	}
+	for _, p := range opts.Ports {
+		args = append(args, "-p", formatPortPublish(p))
+	}
 	for _, ev := range opts.Env {
 		args = append(args, "-e", ev)
 	}
-	args = append(args, opts.Image, "sleep", "infinity")
+	if opts.Entrypoint != nil && len(opts.Entrypoint) > 0 {
+		args = append(args, "--entrypoint", opts.Entrypoint[0])
+	}
+	args = append(args, opts.Image)
+	switch {
+	case opts.KeepImageCmd:
+		// leave image ENTRYPOINT/CMD as-is
+	case len(opts.Cmd) > 0:
+		args = append(args, opts.Cmd...)
+	default:
+		args = append(args, "sleep", "infinity")
+	}
 	_, err := e.run(ctx, args...)
 	return err
+}
+
+func (e *AppleRuntime) InspectPublishedPorts(ctx context.Context, name string) (PublishedPorts, error) {
+	if err := e.ensureSystem(ctx); err != nil {
+		return nil, err
+	}
+	// Apple Container CLI mirrors docker inspect formatting when available.
+	out, err := e.run(ctx, "inspect", "-f", "{{json .NetworkSettings.Ports}}", name)
+	if err != nil {
+		return PublishedPorts{}, nil
+	}
+	return parseDockerPortsJSON(out)
 }
 
 func resourceFlagsApple(r domain.EnvironmentResources) []string {
