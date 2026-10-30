@@ -6,7 +6,7 @@ license: MIT
 compatibility: Requires read_file, grep, glob; write only on Default/Team when the user asks to save the plan file
 metadata:
   author: danmo-work
-  version: "1.0"
+  version: "1.1"
   category: coding
   adapted_from: "https://github.com/obra/superpowers/tree/main/skills/writing-plans"
   upstream_license: MIT
@@ -19,6 +19,13 @@ metadata:
 
 Write plans that a skilled engineer with little repo context can execute: exact files, concrete steps, tests, and commands. Prefer DRY, YAGNI, TDD, frequent commits.
 
+## Tools (do not mix)
+
+| Tool | Role |
+|------|------|
+| `create_plan` / `update_plan` | Publish / revise a **reviewable implementation plan** (Plan panel + Execute → composer). Primary handoff in **plan mode**. |
+| `todowrite` | **Execution progress** checklist while implementing in **normal mode**. Not available / not for plan-mode handoff. |
+
 ## Workflow
 
 1. **Explore** — map relevant files with `glob` / `grep` / `read_file`. Follow existing patterns.
@@ -27,8 +34,8 @@ Write plans that a skilled engineer with little repo context can execute: exact 
 4. **Tasks** — bite-sized units with their own test cycle; each ends in an independently verifiable deliverable.
 5. **Self-review** — spec coverage, no placeholders, consistent names/types across tasks.
 6. **Handoff**
-   - **Plan mode / Planner (read-only):** call `create_plan` with the full markdown plan (+ todos). Use `update_plan` for revisions. Do not call `write` or claim a file was saved. The user reviews the Plan panel and clicks Execute to send the plan to the composer.
-   - **Default / Team (not plan mode):** prefer `create_plan` so the Plan panel + Execute button work; a short chat summary is fine. Only `write` a plan file when the user explicitly asks to save it.
+   - **Plan mode:** call `create_plan` with the full markdown plan (+ optional plan todos). Use `update_plan` for revisions. Do not call `write` or `todowrite`. User reviews the Plan panel and clicks Execute.
+   - **Normal mode (Default / Team):** if the user only wants a plan before coding, still use `create_plan` so Execute works; otherwise deliver the plan in chat. Use `todowrite` only after you start implementing. Only `write` a plan file when the user explicitly asks to save it.
 
 ## Plan header (required)
 
@@ -69,7 +76,8 @@ Never leave: TBD/TODO, “add appropriate validation”, “write tests for the 
 - Giant tasks that mix unrelated deliverables
 - Plans that assume unspoken domain knowledge
 - Skipping self-review for type/name drift across tasks
+- Using `todowrite` instead of `create_plan` in plan mode (or the reverse while implementing)
 
 ## Stop condition
 
-Call `create_plan` (and path only if Default/Team saved a file). Confirm the plan is ready for review; do not start coding inside this skill unless the user already approved execution (or clicked Execute).
+In plan mode: `create_plan`, then confirm ready for review — do not start coding until the user Executes or explicitly approves. In normal mode after approval: implement with `todowrite` for progress.

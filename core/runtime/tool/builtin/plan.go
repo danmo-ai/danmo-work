@@ -145,11 +145,12 @@ func (h *CreatePlan) Describe(args map[string]any) string {
 func (h *CreatePlan) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
 		Name: "create_plan",
-		Description: "Create an implementation plan for the user to review in the Plan panel.\n\n" +
-			"When to use: plan mode, or any multi-step coding task that needs an actionable plan before edits.\n" +
-			"After research, call this tool with the full markdown plan. The user can click Execute to send it to the composer.\n" +
+		Description: "Publish an implementation plan for the Plan panel (review + Execute → composer).\n\n" +
+			"When to use: PLAN MODE after research, when the user asked for a plan before coding, or when you need a reviewable handoff before edits.\n" +
+			"Not a progress tracker: while implementing in normal mode, use todowrite for live checklists. create_plan is the plan artifact, not step-by-step execution status.\n\n" +
+			"After research, call with full markdown `plan` (+ optional `todos` derived from tasks). The user clicks Execute to send it to the composer.\n" +
 			"Do NOT claim files were written. Prefer this over dumping the plan only as a final assistant message.\n" +
-			"To revise later, call update_plan.",
+			"To revise after feedback, call update_plan.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -208,9 +209,10 @@ func (h *UpdatePlan) Describe(args map[string]any) string {
 func (h *UpdatePlan) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
 		Name: "update_plan",
-		Description: "Update the implementation plan in the Plan panel after user feedback or new findings.\n\n" +
-			"Provide the fields you want to change. Prefer sending the full updated `plan` markdown so the panel stays coherent.\n" +
-			"Use create_plan for the first version; use this tool for revisions. Does not start execution — the user clicks Execute.",
+		Description: "Revise the implementation plan in the Plan panel after user feedback or new findings.\n\n" +
+			"First version: create_plan. Revisions: this tool. Prefer sending the full updated `plan` markdown.\n" +
+			"Not for live execution progress — use todowrite while implementing in normal mode.\n" +
+			"Does not start execution; the user clicks Execute.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

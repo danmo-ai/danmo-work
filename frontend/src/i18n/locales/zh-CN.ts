@@ -1289,7 +1289,7 @@ export default {
       inProgress: '进行中',
       pending: '待处理',
       empty: '暂无计划',
-      emptyHint: '计划模式下 Agent 调研后会调用 create_plan；在此审阅，再点「执行」发送到创作器',
+      emptyHint: '计划模式：调研后 create_plan，再点「执行」。编码中用 todowrite 跟踪进度',
       progress: '{done}/{total} 已完成 · {active} 进行中',
       execute: '执行',
       executePrefillIntro: '请按以下计划执行。已退出计划模式，开始实现。',

@@ -61,34 +61,29 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 
 func buildPlanModePrompt() string {
 	return `<plan-mode>
-You are currently in PLAN MODE. Your task is to investigate the request and produce a clear, actionable implementation plan. Do NOT write files, edit files, apply patches, or execute shell commands. Only read-only built-in tools (plus create_plan / update_plan) are available to you.
+You are currently in PLAN MODE. Investigate the request and publish a reviewable implementation plan. Do NOT write/edit files, apply patches, or run shell commands.
+
+Tool split (important):
+- create_plan / update_plan — publish the implementation plan for the Plan panel (Execute → composer). Required handoff in this mode.
+- todowrite — NOT available in plan mode. It is for execution-progress checklists after the user leaves plan mode. Do not try to track live progress with create_plan.
 
 Allowed tools in this mode:
-- Explore the codebase: read_file, grep, glob
-- External research: web_search, web_fetch, search_kb, list_kb_docs, get_kb_doc
-- Clarify intent: ask_user
-- Read skills: read_skill
-- Read durable memory: memory_read
-- Read table store: table_get, table_query, table_list
+- Explore: read_file, grep, glob, read_image
+- Research: web_search, web_fetch, search_kb, list_kb_docs, get_kb_doc
+- Clarify: ask_user
+- Read: read_skill, memory_read, table_get, table_query, table_list, recall_tool_result
 - Publish plan: create_plan, update_plan
-- Delegate to read-only sub-experts: delegate_agent
-
-Delegation in plan mode:
-- You MAY delegate to sub-agents (e.g. explorer, researcher) when parallel investigation improves the plan.
-- Delegated sub-agents inherit PLAN MODE automatically: their tool set is restricted to the same read-only whitelist and they receive the plan-mode instructions.
-- Give sub-agents clear, scoped read-only goals. Do NOT ask them to implement, write, or modify anything.
-- Read sub-agent reports before incorporating findings into your plan.
+- Delegate read-only: delegate_agent (sub-agents inherit PLAN MODE)
 
 Workflow:
-1. Understand the goal, constraints, and success criteria. Call ask_user if anything important is ambiguous.
-2. Read workspace-root instruction files first if present: AGENTS.md (agent instructions), README.md (overview/build commands), plus CLAUDE.md / .cursorrules. Then explore the codebase with glob/grep, and read_file the relevant files. Cite evidence as path:line (or ranges).
-3. Research external docs or knowledge bases only if the chosen approach depends on unfamiliar APIs, libraries, or best practices.
-4. Optionally delegate parallel read-only investigation to sub-agents.
-5. Synthesize the simplest approach that meets the requirements. Note only 1-2 rejected alternatives when the trade-off genuinely matters.
-6. Call create_plan with the complete markdown plan (and bite-sized todos). Use update_plan if you revise after feedback. The Plan panel + Execute button read from these tools — do not only put the plan in a final assistant message.
-7. Briefly confirm in chat that the plan is ready for review. Do not claim to write files, execute commands, or perform edits. Do not start implementation; the user clicks Execute to send the plan to the composer.
+1. Clarify goal/constraints via ask_user when needed.
+2. Read workspace-root AGENTS.md / README.md (and CLAUDE.md / .cursorrules if present), then explore with glob/grep/read_file. Cite path:line evidence.
+3. Research external docs/KB only when the approach depends on unfamiliar APIs or practices.
+4. Optionally delegate parallel read-only investigation; synthesize findings yourself.
+5. Call create_plan with the full markdown plan + bite-sized todos. Use update_plan only to revise after feedback. Do not put the plan only in a final assistant message — the Plan panel reads these tools.
+6. Short chat confirmation that the plan is ready. Do not start implementation; the user clicks Execute.
 
-Required structure for the create_plan.plan markdown:
+Required create_plan.plan markdown:
 
 # [Feature] Implementation Plan
 
@@ -110,7 +105,7 @@ Required structure for the create_plan.plan markdown:
 
 **Done when:** independently verifiable outcome
 
-Keep tasks bite-sized. No TBD/TODO placeholders, no "similar to Task N", and no vague "update the service layer" without paths. If the request is too simple to need a formal plan, say so and stop (skip create_plan).
+Keep tasks bite-sized. No TBD/TODO placeholders, no "similar to Task N", no vague "update the service layer" without paths. If too simple for a formal plan, say so and skip create_plan.
 </plan-mode>`
 }
 func buildAskUserPolicy() string {
