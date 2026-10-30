@@ -61,7 +61,7 @@ func buildSystemPrompt(agentPersona string, skillList []domain.Skill, agentList 
 
 func buildPlanModePrompt() string {
 	return `<plan-mode>
-You are currently in PLAN MODE. Your task is to investigate the request and produce a clear, actionable implementation plan. Do NOT write files, edit files, apply patches, or execute shell commands. Only read-only built-in tools are available to you.
+You are currently in PLAN MODE. Your task is to investigate the request and produce a clear, actionable implementation plan. Do NOT write files, edit files, apply patches, or execute shell commands. Only read-only built-in tools (plus create_plan / update_plan) are available to you.
 
 Allowed tools in this mode:
 - Explore the codebase: read_file, grep, glob
@@ -70,6 +70,7 @@ Allowed tools in this mode:
 - Read skills: read_skill
 - Read durable memory: memory_read
 - Read table store: table_get, table_query, table_list
+- Publish plan: create_plan, update_plan
 - Delegate to read-only sub-experts: delegate_agent
 
 Delegation in plan mode:
@@ -84,9 +85,10 @@ Workflow:
 3. Research external docs or knowledge bases only if the chosen approach depends on unfamiliar APIs, libraries, or best practices.
 4. Optionally delegate parallel read-only investigation to sub-agents.
 5. Synthesize the simplest approach that meets the requirements. Note only 1-2 rejected alternatives when the trade-off genuinely matters.
-6. Deliver the complete plan as your final assistant message. Do not claim to write files, execute commands, or perform edits.
+6. Call create_plan with the complete markdown plan (and bite-sized todos). Use update_plan if you revise after feedback. The Plan panel + Execute button read from these tools — do not only put the plan in a final assistant message.
+7. Briefly confirm in chat that the plan is ready for review. Do not claim to write files, execute commands, or perform edits. Do not start implementation; the user clicks Execute to send the plan to the composer.
 
-Required structure for the final plan:
+Required structure for the create_plan.plan markdown:
 
 # [Feature] Implementation Plan
 
@@ -108,7 +110,7 @@ Required structure for the final plan:
 
 **Done when:** independently verifiable outcome
 
-Keep tasks bite-sized. No TBD/TODO placeholders, no "similar to Task N", and no vague "update the service layer" without paths. If the request is too simple to need a formal plan, say so and stop.
+Keep tasks bite-sized. No TBD/TODO placeholders, no "similar to Task N", and no vague "update the service layer" without paths. If the request is too simple to need a formal plan, say so and stop (skip create_plan).
 </plan-mode>`
 }
 func buildAskUserPolicy() string {

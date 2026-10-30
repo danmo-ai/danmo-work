@@ -325,6 +325,8 @@ func New(cfg Config) *Core {
 	eng.RegisterTool(&builtin.Grep{})
 	eng.RegisterTool(&builtin.Glob{})
 	eng.RegisterTool(&builtin.TodoWrite{})
+	eng.RegisterTool(&builtin.CreatePlan{})
+	eng.RegisterTool(&builtin.UpdatePlan{})
 	searchCfgFn := func(ctx context.Context) (domain.SearchConfig, error) {
 		return searchConfig.Get(ctx)
 	}

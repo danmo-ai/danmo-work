@@ -93,17 +93,20 @@ var PlanModeAllowedToolIDs = map[string]struct{}{
 	"ask_user":       {},
 	"delegate_agent": {},
 	// Skills / memory read
-	"read_skill":  {},
-	"memory_read": {},
+	"read_skill":         {},
+	"memory_read":        {},
 	"recall_tool_result": {},
+	// Plan artifacts (Plan panel + Execute → composer)
+	"create_plan": {},
+	"update_plan": {},
 	// Knowledge base read
 	"search_kb":    {},
 	"list_kb_docs": {},
 	"get_kb_doc":   {},
 	// Table store read
-	"table_get":    {},
-	"table_query":  {},
-	"table_list":   {},
+	"table_get":   {},
+	"table_query": {},
+	"table_list":  {},
 }
 
 // coreToolIDs are engine-mounted for every agent (Core layer). Binding them in
