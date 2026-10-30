@@ -211,6 +211,7 @@ func TestUITestPluginPacksSkillKBAndTools(t *testing.T) {
 		"ui-test/skills/ui-test/assets/templates/spec.md",
 		"ui-test/skills/ui-test/references/case-design.md",
 		"ui-test/skills/ui-test/references/execution.md",
+		"ui-test/skills/ui-test/references/from-changes.md",
 		"ui-test/ai.danmo.work/knowledge/_meta.json",
 		"ui-test/ai.danmo.work/knowledge/01-landscape.md",
 		"ui-test/ai.danmo.work/knowledge/02-oracle.md",
@@ -226,6 +227,22 @@ func TestUITestPluginPacksSkillKBAndTools(t *testing.T) {
 	if !strings.Contains(string(meta), `"id": "kb-ui-test"`) {
 		t.Fatalf("ui-test KB meta missing stable id: %s", meta)
 	}
+	skill, err := fs.ReadFile(FS, "ui-test/skills/ui-test/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	skillBody := string(skill)
+	for _, needle := range []string{
+		"from-changes.md",
+		"execution.md",
+		"browser_*",
+		"computer",
+		"Change-driven",
+	} {
+		if !strings.Contains(skillBody, needle) {
+			t.Errorf("ui-test skill missing %q", needle)
+		}
+	}
 	ed, err := fs.ReadFile(FS, "ui-test/ai.danmo.work/experts/ui-test.md")
 	if err != nil {
 		t.Fatal(err)
@@ -236,10 +253,13 @@ func TestUITestPluginPacksSkillKBAndTools(t *testing.T) {
 		"browser_navigate",
 		"browser_act",
 		"computer",
+		"exec_shell",
 		"ui-test",
 		"browser",
 		"computer-use",
 		"search_kb",
+		"from-changes.md",
+		"CHANGES",
 	} {
 		if !strings.Contains(s, needle) {
 			t.Errorf("ui-test expert missing %q", needle)

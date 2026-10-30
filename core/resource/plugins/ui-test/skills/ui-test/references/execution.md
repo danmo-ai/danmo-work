@@ -1,8 +1,9 @@
 # Execution (Linux desktop sandbox)
 
-Tools run inside the Danmo Linux desktop VM. Prefer structured browser control;
-use desktop computer control only when the case needs a real headed window or
-vision on non-semantic UI.
+Run **after** specs exist (hand-written or auto-authored from
+`from-changes.md`). Tools run inside the Danmo Linux desktop VM. Prefer
+structured **browser use** (`browser_*`); use **computer use** (`computer`)
+when the case needs a real headed window or vision on non-semantic UI.
 
 ## Engine selection
 

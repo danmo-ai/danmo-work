@@ -29,7 +29,7 @@
 | **计划 → 执行** | Plan 模式用 `create_plan` / `update_plan` 把方案写进右侧 Plan 面板；点 **执行** 送入 Composer 开工。日常清单仍用 `todowrite` |
 | **File Stage + AI Diff** | 文档 / 幻灯片 / 表格 / 源码 / 网页 / 媒体 / Diff 同台——`routeProjectFile` 路由；本地 HTML 走应用内预览；回合前快照 → 审阅 hunk → 保留 / 回滚 / 接受 |
 | **小说工作台** | Scrivener 式书架：书 → 卷 → 单元队列、人物墙与关系图、每阶段一个主 CTA。立项 → 规划 → 写作 → 定稿，搭配题材技法库、去 AI 味门禁与分模型回合 |
-| **给项目做 UI 测试** | 在 Danmo Work 项目里做出 Web 应用后，**UI Test** 专家把 Markdown 用例写进该项目的 `ui-tests/`，在 Linux **desktop** 沙箱用 `browser_*` / `computer` 驱动你的应用，交回带证据的 PASS/FAIL——测的是你的项目，不是 Danmo Work 自身 |
+| **给项目做 UI 测试** | 根据**你项目的代码变更**，**UI Test** 专家自动把 Markdown 用例写进该项目的 `ui-tests/`，再用 **browser use**（`browser_*`）与 **computer use**（`computer`）在 Linux **desktop** 沙箱执行，交回带证据的 PASS/FAIL——测的是你的项目，不是 Danmo Work 自身 |
 | **随时向你请示** | `ask_user` 带选项、带表单；危险 Shell、桌面控制或外部 MCP 执行前走审批门禁——桌面与 IM 同一套流程 |
 | **记忆、表与知识库** | `memory_*` 按 user / project / agent 三级作用域；无 schema 的 `table_*` 流水在 `store.db`；Markdown 知识库按章节 FTS 检索 |
 | **技能、插件与连接器** | 技能 / 插件市场（官方目录、Tech Leads Club、ClawHub、ArtCraft 办公 CLI）；磁盘 Ambient 技能；按 Agent 绑定的 MCP；Codex 风格插件 `hooks.json` |
@@ -62,7 +62,7 @@
 | **Reviewer** | 代码与产物审查 |
 | **Browser** | 粘性多步浏览器 Tab（`browser_*`，经 CDP） |
 | **Computer** | 桌面 GUI 控制——找窗口、点击、键入、截屏（每次审批） |
-| **UI Test** | 测**你的**项目 Web UI：用例 Markdown 落在项目里，经 Linux desktop 沙箱用 `browser_*` / `computer` 执行 |
+| **UI Test** | 代码变更 → 自动写进**你的**项目的 Markdown 用例 → 用 `browser_*` + `computer` 在 Linux desktop 沙箱自动执行 |
 | **Data** | CSV / JSON 分析与报表 |
 | **GitHub** | Issue / PR / Actions / Release |
 | **Danmo Make** | 本机图片 / 视频 / 音频生成（需另装 Danmo Make） |
@@ -102,14 +102,15 @@ Composer 里 `@` 一下，或者干脆说一句「让文档专家写份报告」
 
 ### 给在这里开发的应用做 UI 测试
 
-Danmo Work 既是车间，也是**你的** Web 项目的测试跑手——打开项目、做出页面或 SPA，再让 Team（或 `@` **UI Test**）对着这套应用写用例、跑回归。
+Danmo Work 既是车间，也是**按代码变更驱动**的 UI 测试跑手：
 
-1. **对准你的应用** — 本机 `http://127.0.0.1:…`（经 `/api/v1/proxy/…`）或项目文件经 `/api/v1/projects/<id>/raw/…`
-2. **用例落在项目里** — Markdown 写在项目的 `ui-tests/specs/`（和代码同仓）
-3. **沙箱里执行** — 默认 `browser_*`（无障碍 ref）；布局 / canvas 需要 headed 时用 `computer`（`runtime.sandbox.profile=desktop`）
-4. **证据交回** — `ui-tests/runs/<stamp>/report.md`，按场景 PASS/FAIL（可附截图）
+1. **先在项目里做出 UI** — 页面 / SPA 照常交付（Implementer / Team）
+2. **按变更测** — 例如说「根据这次改动写 UI 测试并跑一遍」，或 `@` **UI Test**
+3. **从 diff 自动写用例** — 专家读 git/工作区变更，映射 UI 影响面，把 Markdown 写进/更新到项目的 `ui-tests/specs/`
+4. **browser + computer 自动执行** — 优先 `browser_*`（无障碍 ref）；布局 / canvas 用 `computer`（`runtime.sandbox.profile=desktop`）
+5. **证据交回** — `ui-tests/runs/<stamp>/report.md`，按场景 PASS/FAIL（可附截图）
 
-这是产品能力：测用 Danmo Work 开发的应用，不是给 Danmo Work 本仓库做 CI。不是 Playwright 脚手架；只做 Web，不做原生 Windows 应用。详见 [docs/experts.md](docs/experts.md)、[docs/agent-desktop-sandbox.md](docs/agent-desktop-sandbox.md)。
+应用入口走 `/api/v1/proxy/…`，静态页走 `/api/v1/projects/<id>/raw/…`。测的是用 Danmo Work 开发的应用，不是给 Danmo Work 本仓库做 CI。不是 Playwright 脚手架；只做 Web。详见 [docs/experts.md](docs/experts.md)、[docs/agent-desktop-sandbox.md](docs/agent-desktop-sandbox.md)。
 
 ### 安全
 

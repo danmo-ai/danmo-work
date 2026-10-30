@@ -29,7 +29,7 @@
 | **Plan → Execute** | Plan mode publishes via `create_plan` / `update_plan` into the right-hand Plan panel; hit **Execute** to send the plan into Composer. Day-to-day checklists still use `todowrite` |
 | **File Stage + AI Diff** | Docs, slides, sheets, code, web, media, and diff on one canvas — routed by `routeProjectFile`; local HTML opens through app preview; pre-turn snapshot → review hunks → keep / revert / accept |
 | **Novel workbench** | Scrivener-style shelf: book → volume → unit queue, cast wall & relation graph, one primary CTA per stage. Setup → plan → write → review with craft KB, anti-AI gates, and multi-model turns |
-| **UI tests for your projects** | After you build a Web app in a Danmo Work project, the **UI Test** expert writes Markdown specs into that project's `ui-tests/`, drives your app via `browser_*` / `computer` in the Linux **desktop** sandbox, and returns PASS/FAIL with evidence — not a test suite for Danmo Work itself |
+| **UI tests for your projects** | From **your project's code changes**, the **UI Test** expert auto-authors Markdown specs into that project's `ui-tests/`, then runs them with **browser use** (`browser_*`) and **computer use** (`computer`) in the Linux **desktop** sandbox — PASS/FAIL with evidence. Not a suite for Danmo Work itself |
 | **Humans in the loop** | `ask_user` with options and forms; approval gates before risky shell, desktop control, or external MCP — same flow in desktop and IM chats |
 | **Memory, tables & knowledge** | `memory_*` across user / project / agent scopes; schema-free `table_*` rows in `store.db`; Markdown knowledge bases with chapter-level FTS |
 | **Skills, plugins & connectors** | Skill / plugin market (official catalog, Tech Leads Club, ClawHub, ArtCraft office CLIs); ambient disk skills; MCP connectors bound per agent; Codex-style plugin `hooks.json` |
@@ -62,7 +62,7 @@ The lead agent runs the session; specialists do focused work on demand, each in 
 | **Reviewer** | Code and artifact review |
 | **Browser** | Sticky multi-step browser tabs (`browser_*` via CDP) |
 | **Computer** | Desktop GUI control — windows, click, type, screenshot (approval-gated) |
-| **UI Test** | Test the Web UI of **your** project: Markdown specs in-repo, executed via `browser_*` / `computer` on the Linux desktop sandbox |
+| **UI Test** | Diff → auto Markdown specs in **your** project → automate with `browser_*` + `computer` on the Linux desktop sandbox |
 | **Data** | CSV / JSON analysis and reporting |
 | **GitHub** | Issues, PRs, Actions, releases |
 | **Danmo Make** | Local image / video / audio generation (separate app) |
@@ -102,14 +102,15 @@ Pipeline: `novel-setup` → `novel-plan` (cast + outlines, human-approved volume
 
 ### UI tests for apps you build
 
-Danmo Work is both the workshop and the test runner for **your** Web project — open the project, ship a page or SPA, then ask Team (or `@` **UI Test**) to author and run cases against that app.
+Danmo Work is the workshop **and** the change-driven UI test runner for **your** Web project:
 
-1. **Target your app** — local `http://127.0.0.1:…` (via `/api/v1/proxy/…`) or project files via `/api/v1/projects/<id>/raw/…`
-2. **Specs in the project** — Markdown under the project's `ui-tests/specs/` (source of truth next to your code)
-3. **Execute in sandbox** — `browser_*` (a11y refs) by default; headed layout/canvas via `computer` when `runtime.sandbox.profile=desktop`
-4. **Evidence back** — `ui-tests/runs/<stamp>/report.md` with per-scenario PASS/FAIL (optional screenshots)
+1. **Ship UI in the project** — pages/SPA as usual (Implementer / Team)
+2. **Ask for change-driven tests** — e.g. "根据这次改动写 UI 测试并跑一遍" / `@` **UI Test**
+3. **Auto specs from the diff** — expert reads git/working-tree changes, maps UI impact, writes/updates Markdown under the project's `ui-tests/specs/`
+4. **Automate with browser + computer use** — `browser_*` (a11y refs) first; headed layout/canvas via `computer` on `runtime.sandbox.profile=desktop`
+5. **Evidence back** — `ui-tests/runs/<stamp>/report.md` with per-scenario PASS/FAIL (optional screenshots)
 
-This is product capability for apps developed with Danmo Work, not an in-repo CI suite for Danmo Work itself. Not Playwright codegen; Web only (no native Windows apps). Details: [docs/experts.md](docs/experts.md), [docs/agent-desktop-sandbox.md](docs/agent-desktop-sandbox.md).
+Target your running app via `/api/v1/proxy/…` or static pages via `/api/v1/projects/<id>/raw/…`. Product capability for apps developed with Danmo Work — not an in-repo CI suite for Danmo Work itself. Not Playwright codegen; Web only. Details: [docs/experts.md](docs/experts.md), [docs/agent-desktop-sandbox.md](docs/agent-desktop-sandbox.md).
 
 ### Safety
 
