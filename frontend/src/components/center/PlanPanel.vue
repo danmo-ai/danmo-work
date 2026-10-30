@@ -2,6 +2,14 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { StreamEvent } from '@/types/mission'
+import { renderMarkdown } from '@/utils/markdown-render'
+import {
+  mergePlanDocFromEvents,
+  latestTodoWriteItems,
+  buildPlanExecutePrefill,
+} from '@/utils/plan-from-stream'
+import { useSessionsStore } from '@/stores/sessions'
+import { useWorkspaceUiStore } from '@/stores/workspaceUi'
 
 const props = defineProps<{
   streamEvents: StreamEvent[]
@@ -9,33 +17,23 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
+const sessions = useSessionsStore()
+const workspaceUi = useWorkspaceUiStore()
 
-interface TodoItem {
-  content: string
-  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
-  priority: 'high' | 'medium' | 'low'
-}
+const planDoc = computed(() => mergePlanDocFromEvents(props.streamEvents))
 
-const todos = computed<TodoItem[]>(() => {
-  const turnId = props.planTurnId
-  for (let i = props.streamEvents.length - 1; i >= 0; i--) {
-    const ev = props.streamEvents[i]
-    if (turnId && ev.turnId !== turnId) continue
-    if (ev.type !== 'tool.running') continue
-    const p = ev.payload as Record<string, unknown> | null
-    if (p?.name !== 'todowrite') continue
-    const input = p?.input as Record<string, unknown> | null
-    if (!input?.todos) continue
-    const items = input.todos as unknown[]
-    if (!Array.isArray(items) || items.length === 0) continue
-    return items.map((item: any) => ({
-      content: String(item.content ?? ''),
-      status: String(item.status ?? 'pending') as TodoItem['status'],
-      priority: String(item.priority ?? 'medium') as TodoItem['priority'],
-    }))
-  }
-  return []
+const todos = computed(() => {
+  if (planDoc.value?.todos?.length) return planDoc.value.todos
+  return latestTodoWriteItems(props.streamEvents, props.planTurnId)
 })
+
+const planHtml = computed(() => {
+  const md = planDoc.value?.plan?.trim()
+  if (!md) return ''
+  return renderMarkdown(md)
+})
+
+const hasPlanArtifact = computed(() => !!planDoc.value?.plan?.trim() || !!planDoc.value?.name)
 
 const groups = computed(() => {
   const items = todos.value
@@ -62,20 +60,11 @@ const stats = computed(() => {
   }
 })
 
-function statusIcon(status: TodoItem['status']): string {
-  switch (status) {
-    case 'completed': return '[x]'
-    case 'in_progress': return '[>]'
-    case 'cancelled': return '[-]'
-    default: return '[ ]'
-  }
-}
-
-function priorityColor(priority: TodoItem['priority']): string {
+function priorityColor(priority: 'high' | 'medium' | 'low' | undefined): string {
   switch (priority) {
     case 'high': return 'var(--dq-label-secondary)'
-    case 'medium': return 'var(--dq-label-tertiary)'
     case 'low': return 'var(--dq-label-quaternary)'
+    default: return 'var(--dq-label-tertiary)'
   }
 }
 
@@ -84,21 +73,47 @@ const progressText = computed(() => {
   if (stats.value.inProgress <= 0) return base
   return `${base} · ${stats.value.inProgress} ${t('sessions.plan.inProgress')}`
 })
+
+const showEmpty = computed(() => !hasPlanArtifact.value && !todos.value.length)
+
+function executePlan() {
+  const text = buildPlanExecutePrefill(planDoc.value, todos.value, {
+    intro: t('sessions.plan.executePrefillIntro'),
+    todosHeader: t('sessions.plan.executePrefillTodosHeader'),
+  })
+  if (!text) return
+  // Leave plan mode so the next turn can use write/exec tools.
+  sessions.selectedPlanMode = false
+  workspaceUi.prefillComposer(text)
+  workspaceUi.openRightDrawer('plan')
+}
 </script>
 
 <template>
   <aside class="plan-panel">
-    <div v-if="todos.length" class="plan-panel__head">
-      <div class="plan-panel__stats-row">
-        <span class="plan-panel__stat plan-panel__stat--progress" v-if="stats.inProgress > 0">⏳ {{ stats.inProgress }}</span>
-        <span class="plan-panel__stat plan-panel__stat--pending" v-if="stats.pending > 0">○ {{ stats.pending }}</span>
-        <span class="plan-panel__stat plan-panel__stat--done" v-if="stats.completed > 0">✓ {{ stats.completed }}</span>
-        <span class="plan-panel__stat plan-panel__stat--cancelled" v-if="stats.cancelled > 0">✗ {{ stats.cancelled }}</span>
-        <span class="plan-panel__stat plan-panel__stat--total">{{ stats.completed }}/{{ stats.total }}</span>
+    <div v-if="!showEmpty" class="plan-panel__head">
+      <div class="plan-panel__head-main">
+        <div v-if="planDoc?.name" class="plan-panel__title">{{ planDoc.name }}</div>
+        <div v-if="todos.length" class="plan-panel__stats-row">
+          <span class="plan-panel__stat plan-panel__stat--progress" v-if="stats.inProgress > 0">⏳ {{ stats.inProgress }}</span>
+          <span class="plan-panel__stat plan-panel__stat--pending" v-if="stats.pending > 0">○ {{ stats.pending }}</span>
+          <span class="plan-panel__stat plan-panel__stat--done" v-if="stats.completed > 0">✓ {{ stats.completed }}</span>
+          <span class="plan-panel__stat plan-panel__stat--cancelled" v-if="stats.cancelled > 0">✗ {{ stats.cancelled }}</span>
+          <span class="plan-panel__stat plan-panel__stat--total">{{ stats.completed }}/{{ stats.total }}</span>
+        </div>
       </div>
+      <DqButton
+        type="primary"
+        size="sm"
+        class="plan-panel__execute"
+        :disabled="!hasPlanArtifact && !todos.length"
+        @click="executePlan"
+      >
+        {{ t('sessions.plan.execute') }}
+      </DqButton>
     </div>
 
-    <div v-if="!todos.length" class="plan-panel__empty">
+    <div v-if="showEmpty" class="plan-panel__empty">
       <div class="plan-panel__empty-icon">
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       </div>
@@ -106,27 +121,37 @@ const progressText = computed(() => {
       <p class="plan-panel__hint">{{ t('sessions.plan.emptyHint') }}</p>
     </div>
 
-    <div v-else class="plan-panel__list">
+    <div v-else class="plan-panel__body">
+      <p v-if="planDoc?.overview" class="plan-panel__overview">{{ planDoc.overview }}</p>
+
       <div
-        v-for="group in groups"
-        :key="group.key"
-        class="plan-panel__group"
-      >
-        <div class="plan-panel__group-label">
-          {{ group.label }}
-          <span class="plan-panel__group-count">{{ group.items.length }}</span>
-        </div>
+        v-if="planHtml"
+        class="plan-panel__markdown dq-prose"
+        v-html="planHtml"
+      />
+
+      <div v-if="todos.length" class="plan-panel__list">
         <div
-          v-for="(item, idx) in group.items"
-          :key="idx"
-          class="plan-panel__item"
-          :class="{ 'is-done': item.status === 'completed', 'is-cancelled': item.status === 'cancelled', 'is-in-progress': item.status === 'in_progress' }"
+          v-for="group in groups"
+          :key="group.key"
+          class="plan-panel__group"
         >
-          <span
-            class="plan-panel__item-dot"
-            :style="{ background: priorityColor(item.priority) }"
-          />
-          <span class="plan-panel__item-text">{{ item.content }}</span>
+          <div class="plan-panel__group-label">
+            {{ group.label }}
+            <span class="plan-panel__group-count">{{ group.items.length }}</span>
+          </div>
+          <div
+            v-for="(item, idx) in group.items"
+            :key="item.id || idx"
+            class="plan-panel__item"
+            :class="{ 'is-done': item.status === 'completed', 'is-cancelled': item.status === 'cancelled', 'is-in-progress': item.status === 'in_progress' }"
+          >
+            <span
+              class="plan-panel__item-dot"
+              :style="{ background: priorityColor(item.priority) }"
+            />
+            <span class="plan-panel__item-text">{{ item.content }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -159,30 +184,37 @@ const progressText = computed(() => {
 .plan-panel__head {
   flex-shrink: 0;
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 10px 12px 6px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px 8px;
   border-bottom: 1px solid var(--dq-separator-light);
 }
 
-.plan-panel__title {
+.plan-panel__head-main {
+  min-width: 0;
+  flex: 1;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
+}
+
+.plan-panel__title {
   font-size: var(--dq-font-size-body);
   font-weight: 600;
   color: var(--dq-label-primary);
-  white-space: nowrap;
+  line-height: 1.35;
+  word-break: break-word;
 }
 
-.plan-panel__title svg {
-  color: var(--dq-label-tertiary);
+.plan-panel__execute {
+  flex-shrink: 0;
 }
 
 .plan-panel__stats-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   font-size: var(--dq-font-size-caption);
   font-variant-numeric: tabular-nums;
@@ -240,10 +272,79 @@ const progressText = computed(() => {
   line-height: 1.5;
 }
 
-.plan-panel__list {
+.plan-panel__body {
   flex: 1;
   overflow-y: auto;
-  padding: 6px 0;
+  padding: 8px 0 12px;
+  min-height: 0;
+}
+
+.plan-panel__overview {
+  margin: 0 16px 10px;
+  font-size: var(--dq-font-size-caption);
+  color: var(--dq-label-secondary);
+  line-height: 1.45;
+}
+
+.plan-panel__markdown {
+  padding: 0 16px 8px;
+  color: var(--dq-label-primary);
+  font-size: var(--dq-font-size-body);
+  line-height: 1.5;
+}
+
+.plan-panel__markdown :deep(h1),
+.plan-panel__markdown :deep(h2),
+.plan-panel__markdown :deep(h3),
+.plan-panel__markdown :deep(h4) {
+  margin: 0.75em 0 0.35em;
+  font-weight: 600;
+  color: var(--dq-label-primary);
+  line-height: 1.3;
+}
+
+.plan-panel__markdown :deep(h1) { font-size: 1.15em; }
+.plan-panel__markdown :deep(h2) { font-size: 1.05em; }
+.plan-panel__markdown :deep(h3),
+.plan-panel__markdown :deep(h4) { font-size: 1em; }
+
+.plan-panel__markdown :deep(p) {
+  margin: 0.4em 0;
+}
+
+.plan-panel__markdown :deep(ul),
+.plan-panel__markdown :deep(ol) {
+  margin: 0.35em 0;
+  padding-left: 1.25em;
+}
+
+.plan-panel__markdown :deep(li) {
+  margin: 0.15em 0;
+}
+
+.plan-panel__markdown :deep(code) {
+  font-size: 0.92em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--dq-label-primary) 6%, transparent);
+}
+
+.plan-panel__markdown :deep(pre) {
+  margin: 0.5em 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--dq-label-primary) 5%, transparent);
+  font-size: var(--dq-font-size-caption);
+}
+
+.plan-panel__markdown :deep(pre code) {
+  padding: 0;
+  background: transparent;
+}
+
+.plan-panel__list {
+  padding: 6px 0 0;
 }
 
 .plan-panel__group {

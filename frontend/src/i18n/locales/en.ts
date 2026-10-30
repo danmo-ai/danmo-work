@@ -1266,8 +1266,11 @@ export default {
       inProgress: 'In progress',
       pending: 'Pending',
       empty: 'No plan yet',
-      emptyHint: 'The agent will create a plan for complex tasks',
+      emptyHint: 'In Plan mode the agent calls create_plan after research; review it here, then Execute',
       progress: '{done}/{total} done · {active} in progress',
+      execute: 'Execute',
+      executePrefillIntro: 'Implement the following plan. Exit plan mode and start coding.',
+      executePrefillTodosHeader: '## Todos',
     },
     terminal: {
       createFailed: 'Could not create terminal connection',
