@@ -11,7 +11,7 @@ LDFLAGS := -w -s -X 'danmo-work/server/api/v1.Version=$(RELEASE_VERSION)'
 export DQ_APP_NAME := $(APP_NAME)
 
 .PHONY: help backend dev-web dev-desktop dev-cli dev-tui stop \
-	frontend-install frontend-dev frontend-build frontend-typecheck \
+	frontend-install frontend-dev frontend-build frontend-typecheck test-frontend \
 	check-layers test test-integration \
 	build-go build-server build-cli build-tui build-sidecar build build-all clean \
 	build-env-tar build-env-tar-desktop fetch-ripgrep \
@@ -40,8 +40,8 @@ help:
 	@echo "  dev-tui       Run TUI directly (no server needed)"
 	@echo "  stop          Stop all dev processes"
 	@echo ""
-	@echo "Frontend:  frontend-install | frontend-dev | frontend-build | frontend-typecheck"
-	@echo "Test:      check-layers | test | test-integration"
+	@echo "Frontend:  frontend-install | frontend-dev | frontend-build | frontend-typecheck | test-frontend"
+	@echo "Test:      check-layers | test | test-frontend | test-integration"
 	@echo "Eval:      eval-harbor-bin | eval-harbor-base | eval-harbor-sync-tb2 | eval-harbor-smoke | eval-harbor-suite | eval-harbor-compare"
 	@echo "Build:     build | build-all | build-go | build-server | build-cli | build-tui | build-sidecar | build-env-tar | fetch-ripgrep | clean"
 	@echo "Release:   pack-macos-desktop | pack-linux-desktop | pack-windows-desktop"
@@ -84,6 +84,9 @@ frontend-build: frontend-install
 
 frontend-typecheck: frontend-install
 	cd $(FRONTEND_DIR) && npm run typecheck
+
+test-frontend: frontend-install
+	cd $(FRONTEND_DIR) && npm test
 
 check-layers:
 	go run scripts/check_layers.go

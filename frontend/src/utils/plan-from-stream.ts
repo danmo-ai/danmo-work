@@ -104,6 +104,40 @@ export function latestTodoWriteItems(
   return []
 }
 
+export interface PlanProgress {
+  completed: number
+  total: number
+}
+
+function countTodoProgress(items: PlanTodoItem[]): PlanProgress {
+  const total = items.length
+  const completed = items.filter((item) => item.status === 'completed').length
+  return { completed, total }
+}
+
+/**
+ * Badge progress for the Plan rail: prefer newest create_plan/update_plan todos
+ * session-wide, else todowrite on the active plan turn.
+ */
+export function planProgressFromEvents(
+  events: PlanStreamEvent[],
+  planTurnId?: string | null,
+): PlanProgress {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const ev = events[i]
+    if (ev.type !== 'tool.running' && ev.type !== 'tool.completed') continue
+    const p = asRecord(ev.payload)
+    const name = String(p?.name ?? '')
+    if (!PLAN_TOOL_NAMES.has(name)) continue
+    const input = asRecord(p?.input)
+    const items = parsePlanTodos(input?.todos)
+    if (items.length) return countTodoProgress(items)
+  }
+  const legacy = latestTodoWriteItems(events, planTurnId)
+  if (legacy.length) return countTodoProgress(legacy)
+  return { completed: 0, total: 0 }
+}
+
 export function buildPlanExecutePrefill(
   doc: PlanDoc | null,
   todos: PlanTodoItem[],
