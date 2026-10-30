@@ -461,6 +461,25 @@ const desktopTarVariants = computed(() => {
   ]
 })
 
+/** Tar list for the currently selected sandbox image (cli | desktop). */
+const activeTarVariants = computed(() =>
+  runtimeForm.value.envProfile === 'desktop' ? desktopTarVariants.value : envTarVariants.value,
+)
+
+const envAdvancedOpen = ref(false)
+
+// Switching CLI ↔ Desktop clears a stale image-tag override so the new default applies.
+watch(
+  () => runtimeForm.value.envProfile,
+  (profile, prev) => {
+    if (!prev || profile === prev) return
+    runtimeForm.value.envImage = ''
+    if (profile === 'desktop' && runtimeForm.value.sandboxNetwork === 'deny') {
+      runtimeForm.value.sandboxNetwork = 'allow'
+    }
+  },
+)
+
 const browserStatusText = computed(() => {
   const st = runtimeConfig.browserStatus
   if (!st) return ''
@@ -1562,10 +1581,6 @@ onUnmounted(() => {
                     <DqOption value="allow" :label="$t('settings.sandboxNetworkAllow')" />
                   </DqSelect>
                 </div>
-                <div v-if="isContainerBackend" class="settings-field settings-field--half">
-                  <span class="settings-field__label">{{ $t('settings.envImage') }}</span>
-                  <DqInput v-model="runtimeForm.envImage" :placeholder="$t('settings.envImagePlaceholder')" />
-                </div>
               </div>
               <p class="settings-form-group__desc">{{ $t('settings.sandboxNetworkDesc') }}</p>
 
@@ -1612,93 +1627,75 @@ onUnmounted(() => {
                   </div>
                   <p class="settings-form-group__desc">{{ $t('settings.envDesktopGeometryDesc') }}</p>
                 </template>
-                <div class="settings-form-row">
-                  <div class="settings-field settings-field--half">
-                    <span class="settings-field__label">{{ $t('settings.envTarPath') }}</span>
-                    <DqInput
-                      v-model="runtimeForm.envTarPath"
-                      :placeholder="$t('settings.envTarPathPlaceholder')"
-                    />
+                <p class="settings-form-group__desc">
+                  {{
+                    runtimeForm.envProfile === 'desktop'
+                      ? $t('settings.envDesktopTarVariantsDesc')
+                      : $t('settings.envTarVariantsDesc')
+                  }}
+                </p>
+                <div
+                  v-for="v in activeTarVariants"
+                  :key="runtimeForm.envProfile + '-' + v.arch"
+                  class="settings-form-row"
+                  style="align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px"
+                >
+                  <DqButton
+                    size="sm"
+                    :loading="runtimeConfig.downloadingTar === `${runtimeForm.envProfile}:${v.arch}`"
+                    :disabled="!!runtimeConfig.downloadingTar"
+                    @click="downloadEnvTar(v.arch, runtimeForm.envProfile)"
+                  >
+                    {{
+                      (v.present
+                        ? $t('settings.envTarRedownloadArch', { arch: v.arch })
+                        : $t('settings.envTarDownloadArch', { arch: v.arch }))
+                        + (v.recommended ? ` (${$t('settings.envTarRecommended')})` : '')
+                    }}
+                  </DqButton>
+                  <a
+                    v-if="v.downloadUrl"
+                    class="settings-link"
+                    :href="v.downloadUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {{ v.assetName }}
+                  </a>
+                  <span v-if="v.present" class="settings-form-group__desc" style="margin: 0">
+                    {{ $t('settings.envTarInstalled', {
+                      path: v.path || '',
+                      size: formatTarBytes(v.bytes || 0),
+                    }) }}
+                  </span>
+                  <span v-else class="settings-form-group__desc" style="margin: 0">
+                    {{ $t('settings.envTarMissingArch', { arch: v.arch }) }}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  class="settings-link"
+                  style="background: none; border: 0; padding: 0; cursor: pointer; margin: 8px 0"
+                  @click="envAdvancedOpen = !envAdvancedOpen"
+                >
+                  {{ envAdvancedOpen ? $t('settings.envAdvancedHide') : $t('settings.envAdvancedShow') }}
+                </button>
+                <template v-if="envAdvancedOpen">
+                  <div class="settings-form-row">
+                    <div class="settings-field settings-field--half">
+                      <span class="settings-field__label">{{ $t('settings.envImage') }}</span>
+                      <DqInput v-model="runtimeForm.envImage" :placeholder="$t('settings.envImagePlaceholder')" />
+                    </div>
+                    <div class="settings-field settings-field--half">
+                      <span class="settings-field__label">{{ $t('settings.envTarPath') }}</span>
+                      <DqInput
+                        v-model="runtimeForm.envTarPath"
+                        :placeholder="$t('settings.envTarPathPlaceholder')"
+                      />
+                    </div>
                   </div>
-                </div>
-                <p class="settings-form-group__desc">{{ $t('settings.envTarVariantsDesc') }}</p>
-                <div
-                  v-for="v in envTarVariants"
-                  :key="'cli-' + v.arch"
-                  class="settings-form-row"
-                  style="align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px"
-                >
-                  <DqButton
-                    size="sm"
-                    :loading="runtimeConfig.downloadingTar === `cli:${v.arch}`"
-                    :disabled="!!runtimeConfig.downloadingTar"
-                    @click="downloadEnvTar(v.arch, 'cli')"
-                  >
-                    {{
-                      (v.present
-                        ? $t('settings.envTarRedownloadArch', { arch: 'cli/' + v.arch })
-                        : $t('settings.envTarDownloadArch', { arch: 'cli/' + v.arch }))
-                        + (v.recommended ? ` (${$t('settings.envTarRecommended')})` : '')
-                    }}
-                  </DqButton>
-                  <a
-                    v-if="v.downloadUrl"
-                    class="settings-link"
-                    :href="v.downloadUrl"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {{ v.assetName }}
-                  </a>
-                  <span v-if="v.present" class="settings-form-group__desc" style="margin: 0">
-                    {{ $t('settings.envTarInstalled', {
-                      path: v.path || '',
-                      size: formatTarBytes(v.bytes || 0),
-                    }) }}
-                  </span>
-                  <span v-else class="settings-form-group__desc" style="margin: 0">
-                    {{ $t('settings.envTarMissingArch', { arch: 'cli/' + v.arch }) }}
-                  </span>
-                </div>
-                <p class="settings-form-group__desc">{{ $t('settings.envDesktopTarVariantsDesc') }}</p>
-                <div
-                  v-for="v in desktopTarVariants"
-                  :key="'desktop-' + v.arch"
-                  class="settings-form-row"
-                  style="align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px"
-                >
-                  <DqButton
-                    size="sm"
-                    :loading="runtimeConfig.downloadingTar === `desktop:${v.arch}`"
-                    :disabled="!!runtimeConfig.downloadingTar"
-                    @click="downloadEnvTar(v.arch, 'desktop')"
-                  >
-                    {{
-                      (v.present
-                        ? $t('settings.envTarRedownloadArch', { arch: 'desktop/' + v.arch })
-                        : $t('settings.envTarDownloadArch', { arch: 'desktop/' + v.arch }))
-                        + (v.recommended ? ` (${$t('settings.envTarRecommended')})` : '')
-                    }}
-                  </DqButton>
-                  <a
-                    v-if="v.downloadUrl"
-                    class="settings-link"
-                    :href="v.downloadUrl"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {{ v.assetName }}
-                  </a>
-                  <span v-if="v.present" class="settings-form-group__desc" style="margin: 0">
-                    {{ $t('settings.envTarInstalled', {
-                      path: v.path || '',
-                      size: formatTarBytes(v.bytes || 0),
-                    }) }}
-                  </span>
-                  <span v-else class="settings-form-group__desc" style="margin: 0">
-                    {{ $t('settings.envTarMissingArch', { arch: 'desktop/' + v.arch }) }}
-                  </span>
-                </div>
+                  <p class="settings-form-group__desc">{{ $t('settings.envAdvancedDesc') }}</p>
+                </template>
                 <p class="settings-form-group__desc">{{ $t('settings.envResourcesDesc') }}</p>
                 <div class="settings-form-row">
                   <div class="settings-field settings-field--half">
