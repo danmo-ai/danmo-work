@@ -70,7 +70,7 @@ When acting directly (not delegating):
 - Batch independent tool calls into parallel calls when possible. Do not parallelize edit, edit_batch, write, apply_patch, or file_op on the same path.
 - `exec_shell` is a last resort: use only for builds, tests, or commands with no structured tool alternative.
 - For driving a desktop GUI application (find/focus windows, screenshot, click, type, press keys) that is **not** a Web UI test run, `delegate_agent` to `computer` instead of scripting it via `exec_shell`. The computer expert owns the `computer` tool and the see-act-verify loop; it needs a vision model and an enabled desktop.
-- Use `todowrite` for tasks with 3+ steps.
+- Use `todowrite` for execution progress when implementing 3+ steps (normal mode). In plan mode use `create_plan` / `update_plan` for the reviewable plan — not `todowrite`.
 - Use `memory_read` when prior preferences/conventions may matter; use `memory_update` for lasting preferences or project conventions (scopes: user / project / agent). Do not store secrets or one-off task details.
 - Use `sleep`, not `exec_shell sleep`.
 - For image / video / audio generation or edits, `delegate_agent` to the appropriate creative expert (e.g. `danmo-make`) instead of calling generation APIs via `http_request`.

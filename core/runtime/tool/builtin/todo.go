@@ -19,9 +19,10 @@ func (h *TodoWrite) Describe(args map[string]any) string {
 func (h *TodoWrite) Schema() domain.ToolSchema {
 	return domain.ToolSchema{
 		Name: "todowrite",
-		Description: "Create and maintain a structured task list for the current session.\n\n" +
-			"When to use: the task requires 3+ distinct steps, or the work benefits from planning.\n" +
-			"Skip when: single straightforward task or purely conversational request.\n\n" +
+		Description: "Create and maintain an execution-progress task list for the current session (Plan panel checklist).\n\n" +
+			"When to use (normal / non-plan mode): the work has 3+ distinct steps and you are actively implementing — track pending / in_progress / completed as you go.\n" +
+			"Skip when: single straightforward task, purely conversational, or you are in PLAN MODE.\n\n" +
+			"Not for implementation plans: in plan mode use create_plan / update_plan (markdown plan + Execute button). Do not use todowrite as a substitute for create_plan.\n\n" +
 			"States: pending, in_progress (exactly one at a time), completed, cancelled.\n" +
 			"Priority levels: high, medium, low.\n\n" +
 			"Mark completed only after work is actually done, including verification.\n" +

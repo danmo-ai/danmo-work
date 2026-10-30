@@ -1165,6 +1165,9 @@ func TestAppendCallTimeContextIncludesPlanMode(t *testing.T) {
 	if !strings.Contains(out[0].Content, "create_plan") || !strings.Contains(out[0].Content, "update_plan") {
 		t.Fatal("expected plan-mode to mention create_plan / update_plan")
 	}
+	if !strings.Contains(out[0].Content, "todowrite") || !strings.Contains(out[0].Content, "NOT available in plan mode") {
+		t.Fatal("expected plan-mode to distinguish todowrite from create_plan")
+	}
 	if !strings.Contains(out[0].Content, "AGENTS.md") {
 		t.Fatal("expected plan-mode workflow to mention AGENTS.md")
 	}
