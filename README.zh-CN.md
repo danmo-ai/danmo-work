@@ -29,10 +29,11 @@
 | **计划 → 执行** | Plan 模式用 `create_plan` / `update_plan` 把方案写进右侧 Plan 面板；点 **执行** 送入 Composer 开工。日常清单仍用 `todowrite` |
 | **File Stage + AI Diff** | 文档 / 幻灯片 / 表格 / 源码 / 网页 / 媒体 / Diff 同台——`routeProjectFile` 路由；本地 HTML 走应用内预览；回合前快照 → 审阅 hunk → 保留 / 回滚 / 接受 |
 | **小说工作台** | Scrivener 式书架：书 → 卷 → 单元队列、人物墙与关系图、每阶段一个主 CTA。立项 → 规划 → 写作 → 定稿，搭配题材技法库、去 AI 味门禁与分模型回合 |
+| **Agent UI 测试** | 内置 **UI Test** 专家：在 `ui-tests/` 写 Markdown 用例，用 `browser_*`（无障碍优先）或 headed `computer` 在 Linux **desktop** 沙箱执行，产出带证据的 PASS/FAIL |
 | **随时向你请示** | `ask_user` 带选项、带表单；危险 Shell、桌面控制或外部 MCP 执行前走审批门禁——桌面与 IM 同一套流程 |
 | **记忆、表与知识库** | `memory_*` 按 user / project / agent 三级作用域；无 schema 的 `table_*` 流水在 `store.db`；Markdown 知识库按章节 FTS 检索 |
 | **技能、插件与连接器** | 技能 / 插件市场（官方目录、Tech Leads Club、ClawHub、ArtCraft 办公 CLI）；磁盘 Ambient 技能；按 Agent 绑定的 MCP；Codex 风格插件 `hooks.json` |
-| **实打实的沙箱** | OS 级隔离（Seatbelt / Landlock / bwrap / WSL2）或可选 Podman/Docker 容器环境；网络 deny / 域名白名单；四种权限模式 |
+| **实打实的沙箱** | OS 级隔离（Seatbelt / Landlock / bwrap / WSL2）或 Podman/Docker 容器；`cli` Alpine Shell 或 `desktop`（Xvfb + Chromium CDP + noVNC）配置；网络 deny / 域名白名单；四种权限模式 |
 | **长程会话** | Turn Log 与流式事件在 `history.db`；Compaction 检查点；崩溃后 `RecoverRunning`；会话可跨天、跨周 |
 | **自动化与 IM** | cron 定时 + webhook 触发；飞书 / QQ / 微信 / 企微出站直连——进度卡片、提问、审批全在聊天里 |
 | **模型、数据都是你的** | Anthropic 原生 + OpenAI 兼容，并按厂商绑定 **协议方言**（DeepSeek、GLM（智谱）、通义、Kimi、Gemini、Grok、MiniMax、本地 Ollama……）；数据都在 `~/.danmo-work/` |
@@ -99,10 +100,14 @@ Composer 里 `@` 一下，或者干脆说一句「让文档专家写份报告」
 
 流水线：`novel-setup` → `novel-plan`（人物 + 大纲，卷纲需人批准）→ `novel-write`（细纲 / 正文，CONTEXT 打包落盘）→ `novel-review`（qc-pack → 审 → Commit）。技法在 `kb-novel-craft`（共性篇 + 八题材专文，刑侦探案可追加人味文风）；机器门禁盯住连续性、字数配额与去 AI 味。
 
+### Agent UI 测试
+
+让 Team 跑 Web UI 测试（或 `@` **UI Test** 专家）。用例是 `ui-tests/specs/` 下的 Markdown；跑完写入 `ui-tests/runs/<stamp>/report.md`，按场景 PASS/FAIL。优先 `browser_*` 无障碍 ref；布局 / canvas 或需要 headed 时再升到 `computer`，跑在 Linux desktop 沙箱（`runtime.sandbox.profile=desktop`）。不是 Playwright 脚手架，也不测原生 Windows 应用——详见 [docs/experts.md](docs/experts.md) 与 [docs/agent-desktop-sandbox.md](docs/agent-desktop-sandbox.md)。
+
 ### 安全
 
 - **软门禁** — 四种权限模式（`discuss` / `plan` / `interactive` / `auto`），危险命令、桌面控制与外部 MCP 先问再跑
-- **硬沙箱** — OS 级隔离或可选 Podman/Docker 容器环境；网络 `deny`、全开或域名白名单
+- **硬沙箱** — OS 级隔离或 Podman/Docker 容器（`cli` / `desktop` 配置）；网络 `deny`、全开或域名白名单
 - `auto_approve` 绝不会静默放行危险命令；IM 里同样能审批
 
 ### 通道、远程与自动化
@@ -159,6 +164,7 @@ make dev-web   # 后端 :7801 + Vite :5801 → http://localhost:5801/app/
 ```bash
 make dev-web          # 后端 :7801 + Vite :5801 → http://localhost:5801/app/
 make stop             # 停掉所有 DQ_DEV 进程
+make test-frontend    # 前端 UI 辅助脚本（Plan / 专家 / File Stage / …）
 mkdir -p ~/.danmo-work && cp config.example.yaml ~/.danmo-work/config.yaml
 ```
 
@@ -171,7 +177,8 @@ mkdir -p ~/.danmo-work && cp config.example.yaml ~/.danmo-work/config.yaml
 | 文档 | 说明 |
 |------|------|
 | [docs/core-design.md](docs/core-design.md) | Agent 架构、工具系统、通道、File Stage |
-| [docs/experts.md](docs/experts.md) | 专家使用说明、内置清单、小说工作台 |
+| [docs/experts.md](docs/experts.md) | 专家使用说明、内置清单、小说工作台、UI Test |
+| [docs/agent-desktop-sandbox.md](docs/agent-desktop-sandbox.md) | Desktop 沙箱配置（Chromium CDP + computer + noVNC） |
 | [docs/remote/README.md](docs/remote/README.md) | Remote Hub 配对与隧道协议 |
 | [docs/screenshots/README.md](docs/screenshots/README.md) | 产品截图轮播（README 头图） |
 | [docs/demo/README.md](docs/demo/README.md) | 架构演示 HTML / GIF / MP4 |

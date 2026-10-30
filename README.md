@@ -29,10 +29,11 @@
 | **Plan → Execute** | Plan mode publishes via `create_plan` / `update_plan` into the right-hand Plan panel; hit **Execute** to send the plan into Composer. Day-to-day checklists still use `todowrite` |
 | **File Stage + AI Diff** | Docs, slides, sheets, code, web, media, and diff on one canvas — routed by `routeProjectFile`; local HTML opens through app preview; pre-turn snapshot → review hunks → keep / revert / accept |
 | **Novel workbench** | Scrivener-style shelf: book → volume → unit queue, cast wall & relation graph, one primary CTA per stage. Setup → plan → write → review with craft KB, anti-AI gates, and multi-model turns |
+| **Agent UI testing** | Builtin **UI Test** expert authors Markdown specs under `ui-tests/`, runs them with `browser_*` (a11y-first) or headed `computer` on the Linux **desktop** sandbox, and returns PASS/FAIL with evidence |
 | **Humans in the loop** | `ask_user` with options and forms; approval gates before risky shell, desktop control, or external MCP — same flow in desktop and IM chats |
 | **Memory, tables & knowledge** | `memory_*` across user / project / agent scopes; schema-free `table_*` rows in `store.db`; Markdown knowledge bases with chapter-level FTS |
 | **Skills, plugins & connectors** | Skill / plugin market (official catalog, Tech Leads Club, ClawHub, ArtCraft office CLIs); ambient disk skills; MCP connectors bound per agent; Codex-style plugin `hooks.json` |
-| **Real sandbox** | OS-level isolation (Seatbelt / Landlock / bwrap / WSL2) or optional Podman/Docker env; network deny / domain allowlist; four permission modes |
+| **Real sandbox** | OS-level isolation (Seatbelt / Landlock / bwrap / WSL2) or Podman/Docker env; `cli` Alpine shell or `desktop` (Xvfb + Chromium CDP + noVNC) profile; network deny / domain allowlist; four permission modes |
 | **Long-horizon sessions** | Turn log + stream events in `history.db`; compaction checkpoints; `RecoverRunning` after crashes; sessions can span days or weeks |
 | **Automations & IM** | Cron schedules and webhooks; Feishu / QQ / WeChat / WeCom outbound — progress cards, questions, and approvals in-channel |
 | **Your model, your data** | Anthropic-native + OpenAI-compatible with per-vendor **protocol dialects** (DeepSeek, GLM, Qwen, Kimi, Gemini, Grok, MiniMax, Ollama…). Everything under `~/.danmo-work/` |
@@ -99,10 +100,14 @@ Open **Workbench** in the session chrome (or type `/novel`). Same three-pane lay
 
 Pipeline: `novel-setup` → `novel-plan` (cast + outlines, human-approved volumes) → `novel-write` (unit outlines / drafts with packed CONTEXT) → `novel-review` (qc-pack → review → commit). Craft lives in `kb-novel-craft` (shared + eight genre articles, plus crime-human flavor when needed); machine gates keep continuity, word quotas, and anti-AI style checks honest.
 
+### Agent UI testing
+
+Ask Team to run Web UI tests (or `@` the **UI Test** expert). Specs live as Markdown under `ui-tests/specs/`; runs write `ui-tests/runs/<stamp>/report.md` with per-scenario PASS/FAIL. Prefer `browser_*` a11y refs; escalate to `computer` for headed layout/canvas on the Linux desktop sandbox (`runtime.sandbox.profile=desktop`). Not Playwright codegen, and not for native Windows apps — details in [docs/experts.md](docs/experts.md) and [docs/agent-desktop-sandbox.md](docs/agent-desktop-sandbox.md).
+
 ### Safety
 
 - **Soft gate** — permission modes (`discuss` / `plan` / `interactive` / `auto`); risky commands, desktop control, and external MCP ask before running
-- **Hard sandbox** — OS-level isolation or optional Podman/Docker container env; network `deny`, open, or domain allowlist
+- **Hard sandbox** — OS-level isolation or Podman/Docker container env (`cli` or `desktop` profile); network `deny`, open, or domain allowlist
 - `auto_approve` never silently approves dangerous commands; approvals render inside IM chats too
 
 ### Channels, remote & automations
@@ -160,6 +165,7 @@ make dev-web   # backend :7801 + Vite :5801 → http://localhost:5801/app/
 ```bash
 make dev-web          # backend :7801 + Vite :5801 → http://localhost:5801/app/
 make stop             # stop all DQ_DEV processes
+make test-frontend    # frontend UI helper scripts (Plan / experts / File Stage / …)
 mkdir -p ~/.danmo-work && cp config.example.yaml ~/.danmo-work/config.yaml
 ```
 
@@ -172,7 +178,8 @@ Build, pack, test, env vars, and CI: [`AGENTS.md`](AGENTS.md). Architecture: [`d
 | Doc | Description |
 |-----|-------------|
 | [docs/core-design.md](docs/core-design.md) | Agent architecture, tool system, channels, File Stage |
-| [docs/experts.md](docs/experts.md) | Expert usage, builtin roster, novel workbench |
+| [docs/experts.md](docs/experts.md) | Expert usage, builtin roster, novel workbench, UI Test |
+| [docs/agent-desktop-sandbox.md](docs/agent-desktop-sandbox.md) | Desktop sandbox profile (Chromium CDP + computer + noVNC) |
 | [docs/remote/README.md](docs/remote/README.md) | Remote Hub pairing and tunnel protocol |
 | [docs/screenshots/README.md](docs/screenshots/README.md) | Screenshot carousel (README hero) |
 | [docs/demo/README.md](docs/demo/README.md) | Architecture tour HTML / GIF / MP4 |

@@ -102,6 +102,29 @@ delegate_agent(agent_id="<id>", goal="...")
 
 ---
 
+## 4b. UI Test 专家（简介）
+
+**Web-only** 的 UI 测试专家：写 Markdown 用例、在 Linux desktop 沙箱执行、交回 PASS/FAIL 证据。
+
+| 需求 | 专家 |
+|------|------|
+| 系统化 Web UI 用例 + 报告 | **`ui-test`** |
+| 一次性网页操作（无套件） | `browser` |
+| 任意桌面 GUI（非 Web 测试交付） | `computer` |
+| 代码单测 / 集成测 | `implementer` + TDD |
+
+用法：
+
+1. 主专家选 **Team**；说「给这个页面写/跑 UI 测试」，或 `@` **UI Test**。
+2. 专家 `read_skill(ui-test)`，按模板写 `ui-tests/specs/*.md`（或更新已有用例）。
+3. 默认 `browser_*`（navigate → snapshot refs → act → verify）；headed / 视觉 / canvas 或 `browser_*` 不可用时升到 `computer`。
+4. 断言必须可核对（文案、URL、禁止态）；截图作证据，不能单靠「看起来没问题」。
+5. 写入 `ui-tests/runs/<YYYYMMDD-HHMMSS>/report.md`，按专家输出格式交 SUMMARY / RESULTS / ARTIFACTS。
+
+沙箱：容器后端设 `runtime.sandbox.profile=desktop`（Xvfb + Chromium CDP + noVNC），见 [agent-desktop-sandbox.md](./agent-desktop-sandbox.md)。禁止脚手架 Playwright / Cypress；禁止 `file://`（改 `/raw/` 或 `/proxy/` URL）。
+
+---
+
 ## 5. 市场、内置插件与自定义专家
 
 - **内置插件（Builtin plugins）**：所有内置**子专家**均以 Agent Plugins 布局落在 `~/.danmo-work/plugins/<name>/`。能力包可同带 `skills/`、`mcp.json`、knowledge；薄专家只带 `ai.danmo.work/experts/`，共享技能仍从 home 解析。
