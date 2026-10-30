@@ -236,6 +236,78 @@ fn external_backend_requested() -> bool {
     false
 }
 
+/// Prepend common third-party bin dirs missing from PATH (macOS/Linux GUI apps).
+fn enriched_host_path(home: &Path) -> Option<String> {
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = home;
+        return None;
+    }
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        let sep = ':';
+        let cur = std::env::var("PATH").unwrap_or_default();
+        let mut have: std::collections::HashSet<String> = cur
+            .split(sep)
+            .filter(|p| !p.is_empty())
+            .map(|p| p.to_string())
+            .collect();
+        let user_home = std::env::var_os("HOME").map(PathBuf::from);
+        let mut extras: Vec<PathBuf> = Vec::new();
+        #[cfg(target_os = "macos")]
+        {
+            extras.extend([
+                PathBuf::from("/opt/homebrew/bin"),
+                PathBuf::from("/opt/homebrew/sbin"),
+                PathBuf::from("/usr/local/bin"),
+                PathBuf::from("/usr/local/sbin"),
+                PathBuf::from("/opt/local/bin"),
+                PathBuf::from("/opt/podman/bin"),
+                PathBuf::from("/Applications/Docker.app/Contents/Resources/bin"),
+            ]);
+            if let Some(h) = &user_home {
+                extras.push(h.join(".docker/bin"));
+                extras.push(h.join(".orbstack/bin"));
+                extras.push(h.join(".local/bin"));
+                extras.push(h.join("bin"));
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            extras.extend([
+                PathBuf::from("/usr/local/bin"),
+                PathBuf::from("/opt/podman/bin"),
+            ]);
+            if let Some(h) = &user_home {
+                extras.push(h.join(".docker/bin"));
+                extras.push(h.join(".local/bin"));
+                extras.push(h.join("bin"));
+            }
+        }
+        extras.push(home.join("bin"));
+
+        let mut prepend = Vec::new();
+        for d in extras {
+            let s = d.to_string_lossy().into_owned();
+            if have.contains(&s) {
+                continue;
+            }
+            if d.is_dir() {
+                have.insert(s.clone());
+                prepend.push(s);
+            }
+        }
+        if prepend.is_empty() {
+            return None;
+        }
+        if cur.is_empty() {
+            Some(prepend.join(&sep.to_string()))
+        } else {
+            Some(format!("{}{sep}{cur}", prepend.join(&sep.to_string())))
+        }
+    }
+}
+
 fn spawn_backend(app: &AppHandle) -> Result<(), String> {
     let home = teams_home(app)?;
     fs::create_dir_all(&home).map_err(|e| format!("failed to create ~/.danmo-work: {e}"))?;
@@ -304,6 +376,11 @@ fn spawn_backend(app: &AppHandle) -> Result<(), String> {
         .env("WORK_DATA_DIR", work_dir.to_string_lossy().as_ref())
         .stdout(std::process::Stdio::from(log_file))
         .stderr(std::process::Stdio::from(log_err));
+    // Finder/Dock launches strip Homebrew/Docker from PATH; enrich before spawn
+    // so the Go sidecar can detect podman/docker/container CLIs.
+    if let Some(path) = enriched_host_path(&home) {
+        cmd.env("PATH", path);
+    }
     // Own process group on Unix so Exit/Drop can SIGTERM/SIGKILL the whole tree
     // (Go may spawn helpers; killing only the parent leaves orphans).
     #[cfg(unix)]
