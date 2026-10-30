@@ -56,7 +56,8 @@ func (h *Computer) Schema() domain.ToolSchema {
 			"to see it, 4) act with `left_click` / `type` / `key`, 5) `screenshot` again to verify.\n\n" +
 			"Coordinates: a full-display screenshot uses absolute screen pixels. A window screenshot returns pixels " +
 			"relative to that image; pass the same `window_id` on the follow-up action and coordinates are mapped " +
-			"back automatically.\n\n" +
+			"back automatically. Screenshots may be JPEG-downscaled (see display_width/display_height in the result); " +
+			"always click using the image pixel coordinates — the runtime remaps them to the real display.\n\n" +
 			"When runtime.sandbox.profile=desktop with a container backend, actions target the sandboxed Xvfb " +
 			"desktop (not the host GUI). Otherwise this controls the host machine. Each call requires user approval. " +
 			"Prefer keyboard shortcuts (`key`) over fragile mouse clicks when possible. For web UI testing prefer browser_*.",
@@ -228,7 +229,20 @@ func (h *Computer) screenshot(ctx context.Context, input map[string]any, windowI
 	if windowID != "" {
 		meta["window_id"] = windowID
 	}
-	desc := fmt.Sprintf("Captured screenshot (%dx%d, %s coordinates).", img.Width, img.Height, space)
+	dispW, dispH := img.DisplayWidth, img.DisplayHeight
+	if dispW == 0 {
+		dispW = img.Width
+	}
+	if dispH == 0 {
+		dispH = img.Height
+	}
+	meta["display_width"] = dispW
+	meta["display_height"] = dispH
+	desc := fmt.Sprintf("Captured screenshot (%dx%d image", img.Width, img.Height)
+	if img.Width != dispW || img.Height != dispH {
+		desc += fmt.Sprintf(", display %dx%d — use image-pixel coordinates; runtime maps them to the display", dispW, dispH)
+	}
+	desc += fmt.Sprintf(", %s coordinates).", space)
 
 	modelID, _ := input["__model_id"].(string)
 	if h.SupportsImage != nil && modelID != "" && !h.SupportsImage(modelID) {

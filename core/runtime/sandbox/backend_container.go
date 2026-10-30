@@ -40,19 +40,21 @@ type containerBackend struct {
 	mu           sync.Mutex
 	engine       domain.EnvironmentEngine
 	runtime      container.Runtime
-	profile      string
-	image        string
-	tarPath      string
-	tarOverride  string
-	mount        string
-	resources    domain.EnvironmentResources
-	imageReady   bool
-	tarMissing   bool
-	daemonDown   bool
-	daemonMsg    string
-	active       map[string]struct{}
-	endpoints    map[string]domain.DesktopEndpoints // projectID → published ports
-	credProvider port.GitCredentialProvider
+	profile        string
+	image          string
+	tarPath        string
+	tarOverride    string
+	mount          string
+	resources      domain.EnvironmentResources
+	desktopWidth   int
+	desktopHeight  int
+	imageReady     bool
+	tarMissing     bool
+	daemonDown     bool
+	daemonMsg      string
+	active         map[string]struct{}
+	endpoints      map[string]domain.DesktopEndpoints // projectID → published ports
+	credProvider   port.GitCredentialProvider
 }
 
 func newContainerBackend(engine domain.EnvironmentEngine, cfg domain.ConfigSandboxSection) (*containerBackend, error) {
@@ -105,6 +107,14 @@ func (b *containerBackend) Configure(cfg domain.ConfigSandboxSection) {
 	b.tarPath = container.ResolveTarPathProfile(cfg.TarPath, profile)
 	b.mount = cfg.WorkspaceMount
 	b.resources = cfg.Resources
+	b.desktopWidth = cfg.DesktopWidth
+	b.desktopHeight = cfg.DesktopHeight
+	if b.desktopWidth <= 0 {
+		b.desktopWidth = domain.DefaultDesktopWidth
+	}
+	if b.desktopHeight <= 0 {
+		b.desktopHeight = domain.DefaultDesktopHeight
+	}
 	b.tarMissing = b.tarPath == ""
 	if !b.tarMissing {
 		b.daemonDown = false
@@ -227,14 +237,19 @@ func (b *containerBackend) ExecDesktop(ctx context.Context, opts port.SandboxRun
 	if err := b.ensureImage(ctx); err != nil {
 		return nil, err
 	}
-	name, mount, err := b.ensureProjectContainer(ctx, opts, domain.ConfigSandboxSection{
+	b.mu.Lock()
+	deskCfg := domain.ConfigSandboxSection{
 		Profile:        domain.SandboxProfileDesktop,
 		Network:        domain.SandboxNetworkAllow, // desktop needs net for Chromium/CDP internals
 		WorkspaceMount: b.mount,
 		Resources:      b.resources,
 		Image:          b.image,
 		TarPath:        b.tarOverride,
-	})
+		DesktopWidth:   b.desktopWidth,
+		DesktopHeight:  b.desktopHeight,
+	}
+	b.mu.Unlock()
+	name, mount, err := b.ensureProjectContainer(ctx, opts, deskCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +361,18 @@ func (b *containerBackend) ensureProjectContainer(ctx context.Context, opts port
 	})
 	env = ensureWorkHomeEnv(env)
 	if profile == domain.SandboxProfileDesktop {
-		env = append(env, "DISPLAY="+desktopDisplay)
+		w, h := cfg.DesktopWidth, cfg.DesktopHeight
+		if w <= 0 {
+			w = domain.DefaultDesktopWidth
+		}
+		if h <= 0 {
+			h = domain.DefaultDesktopHeight
+		}
+		env = append(env,
+			"DISPLAY="+desktopDisplay,
+			fmt.Sprintf("DISPLAY_WIDTH=%d", w),
+			fmt.Sprintf("DISPLAY_HEIGHT=%d", h),
+		)
 	}
 	var binds []container.Bind
 	if bind, ok := workHomeBind(workDir); ok {
@@ -435,19 +461,34 @@ func (b *containerBackend) refreshEndpoints(ctx context.Context, projectID, name
 
 func (b *containerBackend) waitDesktopReady(ctx context.Context, name, mount string) error {
 	deadline := time.Now().Add(desktopReadyWait)
+	displayOK := false
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
 		}
-		out, err := b.runtime.Exec(ctx, name, mount, "xdpyinfo >/dev/null 2>&1 && echo OK", []string{"DISPLAY=" + desktopDisplay})
-		if err == nil && strings.Contains(string(out), "OK") {
-			return nil
+		if !displayOK {
+			out, err := b.runtime.Exec(ctx, name, mount, "xdpyinfo >/dev/null 2>&1 && echo OK", []string{"DISPLAY=" + desktopDisplay})
+			if err == nil && strings.Contains(string(out), "OK") {
+				displayOK = true
+			}
 		}
-		time.Sleep(200 * time.Millisecond)
+		if displayOK {
+			// Chromium CDP must answer before browser_* attach.
+			out, err := b.runtime.Exec(ctx, name, mount,
+				fmt.Sprintf(`curl -fsS --max-time 1 http://127.0.0.1:%d/json/version >/dev/null && echo CDP_OK`, desktopCDPPort),
+				[]string{"DISPLAY=" + desktopDisplay})
+			if err == nil && strings.Contains(string(out), "CDP_OK") {
+				return nil
+			}
+		}
+		time.Sleep(250 * time.Millisecond)
 	}
-	return fmt.Errorf("desktop: display %s not ready within %s", desktopDisplay, desktopReadyWait)
+	if !displayOK {
+		return fmt.Errorf("desktop: display %s not ready within %s", desktopDisplay, desktopReadyWait)
+	}
+	return fmt.Errorf("desktop: Chromium CDP :%d not ready within %s", desktopCDPPort, desktopReadyWait)
 }
 
 // Teardown stops and removes the per-project container.

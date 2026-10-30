@@ -56,11 +56,28 @@ func New(cfg domain.ConfigSandboxSection) *Manager {
 }
 
 func normalizeConfig(cfg domain.ConfigSandboxSection) domain.ConfigSandboxSection {
+	cfg.Profile = domain.NormalizeSandboxProfile(cfg.Profile)
 	if cfg.Mode == "" {
 		cfg.Mode = domain.SandboxModeWorkspaceWrite
 	}
 	if cfg.Network == "" {
-		cfg.Network = domain.SandboxNetworkDeny
+		// Desktop software-testing usually needs outbound HTTP; cli stays deny-by-default.
+		if cfg.Profile == domain.SandboxProfileDesktop {
+			cfg.Network = domain.SandboxNetworkAllow
+		} else {
+			cfg.Network = domain.SandboxNetworkDeny
+		}
+	}
+	if cfg.Profile == domain.SandboxProfileDesktop {
+		if cfg.DesktopWidth <= 0 {
+			cfg.DesktopWidth = domain.DefaultDesktopWidth
+		}
+		if cfg.DesktopHeight <= 0 {
+			cfg.DesktopHeight = domain.DefaultDesktopHeight
+		}
+		if cfg.DesktopMaxShotEdge <= 0 {
+			cfg.DesktopMaxShotEdge = domain.DefaultDesktopMaxShotEdge
+		}
 	}
 	cfg.AllowlistDomains = netproxy.NormalizeDomains(cfg.AllowlistDomains)
 	return cfg
@@ -112,6 +129,16 @@ func (m *Manager) DesktopProfile() string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return domain.NormalizeSandboxProfile(m.cfg.Profile)
+}
+
+// DesktopMaxShotEdge returns the screenshot long-edge cap for vision tokens.
+func (m *Manager) DesktopMaxShotEdge() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.cfg.DesktopMaxShotEdge > 0 {
+		return m.cfg.DesktopMaxShotEdge
+	}
+	return domain.DefaultDesktopMaxShotEdge
 }
 
 // EnsureDesktop starts the project's desktop container and returns endpoints.
@@ -419,6 +446,14 @@ func (m *Manager) EnvironmentStatus() domain.EnvironmentStatus {
 	}
 	if profile == domain.SandboxProfileDesktop {
 		st.Display = desktopDisplay
+		st.DesktopWidth = cfg.DesktopWidth
+		st.DesktopHeight = cfg.DesktopHeight
+		if st.DesktopWidth <= 0 {
+			st.DesktopWidth = domain.DefaultDesktopWidth
+		}
+		if st.DesktopHeight <= 0 {
+			st.DesktopHeight = domain.DefaultDesktopHeight
+		}
 		if eps := cs.ActiveProjects(); len(eps) > 0 {
 			if ep, ok := cs.DesktopEndpoints(eps[0]); ok {
 				st.CDPURL = ep.CDPURL

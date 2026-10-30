@@ -24,7 +24,8 @@ func TestLinuxSmoke(t *testing.T) {
 		t.Skip("xdotool not installed")
 	}
 
-	m := New(domain.ConfigComputerSection{Enabled: true, Display: display})
+	// MaxShotEdge -1 keeps the raw capture (no JPEG downscale) for smoke asserts.
+	m := New(domain.ConfigComputerSection{Enabled: true, Display: display, MaxShotEdge: -1})
 	st := m.Status()
 	if !st.Available {
 		t.Skipf("desktop control unavailable: %s", st.DegradedReason)
@@ -33,12 +34,12 @@ func TestLinuxSmoke(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Screenshot of the full display must return PNG bytes.
+	// Screenshot of the full display must return image bytes.
 	img, err := m.Screenshot(ctx, "")
 	if err != nil {
 		t.Fatalf("screenshot: %v", err)
 	}
-	if len(img.Data) == 0 || img.MimeType != "image/png" {
+	if len(img.Data) == 0 || (img.MimeType != "image/png" && img.MimeType != "image/jpeg") {
 		t.Fatalf("bad screenshot: %d bytes, mime=%s", len(img.Data), img.MimeType)
 	}
 

@@ -12,6 +12,9 @@ import (
 type DesktopEnvironment interface {
 	// DesktopProfile returns cli|desktop for the active sandbox config.
 	DesktopProfile() string
+	// DesktopMaxShotEdge returns the configured screenshot long-edge cap
+	// (JPEG downscale for the model). Zero/negative callers treat as default.
+	DesktopMaxShotEdge() int
 	// EnsureDesktop starts (or reuses) the project's desktop container and
 	// returns published CDP/noVNC endpoints.
 	EnsureDesktop(ctx context.Context, opts SandboxRunOptions) (domain.DesktopEndpoints, error)

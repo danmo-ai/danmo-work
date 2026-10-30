@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -306,6 +307,9 @@ func (m *Manager) ensureDesktopCDP(ctx context.Context) error {
 	if ep.CDPURL == "" {
 		return fmt.Errorf("desktop browser: CDP port not published yet")
 	}
+	if err := waitHostCDP(ctx, ep.CDPURL, 30*time.Second); err != nil {
+		return fmt.Errorf("desktop browser: %w", err)
+	}
 	m.mu.Lock()
 	// Reset allocator if CDP URL changed so we re-attach.
 	if m.allocMode == "attach" && m.cfg.CDPURL == "" && (m.status.Path != ep.CDPURL) {
@@ -406,6 +410,42 @@ func (m *Manager) sweepIdlePages() {
 	for _, id := range stale {
 		_ = m.ClosePage(context.Background(), id)
 	}
+}
+
+func waitHostCDP(ctx context.Context, cdpURL string, timeout time.Duration) error {
+	cdpURL = strings.TrimRight(strings.TrimSpace(cdpURL), "/")
+	if cdpURL == "" {
+		return fmt.Errorf("empty CDP URL")
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	deadline := time.Now().Add(timeout)
+	var last error
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, cdpURL+"/json/version", nil)
+		if err != nil {
+			return err
+		}
+		resp, err := client.Do(req)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return nil
+			}
+			last = fmt.Errorf("CDP HTTP %d", resp.StatusCode)
+		} else {
+			last = err
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	if last == nil {
+		last = fmt.Errorf("timeout")
+	}
+	return fmt.Errorf("CDP %s not ready: %w", cdpURL, last)
 }
 
 func (m *Manager) probeStatusLocked() domain.BrowserStatus {

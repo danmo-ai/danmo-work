@@ -52,6 +52,13 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     keywords: ['shell', '终端'],
   },
   {
+    id: 'desktop',
+    trigger: 'desktop',
+    labelKey: 'composer.slash.desktop',
+    descriptionKey: 'composer.slash.desktopDesc',
+    keywords: ['vnc', 'novnc', 'sandbox', '桌面', '沙箱'],
+  },
+  {
     id: 'approve',
     trigger: 'approve',
     labelKey: 'composer.slash.approve',

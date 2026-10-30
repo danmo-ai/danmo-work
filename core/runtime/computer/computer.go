@@ -42,6 +42,9 @@ type Manager struct {
 	desktop  *desktopBackend
 	backend  backend
 	env      port.DesktopEnvironment
+	// lastShot maps model image coords → screen coords after downscale.
+	lastImgW, lastImgH   int
+	lastDispW, lastDispH int
 }
 
 // New builds a Manager for the current OS and probes availability.
@@ -98,12 +101,10 @@ func (m *Manager) reselectLocked() {
 func (m *Manager) Status() domain.ComputerStatus {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// Re-probe when desktop may have become available after config/tar load.
 	m.reselectLocked()
 	return m.status
 }
 
-// ready validates that control is both enabled and available before an action.
 func (m *Manager) ready() error {
 	m.mu.Lock()
 	m.reselectLocked()
@@ -121,6 +122,41 @@ func (m *Manager) ready() error {
 		return fmt.Errorf("desktop control unavailable: %s", reason)
 	}
 	return nil
+}
+
+func (m *Manager) maxShotEdge() int {
+	m.mu.Lock()
+	edge := m.cfg.MaxShotEdge
+	env := m.env
+	m.mu.Unlock()
+	if edge != 0 {
+		return edge // negative disables downscale
+	}
+	if env != nil {
+		if n := env.DesktopMaxShotEdge(); n > 0 {
+			return n
+		}
+	}
+	return domain.DefaultDesktopMaxShotEdge
+}
+
+func (m *Manager) rememberShot(img domain.ComputerImage) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.lastImgW, m.lastImgH = img.Width, img.Height
+	m.lastDispW, m.lastDispH = img.DisplayWidth, img.DisplayHeight
+	if m.lastDispW == 0 {
+		m.lastDispW = img.Width
+	}
+	if m.lastDispH == 0 {
+		m.lastDispH = img.Height
+	}
+}
+
+func (m *Manager) mapXY(x, y int) (int, int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return mapShotCoord(x, y, m.lastImgW, m.lastImgH, m.lastDispW, m.lastDispH)
 }
 
 func (m *Manager) ListWindows(ctx context.Context, query string) ([]domain.WindowInfo, error) {
@@ -160,13 +196,20 @@ func (m *Manager) Screenshot(ctx context.Context, windowID string) (domain.Compu
 	m.mu.Lock()
 	b := m.backend
 	m.mu.Unlock()
-	return b.screenshot(ctx, windowID)
+	img, err := b.screenshot(ctx, windowID)
+	if err != nil {
+		return domain.ComputerImage{}, err
+	}
+	img = shrinkComputerImage(img, m.maxShotEdge())
+	m.rememberShot(img)
+	return img, nil
 }
 
 func (m *Manager) MouseMove(ctx context.Context, x, y int) error {
 	if err := m.ready(); err != nil {
 		return err
 	}
+	x, y = m.mapXY(x, y)
 	m.mu.Lock()
 	b := m.backend
 	m.mu.Unlock()
@@ -180,6 +223,9 @@ func (m *Manager) MouseClick(ctx context.Context, button domain.MouseButton, x, 
 	if clicks < 1 {
 		clicks = 1
 	}
+	if x >= 0 && y >= 0 {
+		x, y = m.mapXY(x, y)
+	}
 	m.mu.Lock()
 	b := m.backend
 	m.mu.Unlock()
@@ -190,6 +236,8 @@ func (m *Manager) MouseDrag(ctx context.Context, x0, y0, x1, y1 int) error {
 	if err := m.ready(); err != nil {
 		return err
 	}
+	x0, y0 = m.mapXY(x0, y0)
+	x1, y1 = m.mapXY(x1, y1)
 	m.mu.Lock()
 	b := m.backend
 	m.mu.Unlock()
@@ -202,6 +250,9 @@ func (m *Manager) Scroll(ctx context.Context, x, y int, dir domain.ScrollDirecti
 	}
 	if amount < 1 {
 		amount = 1
+	}
+	if x >= 0 && y >= 0 {
+		x, y = m.mapXY(x, y)
 	}
 	m.mu.Lock()
 	b := m.backend

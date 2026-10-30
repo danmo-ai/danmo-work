@@ -90,11 +90,13 @@ type EnvironmentStatus struct {
 	// ActiveProjects lists project IDs with a running/created container.
 	ActiveProjects []string `json:"activeProjects,omitempty"`
 	// Desktop endpoints (profile=desktop only; populated when a container is running).
-	Display  string `json:"display,omitempty"`  // e.g. ":1"
-	CDPURL   string `json:"cdpUrl,omitempty"`   // host-mapped Chromium CDP
-	NoVNCURL string `json:"novncUrl,omitempty"` // host-mapped noVNC viewer
-	CDPPort  int    `json:"cdpPort,omitempty"`
-	NoVNCPort int   `json:"novncPort,omitempty"`
+	Display       string `json:"display,omitempty"`  // e.g. ":1"
+	CDPURL        string `json:"cdpUrl,omitempty"`   // host-mapped Chromium CDP
+	NoVNCURL      string `json:"novncUrl,omitempty"` // host-mapped noVNC viewer
+	CDPPort       int    `json:"cdpPort,omitempty"`
+	NoVNCPort     int    `json:"novncPort,omitempty"`
+	DesktopWidth  int    `json:"desktopWidth,omitempty"`
+	DesktopHeight int    `json:"desktopHeight,omitempty"`
 }
 
 // EnvironmentTarVariant is one arch-specific env image download option.

@@ -5,7 +5,7 @@ import { isWorkbenchId, type WorkbenchId } from '@/types/workbench'
 
 export type { FileEngine, FileKind, FileMode }
 
-export type RightWorkspaceTab = 'plan' | 'files' | 'memory' | 'tables' | 'changes' | 'terminal' | 'trajectory'
+export type RightWorkspaceTab = 'plan' | 'files' | 'memory' | 'tables' | 'changes' | 'terminal' | 'desktop' | 'trajectory'
 export type LayoutMode = 'chat' | 'stage' | 'immersive'
 
 const ACTIVE_WORKBENCH_KEY = 'app-active-workbench'

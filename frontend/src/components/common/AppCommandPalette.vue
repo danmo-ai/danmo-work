@@ -156,6 +156,12 @@ const actions = computed<PaletteAction[]>(() => [
     run: () => goTab('terminal'),
   },
   {
+    id: 'tab.desktop',
+    title: t('commandPalette.tabDesktop'),
+    group: t('commandPalette.groupNavigate'),
+    run: () => goTab('desktop'),
+  },
+  {
     id: 'tab.trajectory',
     title: t('commandPalette.tabTrajectory'),
     group: t('commandPalette.groupNavigate'),

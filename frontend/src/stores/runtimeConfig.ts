@@ -19,6 +19,9 @@ export interface RuntimeForm {
   envWorkspaceMount: string
   envCpus: string
   envMemory: string
+  envDesktopWidth: number
+  envDesktopHeight: number
+  envDesktopMaxShotEdge: number
   browserEnabled: boolean
   browserExecutablePath: string
   browserCdpUrl: string
@@ -52,7 +55,8 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     permissionMode: rt.permissionMode || 'interactive',
     sandboxEnabled: sb?.enabled ?? true,
     sandboxMode: sb?.mode ?? 'workspace-write',
-    sandboxNetwork: sb?.network ?? 'deny',
+    sandboxNetwork: (sb?.network
+      || (sb?.profile === 'desktop' ? 'allow' : 'deny')) as RuntimeForm['sandboxNetwork'],
     sandboxAllowlistDomains: (sb?.allowlistDomains ?? []).join('\n'),
     sandboxBackend: sb?.backend ?? '',
     envProfile: (sb?.profile === 'desktop' ? 'desktop' : 'cli'),
@@ -61,6 +65,10 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     envWorkspaceMount: sb?.workspaceMount ?? '',
     envCpus: sb?.resources?.cpus ?? '',
     envMemory: sb?.resources?.memory ?? '',
+    envDesktopWidth: sb?.desktopWidth && sb.desktopWidth > 0 ? sb.desktopWidth : 1280,
+    envDesktopHeight: sb?.desktopHeight && sb.desktopHeight > 0 ? sb.desktopHeight : 800,
+    envDesktopMaxShotEdge:
+      sb?.desktopMaxShotEdge && sb.desktopMaxShotEdge > 0 ? sb.desktopMaxShotEdge : 1024,
     browserEnabled: br?.enabled ?? true,
     browserExecutablePath: br?.executablePath ?? '',
     browserCdpUrl: br?.cdpUrl ?? '',
@@ -184,6 +192,18 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
                 memory: form.envMemory.trim() || undefined,
               }
             : undefined,
+          desktopWidth:
+            containerSelected && form.envProfile === 'desktop' && form.envDesktopWidth > 0
+              ? form.envDesktopWidth
+              : undefined,
+          desktopHeight:
+            containerSelected && form.envProfile === 'desktop' && form.envDesktopHeight > 0
+              ? form.envDesktopHeight
+              : undefined,
+          desktopMaxShotEdge:
+            containerSelected && form.envProfile === 'desktop' && form.envDesktopMaxShotEdge > 0
+              ? form.envDesktopMaxShotEdge
+              : undefined,
         },
         browser: {
           enabled: form.browserEnabled,

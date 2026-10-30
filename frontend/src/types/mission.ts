@@ -251,6 +251,9 @@ export interface ConfigFile {
         memory?: string
         pids?: number
       }
+      desktopWidth?: number
+      desktopHeight?: number
+      desktopMaxShotEdge?: number
     }
     environment?: {
       backend?: 'local' | 'container' | string
@@ -421,6 +424,8 @@ export interface EnvironmentStatus {
   novncUrl?: string
   cdpPort?: number
   novncPort?: number
+  desktopWidth?: number
+  desktopHeight?: number
 }
 
 export interface BrowserStatus {

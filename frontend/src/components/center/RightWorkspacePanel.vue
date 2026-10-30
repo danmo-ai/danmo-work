@@ -8,6 +8,7 @@ import {
   Terminal,
   Library,
   Grid,
+  Monitor,
 } from '@danqing/dq-shell'
 import PlanPanel from '@/components/center/PlanPanel.vue'
 import FileTree from '@/components/center/FileTree.vue'
@@ -15,6 +16,7 @@ import MemoryPanel from '@/components/center/MemoryPanel.vue'
 import TablesPanel from '@/components/center/TablesPanel.vue'
 import ChangesPanel from '@/components/center/ChangesPanel.vue'
 import TerminalPanel from '@/components/center/TerminalPanel.vue'
+import DesktopPanel from '@/components/center/DesktopPanel.vue'
 import TrajectoryPanel from '@/components/center/TrajectoryPanel.vue'
 import type { StreamEvent, TurnLog } from '@/types/mission'
 import type { RightWorkspaceTab } from '@/stores/workspaceUi'
@@ -44,11 +46,16 @@ const changesPanelRef = ref<InstanceType<typeof ChangesPanel> | null>(null)
 const memoryPanelRef = ref<InstanceType<typeof MemoryPanel> | null>(null)
 const tablesPanelRef = ref<InstanceType<typeof TablesPanel> | null>(null)
 const terminalPanelRef = ref<InstanceType<typeof TerminalPanel> | null>(null)
+const desktopPanelRef = ref<InstanceType<typeof DesktopPanel> | null>(null)
 
 watch(rightTab, async (tab) => {
   if (tab === 'terminal') {
     await nextTick()
     requestAnimationFrame(() => terminalPanelRef.value?.refit?.())
+  }
+  if (tab === 'desktop') {
+    await nextTick()
+    desktopPanelRef.value?.refresh?.()
   }
   if (tab === 'files') {
     await nextTick()
@@ -76,6 +83,7 @@ const tabTitle = computed(() => {
     tables: t('sessions.tabTables'),
     changes: t('sessions.tabChanges'),
     terminal: t('sessions.tabTerminal'),
+    desktop: t('sessions.tabDesktop'),
     trajectory: t('sessions.tabTrajectory'),
   }
   return map[rightTab.value]
@@ -99,6 +107,7 @@ const iconItems = computed(() => [
     badge: props.changesCount && props.changesCount > 0 ? props.changesCount : undefined,
   },
   { value: 'terminal' as const, label: t('sessions.tabTerminal'), icon: Terminal },
+  { value: 'desktop' as const, label: t('sessions.tabDesktop'), icon: Monitor },
 ])
 
 defineExpose({
@@ -155,6 +164,13 @@ defineExpose({
           :active="true"
         />
       </template>
+
+      <DesktopPanel
+        v-else-if="rightTab === 'desktop'"
+        ref="desktopPanelRef"
+        :project-id="projectId"
+        :active="true"
+      />
 
       <TrajectoryPanel
         v-else-if="rightTab === 'trajectory'"

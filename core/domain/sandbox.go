@@ -83,7 +83,22 @@ type ConfigSandboxSection struct {
 	WorkspaceMount string `json:"workspaceMount,omitempty" mapstructure:"workspace_mount" yaml:"workspace_mount,omitempty"`
 	// Resources: default unlimited; optional user overrides (Settings / config).
 	Resources EnvironmentResources `json:"resources,omitempty" mapstructure:"resources" yaml:"resources,omitempty"`
+	// DesktopWidth/DesktopHeight size the Xvfb virtual display (profile=desktop).
+	// Zero → 1280×800.
+	DesktopWidth  int `json:"desktopWidth,omitempty" mapstructure:"desktop_width" yaml:"desktop_width,omitempty"`
+	DesktopHeight int `json:"desktopHeight,omitempty" mapstructure:"desktop_height" yaml:"desktop_height,omitempty"`
+	// DesktopMaxShotEdge caps the longest screenshot edge sent to the model
+	// (profile=desktop or any computer backend). Zero → 1024. Clicks are mapped
+	// back to full display coordinates automatically.
+	DesktopMaxShotEdge int `json:"desktopMaxShotEdge,omitempty" mapstructure:"desktop_max_shot_edge" yaml:"desktop_max_shot_edge,omitempty"`
 }
+
+// Default desktop display geometry.
+const (
+	DefaultDesktopWidth       = 1280
+	DefaultDesktopHeight      = 800
+	DefaultDesktopMaxShotEdge = 1024
+)
 
 // Sandbox image profile constants.
 const (

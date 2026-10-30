@@ -250,6 +250,9 @@ const runtimeForm = ref({
   envWorkspaceMount: '',
   envCpus: '',
   envMemory: '',
+  envDesktopWidth: 1280,
+  envDesktopHeight: 800,
+  envDesktopMaxShotEdge: 1024,
   browserEnabled: true,
   browserExecutablePath: '',
   browserCdpUrl: '',
@@ -1585,6 +1588,30 @@ onUnmounted(() => {
                   </div>
                 </div>
                 <p class="settings-form-group__desc">{{ $t('settings.envProfileDesc') }}</p>
+                <template v-if="runtimeForm.envProfile === 'desktop'">
+                  <div class="settings-form-row">
+                    <div class="settings-field settings-field--half">
+                      <span class="settings-field__label">{{ $t('settings.envDesktopWidth') }}</span>
+                      <DqInput v-model.number="runtimeForm.envDesktopWidth" type="number" min="640" step="1" />
+                    </div>
+                    <div class="settings-field settings-field--half">
+                      <span class="settings-field__label">{{ $t('settings.envDesktopHeight') }}</span>
+                      <DqInput v-model.number="runtimeForm.envDesktopHeight" type="number" min="480" step="1" />
+                    </div>
+                  </div>
+                  <div class="settings-form-row">
+                    <div class="settings-field settings-field--half">
+                      <span class="settings-field__label">{{ $t('settings.envDesktopMaxShotEdge') }}</span>
+                      <DqInput
+                        v-model.number="runtimeForm.envDesktopMaxShotEdge"
+                        type="number"
+                        min="256"
+                        step="1"
+                      />
+                    </div>
+                  </div>
+                  <p class="settings-form-group__desc">{{ $t('settings.envDesktopGeometryDesc') }}</p>
+                </template>
                 <div class="settings-form-row">
                   <div class="settings-field settings-field--half">
                     <span class="settings-field__label">{{ $t('settings.envTarPath') }}</span>
