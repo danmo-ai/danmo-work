@@ -256,6 +256,8 @@ const runtimeForm = ref({
   browserEnabled: true,
   browserExecutablePath: '',
   browserCdpUrl: '',
+  computerEnabled: false,
+  computerDisplay: '',
   doomLoopThreshold: 10,
   maxStepsDefault: 200,
   maxLLMFailures: 3,
@@ -488,6 +490,18 @@ const browserStatusText = computed(() => {
   }
   const path = st.path ? ` @ ${st.path}` : ''
   return `${st.engine} (${st.mode})${path}`
+})
+
+const computerStatusText = computed(() => {
+  const st = runtimeConfig.computerStatus
+  if (!st) return ''
+  if (!st.enabled) return 'disabled'
+  if (!st.available) {
+    return st.degradedReason || 'unavailable'
+  }
+  const display = st.display ? ` · ${st.display}` : ''
+  const platform = st.platform ? `${st.platform}/` : ''
+  return `${platform}${st.backend || 'ok'}${display}`
 })
 
 const modelConfigForm = ref<ModelConfig[]>([])
@@ -1823,6 +1837,38 @@ onUnmounted(() => {
                   class="settings-sandbox-status__degraded"
                 >
                   {{ $t('settings.browserUnavailable') }}: {{ runtimeConfig.browserStatus.degradedReason }}
+                </p>
+              </div>
+            </template>
+          </div>
+
+          <div class="settings-form-group">
+            <h3 class="settings-form-group__title">{{ $t('settings.runtimeComputer') }}</h3>
+            <p class="settings-form-group__desc">{{ $t('settings.computerEnabledDesc') }}</p>
+            <label class="settings-field settings-field--switch">
+              <span class="settings-field__label">{{ $t('settings.computerEnabled') }}</span>
+              <DqSwitch
+                :model-value="runtimeForm.computerEnabled"
+                size="sm"
+                @update:model-value="(v: boolean) => runtimeForm.computerEnabled = v"
+              />
+            </label>
+            <template v-if="runtimeForm.computerEnabled">
+              <div class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.computerDisplay') }}</span>
+                <DqInput
+                  v-model="runtimeForm.computerDisplay"
+                  :placeholder="$t('settings.computerDisplayPlaceholder')"
+                />
+              </div>
+              <div v-if="computerStatusText" class="settings-sandbox-status">
+                <span class="settings-field__label">{{ $t('settings.computerStatus') }}</span>
+                <code class="settings-sandbox-status__value">{{ computerStatusText }}</code>
+                <p
+                  v-if="!runtimeConfig.computerStatus?.available && runtimeConfig.computerStatus?.degradedReason"
+                  class="settings-sandbox-status__degraded"
+                >
+                  {{ $t('settings.computerUnavailable') }}: {{ runtimeConfig.computerStatus.degradedReason }}
                 </p>
               </div>
             </template>

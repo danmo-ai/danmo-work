@@ -47,6 +47,7 @@ type Core struct {
 	Sandbox       port.Sandbox
 	Execution     port.ExecutionBackend
 	Browser       port.Browser
+	Computer      port.Computer
 	Config        *domain.ConfigFile
 	Loader        *config.Loader
 	Sessions      *service.SessionManager
@@ -462,6 +463,7 @@ func New(cfg Config) *Core {
 		Sandbox:       sb,
 		Execution:     sb,
 		Browser:       br,
+		Computer:      computerCtl,
 		Config:        appCfg,
 		Loader:        loader,
 		Sessions:      sessions,

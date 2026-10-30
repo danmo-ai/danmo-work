@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { fetchJSON } from '@/api/client'
 import { toast } from '@/utils/feedback'
 import { i18n } from '@/i18n'
-import type { ConfigFile, UpdateConfigFileRequest, SandboxStatus, BrowserStatus, EnvironmentStatus } from '@/types/mission'
+import type { ConfigFile, UpdateConfigFileRequest, SandboxStatus, BrowserStatus, ComputerStatus, EnvironmentStatus } from '@/types/mission'
 
 export interface RuntimeForm {
   autoApprove: boolean
@@ -25,6 +25,8 @@ export interface RuntimeForm {
   browserEnabled: boolean
   browserExecutablePath: string
   browserCdpUrl: string
+  computerEnabled: boolean
+  computerDisplay: string
   doomLoopThreshold: number
   maxStepsDefault: number
   maxLLMFailures: number
@@ -50,6 +52,7 @@ const CONTAINER_BACKENDS = ['podman', 'docker', 'apple-container']
 function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
   const sb = rt.sandbox
   const br = rt.browser
+  const comp = rt.computer
   return {
     autoApprove: rt.autoApprove,
     permissionMode: rt.permissionMode || 'interactive',
@@ -72,6 +75,8 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     browserEnabled: br?.enabled ?? true,
     browserExecutablePath: br?.executablePath ?? '',
     browserCdpUrl: br?.cdpUrl ?? '',
+    computerEnabled: comp?.enabled ?? false,
+    computerDisplay: comp?.display ?? '',
     doomLoopThreshold: rt.turn.doomLoopThreshold,
     maxStepsDefault: rt.turn.maxStepsDefault,
     maxLLMFailures: rt.turn.maxLLMFailures ?? 3,
@@ -98,6 +103,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
   const sandboxStatus = ref<SandboxStatus | null>(null)
   const environmentStatus = ref<EnvironmentStatus | null>(null)
   const browserStatus = ref<BrowserStatus | null>(null)
+  const computerStatus = ref<ComputerStatus | null>(null)
   const loading = ref(false)
   const saving = ref(false)
 
@@ -153,12 +159,25 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
     }
   }
 
+  async function loadComputerStatus() {
+    try {
+      computerStatus.value = await fetchJSON<ComputerStatus>('/computer/status')
+    } catch {
+      computerStatus.value = null
+    }
+  }
+
   async function loadConfig() {
     loading.value = true
     try {
       const cfg = await fetchJSON<ConfigFile>('/config')
       config.value = formFromRuntime(cfg.runtime)
-      await Promise.all([loadSandboxStatus(), loadEnvironmentStatus(), loadBrowserStatus()])
+      await Promise.all([
+        loadSandboxStatus(),
+        loadEnvironmentStatus(),
+        loadBrowserStatus(),
+        loadComputerStatus(),
+      ])
     } catch {
       config.value = null
     } finally {
@@ -210,6 +229,10 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
           executablePath: form.browserExecutablePath || undefined,
           cdpUrl: form.browserCdpUrl || undefined,
         },
+        computer: {
+          enabled: form.computerEnabled,
+          display: form.computerDisplay.trim() || undefined,
+        },
         turn: {
           doomLoopThreshold: form.doomLoopThreshold,
           maxStepsDefault: form.maxStepsDefault,
@@ -248,7 +271,12 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
         body: JSON.stringify(req),
       })
       config.value = formFromRuntime(cfg.runtime)
-      await Promise.all([loadSandboxStatus(), loadEnvironmentStatus(), loadBrowserStatus()])
+      await Promise.all([
+        loadSandboxStatus(),
+        loadEnvironmentStatus(),
+        loadBrowserStatus(),
+        loadComputerStatus(),
+      ])
       toast.success(i18n.global.t('settings.runtimeSaved'))
     } catch (e) {
       toast.error(e instanceof Error ? e.message : i18n.global.t('common.saveFailed'))
@@ -263,6 +291,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
     sandboxStatus,
     environmentStatus,
     browserStatus,
+    computerStatus,
     loading,
     saving,
     downloadingTar,
@@ -270,6 +299,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
     loadSandboxStatus,
     loadEnvironmentStatus,
     loadBrowserStatus,
+    loadComputerStatus,
     downloadEnvTar,
     saveConfig,
   }

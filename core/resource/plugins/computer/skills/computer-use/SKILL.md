@@ -8,9 +8,11 @@ description: >-
 license: Apache-2.0
 compatibility: >-
   Requires the `computer` tool bound and runtime.computer.enabled=true.
-  Linux needs an X11 DISPLAY + xdotool + a screenshot tool (imagemagick/scrot/
-  ffmpeg/xwd); macOS needs Accessibility + Screen Recording permission (mouse
-  via cliclick); Windows uses PowerShell. Screenshots require a vision model.
+  With sandbox.profile=desktop + container backend, actions target the Xvfb
+  sandbox (not the host GUI). Otherwise: Linux needs an X11 DISPLAY + xdotool +
+  a screenshot tool (imagemagick/scrot/ffmpeg/xwd); macOS needs Accessibility +
+  Screen Recording permission (mouse via cliclick); Windows uses PowerShell.
+  Screenshots require a vision model.
 metadata:
   author: danmo
   version: "0.1.0"
@@ -20,8 +22,12 @@ metadata:
 # Computer Use (desktop GUI control)
 
 Drive real application windows through the single `computer` tool. Every call
-asks the user for approval (`desktop_control`) and controls the actual machine
-with no sandbox, so act deliberately and verify each step.
+asks the user for approval. With `runtime.sandbox.profile=desktop` this drives
+the sandboxed Xvfb desktop (same machine as sandbox Chromium / noVNC) — not the
+host GUI. Otherwise it controls the host. Act deliberately and verify each step.
+
+For web pages prefer the `browser` expert (`browser_*`). CDP is always
+`http://127.0.0.1:9222` (sandbox or host).
 
 ## Core loop
 

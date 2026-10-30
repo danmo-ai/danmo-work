@@ -17,8 +17,8 @@ func TestFormatCreateArgsDesktopKeepImageCmd(t *testing.T) {
 		KeepImageCmd: true,
 		ShmSize:      "1g",
 		Ports: []PortPublish{
-			{HostIP: "127.0.0.1", ContainerPort: 9222},
-			{HostIP: "127.0.0.1", ContainerPort: 6080},
+			{HostIP: "127.0.0.1", HostPort: 9222, ContainerPort: 9222},
+			{HostIP: "127.0.0.1", HostPort: 6080, ContainerPort: 6080},
 		},
 		Env: []string{"DISPLAY=:1"},
 	}
@@ -44,8 +44,8 @@ func TestFormatCreateArgsDesktopKeepImageCmd(t *testing.T) {
 	joined := strings.Join(args, " ")
 	for _, want := range []string{
 		"--shm-size 1g",
-		"-p 127.0.0.1::9222/tcp",
-		"-p 127.0.0.1::6080/tcp",
+		"-p 127.0.0.1:9222:9222/tcp",
+		"-p 127.0.0.1:6080:6080/tcp",
 		"-e DISPLAY=:1",
 		domain.EnvImageTagDesktop,
 	} {

@@ -272,6 +272,10 @@ export interface ConfigFile {
       executablePath?: string
       cdpUrl?: string
     }
+    computer?: {
+      enabled: boolean
+      display?: string
+    }
     turn: {
       doomLoopThreshold: number
       maxStepsDefault: number
@@ -437,6 +441,15 @@ export interface BrowserStatus {
   degradedReason?: string
 }
 
+export interface ComputerStatus {
+  available: boolean
+  enabled: boolean
+  platform?: string
+  backend?: string
+  display?: string
+  degradedReason?: string
+}
+
 export interface UpdateConfigFileRequest {
   data?: ConfigFile['data']
   server?: ConfigFile['server']
@@ -458,6 +471,8 @@ export interface RuntimeConfigForm {
   browserEnabled?: boolean
   browserExecutablePath?: string
   browserCdpUrl?: string
+  computerEnabled?: boolean
+  computerDisplay?: string
   doomLoopThreshold: number
   maxStepsDefault: number
   maxLLMFailures: number

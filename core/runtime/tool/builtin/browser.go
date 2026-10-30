@@ -120,7 +120,7 @@ func (h *BrowserNavigate) Schema() domain.ToolSchema {
 			"- Loopback (127.0.0.1, localhost, ::1) is allowed. Other private, link-local, and metadata addresses stay blocked.\n" +
 			"- wait_until: load | domcontentloaded | networkidle (default load).\n" +
 			"- After navigate, call browser_act with refs from the snapshot. Use browser_screenshot only when vision is needed.\n" +
-			"- Requires local Chrome/Edge/Chromium or runtime.browser.cdp_url.",
+			"- Requires local Chrome/Edge/Chromium, runtime.browser.cdp_url, or sandbox profile=desktop (CDP http://127.0.0.1:9222).",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

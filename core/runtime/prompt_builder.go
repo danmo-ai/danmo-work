@@ -306,13 +306,10 @@ func buildRuntimeEnvironment(st domain.SandboxStatus, envSt domain.EnvironmentSt
 			if envSt.Display != "" {
 				b.WriteString("Display: " + envSt.Display + "\n")
 			}
-			if envSt.CDPURL != "" {
-				b.WriteString("Chromium CDP: " + envSt.CDPURL + "\n")
-			}
-			if envSt.NoVNCURL != "" {
-				b.WriteString("noVNC: " + envSt.NoVNCURL + "\n")
-			}
-			b.WriteString("Note: exec_shell, computer, and browser_* target this desktop sandbox. Project dir and $WORK_HOME are bind-mounted at the same absolute host paths. Prefer browser_* for web UI; use computer for native GUI.\n")
+			// Do not inject host-mapped CDP/noVNC URLs into the prompt: ephemeral
+			// publish ports (or any concrete CDP URL) make the model probe/curl
+			// them. browser_* attaches to http://127.0.0.1:9222 itself.
+			b.WriteString("Note: exec_shell, computer, and browser_* target this desktop sandbox. Project dir and $WORK_HOME are bind-mounted at the same absolute host paths. Prefer browser_* for web UI (CDP attach is automatic; do not probe CDP ports). Use computer for native GUI. noVNC is for the human observer in Settings, not for agents.\n")
 		} else {
 			b.WriteString("Preinstalled: " + domain.EnvImagePreinstalled + "\n")
 			b.WriteString("Note: exec_shell runs inside the per-project container. The project directory and $WORK_HOME (plugin packs, read-only) are bind-mounted at the same absolute host paths. WORK_HOME is set.\n")

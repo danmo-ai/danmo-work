@@ -34,10 +34,12 @@ DQ_ENV_PROFILE=desktop make build-env-tar
 
 ## Ports (published to host loopback)
 
-| Container | Purpose |
-|-----------|---------|
-| 9222 | Chromium CDP (browser_* attach) |
-| 6080 | noVNC web viewer |
+| Host ↔ Container | Purpose |
+|------------------|---------|
+| `127.0.0.1:9222` → `:9222` | Chromium CDP (`browser_*` / Settings) |
+| `127.0.0.1:6080` → `:6080` | noVNC web viewer |
+
+Same CDP port as a host Chrome with remote debugging (`http://127.0.0.1:9222`).
 
 ## Related
 

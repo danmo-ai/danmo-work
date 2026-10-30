@@ -7,11 +7,12 @@ description: >-
   readable page extraction.
 license: MIT
 compatibility: >-
-  Local Chrome/Edge/Chromium (auto-launched headless) or runtime.browser.cdp_url
-  attach; vision model optional for browser_screenshot.
+  Local Chrome/Edge/Chromium (auto-launched headless) or CDP attach at
+  http://127.0.0.1:9222 (host browser or sandbox desktop Chromium — same port).
+  Vision model optional for browser_screenshot.
 metadata:
   author: danmo
-  version: "0.1.0"
+  version: "0.1.1"
   category: research
 ---
 
@@ -31,8 +32,14 @@ delete.
 
 ## Engine modes
 
-- **Launch (default):** no `cdp_url` → local Chrome/Edge/Chromium starts headless.
-- **Attach:** Settings CDP URL (e.g. `http://127.0.0.1:9222`) → attach to that browser; closing tabs does not kill the remote process.
+CDP default is always `http://127.0.0.1:9222` — same for sandbox desktop Chromium
+and a host Chrome/Edge with remote debugging. Call `browser_*`; do not manage
+ports yourself.
+
+- **Attach:** something already listening on CDP `:9222` (desktop sandbox or
+  Settings `runtime.browser.cdp_url`) → attach; closing tabs does not kill the
+  remote process.
+- **Launch:** no CDP listener → local Chrome/Edge/Chromium starts headless.
 
 ## Local files and dev servers
 

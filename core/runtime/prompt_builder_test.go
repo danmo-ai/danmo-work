@@ -132,18 +132,29 @@ func TestBuildRuntimeEnvironmentContainer(t *testing.T) {
 		Profile:  domain.SandboxProfileDesktop,
 		Image:    domain.EnvImageTagDesktop,
 		Display:  ":1",
-		CDPURL:   "http://127.0.0.1:49152",
-		NoVNCURL: "http://127.0.0.1:49153/vnc.html",
+		CDPURL:   "http://127.0.0.1:45063", // must NOT appear in the prompt
+		NoVNCURL: "http://127.0.0.1:45064/vnc.html",
 	})
 	for _, want := range []string{
 		"OCI desktop container",
 		"Image profile: desktop",
 		"Xvfb",
-		"Chromium CDP: http://127.0.0.1:49152",
-		"noVNC: http://127.0.0.1:49153/vnc.html",
+		"Display: :1",
+		"browser_*",
+		"do not probe CDP ports",
 	} {
 		if !strings.Contains(desk, want) {
 			t.Fatalf("missing %q in:\n%s", want, desk)
+		}
+	}
+	for _, ban := range []string{
+		"Chromium CDP:",
+		"45063",
+		"45064",
+		"noVNC: http://",
+	} {
+		if strings.Contains(desk, ban) {
+			t.Fatalf("prompt must not inject mapped CDP/noVNC URL %q:\n%s", ban, desk)
 		}
 	}
 
