@@ -18,7 +18,7 @@ const EnvImagePreinstalled = "Alpine Linux (busybox coreutils) with bash, git, c
 
 // EnvDesktopImagePreinstalled describes the desktop agent image
 // (environments/agent-desktop/Dockerfile). Keep in sync with that Dockerfile.
-const EnvDesktopImagePreinstalled = "Ubuntu 24.04 desktop sandbox with Xvfb :1, openbox, xterm, Chromium (CDP :9222), xdotool/scrot/ImageMagick, x11vnc + noVNC (:6080); bash/git/curl/jq preinstalled"
+const EnvDesktopImagePreinstalled = "Ubuntu 24.04 desktop sandbox with Xvfb :1, openbox, xterm, Chromium (CDP http://127.0.0.1:9222), xdotool/scrot/ImageMagick, x11vnc + noVNC (http://127.0.0.1:6080); bash/git/curl/jq preinstalled"
 
 // Default OCI image tags after local tar load (never registry pull).
 const (

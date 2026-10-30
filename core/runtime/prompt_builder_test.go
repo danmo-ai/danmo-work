@@ -132,15 +132,15 @@ func TestBuildRuntimeEnvironmentContainer(t *testing.T) {
 		Profile:  domain.SandboxProfileDesktop,
 		Image:    domain.EnvImageTagDesktop,
 		Display:  ":1",
-		CDPURL:   "http://127.0.0.1:49152",
-		NoVNCURL: "http://127.0.0.1:49153/vnc.html",
+		CDPURL:   "http://127.0.0.1:9222",
+		NoVNCURL: "http://127.0.0.1:6080/vnc.html",
 	})
 	for _, want := range []string{
 		"OCI desktop container",
 		"Image profile: desktop",
 		"Xvfb",
-		"Chromium CDP: http://127.0.0.1:49152",
-		"noVNC: http://127.0.0.1:49153/vnc.html",
+		"Chromium CDP: http://127.0.0.1:9222",
+		"noVNC: http://127.0.0.1:6080/vnc.html",
 	} {
 		if !strings.Contains(desk, want) {
 			t.Fatalf("missing %q in:\n%s", want, desk)

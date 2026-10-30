@@ -410,9 +410,11 @@ func (b *containerBackend) ensureProjectContainer(ctx context.Context, opts port
 	}
 	if profile == domain.SandboxProfileDesktop {
 		create.ShmSize = desktopShmSize
+		// Fixed host ports match container defaults so browser_* / Settings can
+		// always use http://127.0.0.1:9222 (same as a host Chrome with CDP).
 		create.Ports = []container.PortPublish{
-			{HostIP: "127.0.0.1", ContainerPort: desktopCDPPort},
-			{HostIP: "127.0.0.1", ContainerPort: desktopNoVNCPort},
+			{HostIP: "127.0.0.1", HostPort: desktopCDPPort, ContainerPort: desktopCDPPort},
+			{HostIP: "127.0.0.1", HostPort: desktopNoVNCPort, ContainerPort: desktopNoVNCPort},
 		}
 		// Use image ENTRYPOINT (desktop-entrypoint.sh); do not override with sleep.
 		create.KeepImageCmd = true
@@ -437,21 +439,24 @@ func (b *containerBackend) refreshEndpoints(ctx context.Context, projectID, name
 	if profile != domain.SandboxProfileDesktop {
 		return nil
 	}
-	ports, err := b.runtime.InspectPublishedPorts(ctx, name)
-	if err != nil {
-		return err
-	}
+	// Defaults match container Chromium/noVNC and the fixed HostPort publish.
 	ep := domain.DesktopEndpoints{
 		Display:   desktopDisplay,
 		Container: name,
+		CDPPort:   desktopCDPPort,
+		CDPURL:    fmt.Sprintf("http://127.0.0.1:%d", desktopCDPPort),
+		NoVNCPort: desktopNoVNCPort,
+		NoVNCURL:  fmt.Sprintf("http://127.0.0.1:%d/vnc.html", desktopNoVNCPort),
 	}
-	if hp, ok := ports[desktopCDPPort]; ok && hp > 0 {
-		ep.CDPPort = hp
-		ep.CDPURL = fmt.Sprintf("http://127.0.0.1:%d", hp)
-	}
-	if hp, ok := ports[desktopNoVNCPort]; ok && hp > 0 {
-		ep.NoVNCPort = hp
-		ep.NoVNCURL = fmt.Sprintf("http://127.0.0.1:%d/vnc.html", hp)
+	if ports, err := b.runtime.InspectPublishedPorts(ctx, name); err == nil {
+		if hp, ok := ports[desktopCDPPort]; ok && hp > 0 {
+			ep.CDPPort = hp
+			ep.CDPURL = fmt.Sprintf("http://127.0.0.1:%d", hp)
+		}
+		if hp, ok := ports[desktopNoVNCPort]; ok && hp > 0 {
+			ep.NoVNCPort = hp
+			ep.NoVNCURL = fmt.Sprintf("http://127.0.0.1:%d/vnc.html", hp)
+		}
 	}
 	b.mu.Lock()
 	b.endpoints[projectID] = ep

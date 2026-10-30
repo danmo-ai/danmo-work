@@ -37,8 +37,13 @@ exec_shell / browser_* / computer
         └─ profile=desktop → Ubuntu Xvfb + openbox + Chromium(CDP) + x11vnc/noVNC
                                 │
                                 ├─ computer → container exec DISPLAY=:1 + xdotool/scrot
-                                └─ browser  → attach published CDP (127.0.0.1:<host>)
+                                └─ browser  → attach CDP http://127.0.0.1:9222
+                                              (container :9222 published to host :9222)
 ```
+
+CDP default is `http://127.0.0.1:9222` for both sandbox Chromium and a host
+browser with remote debugging — `browser_*` does not need a different port.
+
 
 ## Non-goals (this phase)
 

@@ -21,6 +21,20 @@ var _ port.Browser = (*Manager)(nil)
 
 const sessionIdleTTL = 15 * time.Minute
 
+// defaultCDPURL is the shared CDP endpoint for host Chrome remote-debugging and
+// desktop-sandbox Chromium (container :9222 published to host :9222).
+const defaultCDPURL = "http://127.0.0.1:9222"
+
+func isDefaultLoopbackCDP(raw string) bool {
+	raw = strings.TrimRight(strings.TrimSpace(strings.ToLower(raw)), "/")
+	switch raw {
+	case "", strings.ToLower(defaultCDPURL), "http://localhost:9222", "http://[::1]:9222":
+		return true
+	default:
+		return false
+	}
+}
+
 // Manager launches or attaches to a CDP browser for one-shot HTML renders
 // and sticky interactive pages (browser_* tools).
 type Manager struct {
@@ -291,7 +305,13 @@ func (m *Manager) ensureDesktopCDP(ctx context.Context) error {
 	opts := m.desktopOpts
 	cfgCDP := m.cfg.CDPURL
 	m.mu.Unlock()
-	if cfgCDP != "" || desktop == nil || desktop.DesktopProfile() != domain.SandboxProfileDesktop {
+	if desktop == nil || desktop.DesktopProfile() != domain.SandboxProfileDesktop {
+		return nil
+	}
+	// Custom (non-default) cdp_url → attach elsewhere; skip sandbox bring-up.
+	// Empty or http://127.0.0.1:9222 still ensures the desktop container so the
+	// shared default port is actually listening.
+	if cfgCDP != "" && !isDefaultLoopbackCDP(cfgCDP) {
 		return nil
 	}
 	if opts.ProjectID == "" {
@@ -321,7 +341,7 @@ func (m *Manager) ensureDesktopCDP(ctx context.Context) error {
 		}
 	}
 	m.status = m.probeStatusLocked()
-	// Stash ephemeral CDP on status.Path for ensureAllocatorLocked.
+	// Stash sandbox CDP (http://127.0.0.1:9222) on status.Path for ensureAllocatorLocked.
 	if m.cfg.CDPURL == "" && ep.CDPURL != "" {
 		m.status.Available = true
 		m.status.Mode = "attach"
@@ -449,29 +469,29 @@ func waitHostCDP(ctx context.Context, cdpURL string, timeout time.Duration) erro
 }
 
 func (m *Manager) probeStatusLocked() domain.BrowserStatus {
-	st := probeStatus(m.cfg)
-	if st.Available {
-		return st
+	// Non-default Settings cdp_url wins (remote / alternate host port).
+	if cdp := strings.TrimSpace(m.cfg.CDPURL); cdp != "" && !isDefaultLoopbackCDP(cdp) {
+		return probeStatus(m.cfg)
 	}
-	// Sandbox desktop Chromium is an attach target once the container is up.
+	// When sandbox.profile=desktop, prefer the container Chromium over launching
+	// a second host browser. CDP is still defaultCDPURL (:9222 on host and in
+	// the container) — same address a host Chrome with remote debugging uses.
 	if m.desktop != nil && m.desktop.DesktopProfile() == domain.SandboxProfileDesktop && m.cfg.Enabled {
+		st := domain.BrowserStatus{
+			Enabled:   true,
+			Available: true,
+			Mode:      "attach",
+			Engine:    "cdp-sandbox",
+		}
 		if ep, ok := m.desktop.DesktopEndpoints(m.desktopOpts.ProjectID); ok && ep.CDPURL != "" {
-			st.Available = true
-			st.Mode = "attach"
-			st.Engine = "cdp-sandbox"
 			st.Path = ep.CDPURL
-			st.DegradedReason = ""
 			return st
 		}
 		// Desktop profile selected but container not started yet — still mark
 		// available so AcquirePage can EnsureDesktop on demand.
-		st.Available = true
-		st.Mode = "attach"
-		st.Engine = "cdp-sandbox"
-		st.DegradedReason = ""
 		return st
 	}
-	return st
+	return probeStatus(m.cfg)
 }
 
 func probeStatus(cfg domain.ConfigBrowserSection) domain.BrowserStatus {

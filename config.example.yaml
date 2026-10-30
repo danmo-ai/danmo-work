@@ -83,17 +83,20 @@ runtime:
       cpus: ""      # e.g. "2" — empty = unlimited
       memory: ""    # e.g. "2g" — empty = unlimited
       # pids: 0     # docker/podman --pids-limit; 0 = omit
-  # Headless browser for web_fetch JS rendering (chromedp + system Chrome/Edge).
-  # Does not ship a browser binary. Leave cdp_url empty to auto-launch a local browser.
+  # Headless / CDP browser for web_fetch + browser_* (chromedp).
+  # Does not ship a browser binary. Leave cdp_url empty to auto-launch a local
+  # browser, or (with sandbox.profile=desktop) auto-attach to sandbox Chromium.
+  # CDP default is http://127.0.0.1:9222 for both host and desktop sandbox.
   browser:
     enabled: true
     executable_path: ""   # optional absolute path to chrome/chromium/edge
     cdp_url: ""           # optional attach URL, e.g. http://127.0.0.1:9222
   # Desktop control for the `computer` tool (find/focus windows, mouse, keyboard,
-  # screenshots). Off by default: it drives the host GUI with no sandbox and each
-  # call requires approval. Linux needs xdotool + a screenshot tool (imagemagick/
-  # scrot/ffmpeg); macOS needs Accessibility+Screen Recording TCC (mouse via
-  # cliclick); Windows uses PowerShell.
+  # screenshots). Off by default. With sandbox.profile=desktop + container backend
+  # it drives the Xvfb sandbox; otherwise the host GUI. Each call requires approval.
+  # Host Linux needs xdotool + a screenshot tool (imagemagick/scrot/ffmpeg);
+  # macOS needs Accessibility+Screen Recording TCC (mouse via cliclick);
+  # Windows uses PowerShell.
   computer:
     enabled: false
     display: ""           # optional X11 DISPLAY override on Linux (e.g. ":1")
