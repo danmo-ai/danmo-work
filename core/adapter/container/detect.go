@@ -2,17 +2,21 @@ package container
 
 import (
 	"fmt"
-	"os/exec"
 	"runtime"
 	"strings"
 
 	"danmo-work/core/domain"
+	"danmo-work/core/paths"
 )
 
 // Detect picks a Runtime. prefer may be auto|podman|docker|apple-container.
 // Probe order when auto: on darwin prefer Apple `container`, then podman, docker;
 // elsewhere podman then docker.
+//
+// On macOS desktop apps, PATH is often minimal (no Homebrew/Docker Desktop).
+// lookCLI fills those gaps before reporting "not in PATH".
 func Detect(prefer domain.EnvironmentEngine) (Runtime, error) {
+	paths.EnsureHostPATH()
 	want := strings.ToLower(strings.TrimSpace(string(prefer)))
 	switch want {
 	case "", "auto":
@@ -38,7 +42,7 @@ func detectAuto() (Runtime, error) {
 		}
 	}
 	for _, name := range []string{"podman", "docker"} {
-		if p, err := exec.LookPath(name); err == nil && p != "" {
+		if p, err := lookCLI(name); err == nil && p != "" {
 			return newCLIRuntime(p, name), nil
 		}
 		tried = append(tried, name+" not in PATH")
@@ -54,7 +58,7 @@ func detectAuto() (Runtime, error) {
 }
 
 func requireCLI(bin, name string) (Runtime, error) {
-	p, err := exec.LookPath(bin)
+	p, err := lookCLI(bin)
 	if err != nil || p == "" {
 		return nil, fmt.Errorf("container: %s not in PATH", bin)
 	}
@@ -70,7 +74,7 @@ func requireApple() (Runtime, error) {
 }
 
 func tryApple() (Runtime, error) {
-	p, err := exec.LookPath("container")
+	p, err := lookCLI("container")
 	if err != nil || p == "" {
 		return nil, fmt.Errorf("apple-container: `container` not in PATH")
 	}

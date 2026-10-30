@@ -72,6 +72,10 @@ type Core struct {
 }
 
 func New(cfg Config) *Core {
+	// Desktop macOS (and some Linux GUI launches) inherit a stripped PATH.
+	// Prepend Homebrew / Docker Desktop / Podman locations before any LookPath.
+	paths.EnsureHostPATH()
+
 	loader := config.NewLoader(cfg.ConfigPath)
 	appCfg, err := loader.Load(context.Background())
 	if err != nil {
