@@ -59,6 +59,9 @@ The lead agent runs the session; specialists do focused work on demand, each in 
 | **Explorer** | Read-only codebase exploration |
 | **Researcher** | Deep research and retrieval |
 | **Reviewer** | Code and artifact review |
+| **Browser** | Multi-step web UI operation (`browser_*`) |
+| **Computer** | Desktop GUI automation (`computer`) |
+| **UI Test** | Web UI testing: Markdown specs executed via `browser_*` / `computer` on the Linux sandbox |
 | **Data** | CSV / JSON analysis and reporting |
 | **GitHub** | Issues, PRs, Actions, releases |
 | **Danmo Make** | Local image / video / audio generation (separate app) |
