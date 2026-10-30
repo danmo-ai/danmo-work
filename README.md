@@ -25,12 +25,12 @@
 
 | | |
 |--|--|
-| **Multi-agent teams** | **Team** lead delegates built-in specialists — Document, Implementer, Researcher, Reviewer, Browser, Computer, UI Test, GitHub, Novel Writing… — each in an isolated sub-turn; main context stays lean |
+| **Multi-agent teams** | **Team** lead delegates built-in specialists — Document, Implementer, Researcher, Reviewer, Browser, Computer, UI Test, GitHub, Danmo Make, Danmo Novel… — each in an isolated sub-turn; main context stays lean |
 | **Plan → Execute** | Plan mode publishes via `create_plan` / `update_plan` into the right-hand Plan panel; hit **Execute** to send the plan into Composer. Day-to-day checklists still use `todowrite` |
 | **File Stage + AI Diff** | Docs, slides, sheets, code, web, media, and diff on one canvas — routed by `routeProjectFile`; local HTML opens through app preview; pre-turn snapshot → review hunks → keep / revert / accept |
-| **Novel workbench** | Scrivener-style shelf: book → volume → unit queue, cast wall & relation graph, one primary CTA per stage. Setup → plan → write → review with craft KB, anti-AI gates, and multi-model turns |
 | **UI tests for your projects** | From **your project's code changes**, the **UI Test** expert auto-authors Markdown specs into that project's `ui-tests/`, then runs them with **browser use** (`browser_*`) and **computer use** (`computer`) in the Linux **desktop** sandbox — PASS/FAIL with evidence. Not a suite for Danmo Work itself |
 | **Humans in the loop** | `ask_user` with options and forms; approval gates before risky shell, desktop control, or external MCP — same flow in desktop and IM chats |
+| **Plans that stay alive** | `todowrite` is the plan: status updates as work proceeds, items marked done only after verification, rewritten when scope drifts |
 | **Memory, tables & knowledge** | `memory_*` across user / project / agent scopes; schema-free `table_*` rows in `store.db`; Markdown knowledge bases with chapter-level FTS |
 | **Skills, plugins & connectors** | Skill / plugin market (official catalog, Tech Leads Club, ClawHub, ArtCraft office CLIs); ambient disk skills; MCP connectors bound per agent; Codex-style plugin `hooks.json` |
 | **Real sandbox** | OS-level isolation (Seatbelt / Landlock / bwrap / WSL2) or Podman/Docker env; `cli` Alpine shell or `desktop` (Xvfb + Chromium CDP + noVNC) profile; network deny / domain allowlist; four permission modes |
@@ -66,7 +66,7 @@ The lead agent runs the session; specialists do focused work on demand, each in 
 | **Data** | CSV / JSON analysis and reporting |
 | **GitHub** | Issues, PRs, Actions, releases |
 | **Danmo Make** | Local image / video / audio generation (separate app) |
-| **Novel Writing** | Long-form fiction workbench: setup → plan → unit draft → review/commit; genre craft KB + quantitative anti-AI gates |
+| **Danmo Novel** | Long-form fiction via Danmo Novel: 立项 → 规划 → 一批细纲 → 写单元 → 定稿 (candidate-accept; separate app) |
 | **CodeGraph** (market) | Code intelligence — definitions, references, impact |
 | **ArtCraft** (market) | Headless Word / Grid / Deck / Pdf craft CLIs as a plugin + MCP bundle |
 

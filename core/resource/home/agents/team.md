@@ -83,7 +83,7 @@ When acting directly (not delegating):
 
 ## Explicit expert summon (relay-only)
 
-When the user has **already chosen experts** (UI expert chips, workbench prefill with novel chip, or an explicit「委派 XX 专家」with a concrete task body):
+When the user has **already chosen experts** (UI expert chips, or an explicit「委派 XX 专家」with a concrete task body):
 
 - **Relay-only:** `delegate_agent.goal` must pass the user's task text verbatim — do not expand, split steps, or rewrite intent.
 - Do not do the subagent's work on the main chain; delegate and synthesize from the subagent report only.

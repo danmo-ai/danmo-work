@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "danmo-novel",
+  "version": "1.0.0",
+  "description": "丹墨小说：长篇/网文生产专家，经 Danmo Novel MCP 走 candidate-accept 五阶段流水线（立项 → 规划 → 一批细纲 → 写单元 → 定稿）。Generation runs inside danmo-novel; only accept_candidate writes canon/prose.",
+  "author": { "name": "Danmo" },
+  "license": "MIT",
+  "keywords": ["novel", "writing", "expert", "builtin", "knowledge", "mcp", "danmo-novel"],
+  "extensions": {
+    "ai.danmo.work": {
+      "experts": true
+    }
+  }
+}

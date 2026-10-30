@@ -11,12 +11,12 @@ func TestResolveReadPathAllowsWorkHomePlugins(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("WORK_HOME", home)
 
-	plugins := filepath.Join(home, "plugins", "novel", "skills", "novel-setup", "scripts")
+	plugins := filepath.Join(home, "plugins", "danmo-novel", "skills", "danmo-novel")
 	if err := os.MkdirAll(plugins, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	gate := filepath.Join(plugins, "novel_gate.py")
-	if err := os.WriteFile(gate, []byte("print('ok')\n"), 0o644); err != nil {
+	gate := filepath.Join(plugins, "SKILL.md")
+	if err := os.WriteFile(gate, []byte("---\nname: danmo-novel\n---\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -33,7 +33,7 @@ func TestResolveReadPathAllowsWorkHomePlugins(t *testing.T) {
 		t.Fatalf("got %q want %q", got, gate)
 	}
 
-	got, err = resolveReadPath(work, "$WORK_HOME/plugins/novel/skills/novel-setup/scripts/novel_gate.py")
+	got, err = resolveReadPath(work, "$WORK_HOME/plugins/danmo-novel/skills/danmo-novel/SKILL.md")
 	if err != nil {
 		t.Fatalf("$WORK_HOME plugin path: %v", err)
 	}

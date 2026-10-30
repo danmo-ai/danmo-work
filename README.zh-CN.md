@@ -66,7 +66,7 @@
 | **Data** | CSV / JSON 分析与报表 |
 | **GitHub** | Issue / PR / Actions / Release |
 | **Danmo Make** | 本机图片 / 视频 / 音频生成（需另装 Danmo Make） |
-| **Novel Writing** | 长篇小说工作台：立项 → 规划 → 写单元 → 定稿；题材技法库 + 量化去 AI 味门禁 |
+| **Danmo Novel** | 长篇小说（需另装 Danmo Novel）：立项 → 规划 → 一批细纲 → 写单元 → 定稿（candidate-accept） |
 | **CodeGraph**（市场） | 代码智能：定义、引用、影响面 |
 | **ArtCraft**（市场） | 无头 Word / Grid / Deck / Pdf 办公 CLI，插件 + MCP 一包装 |
 

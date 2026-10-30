@@ -113,7 +113,7 @@ func IsProductBuiltinConnector(id string) bool {
 	if id == "" {
 		return false
 	}
-	if id == GitHubLegacyMarketConnectorID || id == GitHubExpertID || id == "danmo-make" {
+	if id == GitHubLegacyMarketConnectorID || id == GitHubExpertID || id == "danmo-make" || id == "danmo-novel" {
 		return true
 	}
 	for _, bid := range BuiltinConnectorIDs {

@@ -14,14 +14,14 @@ const agents = [
   { id: 'team', name: 'Team', mode: 'primary', canDelegate: true },
   { id: 'document', name: 'Document', mode: 'subagent', description: 'Docs', category: 'office' },
   { id: 'github', name: 'GitHub', mode: 'subagent', description: 'Issues', category: 'coding' },
-  { id: 'novel', name: '小说创作', mode: 'subagent', description: 'Fiction', category: 'creative' },
+  { id: 'danmo-novel', name: 'Danmo Novel', mode: 'subagent', description: 'Fiction', category: 'creative' },
   { id: 'browser', name: 'Browser', mode: 'subagent', description: 'Web UI', category: 'research' },
   { id: 'ui-test', name: 'UI Test', mode: 'subagent', description: 'Web UI tests', category: 'research' },
 ]
 
 assert.deepEqual(
   listSummonableExperts(agents, 'team').map((a) => a.id).sort(),
-  ['browser', 'document', 'github', 'novel', 'ui-test'],
+  ['browser', 'danmo-novel', 'document', 'github', 'ui-test'],
 )
 assert.ok(!listSummonableExperts(agents, 'team').some((a) => a.id === 'team'))
 
@@ -70,7 +70,7 @@ const relayOut = prependExpertSummon(
     `请用 delegate_agent(agent_id=${id}) 委派「${name}」。goal 必须原文转述下方用户任务正文，禁止扩写。`,
   '同一正文分别委派，勿拆 scope。',
 )
-assert.ok(relayOut.includes('agent_id=novel'))
+assert.ok(relayOut.includes('agent_id=danmo-novel'))
 assert.ok(relayOut.includes('原文转述'))
 assert.ok(relayOut.includes('勿拆 scope'))
 assert.ok(relayOut.endsWith('写第 4 章正文'))

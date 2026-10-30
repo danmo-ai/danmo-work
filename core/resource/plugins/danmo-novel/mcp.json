@@ -1,0 +1,15 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "danmo-novel": {
+      "type": "streamable-http",
+      "url": "http://127.0.0.1:7804/mcp/",
+      "name": "Danmo Novel",
+      "description": "Local novel workbench via Danmo Novel MCP (bound-only; use with danmo-novel expert). Generation is candidate-accept; only accept_candidate writes canon/prose.",
+      "auth": "none",
+      "catalogId": "danmo-novel",
+      "ambientMount": false,
+      "toolTimeout": 900
+    }
+  }
+}

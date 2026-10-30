@@ -2,9 +2,6 @@ package plugins
 
 import (
 	"io/fs"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -14,7 +11,7 @@ import (
 func TestBuiltinPluginNames(t *testing.T) {
 	names := BuiltinPluginNames()
 	want := map[string]bool{
-		"github": true, "danmo-make": true, "novel": true,
+		"github": true, "danmo-make": true, "danmo-novel": true,
 		"browser": true, "computer": true, "ui-test": true,
 		"implementer": true, "explorer": true, "reviewer": true,
 		"researcher": true, "document": true, "data": true,
@@ -83,85 +80,37 @@ func TestDocumentPluginAbsorbedComms(t *testing.T) {
 	}
 }
 
-func TestNovelPluginPacksSkillAndCraftKB(t *testing.T) {
-	for _, skill := range []string{"novel-setup", "novel-plan", "novel-write", "novel-review"} {
-		if _, err := fs.ReadFile(FS, "novel/skills/"+skill+"/SKILL.md"); err != nil {
-			t.Fatalf("%s: %v", skill, err)
+func TestDanmoNovelPluginIsThinMCP(t *testing.T) {
+	// danmo-novel mirrors danmo-make: thin MCP-driven expert + one skill, no KB,
+	// no filesystem/gate tools, no novel expert leftovers.
+	if _, err := fs.Stat(FS, "novel"); err == nil {
+		t.Fatal("novel plugin should be removed (replaced by danmo-novel)")
+	}
+	expert, err := fs.ReadFile(FS, "danmo-novel/ai.danmo.work/experts/danmo-novel.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(expert)
+	for _, banned := range []string{"exec_shell", "novel_gate", "kb-novel-craft"} {
+		if strings.Contains(body, banned) {
+			t.Fatalf("danmo-novel expert must not reference %q", banned)
 		}
 	}
-	if _, err := fs.Stat(FS, "novel/skills/novel-writing"); err == nil {
-		t.Fatal("novel-writing should be replaced by setup/plan/write/review")
+	if !strings.Contains(body, "mcp_servers:") || !strings.Contains(body, "danmo-novel") {
+		t.Fatal("danmo-novel expert must bind the danmo-novel MCP server")
 	}
-	for _, p := range []string{
-		"novel/skills/novel-setup/assets/templates/world.md",
-		"novel/skills/novel-setup/assets/templates/cast-card.md",
-		"novel/skills/novel-setup/assets/templates/book-bible.md",
-		"novel/skills/novel-setup/assets/templates/novel-state.yaml",
-		"novel/skills/novel-setup/assets/templates/author-lore.md",
-		"novel/skills/novel-setup/assets/templates/facts.md",
-		"novel/skills/novel-setup/assets/templates/locked-terms.yaml",
-		"novel/skills/novel-setup/assets/templates/ledger.md",
-		"novel/skills/novel-write/assets/templates/unit-outline.yaml",
-		"novel/skills/novel-write/assets/templates/style-fingerprint.md",
-		"novel/skills/novel-plan/assets/templates/book-outline.md",
-		"novel/skills/novel-plan/assets/templates/volume-outline.md",
-		"novel/ai.danmo.work/knowledge/09-lore-tracks.md",
-		"novel/skills/novel-setup/scripts/novel_gate.py",
-		"novel/skills/novel-setup/references/gate.md",
-	} {
-		if _, err := fs.ReadFile(FS, p); err != nil {
-			t.Fatalf("%s: %v", p, err)
-		}
+	if _, err := fs.ReadFile(FS, "danmo-novel/skills/danmo-novel/SKILL.md"); err != nil {
+		t.Fatal(err)
 	}
-	outline, err := fs.ReadFile(FS, "novel/skills/novel-write/assets/templates/unit-outline.yaml")
+	if _, err := fs.Stat(FS, "danmo-novel/ai.danmo.work/knowledge"); err == nil {
+		t.Fatal("danmo-novel should not ship a knowledge base")
+	}
+	mcpRaw, err := fs.ReadFile(FS, "danmo-novel/mcp.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(outline), "unit_id:") {
-		t.Fatal("unit-outline.yaml must require unit_id")
-	}
-	if !strings.Contains(string(outline), "word_floor:") {
-		t.Fatal("unit-outline.yaml must declare word_floor")
-	}
-	cast, err := fs.ReadFile(FS, "novel/skills/novel-setup/assets/templates/cast-card.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(cast), "视觉") || !strings.Contains(string(cast), "语言") || !strings.Contains(string(cast), "行为") {
-		t.Fatal("cast-card.md must include 三锚点")
-	}
-	expert, err := fs.ReadFile(FS, "novel/ai.danmo.work/experts/novel.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(expert), "tool_id: novel_gate") {
-		t.Fatal("novel expert must not bind a Go novel_gate tool")
-	}
-	if !strings.Contains(string(expert), "novel_gate.py") {
-		t.Fatal("novel expert must invoke novel-setup/scripts/novel_gate.py")
-	}
-	if !strings.Contains(string(expert), "exec_shell") {
-		t.Fatal("novel expert must bind exec_shell for the gate script")
-	}
-	gateDoc, err := fs.ReadFile(FS, "novel/skills/novel-setup/references/gate.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(gateDoc), "${WORK_HOME}/plugins/novel/skills/novel-setup/scripts/novel_gate.py") {
-		t.Fatal("gate.md must run the plugin script via ${WORK_HOME}")
-	}
-	if strings.Contains(string(gateDoc), "python3 \"$HOME") {
-		t.Fatal("gate.md must not exec $HOME (wrong inside containers)")
-	}
-	if _, err := fs.Stat(FS, "novel/skills/novel-plan/assets/templates/goldfinger-card.md"); err == nil {
-		t.Fatal("goldfinger-card.md belongs under novel-setup, not novel-plan")
-	}
-	meta, err := fs.ReadFile(FS, "novel/ai.danmo.work/knowledge/_meta.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(meta), `"id": "kb-novel-craft"`) {
-		t.Fatalf("novel KB meta missing stable id: %s", meta)
+	if !strings.Contains(string(mcpRaw), "danmo-novel") || !strings.Contains(string(mcpRaw), "7804") {
+		t.Fatalf("danmo-novel mcp.json should bind :7804: %s", mcpRaw)
 	}
 }
 
@@ -285,7 +234,7 @@ func TestBuiltinPluginCategories(t *testing.T) {
 		"implementer": "coding", "explorer": "coding", "reviewer": "coding", "github": "coding",
 		"researcher": "research", "browser": "research", "computer": "research", "ui-test": "research",
 		"document": "office", "data": "office",
-		"novel": "creative", "danmo-make": "creative",
+		"danmo-novel": "creative", "danmo-make": "creative",
 	}
 	for name, cat := range want {
 		ed, err := fs.ReadFile(FS, name+"/ai.danmo.work/experts/"+name+".md")
@@ -305,57 +254,6 @@ func TestBuiltinPluginCategories(t *testing.T) {
 		if fm.Category != cat {
 			t.Errorf("%s category=%q want %q", name, fm.Category, cat)
 		}
-	}
-}
-
-func TestNovelGatePythonScript(t *testing.T) {
-	py, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("python3 not found")
-	}
-	dir := t.TempDir()
-	const scripts = "novel/skills/novel-setup/scripts"
-	// Entry shell + tests + the novel_gate/ package (synced as a directory).
-	if err := fs.WalkDir(FS, scripts, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		if strings.Contains(path, "__pycache__") {
-			return nil
-		}
-		rel := strings.TrimPrefix(path, scripts+"/")
-		data, err := fs.ReadFile(FS, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dir, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
-		}
-		return os.WriteFile(target, data, 0o644)
-	}); err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{
-		"novel_gate.py", "novel_gate_test.py",
-		"novel_gate/__init__.py", "novel_gate/cli.py", "novel_gate/intent.py",
-		"novel_gate/context.py", "novel_gate/cast.py", "novel_gate/outline.py", "novel_gate/ledger.py",
-		"novel_gate/deslop.py", "novel_gate/pack.py", "novel_gate/seal.py", "novel_gate/qc.py",
-	} {
-		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(name))); err != nil {
-			t.Fatalf("gate script layout: %v", err)
-		}
-	}
-	cmd := exec.Command(py, "-m", "unittest", "novel_gate_test")
-	cmd.Dir = dir
-	root, err := filepath.Abs("novel")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cmd.Env = append(os.Environ(), "NOVEL_PLUGIN_ROOT="+root)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("python unittest: %v\n%s", err, out)
 	}
 }
 

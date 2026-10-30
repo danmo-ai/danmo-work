@@ -22,7 +22,7 @@ const builtinPluginsVersionFile = ".builtin_plugins_version"
 var migratedBuiltinAgentFiles = []string{
 	"github.md",
 	"danmo-make.md",
-	"novel.md",
+	"danmo-novel.md",
 	"browser.md",
 	"operator.md", // legacy id before rename to computer
 	"computer.md",
@@ -38,18 +38,20 @@ var migratedBuiltinAgentFiles = []string{
 var migratedBuiltinSkillDirs = []string{
 	"github",
 	"danmo-make",
+	"danmo-novel",
 	"novel-writing",
 	"browser",
 	"computer-use",
 }
 
 var migratedBuiltinKnowledgeDirs = []string{
-	"kb-novel-craft",
+	"kb-novel-craft", // novel craft KB removed with the novel expert
 }
 
 // retiredBuiltinPlugins are embedded pack names removed or renamed; cleaned on every sync.
 var retiredBuiltinPlugins = []string{
 	"operator", // renamed to computer
+	"novel",    // replaced by the danmo-novel plugin (MCP-driven)
 }
 
 // SyncBuiltinPlugins materializes embedded first-party plugins into

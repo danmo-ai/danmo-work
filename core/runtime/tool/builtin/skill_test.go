@@ -100,11 +100,11 @@ func TestReadSkillSchema(t *testing.T) {
 func TestReadSkillByID(t *testing.T) {
 	root := t.TempDir()
 	dataDir := filepath.Join(root, "data")
-	skillDir := filepath.Join(root, "plugins", "novel", "skills", "novel-review")
+	skillDir := filepath.Join(root, "plugins", "danmo-novel", "skills", "danmo-novel")
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	md := "---\nname: novel-review\n---\n\nreview-body"
+	md := "---\nname: danmo-novel\n---\n\nreview-body"
 	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(md), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -117,14 +117,14 @@ func TestReadSkillByID(t *testing.T) {
 	}
 
 	h := &ReadSkill{dataDir: dataDir}
-	got, err := h.Execute(context.Background(), map[string]any{"id": "novel-review"})
+	got, err := h.Execute(context.Background(), map[string]any{"id": "danmo-novel"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Content != "review-body" {
 		t.Fatalf("body=%q", got.Content)
 	}
-	got, err = h.Execute(context.Background(), map[string]any{"path": "novel-review/references/gates.md"})
+	got, err = h.Execute(context.Background(), map[string]any{"path": "danmo-novel/references/gates.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,16 +202,16 @@ func TestReadSkillProjectIDOverridesHome(t *testing.T) {
 func TestReadSkillMisexpandedPluginPath(t *testing.T) {
 	root := t.TempDir()
 	dataDir := filepath.Join(root, "data")
-	skillDir := filepath.Join(root, "plugins", "novel", "skills", "novel-review")
+	skillDir := filepath.Join(root, "plugins", "danmo-novel", "skills", "danmo-novel")
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	md := "---\nname: novel-review\n---\n\nreview-body"
+	md := "---\nname: danmo-novel\n---\n\nreview-body"
 	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(md), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	h := &ReadSkill{dataDir: dataDir}
-	wrong := filepath.Join(root, "data", "proj-x", "files", "plugins", "novel", "skills", "novel-review")
+	wrong := filepath.Join(root, "data", "proj-x", "files", "plugins", "danmo-novel", "skills", "danmo-novel")
 	got, err := h.Execute(context.Background(), map[string]any{"path": wrong})
 	if err != nil {
 		t.Fatal(err)

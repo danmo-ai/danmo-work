@@ -35,16 +35,22 @@ func TestSyncBuiltinPluginsMaterializesPacks(t *testing.T) {
 			t.Fatalf("missing %s: %v", pluginJSON, err)
 		}
 	}
-	gateScript := filepath.Join(root, "plugins", "novel", "skills", "novel-setup", "scripts", "novel_gate.py")
-	if _, err := os.Stat(gateScript); err != nil {
-		t.Fatalf("novel_gate.py should sync like other skill resources: %v", err)
+	mcpJSON := filepath.Join(root, "plugins", "danmo-novel", "mcp.json")
+	if _, err := os.Stat(mcpJSON); err != nil {
+		t.Fatalf("danmo-novel mcp.json should sync: %v", err)
 	}
-	// The gate is a package next to the entry shell; the whole directory must land.
-	for _, name := range []string{"__init__.py", "cli.py", "context.py", "cast.py", "outline.py", "ledger.py", "deslop.py", "qc.py", "doctor.py", "init.py", "migrate.py", "book.py", "common.py"} {
-		pkgFile := filepath.Join(root, "plugins", "novel", "skills", "novel-setup", "scripts", "novel_gate", name)
-		if _, err := os.Stat(pkgFile); err != nil {
-			t.Fatalf("novel_gate package file %s should sync: %v", name, err)
-		}
+	rawMCP, err := os.ReadFile(mcpJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(rawMCP), "danmo-novel") || !strings.Contains(string(rawMCP), "7804") {
+		t.Fatalf("danmo-novel mcp.json should bind danmo-novel :7804: %s", rawMCP)
+	}
+	if _, err := os.Stat(filepath.Join(root, "plugins", "danmo-novel", "ai.danmo.work", "experts", "danmo-novel.md")); err != nil {
+		t.Fatalf("danmo-novel expert should sync: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "plugins", "novel")); err == nil {
+		t.Fatal("retired novel plugin dir should not be materialized")
 	}
 	if _, err := os.Stat(leftover); err == nil {
 		t.Fatal("migrated github.md leftover was not cleaned")
@@ -207,24 +213,32 @@ func TestBuiltinPluginsRegisterExpertsAndMCP(t *testing.T) {
 		t.Fatal("danmo-make mcp must be bound-only")
 	}
 
+	dn, err := mm.Get(context.Background(), "danmo-novel")
+	if err != nil {
+		t.Fatalf("danmo-novel mcp: %v", err)
+	}
+	if dn.AmbientMount {
+		t.Fatal("danmo-novel mcp must be bound-only")
+	}
+	if !strings.Contains(dn.URL, "7804") && !strings.Contains(dn.URL, "/mcp") {
+		t.Fatalf("danmo-novel mcp URL=%q", dn.URL)
+	}
+
 	list := pm.ListInstalled()
 	if len(list) < 12 {
 		t.Fatalf("installed plugins=%d want >=12", len(list))
 	}
-	var novel, uiTest *domain.PluginInstalled
+	var dnovel, uiTest *domain.PluginInstalled
 	for i := range list {
 		switch list[i].Name {
-		case "novel":
-			novel = &list[i]
+		case "danmo-novel":
+			dnovel = &list[i]
 		case "ui-test":
 			uiTest = &list[i]
 		}
 	}
-	if novel == nil {
-		t.Fatal("novel plugin missing from list")
-	}
-	if len(novel.Components.Knowledge) != 1 || novel.Components.Knowledge[0] != "kb-novel-craft" {
-		t.Fatalf("novel knowledge components=%v", novel.Components.Knowledge)
+	if dnovel == nil {
+		t.Fatal("danmo-novel plugin missing from list")
 	}
 	if uiTest == nil {
 		t.Fatal("ui-test plugin missing from list")
@@ -242,31 +256,35 @@ func TestBuiltinPluginsRegisterExpertsAndMCP(t *testing.T) {
 	if _, err := sm.Get(context.Background(), "ui-test"); err != nil {
 		t.Fatalf("ui-test skill: %v", err)
 	}
-
-	plan, err := sm.Get(context.Background(), "novel-plan")
-	if err != nil {
-		t.Fatalf("novel-plan skill: %v", err)
-	}
-	if plan.Dir == "" {
-		t.Fatal("novel-plan Dir should be the plugin skill folder")
-	}
-	files, err := sm.Files(context.Background(), "novel-plan")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(files) == 0 {
-		t.Fatal("novel-plan files should be listed from the plugin pack, not data/skills")
-	}
-	var sawOutline bool
-	for _, f := range files {
-		if f.Path == "references/outline.md" {
-			sawOutline = true
+	for _, name := range list {
+		if name.Name == "novel" {
+			t.Fatal("retired novel plugin should not be installed")
 		}
 	}
-	if !sawOutline {
-		t.Fatalf("novel-plan files=%v", files)
+
+	dnAgent, err := am.Get(context.Background(), "danmo-novel")
+	if err != nil {
+		t.Fatalf("danmo-novel expert: %v", err)
 	}
-	if _, err := sm.File(context.Background(), "novel-plan", "references/outline.md"); err != nil {
-		t.Fatalf("read plugin skill file: %v", err)
+	if !dnAgent.Builtin || dnAgent.Mode != domain.AgentModeSubagent {
+		t.Fatalf("danmo-novel agent: %+v", dnAgent)
+	}
+
+	skill, err := sm.Get(context.Background(), "danmo-novel")
+	if err != nil {
+		t.Fatalf("danmo-novel skill: %v", err)
+	}
+	if skill.Dir == "" {
+		t.Fatal("danmo-novel skill Dir should be the plugin skill folder")
+	}
+	if !strings.Contains(skill.Dir, filepath.Join("danmo-novel", "skills", "danmo-novel")) {
+		t.Fatalf("danmo-novel skill Dir=%q", skill.Dir)
+	}
+	skillBody, err := os.ReadFile(filepath.Join(skill.Dir, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read danmo-novel SKILL.md: %v", err)
+	}
+	if !strings.Contains(string(skillBody), "mcp_danmo_novel") {
+		t.Fatalf("danmo-novel SKILL.md should reference MCP tools, got %d bytes", len(skillBody))
 	}
 }

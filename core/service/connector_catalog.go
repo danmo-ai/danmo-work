@@ -91,6 +91,7 @@ func DefaultConnectorCatalog() []domain.ConnectorCatalogEntry {
 			Tags:        []string{"local", "files", "test"},
 		},
 		DanmoMakeCatalogEntry(),
+		DanmoNovelCatalogEntry(),
 		GitHubCatalogEntry(),
 	}
 }
@@ -115,6 +116,24 @@ func DanmoMakeCatalogEntry() domain.ConnectorCatalogEntry {
 		DocsURL:      "https://github.com/danmo-ai/danmo-make",
 		Region:       "global",
 		Tags:         []string{"danmo-make", "image", "video", "audio", "generation", "local"},
+		ToolTimeout:  900,
+		AmbientMount: boolPtr(false),
+	}
+}
+
+// DanmoNovelCatalogEntry is the built-in local novel-workbench MCP preset.
+func DanmoNovelCatalogEntry() domain.ConnectorCatalogEntry {
+	return domain.ConnectorCatalogEntry{
+		ID:           "danmo-novel",
+		Name:         "Danmo Novel",
+		Description:  "Local novel workbench via Danmo Novel MCP (bound-only; use with danmo-novel expert). Candidate-accept only.",
+		Category:     "local",
+		Transport:    "streamable-http",
+		URL:          ResolveDanmoNovelMCPURL(),
+		Auth:         domain.MCPAuthNone,
+		DocsURL:      "https://github.com/danmo-ai/danmo-novel",
+		Region:       "global",
+		Tags:         []string{"danmo-novel", "novel", "writing", "local"},
 		ToolTimeout:  900,
 		AmbientMount: boolPtr(false),
 	}
@@ -176,6 +195,24 @@ func ResolveDanmoMakeMCPURL() string {
 	port := strings.TrimSpace(string(raw))
 	if port == "" {
 		return "http://127.0.0.1:7800/mcp/"
+	}
+	return fmt.Sprintf("http://127.0.0.1:%s/mcp/", port)
+}
+
+// ResolveDanmoNovelMCPURL reads ~/.danmo-novel/api.port when present, else :7804.
+// Trailing slash is required for streamable-http mounts (Work dialer).
+func ResolveDanmoNovelMCPURL() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "http://127.0.0.1:7804/mcp/"
+	}
+	raw, err := os.ReadFile(filepath.Join(home, ".danmo-novel", "api.port"))
+	if err != nil {
+		return "http://127.0.0.1:7804/mcp/"
+	}
+	port := strings.TrimSpace(string(raw))
+	if port == "" {
+		return "http://127.0.0.1:7804/mcp/"
 	}
 	return fmt.Sprintf("http://127.0.0.1:%s/mcp/", port)
 }
