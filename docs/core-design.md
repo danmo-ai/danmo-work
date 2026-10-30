@@ -364,12 +364,17 @@ OpenAI-compat 路径上，模型常把 `write`/`edit` 等内容里的未转义�
 
 - **坐标系**：整屏截图为屏幕绝对坐标；窗口截图为图像相对坐标，后续动作带同一 `window_id` 时由
   后端按窗口 bounds 自动换算为绝对坐标。
-- **仅本机、无沙箱**：与容器隔离不兼容，权限门以 `desktop_control` 原因**始终 ask、永不
-  auto-approve**（等同 `unsandboxed` 类别）；`discuss/plan` 模式直接拒绝。
+- **默认本机 GUI**：权限门以 `desktop_control` 原因**始终 ask、永不 auto-approve**（等同
+  `unsandboxed`）；`discuss/plan` 模式直接拒绝。
+- **沙箱桌面**（`runtime.sandbox.profile=desktop` + podman/docker/apple-container）：动作经
+  container exec 打到镜像内 Xvfb `:1`（见 `environments/agent-desktop/`）；`browser_*` 附着
+  容器内 Chromium CDP；Settings 可下载 desktop tar 并显示 noVNC/CDP。详见
+  [`docs/agent-desktop-sandbox.md`](agent-desktop-sandbox.md)。
 - **平台后端**（`core/runtime/computer/`，无新增 CGO 依赖）：Linux X11 用 `xdotool` + 截图
   CLI（imagemagick/scrot/ffmpeg/xwd）；macOS 用 osascript/`screencapture`（鼠标需 `cliclick`，
-  且需授予 Accessibility 与 Screen Recording TCC）；Windows 用 PowerShell + user32/System.Drawing。
-  无可用后端时 `ComputerStatus` 报 degraded，动作返回结构化错误。
+  且需授予 Accessibility 与 Screen Recording TCC）；Windows 用 PowerShell + user32/System.Drawing；
+  sandbox-desktop 复用同一套 xdotool/截图命令经 `ExecDesktop`。无可用后端时 `ComputerStatus`
+  报 degraded，动作返回结构化错误。
 - 默认 `runtime.computer.enabled=false`，需显式开启。
 
 ### 7.1.0 能力三层（Core / Bound / Ambient）
