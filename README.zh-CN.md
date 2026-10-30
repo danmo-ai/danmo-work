@@ -7,7 +7,7 @@
 [![Go](https://img.shields.io/github/go-mod/go-version/danmo-ai/danmo-work?filename=go.mod)](go.mod)
 [![Stars](https://img.shields.io/github/stars/danmo-ai/danmo-work?style=social)](https://github.com/danmo-ai/danmo-work)
 
-**开源 AI 工作 Agent**——多 Agent 协作、跑长程任务的本地工作引擎。写代码、做调研、出报告、做幻灯片、填表格、写小说、操控浏览器与桌面，一条 Agent Loop 全包了。你可以全程看着它干，随时纠正，中断了也能接着跑。自托管，MIT 协议。
+**开源 AI 工作 Agent**——多 Agent 协作、跑长程任务的本地工作引擎。写代码、做调研、出报告、做幻灯片、填表格、写小说，还能**给在这里开发的 Web 应用跑 UI 测试**，一条 Agent Loop 全包了。你可以全程看着它干，随时纠正，中断了也能接着跑。自托管，MIT 协议。
 
 - **编排交给模型。** 没有工作流画布这回事。子专家（`delegate_agent`）、向你提问（`ask_user`）、MCP 连接器，本质上都是工具——调哪个、什么时候调，模型规划时自己说了算。
 - **Turn Log 就是状态。** 每次工具调用写入 SQLite（`history.db`）。进程崩了能恢复、回合能回放、改工具结果、隔几天接着跑——JSONL 仅作导出。
@@ -17,7 +17,7 @@
 
 [交互轮播（带说明）](docs/screenshots/carousel.html?lang=zh) · [架构演示](docs/demo/product-tour.html?lang=zh) · [Office 协作演示](docs/demo/office-coedit-tour.html?lang=zh&tour=1)
 
-> 代码、报告、幻灯片、表格、小说、演示、自动化——一条链做完。
+> 代码、报告、幻灯片、表格、小说、演示、给你的应用做 UI 测试——一条链做完。
 
 ---
 
@@ -29,7 +29,7 @@
 | **计划 → 执行** | Plan 模式用 `create_plan` / `update_plan` 把方案写进右侧 Plan 面板；点 **执行** 送入 Composer 开工。日常清单仍用 `todowrite` |
 | **File Stage + AI Diff** | 文档 / 幻灯片 / 表格 / 源码 / 网页 / 媒体 / Diff 同台——`routeProjectFile` 路由；本地 HTML 走应用内预览；回合前快照 → 审阅 hunk → 保留 / 回滚 / 接受 |
 | **小说工作台** | Scrivener 式书架：书 → 卷 → 单元队列、人物墙与关系图、每阶段一个主 CTA。立项 → 规划 → 写作 → 定稿，搭配题材技法库、去 AI 味门禁与分模型回合 |
-| **Agent UI 测试** | 内置 **UI Test** 专家：在 `ui-tests/` 写 Markdown 用例，用 `browser_*`（无障碍优先）或 headed `computer` 在 Linux **desktop** 沙箱执行，产出带证据的 PASS/FAIL |
+| **给项目做 UI 测试** | 在 Danmo Work 项目里做出 Web 应用后，**UI Test** 专家把 Markdown 用例写进该项目的 `ui-tests/`，在 Linux **desktop** 沙箱用 `browser_*` / `computer` 驱动你的应用，交回带证据的 PASS/FAIL——测的是你的项目，不是 Danmo Work 自身 |
 | **随时向你请示** | `ask_user` 带选项、带表单；危险 Shell、桌面控制或外部 MCP 执行前走审批门禁——桌面与 IM 同一套流程 |
 | **记忆、表与知识库** | `memory_*` 按 user / project / agent 三级作用域；无 schema 的 `table_*` 流水在 `store.db`；Markdown 知识库按章节 FTS 检索 |
 | **技能、插件与连接器** | 技能 / 插件市场（官方目录、Tech Leads Club、ClawHub、ArtCraft 办公 CLI）；磁盘 Ambient 技能；按 Agent 绑定的 MCP；Codex 风格插件 `hooks.json` |
@@ -62,7 +62,7 @@
 | **Reviewer** | 代码与产物审查 |
 | **Browser** | 粘性多步浏览器 Tab（`browser_*`，经 CDP） |
 | **Computer** | 桌面 GUI 控制——找窗口、点击、键入、截屏（每次审批） |
-| **UI Test** | Agent 驱动的 Web UI 测试：Markdown 用例，在 Linux 沙箱用 `browser_*` / `computer` 执行 |
+| **UI Test** | 测**你的**项目 Web UI：用例 Markdown 落在项目里，经 Linux desktop 沙箱用 `browser_*` / `computer` 执行 |
 | **Data** | CSV / JSON 分析与报表 |
 | **GitHub** | Issue / PR / Actions / Release |
 | **Danmo Make** | 本机图片 / 视频 / 音频生成（需另装 Danmo Make） |
@@ -100,9 +100,16 @@ Composer 里 `@` 一下，或者干脆说一句「让文档专家写份报告」
 
 流水线：`novel-setup` → `novel-plan`（人物 + 大纲，卷纲需人批准）→ `novel-write`（细纲 / 正文，CONTEXT 打包落盘）→ `novel-review`（qc-pack → 审 → Commit）。技法在 `kb-novel-craft`（共性篇 + 八题材专文，刑侦探案可追加人味文风）；机器门禁盯住连续性、字数配额与去 AI 味。
 
-### Agent UI 测试
+### 给在这里开发的应用做 UI 测试
 
-让 Team 跑 Web UI 测试（或 `@` **UI Test** 专家）。用例是 `ui-tests/specs/` 下的 Markdown；跑完写入 `ui-tests/runs/<stamp>/report.md`，按场景 PASS/FAIL。优先 `browser_*` 无障碍 ref；布局 / canvas 或需要 headed 时再升到 `computer`，跑在 Linux desktop 沙箱（`runtime.sandbox.profile=desktop`）。不是 Playwright 脚手架，也不测原生 Windows 应用——详见 [docs/experts.md](docs/experts.md) 与 [docs/agent-desktop-sandbox.md](docs/agent-desktop-sandbox.md)。
+Danmo Work 既是车间，也是**你的** Web 项目的测试跑手——打开项目、做出页面或 SPA，再让 Team（或 `@` **UI Test**）对着这套应用写用例、跑回归。
+
+1. **对准你的应用** — 本机 `http://127.0.0.1:…`（经 `/api/v1/proxy/…`）或项目文件经 `/api/v1/projects/<id>/raw/…`
+2. **用例落在项目里** — Markdown 写在项目的 `ui-tests/specs/`（和代码同仓）
+3. **沙箱里执行** — 默认 `browser_*`（无障碍 ref）；布局 / canvas 需要 headed 时用 `computer`（`runtime.sandbox.profile=desktop`）
+4. **证据交回** — `ui-tests/runs/<stamp>/report.md`，按场景 PASS/FAIL（可附截图）
+
+这是产品能力：测用 Danmo Work 开发的应用，不是给 Danmo Work 本仓库做 CI。不是 Playwright 脚手架；只做 Web，不做原生 Windows 应用。详见 [docs/experts.md](docs/experts.md)、[docs/agent-desktop-sandbox.md](docs/agent-desktop-sandbox.md)。
 
 ### 安全
 
@@ -164,7 +171,6 @@ make dev-web   # 后端 :7801 + Vite :5801 → http://localhost:5801/app/
 ```bash
 make dev-web          # 后端 :7801 + Vite :5801 → http://localhost:5801/app/
 make stop             # 停掉所有 DQ_DEV 进程
-make test-frontend    # 前端 UI 辅助脚本（Plan / 专家 / File Stage / …）
 mkdir -p ~/.danmo-work && cp config.example.yaml ~/.danmo-work/config.yaml
 ```
 

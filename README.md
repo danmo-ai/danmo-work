@@ -7,7 +7,7 @@
 [![Go](https://img.shields.io/github/go-mod/go-version/danmo-ai/danmo-work?filename=go.mod)](go.mod)
 [![Stars](https://img.shields.io/github/stars/danmo-ai/danmo-work?style=social)](https://github.com/danmo-ai/danmo-work)
 
-**Open-source AI work agent** — multi-agent, long-horizon work on your own machine. Coding, research, reports, slides, sheets, fiction, browser & desktop automation — one agent loop you can watch, correct, and resume. Self-hosted, MIT.
+**Open-source AI work agent** — multi-agent, long-horizon work on your own machine. Coding, research, reports, slides, sheets, fiction, and **UI tests for the Web apps you build here** — one agent loop you can watch, correct, and resume. Self-hosted, MIT.
 
 - **The model orchestrates.** No workflow graphs to configure. Subagents (`delegate_agent`), questions (`ask_user`), and MCP connectors are all just tools the agent calls as it plans.
 - **Turn Log is state.** Every tool call lands in SQLite (`history.db`). Recover from a crash, replay a turn, edit a tool result, or resume days later — JSONL is export-only.
@@ -17,7 +17,7 @@
 
 [Interactive carousel (captions)](docs/screenshots/carousel.html?lang=en) · [Architecture tour](docs/demo/product-tour.html?lang=en) · [Office co-edit tour](docs/demo/office-coedit-tour.html?lang=en&tour=1)
 
-> Code, reports, decks, sheets, novels, demos, automations — on one trail.
+> Code, reports, decks, sheets, novels, demos, UI tests for your apps — on one trail.
 
 ---
 
@@ -29,7 +29,7 @@
 | **Plan → Execute** | Plan mode publishes via `create_plan` / `update_plan` into the right-hand Plan panel; hit **Execute** to send the plan into Composer. Day-to-day checklists still use `todowrite` |
 | **File Stage + AI Diff** | Docs, slides, sheets, code, web, media, and diff on one canvas — routed by `routeProjectFile`; local HTML opens through app preview; pre-turn snapshot → review hunks → keep / revert / accept |
 | **Novel workbench** | Scrivener-style shelf: book → volume → unit queue, cast wall & relation graph, one primary CTA per stage. Setup → plan → write → review with craft KB, anti-AI gates, and multi-model turns |
-| **Agent UI testing** | Builtin **UI Test** expert authors Markdown specs under `ui-tests/`, runs them with `browser_*` (a11y-first) or headed `computer` on the Linux **desktop** sandbox, and returns PASS/FAIL with evidence |
+| **UI tests for your projects** | After you build a Web app in a Danmo Work project, the **UI Test** expert writes Markdown specs into that project's `ui-tests/`, drives your app via `browser_*` / `computer` in the Linux **desktop** sandbox, and returns PASS/FAIL with evidence — not a test suite for Danmo Work itself |
 | **Humans in the loop** | `ask_user` with options and forms; approval gates before risky shell, desktop control, or external MCP — same flow in desktop and IM chats |
 | **Memory, tables & knowledge** | `memory_*` across user / project / agent scopes; schema-free `table_*` rows in `store.db`; Markdown knowledge bases with chapter-level FTS |
 | **Skills, plugins & connectors** | Skill / plugin market (official catalog, Tech Leads Club, ClawHub, ArtCraft office CLIs); ambient disk skills; MCP connectors bound per agent; Codex-style plugin `hooks.json` |
@@ -62,7 +62,7 @@ The lead agent runs the session; specialists do focused work on demand, each in 
 | **Reviewer** | Code and artifact review |
 | **Browser** | Sticky multi-step browser tabs (`browser_*` via CDP) |
 | **Computer** | Desktop GUI control — windows, click, type, screenshot (approval-gated) |
-| **UI Test** | Agent-driven Web UI testing: Markdown specs executed via `browser_*` / `computer` on the Linux sandbox |
+| **UI Test** | Test the Web UI of **your** project: Markdown specs in-repo, executed via `browser_*` / `computer` on the Linux desktop sandbox |
 | **Data** | CSV / JSON analysis and reporting |
 | **GitHub** | Issues, PRs, Actions, releases |
 | **Danmo Make** | Local image / video / audio generation (separate app) |
@@ -100,9 +100,16 @@ Open **Workbench** in the session chrome (or type `/novel`). Same three-pane lay
 
 Pipeline: `novel-setup` → `novel-plan` (cast + outlines, human-approved volumes) → `novel-write` (unit outlines / drafts with packed CONTEXT) → `novel-review` (qc-pack → review → commit). Craft lives in `kb-novel-craft` (shared + eight genre articles, plus crime-human flavor when needed); machine gates keep continuity, word quotas, and anti-AI style checks honest.
 
-### Agent UI testing
+### UI tests for apps you build
 
-Ask Team to run Web UI tests (or `@` the **UI Test** expert). Specs live as Markdown under `ui-tests/specs/`; runs write `ui-tests/runs/<stamp>/report.md` with per-scenario PASS/FAIL. Prefer `browser_*` a11y refs; escalate to `computer` for headed layout/canvas on the Linux desktop sandbox (`runtime.sandbox.profile=desktop`). Not Playwright codegen, and not for native Windows apps — details in [docs/experts.md](docs/experts.md) and [docs/agent-desktop-sandbox.md](docs/agent-desktop-sandbox.md).
+Danmo Work is both the workshop and the test runner for **your** Web project — open the project, ship a page or SPA, then ask Team (or `@` **UI Test**) to author and run cases against that app.
+
+1. **Target your app** — local `http://127.0.0.1:…` (via `/api/v1/proxy/…`) or project files via `/api/v1/projects/<id>/raw/…`
+2. **Specs in the project** — Markdown under the project's `ui-tests/specs/` (source of truth next to your code)
+3. **Execute in sandbox** — `browser_*` (a11y refs) by default; headed layout/canvas via `computer` when `runtime.sandbox.profile=desktop`
+4. **Evidence back** — `ui-tests/runs/<stamp>/report.md` with per-scenario PASS/FAIL (optional screenshots)
+
+This is product capability for apps developed with Danmo Work, not an in-repo CI suite for Danmo Work itself. Not Playwright codegen; Web only (no native Windows apps). Details: [docs/experts.md](docs/experts.md), [docs/agent-desktop-sandbox.md](docs/agent-desktop-sandbox.md).
 
 ### Safety
 
@@ -165,7 +172,6 @@ make dev-web   # backend :7801 + Vite :5801 → http://localhost:5801/app/
 ```bash
 make dev-web          # backend :7801 + Vite :5801 → http://localhost:5801/app/
 make stop             # stop all DQ_DEV processes
-make test-frontend    # frontend UI helper scripts (Plan / experts / File Stage / …)
 mkdir -p ~/.danmo-work && cp config.example.yaml ~/.danmo-work/config.yaml
 ```
 
