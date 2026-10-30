@@ -1162,6 +1162,9 @@ func TestAppendCallTimeContextIncludesPlanMode(t *testing.T) {
 	if !strings.Contains(out[0].Content, "read_file") || !strings.Contains(out[0].Content, "delegate_agent") {
 		t.Fatal("expected plan-mode read-only tool list")
 	}
+	if !strings.Contains(out[0].Content, "create_plan") || !strings.Contains(out[0].Content, "update_plan") {
+		t.Fatal("expected plan-mode to mention create_plan / update_plan")
+	}
 	if !strings.Contains(out[0].Content, "AGENTS.md") {
 		t.Fatal("expected plan-mode workflow to mention AGENTS.md")
 	}

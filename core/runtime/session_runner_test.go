@@ -45,6 +45,40 @@ func TestMountBuiltinToolsSkipsCoreAskUser(t *testing.T) {
 	}
 }
 
+func TestAlwaysOnPlanToolsSurvivePlanModeFilter(t *testing.T) {
+	catalog := tool.NewRegistry(
+		&builtin.ReadSkill{},
+		&builtin.CreatePlan{},
+		&builtin.UpdatePlan{},
+		&builtin.Write{},
+	)
+	engine := &Engine{toolCatalog: catalog}
+	reg := tool.NewRegistry()
+	engine.mountAlwaysOnBuiltins(reg)
+	engine.mountBuiltinTools(reg, []domain.ToolBinding{
+		{ToolID: "write", RiskLevel: domain.RiskMedium},
+	})
+	if _, ok := reg.Get("create_plan"); !ok {
+		t.Fatal("create_plan should mount as always-on")
+	}
+	if _, ok := reg.Get("update_plan"); !ok {
+		t.Fatal("update_plan should mount as always-on")
+	}
+	if _, ok := reg.Get("write"); !ok {
+		t.Fatal("write should mount from bindings")
+	}
+	reg.Filter(domain.PlanModeAllowedToolIDs)
+	if _, ok := reg.Get("create_plan"); !ok {
+		t.Fatal("create_plan must remain in plan mode")
+	}
+	if _, ok := reg.Get("update_plan"); !ok {
+		t.Fatal("update_plan must remain in plan mode")
+	}
+	if _, ok := reg.Get("write"); ok {
+		t.Fatal("write must be filtered out in plan mode")
+	}
+}
+
 type memStreamRepo struct {
 	mu     sync.Mutex
 	events []domain.StreamEvent

@@ -27,8 +27,8 @@ Write plans that a skilled engineer with little repo context can execute: exact 
 4. **Tasks** — bite-sized units with their own test cycle; each ends in an independently verifiable deliverable.
 5. **Self-review** — spec coverage, no placeholders, consistent names/types across tasks.
 6. **Handoff**
-   - **Planner (read-only):** always deliver the complete plan in the assistant reply (session event stream). Do not call `write` or claim a file was saved.
-   - **Default / Team:** deliver in chat by default; only `write` a plan file when the user explicitly asks to save it. Then ask whether to implement.
+   - **Plan mode / Planner (read-only):** call `create_plan` with the full markdown plan (+ todos). Use `update_plan` for revisions. Do not call `write` or claim a file was saved. The user reviews the Plan panel and clicks Execute to send the plan to the composer.
+   - **Default / Team (not plan mode):** prefer `create_plan` so the Plan panel + Execute button work; a short chat summary is fine. Only `write` a plan file when the user explicitly asks to save it.
 
 ## Plan header (required)
 
@@ -72,4 +72,4 @@ Never leave: TBD/TODO, “add appropriate validation”, “write tests for the 
 
 ## Stop condition
 
-Deliver the complete plan in chat (and path only if Default/Team saved a file). Offer to implement next with Single-Agent or Multi-Agent mode; do not start coding inside this skill unless the user already approved execution.
+Call `create_plan` (and path only if Default/Team saved a file). Confirm the plan is ready for review; do not start coding inside this skill unless the user already approved execution (or clicked Execute).

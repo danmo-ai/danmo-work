@@ -11,6 +11,7 @@
     "test:code-route": "node --experimental-strip-types scripts/test-code-route.mjs",
     "test:element-attachment": "node --experimental-strip-types scripts/test-element-attachment.mjs",
     "test:composer-slash": "node --experimental-strip-types scripts/test-composer-slash.mjs",
+    "test:plan-from-stream": "node --experimental-strip-types scripts/test-plan-from-stream.mjs",
     "test:composer-experts": "node --experimental-strip-types scripts/test-composer-experts.mjs",
     "test:open-session-tabs": "node --experimental-strip-types scripts/test-open-session-tabs.mjs",
     "test:novel-workbench": "node --experimental-strip-types scripts/test-novel-workbench.mjs",

@@ -344,6 +344,7 @@ OpenAI-compat 路径上，模型常把 `write`/`edit` 等内容里的未转义�
 | `read_image` | 读取本地图片交给视觉模型（多模态 `ToolResult.Parts`） |
 | `grep` / `glob` | 代码搜索 |
 | `todowrite` | 任务清单 |
+| `create_plan` / `update_plan` | 发布/修订实现计划（全局默认；Plan 面板 + 执行→Composer） |
 | `computer` | 桌面 GUI 控制（找/聚焦窗口、鼠标、键盘、截屏）；高风险、仅本机、每次审批 |
 | `memory_update` / `memory_read` | 跨会话持久记忆（user / project / agent 三级作用域） |
 | `table_upsert` / `table_get` / `table_query` / `table_delete` / `table_list` | 业务流水表（schema-free JSON；独立 `store.db`） |

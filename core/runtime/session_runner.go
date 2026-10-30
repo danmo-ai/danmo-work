@@ -1518,7 +1518,7 @@ func (e *Engine) loadRetainedHistory(sessionID string, cp *domain.CompactionChec
 }
 
 // alwaysOnBuiltinTools are mounted for every agent without requiring ToolBindings.
-var alwaysOnBuiltinTools = []string{"read_skill"}
+var alwaysOnBuiltinTools = []string{"read_skill", "create_plan", "update_plan"}
 
 func (e *Engine) mountAlwaysOnBuiltins(reg *tool.Registry) {
 	for _, id := range alwaysOnBuiltinTools {

@@ -635,10 +635,30 @@ const planTurnId = computed(() => {
   return roots[roots.length - 1].id
 })
 
-/** Latest todowrite snapshot for the plan turn — badge shows completed/total. */
+/** Latest plan/todo snapshot — badge shows completed/total (create_plan todos preferred). */
 const planProgress = computed(() => {
-  const turnId = planTurnId.value
   const events = sessions.streamEvents
+  const countTodos = (items: unknown[]) => {
+    const total = items.length
+    const completed = items.filter(
+      (item) => String((item as { status?: string })?.status ?? '') === 'completed',
+    ).length
+    return { completed, total }
+  }
+  // Prefer session-wide create_plan / update_plan todos (newest first).
+  for (let i = events.length - 1; i >= 0; i--) {
+    const ev = events[i]
+    if (ev.type !== 'tool.running' && ev.type !== 'tool.completed') continue
+    const p = ev.payload as Record<string, unknown> | null
+    const name = String(p?.name ?? '')
+    if (name !== 'create_plan' && name !== 'update_plan') continue
+    const input = p?.input as Record<string, unknown> | null
+    const items = input?.todos
+    if (!Array.isArray(items) || items.length === 0) continue
+    return countTodos(items)
+  }
+  // Fallback: todowrite on the active plan turn.
+  const turnId = planTurnId.value
   for (let i = events.length - 1; i >= 0; i--) {
     const ev = events[i]
     if (turnId && ev.turnId !== turnId) continue
@@ -648,11 +668,7 @@ const planProgress = computed(() => {
     const input = p?.input as Record<string, unknown> | null
     const items = input?.todos
     if (!Array.isArray(items) || items.length === 0) continue
-    const total = items.length
-    const completed = items.filter(
-      (item) => String((item as { status?: string })?.status ?? '') === 'completed',
-    ).length
-    return { completed, total }
+    return countTodos(items)
   }
   return { completed: 0, total: 0 }
 })
@@ -1590,6 +1606,9 @@ watch(
     if (last.type === 'tool.completed' || last.type === 'tool.running') {
       const p = asRecord(last.payload)
       const name = String(p?.name ?? '')
+      if (name === 'create_plan' || name === 'update_plan') {
+        workspaceUi.openRightDrawer('plan')
+      }
       if (WRITE_TOOL_NAMES.has(name) || name.includes('write') || name.includes('edit') || name.includes('patch')) {
         void refreshChangesCount().then(() => {
           if (workspaceUi.changesCount > 0 && rightTab.value !== 'changes') {
