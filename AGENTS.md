@@ -36,6 +36,7 @@ make dev-cli              # CLI
 make dev-tui              # TUI
 make stop                 # stop all dev processes
 make test                 # go test ./...
+make test-frontend        # this-repo frontend helper scripts only (not product UI Test)
 make test-integration     # integration tests
 make build-all            # out/frontend/dist + out/server/* (3 binaries)
 make build-go             # all 3 Go binaries

@@ -18,8 +18,9 @@ Danmo 沙箱是 **Linux 桌面虚拟机**，工具在机内执行。本专家只
 
 ## Danmo `ui-test` 选型（v1）
 
-- 用例：项目内 **Markdown specs**（对齐 Drik / AgenTeX 风格步骤动词）。
-- 执行：**优先 `browser_*`，必要时 `computer` 开 Linux 桌面浏览器**。
+- **变更驱动**：读用户项目的 git/工作区 diff → 自动写/更新 Markdown 用例（`from-changes`）。
+- 用例：项目内 **Markdown specs**（对齐 Drik / AgenTeX 风格步骤动词），落在该项目 `ui-tests/`。
+- 执行：**browser use（`browser_*`）优先**，必要时 **computer use（`computer`）** 开 Linux 桌面浏览器。
 - **不**在 v1 引入 Playwright/Midscene/Stagehand 工程或依赖。
 - 若团队日后需要纯 CI 脚本，可将稳定场景再人工沉淀为 Playwright；那是后续阶段，不是本专家默认产出。
 

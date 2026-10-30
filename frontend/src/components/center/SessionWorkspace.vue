@@ -46,6 +46,7 @@ import type { OfficeEditAttachment } from '@/types/office-edit-attachment'
 import { fetchJSON } from '@/api/client'
 import { formatTokenCount, useSessionContextUsage } from '@/composables/useSessionContextUsage'
 import { routeProjectFile } from '@/utils/file-route'
+import { planProgressFromEvents } from '@/utils/plan-from-stream'
 
 import type { StreamEvent, TurnLog } from '@/types/mission'
 
@@ -639,42 +640,9 @@ const planTurnId = computed(() => {
 })
 
 /** Latest plan/todo snapshot — badge shows completed/total (create_plan todos preferred). */
-const planProgress = computed(() => {
-  const events = sessions.streamEvents
-  const countTodos = (items: unknown[]) => {
-    const total = items.length
-    const completed = items.filter(
-      (item) => String((item as { status?: string })?.status ?? '') === 'completed',
-    ).length
-    return { completed, total }
-  }
-  // Prefer session-wide create_plan / update_plan todos (newest first).
-  for (let i = events.length - 1; i >= 0; i--) {
-    const ev = events[i]
-    if (ev.type !== 'tool.running' && ev.type !== 'tool.completed') continue
-    const p = ev.payload as Record<string, unknown> | null
-    const name = String(p?.name ?? '')
-    if (name !== 'create_plan' && name !== 'update_plan') continue
-    const input = p?.input as Record<string, unknown> | null
-    const items = input?.todos
-    if (!Array.isArray(items) || items.length === 0) continue
-    return countTodos(items)
-  }
-  // Fallback: todowrite on the active plan turn.
-  const turnId = planTurnId.value
-  for (let i = events.length - 1; i >= 0; i--) {
-    const ev = events[i]
-    if (turnId && ev.turnId !== turnId) continue
-    if (ev.type !== 'tool.running') continue
-    const p = ev.payload as Record<string, unknown> | null
-    if (p?.name !== 'todowrite') continue
-    const input = p?.input as Record<string, unknown> | null
-    const items = input?.todos
-    if (!Array.isArray(items) || items.length === 0) continue
-    return countTodos(items)
-  }
-  return { completed: 0, total: 0 }
-})
+const planProgress = computed(() =>
+  planProgressFromEvents(sessions.streamEvents, planTurnId.value),
+)
 
 const visibleTurns = computed(() => {
   if (!currentTurnId.value) return rootTurns.value

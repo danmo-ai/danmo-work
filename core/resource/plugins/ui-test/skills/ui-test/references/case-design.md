@@ -18,6 +18,7 @@
 | `Target:` | yes | Absolute URL or Danmo `/raw/` / `/proxy/` URL |
 | `Scope: web` | yes | Non-web → out of scope for this expert |
 | `Engine:` | yes | `browser` (default) or `computer` |
+| `Change-source:` | recommended | Git range, `working-tree`, or key paths (see `from-changes.md`) |
 | `## Acceptance` | yes | Product-level success / forbidden states |
 | `## Scenarios` | yes | At least one `### S#: …` block |
 

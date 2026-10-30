@@ -4,6 +4,7 @@ import {
   latestTodoWriteItems,
   buildPlanExecutePrefill,
   parsePlanTodos,
+  planProgressFromEvents,
 } from '../src/utils/plan-from-stream.ts'
 
 assert.equal(parsePlanTodos(null).length, 0)
@@ -79,5 +80,31 @@ const todoPrefill = buildPlanExecutePrefill(null, doc.todos, {
 assert.ok(todoPrefill.includes('## Todos'))
 assert.ok(todoPrefill.includes('[x] Wire route'))
 assert.ok(todoPrefill.includes('[ ] Tests'))
+
+// Plan rail badge: create_plan/update_plan wins over todowrite
+assert.deepEqual(planProgressFromEvents(events), { completed: 1, total: 2 })
+assert.deepEqual(planProgressFromEvents(todoOnly, 'turn-1'), { completed: 0, total: 1 })
+assert.deepEqual(planProgressFromEvents([]), { completed: 0, total: 0 })
+
+const mixed = [
+  ...todoOnly,
+  {
+    type: 'tool.completed',
+    turnId: 'turn-2',
+    payload: {
+      name: 'create_plan',
+      input: {
+        name: 'Ship',
+        plan: '# Ship',
+        todos: [
+          { id: 'a', content: 'A', status: 'completed' },
+          { id: 'b', content: 'B', status: 'completed' },
+          { id: 'c', content: 'C', status: 'pending' },
+        ],
+      },
+    },
+  },
+]
+assert.deepEqual(planProgressFromEvents(mixed, 'turn-1'), { completed: 2, total: 3 })
 
 console.log('plan-from-stream helpers ok')

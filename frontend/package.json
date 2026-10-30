@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "vue-tsc --noEmit",
+    "test": "node scripts/run-ui-tests.mjs",
     "test:slides": "node --import ./scripts/register-ts-resolve.mjs --experimental-strip-types scripts/test-slides-render.mjs",
     "test:code-route": "node --experimental-strip-types scripts/test-code-route.mjs",
     "test:element-attachment": "node --experimental-strip-types scripts/test-element-attachment.mjs",
@@ -15,6 +16,7 @@
     "test:composer-experts": "node --experimental-strip-types scripts/test-composer-experts.mjs",
     "test:open-session-tabs": "node --experimental-strip-types scripts/test-open-session-tabs.mjs",
     "test:novel-workbench": "node --experimental-strip-types scripts/test-novel-workbench.mjs",
+    "test:ms-office-convert": "node --experimental-strip-types scripts/test-ms-office-convert.mjs",
     "check-i18n": "NODE_ENV=production node --experimental-strip-types scripts/check-i18n.mjs",
     "preview": "vite preview",
     "test:nested-scroll": "node --experimental-strip-types scripts/test-nested-scroll-chain.mjs"

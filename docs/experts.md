@@ -76,7 +76,7 @@ delegate_agent(agent_id="<id>", goal="...")
 | 调研/自动化 | `researcher` | Researcher | 专家（技能用 home：deep-research） |
 | 调研/自动化 | `browser` | Browser | 专家 + skill + `browser_*` |
 | 调研/自动化 | `computer` | Computer | 专家 + `computer-use` + `computer` |
-| 调研/自动化 | `ui-test` | UI Test | Web UI 测试：Markdown 用例 + `browser_*`/`computer` 执行 + `kb-ui-test` |
+| 调研/自动化 | `ui-test` | UI Test | 用户项目：代码变更 → 自动写 Markdown 用例 → `browser_*`/`computer` 执行 + `kb-ui-test` |
 | 职场写作 | `document` | Document | 职场**写作交付**（报告默认 `.md`；幻灯片/表格走绑定技能；含原 Comms）。专家提示词只做路由与禁令；写法/IR 细节在 home 技能与 `kb-office-ir` |
 | 职场写作 | `data` | Data | 专家 |
 | 创作 | `novel` | Novel Writing | 专家 + `novel-setup` / `novel-plan` / `novel-write` / `novel-review` + KB `kb-novel-craft` |
@@ -99,6 +99,32 @@ delegate_agent(agent_id="<id>", goal="...")
 4. 技法检索走知识库 `kb-novel-craft`（共性篇 + 题材专有篇；`novel-state.genre` 决定 preflight 注入哪一篇题材文，`genre=悬疑` 且 `subgenre=刑侦探案` 再追加「刑侦人味文风」）；本书设定用项目文件。
 
 详细 SOP 见各技能的 `references/`（应用内 `read_skill`）。
+
+---
+
+## 4b. UI Test 专家（简介）
+
+**产品能力：按你项目的代码变更自动写 UI 用例，再用 browser use / computer use 自动跑**（不是给 Danmo Work 本仓库做回归）。
+
+| 需求 | 专家 |
+|------|------|
+| diff/PR → 自动写本项目 UI 用例并执行 + 报告 | **`ui-test`** |
+| 一次性网页操作（无套件） | `browser` |
+| 任意桌面 GUI（非 Web 测试交付） | `computer` |
+| 代码单测 / 集成测 | `implementer` + TDD |
+
+典型路径：Team / Implementer 改完 UI → 说「根据这次改动写 UI 测试并跑」→ **UI Test** 读 diff、写 `ui-tests/specs/`、用 `browser_*` / `computer` 执行。
+
+用法：
+
+1. 打开**你的项目**会话；主专家选 **Team**；说「根据这次改动写/跑 UI 测试」，或 `@` **UI Test**。
+2. 专家 `read_skill(ui-test)` → `from-changes`：只读 git/`git diff`（或目标里给的路径）→ 映射 UI 影响面 → 把用例写进/更新到**该项目**的 `ui-tests/specs/*.md`。
+3. `Target` 指向你的应用：本机服务走 `/api/v1/proxy/http/<host>-<port>/…`，项目内静态页走 `/api/v1/projects/<id>/raw/…`（禁止 `file://`）。
+4. **执行**：默认 **browser use**（`browser_*`：navigate → snapshot refs → act → verify）；布局 / canvas / headed 或 `browser_*` 不可用时升到 **computer use**（`computer`）。
+5. 断言必须可核对（文案、URL、禁止态）；截图作证据，不能单靠「看起来没问题」。
+6. 写入项目内 `ui-tests/runs/<YYYYMMDD-HHMMSS>/report.md`，按专家输出格式交 SUMMARY / CHANGES / RESULTS / ARTIFACTS。
+
+沙箱：容器后端设 `runtime.sandbox.profile=desktop`（Xvfb + Chromium CDP + noVNC），见 [agent-desktop-sandbox.md](./agent-desktop-sandbox.md)。禁止脚手架 Playwright / Cypress；`exec_shell` 不用于点 UI。
 
 ---
 
