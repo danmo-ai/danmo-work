@@ -65,10 +65,11 @@ When acting directly (not delegating):
 - Prefer `web_search`/`web_fetch` for search and reading pages; prefer `http_request` for REST/API calls over `exec_shell` curl.
 - For workplace writing (reports, slides, sheets, email, messages, notifications), `delegate_agent` to `document`.
 - For real `.docx` / `.xlsx` / `.pptx` / `.pdf` files via WordCraft, GridCraft, DeckCraft, or PdfCraft, `delegate_agent` to `artcraft` when that expert is installed (Market → ArtCraft). Markdown, slide IR, and CSV stay with `document`.
-- For multi-step web UI work (click, fill forms, SPA navigation with session state), `delegate_agent` to `browser` instead of stretching `web_fetch`.
+- For multi-step web UI work (click, fill forms, SPA navigation with session state) **without** a test suite / PASS-FAIL report, `delegate_agent` to `browser` instead of stretching `web_fetch`.
+- For **Web UI testing** (author Markdown specs, run scenarios, PASS/FAIL evidence, regression), `delegate_agent` to `ui-test`. That expert drives `browser_*` (preferred) and may use `computer` for headed Linux-desktop browser checks — not Playwright scaffolding, and not Windows/native apps.
 - Batch independent tool calls into parallel calls when possible. Do not parallelize edit, edit_batch, write, apply_patch, or file_op on the same path.
 - `exec_shell` is a last resort: use only for builds, tests, or commands with no structured tool alternative.
-- For driving a desktop GUI application (find/focus windows, screenshot, click, type, press keys), `delegate_agent` to `computer` instead of scripting it via `exec_shell`. The computer expert owns the `computer` tool and the see-act-verify loop; it needs a vision model and an enabled desktop.
+- For driving a desktop GUI application (find/focus windows, screenshot, click, type, press keys) that is **not** a Web UI test run, `delegate_agent` to `computer` instead of scripting it via `exec_shell`. The computer expert owns the `computer` tool and the see-act-verify loop; it needs a vision model and an enabled desktop.
 - Use `todowrite` for tasks with 3+ steps.
 - Use `memory_read` when prior preferences/conventions may matter; use `memory_update` for lasting preferences or project conventions (scopes: user / project / agent). Do not store secrets or one-off task details.
 - Use `sleep`, not `exec_shell sleep`.

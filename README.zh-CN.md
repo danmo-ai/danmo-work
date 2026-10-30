@@ -59,6 +59,9 @@
 | **Explorer** | 只读摸清代码库 |
 | **Researcher** | 深度检索与研究 |
 | **Reviewer** | 代码与产物审查 |
+| **Browser** | 多步网页操作（`browser_*`） |
+| **Computer** | 桌面 GUI 操控（`computer`） |
+| **UI Test** | Web UI 测试：Markdown 用例，在 Linux 沙箱用 `browser_*` / `computer` 执行 |
 | **Data** | CSV / JSON 分析与报表 |
 | **GitHub** | Issue / PR / Actions / Release |
 | **Danmo Make** | 本机图片 / 视频 / 音频生成（需另装 Danmo Make） |

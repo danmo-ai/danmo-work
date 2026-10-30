@@ -208,14 +208,16 @@ func TestBuiltinPluginsRegisterExpertsAndMCP(t *testing.T) {
 	}
 
 	list := pm.ListInstalled()
-	if len(list) < 11 {
-		t.Fatalf("installed plugins=%d want >=11", len(list))
+	if len(list) < 12 {
+		t.Fatalf("installed plugins=%d want >=12", len(list))
 	}
-	var novel *domain.PluginInstalled
+	var novel, uiTest *domain.PluginInstalled
 	for i := range list {
-		if list[i].Name == "novel" {
+		switch list[i].Name {
+		case "novel":
 			novel = &list[i]
-			break
+		case "ui-test":
+			uiTest = &list[i]
 		}
 	}
 	if novel == nil {
@@ -223,6 +225,22 @@ func TestBuiltinPluginsRegisterExpertsAndMCP(t *testing.T) {
 	}
 	if len(novel.Components.Knowledge) != 1 || novel.Components.Knowledge[0] != "kb-novel-craft" {
 		t.Fatalf("novel knowledge components=%v", novel.Components.Knowledge)
+	}
+	if uiTest == nil {
+		t.Fatal("ui-test plugin missing from list")
+	}
+	if len(uiTest.Components.Knowledge) != 1 || uiTest.Components.Knowledge[0] != "kb-ui-test" {
+		t.Fatalf("ui-test knowledge components=%v", uiTest.Components.Knowledge)
+	}
+	ut, err := am.Get(context.Background(), "ui-test")
+	if err != nil {
+		t.Fatalf("ui-test expert: %v", err)
+	}
+	if !ut.Builtin || ut.Mode != domain.AgentModeSubagent {
+		t.Fatalf("ui-test agent: %+v", ut)
+	}
+	if _, err := sm.Get(context.Background(), "ui-test"); err != nil {
+		t.Fatalf("ui-test skill: %v", err)
 	}
 
 	plan, err := sm.Get(context.Background(), "novel-plan")

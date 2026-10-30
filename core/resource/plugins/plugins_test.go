@@ -15,7 +15,7 @@ func TestBuiltinPluginNames(t *testing.T) {
 	names := BuiltinPluginNames()
 	want := map[string]bool{
 		"github": true, "danmo-make": true, "novel": true,
-		"browser": true, "computer": true,
+		"browser": true, "computer": true, "ui-test": true,
 		"implementer": true, "explorer": true, "reviewer": true,
 		"researcher": true, "document": true, "data": true,
 	}
@@ -205,6 +205,48 @@ func TestBrowserAndComputerPluginsPackSkills(t *testing.T) {
 	}
 }
 
+func TestUITestPluginPacksSkillKBAndTools(t *testing.T) {
+	for _, p := range []string{
+		"ui-test/skills/ui-test/SKILL.md",
+		"ui-test/skills/ui-test/assets/templates/spec.md",
+		"ui-test/skills/ui-test/references/case-design.md",
+		"ui-test/skills/ui-test/references/execution.md",
+		"ui-test/ai.danmo.work/knowledge/_meta.json",
+		"ui-test/ai.danmo.work/knowledge/01-landscape.md",
+		"ui-test/ai.danmo.work/knowledge/02-oracle.md",
+	} {
+		if _, err := fs.ReadFile(FS, p); err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
+	}
+	meta, err := fs.ReadFile(FS, "ui-test/ai.danmo.work/knowledge/_meta.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(meta), `"id": "kb-ui-test"`) {
+		t.Fatalf("ui-test KB meta missing stable id: %s", meta)
+	}
+	ed, err := fs.ReadFile(FS, "ui-test/ai.danmo.work/experts/ui-test.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(ed)
+	for _, needle := range []string{
+		"kb-ui-test",
+		"browser_navigate",
+		"browser_act",
+		"computer",
+		"ui-test",
+		"browser",
+		"computer-use",
+		"search_kb",
+	} {
+		if !strings.Contains(s, needle) {
+			t.Errorf("ui-test expert missing %q", needle)
+		}
+	}
+}
+
 func TestThinCodingPluginsRelyOnHomeSkills(t *testing.T) {
 	// implementer should not ship a private copy of debugging/TDD — those stay in home.
 	entries, err := fs.ReadDir(FS, "implementer")
@@ -221,7 +263,7 @@ func TestThinCodingPluginsRelyOnHomeSkills(t *testing.T) {
 func TestBuiltinPluginCategories(t *testing.T) {
 	want := map[string]string{
 		"implementer": "coding", "explorer": "coding", "reviewer": "coding", "github": "coding",
-		"researcher": "research", "browser": "research", "computer": "research",
+		"researcher": "research", "browser": "research", "computer": "research", "ui-test": "research",
 		"document": "office", "data": "office",
 		"novel": "creative", "danmo-make": "creative",
 	}

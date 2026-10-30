@@ -1,0 +1,5 @@
+{
+  "id": "kb-ui-test",
+  "name": "Web UI 测试（Agent 驱动）",
+  "description": "开源 UI 自动化路线对比与本专家选型；断言/Oracle 规则。执行细节在 ui-test 技能 references，不在此库重复 browser/computer 工具手册。"
+}
