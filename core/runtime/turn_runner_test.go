@@ -998,7 +998,7 @@ func TestDedupToolResults_SkipsAskUser(t *testing.T) {
 func TestSnipHeadPreservesAskUserNotReadSkill(t *testing.T) {
 	tr := NewTurnRunner(nil, nil, nil, nil, nil)
 	pad := strings.Repeat("word ", 80)
-	skillBody := "# Novel Review\n" + pad
+	skillBody := "# Review Notes\n" + pad
 	msgs := []Message{
 		{Role: RoleSystem, Content: "sys"},
 		{Role: RoleUser, Content: "delegate goal"},

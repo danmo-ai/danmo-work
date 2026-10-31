@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"danmo-work/core/paths"
 	"danmo-work/core/resource/home"
 )
 
@@ -55,9 +54,6 @@ func TestSyncBuiltinToFSCopiesAgentsSkills(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dataDir, "agents", "team.md")); err != nil {
 		t.Fatalf("primary team agent missing from home sync: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(paths.KnowledgeDir(), "kb-novel-craft")); err == nil {
-		t.Fatal("kb-novel-craft should not sync to KnowledgeDir from home")
 	}
 
 	ver, err := os.ReadFile(filepath.Join(dataDir, ".builtin_version"))

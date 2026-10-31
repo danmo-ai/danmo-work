@@ -7,7 +7,6 @@ import {
   listSummonableExperts,
   normalizeExpertCategory,
   prependExpertSummon,
-  WORKBENCH_CONSTRAINT_MARKER,
 } from '../src/types/composer-experts.ts'
 
 const agents = [
@@ -77,9 +76,5 @@ assert.ok(relayOut.endsWith('写第 4 章正文'))
 
 assert.equal(expertSummonModeForOutgoing(1, 'hello'), 'relay')
 assert.equal(expertSummonModeForOutgoing(0, 'hello'), 'coordinate')
-assert.equal(
-  expertSummonModeForOutgoing(0, `task\n${WORKBENCH_CONSTRAINT_MARKER}`),
-  'relay',
-)
 
 console.log('composer-experts helpers ok')

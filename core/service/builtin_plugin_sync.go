@@ -10,43 +10,10 @@ import (
 	"time"
 
 	"danmo-work/core/domain"
-	"danmo-work/core/paths"
 	"danmo-work/core/resource/plugins"
 )
 
 const builtinPluginsVersionFile = ".builtin_plugins_version"
-
-// Agents/skills/knowledge that used to live under core/resource/home and are now
-// shipped as builtin plugins. Removed from data/ on plugin sync so native FS
-// copies cannot shadow plugin components (MergeAgentsByID: native wins).
-var migratedBuiltinAgentFiles = []string{
-	"github.md",
-	"danmo-make.md",
-	"danmo-novel.md",
-	"browser.md",
-	"operator.md", // legacy id before rename to computer
-	"computer.md",
-	"implementer.md",
-	"explorer.md",
-	"reviewer.md",
-	"researcher.md",
-	"document.md",
-	"data.md",
-	"comms.md", // merged into document plugin
-}
-
-var migratedBuiltinSkillDirs = []string{
-	"github",
-	"danmo-make",
-	"danmo-novel",
-	"novel-writing",
-	"browser",
-	"computer-use",
-}
-
-var migratedBuiltinKnowledgeDirs = []string{
-	"kb-novel-craft", // novel craft KB removed with the novel expert
-}
 
 // retiredBuiltinPlugins are embedded pack names removed or renamed; cleaned on every sync.
 var retiredBuiltinPlugins = []string{
@@ -56,7 +23,7 @@ var retiredBuiltinPlugins = []string{
 
 // SyncBuiltinPlugins materializes embedded first-party plugins into
 // $WORK_HOME/plugins/<name>/ and records them in installed.json (Builtin=true).
-// Hash-gated like SyncBuiltinToFS. Also cleans leftovers migrated out of home embed.
+// Hash-gated like SyncBuiltinToFS.
 func SyncBuiltinPlugins(dataDir string) error {
 	hash, err := plugins.BuiltinContentHash()
 	if err != nil {
@@ -72,8 +39,6 @@ func SyncBuiltinPlugins(dataDir string) error {
 	storedHash, _ := os.ReadFile(versionFile)
 	hashMatches := strings.TrimSpace(string(storedHash)) == hash
 
-	// Always strip migrated leftovers so native agents cannot shadow plugins.
-	cleanMigratedBuiltinLeftovers(dataDir)
 	cleanRetiredBuiltinPlugins(pluginsDir)
 
 	if hashMatches {
@@ -200,47 +165,6 @@ func cleanRetiredBuiltinPlugins(pluginsDir string) {
 			continue
 		}
 		log.Printf("[builtin-plugins] removing retired plugin: %s", name)
-		_ = os.RemoveAll(path)
-	}
-}
-
-func cleanMigratedBuiltinLeftovers(dataDir string) {
-	agentsDir := filepath.Join(dataDir, "agents")
-	for _, name := range migratedBuiltinAgentFiles {
-		path := filepath.Join(agentsDir, name)
-		if _, err := os.Stat(path); err != nil {
-			continue
-		}
-		log.Printf("[builtin-plugins] removing migrated agent leftover: %s", name)
-		_ = os.Remove(path)
-	}
-
-	skillsDir := filepath.Join(dataDir, "skills")
-	for _, id := range migratedBuiltinSkillDirs {
-		path := filepath.Join(skillsDir, id)
-		if _, err := os.Stat(path); err != nil {
-			continue
-		}
-		log.Printf("[builtin-plugins] removing migrated skill leftover: %s", id)
-		_ = os.RemoveAll(path)
-	}
-
-	for _, id := range migratedBuiltinKnowledgeDirs {
-		path := filepath.Join(paths.KnowledgeDir(), id)
-		if _, err := os.Stat(path); err != nil {
-			continue
-		}
-		log.Printf("[builtin-plugins] removing migrated knowledge leftover: %s", id)
-		_ = os.RemoveAll(path)
-	}
-
-	stale := filepath.Join(dataDir, "knowledge")
-	for _, id := range migratedBuiltinKnowledgeDirs {
-		path := filepath.Join(stale, id)
-		if _, err := os.Stat(path); err != nil {
-			continue
-		}
-		log.Printf("[builtin-plugins] removing stale data-dir knowledge: %s", id)
 		_ = os.RemoveAll(path)
 	}
 }

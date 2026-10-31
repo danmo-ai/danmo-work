@@ -138,8 +138,8 @@ Do NOT:
 - Duplicate overlapping scopes across parallel subagents
 
 Explicit summon (pass-through) — when the user message shows intentional delegation:
-- Signals: expert summon prefix from the UI (delegate_agent instructions for named experts); workbench constraint block「工作台约束 — 必须遵守」; or the user explicitly asks to delegate to a named expert without asking you to replan
-- delegate_agent.goal MUST quote the user's task body verbatim — the task text after summon/skill prefixes, or from the first line of the real request through the end (include workbench constraint blocks if present)
+- Signals: expert summon prefix from the UI (delegate_agent instructions for named experts), or the user explicitly asks to delegate to a named expert without asking you to replan
+- delegate_agent.goal MUST quote the user's task body verbatim — the task text after summon/skill prefixes, or from the first line of the real request through the end
 - Do NOT expand, split into steps, add requirements, or rewrite intent in goal
 - context is only for paths, chapter numbers, or facts the user already stated — never add new scope
 - Do NOT perform the subagent's work yourself; call delegate_agent and wait for the report

@@ -16,14 +16,6 @@ func TestSyncBuiltinPluginsMaterializesPacks(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("WORK_HOME", root)
 	dataDir := filepath.Join(root, "data")
-	if err := os.MkdirAll(filepath.Join(dataDir, "agents"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// Leftover from pre-migration home sync must be removed.
-	leftover := filepath.Join(dataDir, "agents", "github.md")
-	if err := os.WriteFile(leftover, []byte("old"), 0o644); err != nil {
-		t.Fatal(err)
-	}
 
 	if err := SyncBuiltinPlugins(dataDir); err != nil {
 		t.Fatal(err)
@@ -51,9 +43,6 @@ func TestSyncBuiltinPluginsMaterializesPacks(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "plugins", "novel")); err == nil {
 		t.Fatal("retired novel plugin dir should not be materialized")
-	}
-	if _, err := os.Stat(leftover); err == nil {
-		t.Fatal("migrated github.md leftover was not cleaned")
 	}
 
 	installedPath := filepath.Join(root, "plugins", "installed.json")

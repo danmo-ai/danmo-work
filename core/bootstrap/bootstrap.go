@@ -17,7 +17,6 @@ import (
 	"danmo-work/core/domain"
 	"danmo-work/core/paths"
 	"danmo-work/core/port"
-	"danmo-work/core/resource/home"
 	dqruntime "danmo-work/core/runtime"
 	dqbrowser "danmo-work/core/runtime/browser"
 	dqcomputer "danmo-work/core/runtime/computer"
@@ -248,7 +247,7 @@ func New(cfg Config) *Core {
 	}
 
 	if err := service.SyncBuiltinToFS(appCfg.Data.Dir); err != nil {
-		log.Printf("[bootstrap] builtin sync failed (experts/skills/knowledge not refreshed): %v", err)
+		log.Printf("[bootstrap] builtin sync failed (experts/skills not refreshed): %v", err)
 	}
 	if err := service.SyncBuiltinPlugins(appCfg.Data.Dir); err != nil {
 		log.Printf("[bootstrap] builtin plugins sync failed: %v", err)
@@ -256,7 +255,6 @@ func New(cfg Config) *Core {
 	if err := pluginManager.Init(context.Background()); err != nil {
 		log.Printf("[bootstrap] plugin init: %v", err)
 	}
-	ensureBuiltinKnowledge(knowledgeMgr)
 	knowledgeMgr.StartAsyncIndex(context.Background())
 	if err := mcpManager.SyncBuiltinMCP(); err != nil {
 		log.Printf("[bootstrap] builtin mcp sync failed (connectors not upserted): %v", err)
@@ -580,13 +578,4 @@ func ensureDefaultProject(pm *service.ProjectManager) {
 		return
 	}
 	pm.Create(ctx, domain.CreateProjectRequest{Name: "默认项目"})
-}
-
-func ensureBuiltinKnowledge(knowledgeMgr *service.KnowledgeManager) {
-	for _, id := range home.KnowledgeDirs() {
-		root := filepath.Join(paths.KnowledgeDir(), id)
-		if err := knowledgeMgr.ScanBuiltinKnowledgeDir(context.Background(), id, root); err != nil {
-			log.Printf("[bootstrap] scan builtin KB %s: %v", id, err)
-		}
-	}
 }

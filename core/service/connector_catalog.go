@@ -121,12 +121,12 @@ func DanmoMakeCatalogEntry() domain.ConnectorCatalogEntry {
 	}
 }
 
-// DanmoNovelCatalogEntry is the built-in local novel-workbench MCP preset.
+// DanmoNovelCatalogEntry is the built-in local fiction-production MCP preset.
 func DanmoNovelCatalogEntry() domain.ConnectorCatalogEntry {
 	return domain.ConnectorCatalogEntry{
 		ID:           "danmo-novel",
 		Name:         "Danmo Novel",
-		Description:  "Local novel workbench via Danmo Novel MCP (bound-only; use with danmo-novel expert). Candidate-accept only.",
+		Description:  "Local fiction production via Danmo Novel MCP (bound-only; use with danmo-novel expert). Candidate-accept only.",
 		Category:     "local",
 		Transport:    "streamable-http",
 		URL:          ResolveDanmoNovelMCPURL(),

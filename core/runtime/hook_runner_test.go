@@ -18,11 +18,11 @@ func TestHookMatcherMatches(t *testing.T) {
 		matcher, agent string
 		want           bool
 	}{
-		{"", "novel", true},
-		{"novel", "novel", true},
-		{"novel", "translator", false},
-		{"novel|translator", "translator", true},
-		{"novel|translator", "other", false},
+		{"", "translator", true},
+		{"translator", "translator", true},
+		{"translator", "summarizer", false},
+		{"translator|summarizer", "summarizer", true},
+		{"translator|summarizer", "other", false},
 	}
 	for _, c := range cases {
 		if got := domain.HookMatcherMatches(c.matcher, c.agent); got != c.want {
@@ -33,11 +33,11 @@ func TestHookMatcherMatches(t *testing.T) {
 
 func TestHooksForAgent(t *testing.T) {
 	hooks := []domain.ResolvedHook{
-		{Event: domain.HookEventSubagentStart, Matcher: "novel", Command: "a"},
-		{Event: domain.HookEventUserPromptSubmit, Matcher: "novel", Command: "b"},
+		{Event: domain.HookEventSubagentStart, Matcher: "translator", Command: "a"},
+		{Event: domain.HookEventUserPromptSubmit, Matcher: "translator", Command: "b"},
 		{Event: domain.HookEventSubagentStart, Matcher: "", Command: "c"},
 	}
-	got := service.HooksForAgent(hooks, domain.HookEventSubagentStart, "novel")
+	got := service.HooksForAgent(hooks, domain.HookEventSubagentStart, "translator")
 	if len(got) != 2 {
 		t.Fatalf("want 2 hooks, got %d", len(got))
 	}
@@ -63,14 +63,14 @@ func writeHookScript(t *testing.T, body string) string {
 func TestRunContextHookInjects(t *testing.T) {
 	script := writeHookScript(t, `printf '{"additionalContext": "STYLE: 短句克制"}'`)
 	h := domain.ResolvedHook{
-		PluginName: "novel", PluginRoot: "/tmp/plugin", Event: domain.HookEventSubagentStart,
+		PluginName: "translator", PluginRoot: "/tmp/plugin", Event: domain.HookEventSubagentStart,
 		Command: script,
 	}
-	got := runContextHook(context.Background(), h, "novel", "s1", "p1", t.TempDir(), "写第 3 章")
+	got := runContextHook(context.Background(), h, "translator", "s1", "p1", t.TempDir(), "翻译第 3 章")
 	if !strings.Contains(got, "STYLE: 短句克制") {
 		t.Fatalf("missing additionalContext: %q", got)
 	}
-	if !strings.Contains(got, `source="novel/subagentStart"`) {
+	if !strings.Contains(got, `source="translator/subagentStart"`) {
 		t.Fatalf("missing provenance tag: %q", got)
 	}
 }
@@ -78,11 +78,11 @@ func TestRunContextHookInjects(t *testing.T) {
 func TestRunContextHookPlaceholdersAndStdin(t *testing.T) {
 	script := writeHookScript(t, `cat > /dev/null; printf '{"additionalContext": "ok"}'`)
 	h := domain.ResolvedHook{
-		PluginName: "novel", PluginRoot: "/nonexistent/plugin root", Event: domain.HookEventSubagentStart,
+		PluginName: "translator", PluginRoot: "/nonexistent/plugin root", Event: domain.HookEventSubagentStart,
 		Command: `test -d "${PLUGIN_DIR}" && exit 1; ` + script,
 	}
 	// ${PLUGIN_DIR} points to a missing dir → test -d fails → script runs.
-	got := runContextHook(context.Background(), h, "novel", "", "", t.TempDir(), "goal")
+	got := runContextHook(context.Background(), h, "translator", "", "", t.TempDir(), "goal")
 	if !strings.Contains(got, "ok") {
 		t.Fatalf("placeholder substitution broken: %q", got)
 	}
@@ -90,10 +90,10 @@ func TestRunContextHookPlaceholdersAndStdin(t *testing.T) {
 
 func TestRunContextHookFailuresNeverBlock(t *testing.T) {
 	cases := []domain.ResolvedHook{
-		{PluginName: "x", Event: "subagentStart", Command: "exit 3"},                      // non-zero exit
-		{PluginName: "x", Event: "subagentStart", Command: "printf 'not-json'"},           // invalid stdout
-		{PluginName: "x", Event: "subagentStart", Command: "printf '{}'"},                 // empty context
-		{PluginName: "x", Event: "subagentStart", Command: "sleep 5", TimeoutSec: 1},      // timeout
+		{PluginName: "x", Event: "subagentStart", Command: "exit 3"},                 // non-zero exit
+		{PluginName: "x", Event: "subagentStart", Command: "printf 'not-json'"},      // invalid stdout
+		{PluginName: "x", Event: "subagentStart", Command: "printf '{}'"},            // empty context
+		{PluginName: "x", Event: "subagentStart", Command: "sleep 5", TimeoutSec: 1}, // timeout
 	}
 	for i, h := range cases {
 		start := time.Now()

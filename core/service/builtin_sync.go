@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"danmo-work/core/paths"
 	"danmo-work/core/resource/home"
 )
 
-// SyncBuiltinToFS materializes the embedded builtin resources (agents, skills,
-// knowledge bases) into the data home so they go through the same filesystem
-// scan/ingest paths as user-created resources.
+// SyncBuiltinToFS materializes the embedded builtin resources (agents and
+// skills) into the data home so they go through the same filesystem
+// scan/ingest paths as user-created resources. No builtin knowledge bases are
+// embedded.
 func SyncBuiltinToFS(dataDir string) error {
 	hash, err := home.BuiltinContentHash()
 	if err != nil {
@@ -33,7 +33,6 @@ func SyncBuiltinToFS(dataDir string) error {
 
 	agentsDir := filepath.Join(dataDir, "agents")
 	skillsDir := filepath.Join(dataDir, "skills")
-	knowledgeDir := paths.KnowledgeDir()
 
 	ts := time.Now().Format("2006-01-02T150405")
 	backupDir := filepath.Join(dataDir, ".backups", ts)
@@ -43,15 +42,10 @@ func SyncBuiltinToFS(dataDir string) error {
 	if _, err := os.Stat(skillsDir); err == nil {
 		copyDirectory(skillsDir, filepath.Join(backupDir, "skills"))
 	}
-	if knowledgeHasEntries(knowledgeDir) {
-		copyDirectory(knowledgeDir, filepath.Join(backupDir, "knowledge"))
-	}
 	log.Printf("[builtin] backup: %s", backupDir)
 
 	cleanBuiltinAgents(agentsDir)
 	cleanBuiltinSkills(skillsDir)
-	cleanBuiltinKnowledge(knowledgeDir)
-	cleanStaleDataKnowledge(dataDir)
 
 	if err := copyBuiltinFiles(dataDir); err != nil {
 		return fmt.Errorf("copy builtin files: %w", err)
@@ -126,40 +120,8 @@ func builtinSkillDirs() map[string]struct{} {
 	return out
 }
 
-func cleanBuiltinKnowledge(dir string) {
-	for _, id := range home.KnowledgeDirs() {
-		target := filepath.Join(dir, id)
-		if _, err := os.Stat(target); err != nil {
-			continue
-		}
-		log.Printf("[builtin] removing old builtin knowledge: %s", id)
-		_ = os.RemoveAll(target)
-	}
-}
-
-func cleanStaleDataKnowledge(dataDir string) {
-	stale := filepath.Join(dataDir, "knowledge")
-	for _, id := range home.KnowledgeDirs() {
-		target := filepath.Join(stale, id)
-		if _, err := os.Stat(target); err != nil {
-			continue
-		}
-		log.Printf("[builtin] removing stale data-dir knowledge: %s", id)
-		_ = os.RemoveAll(target)
-	}
-}
-
-func knowledgeHasEntries(dir string) bool {
-	entries, err := os.ReadDir(dir)
-	return err == nil && len(entries) > 0
-}
-
 func builtinFileTarget(dataDir, embedPath string) string {
 	embedPath = filepath.ToSlash(embedPath)
-	if strings.HasPrefix(embedPath, "knowledge/") {
-		rel := strings.TrimPrefix(embedPath, "knowledge/")
-		return filepath.Join(paths.KnowledgeDir(), filepath.FromSlash(rel))
-	}
 	return filepath.Join(dataDir, filepath.FromSlash(embedPath))
 }
 

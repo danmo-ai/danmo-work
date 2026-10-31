@@ -173,7 +173,7 @@ func (m *KnowledgeManager) ScanPluginBase(ctx context.Context, root string) erro
 }
 
 // pluginKnowledgeID resolves the KB id for a plugin knowledge root.
-// Prefers _meta.json "id" so packs can keep stable ids (e.g. kb-novel-craft).
+// Prefers _meta.json "id" so packs can keep stable ids.
 func pluginKnowledgeID(root string) string {
 	if meta := readKBmeta(filepath.Join(root, "_meta.json")); meta["id"] != "" {
 		return meta["id"]

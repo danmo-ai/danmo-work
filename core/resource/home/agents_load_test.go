@@ -43,12 +43,6 @@ func TestHomeEmbedOnlyKeepsPrimaryTeam(t *testing.T) {
 	}
 }
 
-func TestKnowledgeDirsEmptyAfterPluginMigration(t *testing.T) {
-	if dirs := KnowledgeDirs(); len(dirs) != 0 {
-		t.Fatalf("expected no home-embedded knowledge dirs, got %v", dirs)
-	}
-}
-
 func TestLoadSkillTemplatesIncludesAdaptedPack(t *testing.T) {
 	templates, err := LoadSkillTemplates()
 	if err != nil {
@@ -92,7 +86,7 @@ func TestLoadSkillTemplatesIncludesAdaptedPack(t *testing.T) {
 		}
 	}
 
-	for _, migrated := range []string{"github", "danmo-make", "novel-writing", "browser", "computer-use"} {
+	for _, migrated := range []string{"github", "danmo-make", "browser", "computer-use"} {
 		if _, ok := got[migrated]; ok {
 			t.Errorf("skill %q should live in its capability plugin, not home", migrated)
 		}
