@@ -16,6 +16,7 @@ export DQ_APP_NAME := $(APP_NAME)
 	build-go build-server build-cli build-tui build-sidecar build build-all clean \
 	build-env-tar build-env-tar-desktop fetch-ripgrep \
 	pack-prereqs pack-macos-desktop pack-linux-desktop pack-windows-desktop \
+	set-release-secrets \
 	eval-harbor-bin eval-harbor-base eval-harbor-sync-tb2 eval-harbor-smoke eval-harbor-suite eval-harbor-compare
 
 EVAL_BIN_DIR := $(OUT_DIR)/eval
@@ -128,6 +129,11 @@ pack-prereqs:
 pack-macos-desktop: pack-prereqs frontend-build
 	@chmod +x scripts/*.sh
 	@RELEASE_VERSION=$(RELEASE_VERSION) ./scripts/pack_desktop_macos.sh
+
+# 写入发布 secrets（macOS 证书从钥匙串导出，无需 p12）：make set-release-secrets
+set-release-secrets:
+	@chmod +x scripts/*.sh
+	@./scripts/gh_set_release_secrets.sh $(if $(P12),--p12 "$(P12)")
 
 # Bundled agent OCI image → out/env/danmo-work-env-linux-<arch>.tar.gz (no registry).
 # Set DQ_ENV_PROFILE=desktop for the Ubuntu desktop + Chromium CDP image.
