@@ -40,7 +40,12 @@
     "resources": [
       "resources/first_launch/*",
       "resources/rg/*"
-    ]
+    ],
+    "macOS": {
+      "hardenedRuntime": true,
+      "entitlements": "entitlements.plist",
+      "minimumSystemVersion": "11.0"
+    }
   },
   "plugins": {
     "updater": {

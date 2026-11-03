@@ -26,6 +26,9 @@ jobs:
   macos-desktop:
     name: macOS desktop
     runs-on: macos-latest
+    # 正常 10 分钟；Apple 公证队列偶尔要 30 分钟以上（danmo-novel 实测一次 33 分钟），
+    # 给足余量但别用默认的 6 小时——真卡住时占着 runner 白烧配额。
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -90,6 +93,20 @@ jobs:
         run: |
           chmod +x ${{ env.REPO_DIR }}/scripts/*.sh
           ${{ env.REPO_DIR }}/scripts/ci_prepare_tauri_signing_key.sh
+
+      # 导入 Apple 证书到临时 keychain，并把 APPLE_* 传给后续步骤。
+      # 没设 APPLE_CERTIFICATE 时脚本直接跳过，产物走 ad-hoc 签名（可打包，不可分发）。
+      - name: Import Apple signing certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          chmod +x ${{ env.REPO_DIR }}/scripts/*.sh
+          ${{ env.REPO_DIR }}/scripts/ci_import_apple_cert.sh
 
       - name: Build macOS desktop
         working-directory: ${{ env.REPO_DIR }}

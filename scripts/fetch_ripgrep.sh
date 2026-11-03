@@ -71,6 +71,25 @@ mkdir -p "$DEST_DIR"
 DEST_BIN="$DEST_DIR/$BIN_NAME"
 VERSION_FILE="$DEST_DIR/VERSION"
 
+# stage_home 必须定义在第一次调用之前：Bash 的函数在「执行到定义那一行」时才存在，
+# 而下面的「已缓存」快路径在第 79 行就会调用它。放到文件末尾会让这条路径
+# 报 `stage_home: command not found`（只有 rg 已缓存时才复现）。
+stage_home() {
+  if [[ "${RG_NO_HOME_BIN:-}" != "1" ]]; then
+    HOME_BIN="${HOME:-.}/.danmo-work/bin"
+    mkdir -p "$HOME_BIN"
+    cp -f "$DEST_BIN" "$HOME_BIN/$BIN_NAME"
+    chmod +x "$HOME_BIN/$BIN_NAME" 2>/dev/null || true
+    echo "==> Copied to $HOME_BIN/$BIN_NAME"
+  fi
+  if [[ -n "${1:-}" ]]; then
+    mkdir -p "$1"
+    cp -f "$DEST_BIN" "$1/$BIN_NAME"
+    chmod +x "$1/$BIN_NAME" 2>/dev/null || true
+    echo "==> Staged into $1/$BIN_NAME"
+  fi
+}
+
 if [[ -f "$DEST_BIN" && "${RG_FORCE:-}" != "1" ]]; then
   SIZE="$(wc -c < "$DEST_BIN" | tr -d ' ')"
   if [[ "${SIZE:-0}" -ge 1000000 ]]; then
@@ -119,19 +138,5 @@ chmod +x "$DEST_BIN" 2>/dev/null || true
 printf '%s\n' "$VERSION" >"$VERSION_FILE"
 echo "==> Wrote $DEST_BIN (v${VERSION})"
 
-stage_home() {
-  if [[ "${RG_NO_HOME_BIN:-}" != "1" ]]; then
-    HOME_BIN="${HOME:-.}/.danmo-work/bin"
-    mkdir -p "$HOME_BIN"
-    cp -f "$DEST_BIN" "$HOME_BIN/$BIN_NAME"
-    chmod +x "$HOME_BIN/$BIN_NAME" 2>/dev/null || true
-    echo "==> Copied to $HOME_BIN/$BIN_NAME"
-  fi
-  if [[ -n "${1:-}" ]]; then
-    mkdir -p "$1"
-    cp -f "$DEST_BIN" "$1/$BIN_NAME"
-    chmod +x "$1/$BIN_NAME" 2>/dev/null || true
-    echo "==> Staged into $1/$BIN_NAME"
-  fi
-}
+# stage_home 在上面已定义（见文件开头），这里直接调用。
 stage_home "${1:-}"

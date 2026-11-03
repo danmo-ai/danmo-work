@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Hardened Runtime 的额外能力清单。当前是空的，这是有意的：
+
+	  - 本 app 没开 App Sandbox，所以联网（LLM API）、读写 ~/.danmo-work/、
+	    执行 Resources 里的 rg 与 sidecar 都无需 sandbox entitlement；
+	  - 内嵌的 WKWebView 渲染进程由系统签名并单独运行，不需要 allow-jit；
+	  - Go 后端是 exec 出来的独立子进程，它与 rg 都在打包时单独签名
+	    （见 scripts/pack_desktop_macos.sh），不继承这里的配置。
+
+	  如果 notarytool 拒签并明确说缺某项能力，按日志补对应 key，不要凭猜预先加：
+	  多一个 entitlement 就多一份攻击面，也会让公证解释变复杂。
+	-->
+</dict>
+</plist>
