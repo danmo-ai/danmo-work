@@ -10,6 +10,7 @@ skills:
   - git-workflow
   - debugging
   - skill-creator
+  - skill-installer
   - writing-plans
   - test-driven-development
   - brainstorming
