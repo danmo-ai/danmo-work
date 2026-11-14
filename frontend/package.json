@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node --max-old-space-size=3072 ./node_modules/vite/bin/vite.js build",
     "typecheck": "vue-tsc --noEmit",
     "test": "node scripts/run-ui-tests.mjs",
     "test:slides": "node --import ./scripts/register-ts-resolve.mjs --experimental-strip-types scripts/test-slides-render.mjs",
@@ -60,6 +60,7 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "rxjs": "^7.8.2",
+    "sucrase": "^3.35.1",
     "vue": "^3.5.13",
     "vue-i18n": "^9.14.5",
     "vue-router": "^4.6.4",

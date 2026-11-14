@@ -106,20 +106,15 @@ type SfcCompiler = typeof import('vue/compiler-sfc')
 
 /**
  * `lang="ts"` survives compileScript as TypeScript, so the generated module
- * needs a type-strip pass before it can be evaluated. Loaded lazily — only SFCs
- * that actually use TypeScript pay for the compiler.
+ * needs a type-strip pass before it can be evaluated.
+ *
+ * Uses sucrase (small, browser-friendly) rather than the TypeScript compiler:
+ * importing `typescript` here made Vite bundle a 3.5 MB chunk and pushed the
+ * release build past the runner's heap limit.
  */
 async function stripTypes(code: string): Promise<string> {
-  const ts = (await import('typescript')) as typeof import('typescript')
-  const out = ts.transpileModule(code, {
-    compilerOptions: {
-      target: ts.ScriptTarget.ES2020,
-      module: ts.ModuleKind.ESNext,
-      sourceMap: false,
-    },
-    reportDiagnostics: false,
-  })
-  return out.outputText
+  const { transform } = await import('sucrase')
+  return transform(code, { transforms: ['typescript'], filePath: 'component.ts' }).code
 }
 
 /** Compile SFC source into the module source we can evaluate from a Blob URL. */
