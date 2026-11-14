@@ -75,7 +75,6 @@ const tabTitle = computed(() => {
     tables: t('sessions.tabTables'),
     changes: t('sessions.tabChanges'),
     terminal: t('sessions.tabTerminal'),
-    desktop: t('sessions.tabDesktop'),
     trajectory: t('sessions.tabTrajectory'),
   }
   return map[rightTab.value]

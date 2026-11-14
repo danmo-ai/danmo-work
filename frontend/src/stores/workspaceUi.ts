@@ -5,7 +5,7 @@ import { stageFromUri, stageUri } from '@/utils/stage-uri'
 
 export type { FileEngine, FileKind, FileMode }
 
-export type RightWorkspaceTab = 'plan' | 'files' | 'memory' | 'tables' | 'changes' | 'terminal' | 'desktop' | 'trajectory'
+export type RightWorkspaceTab = 'plan' | 'files' | 'memory' | 'tables' | 'changes' | 'terminal' | 'trajectory'
 export type LayoutMode = 'chat' | 'stage' | 'immersive'
 
 /** Central Stage canvas state — opened via routeProjectFile / openStage. */
@@ -79,6 +79,8 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   const stage = ref<FileStageState | null>(null)
   /** Internal resource URI: the only address of the shared visual Stage. */
   const stageResourceUri = ref('')
+  /** Last non-file Stage address (desktop / agent browser / web), for the header split button. */
+  const lastScreenUri = ref('')
   const previousStageResourceUri = ref('')
   /** Bumped when Stage should reload file from disk (e.g. after AI turn). */
   const stageReloadToken = ref(0)
@@ -183,6 +185,10 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     if (!auto) previousStageResourceUri.value = ''
     stage.value = { ...next }
     stageResourceUri.value = nextUri
+    // Remember the last "screen" surface so the header split button can reopen it.
+    if (next.kind === 'desktop' || next.kind === 'browser-live' || next.kind === 'web' || next.kind === 'media') {
+      lastScreenUri.value = nextUri
+    }
     layoutMode.value = next.mode === 'present' ? 'immersive' : 'stage'
     collapseLeftRailForStage()
     closeRightDrawerForStage()
@@ -308,6 +314,7 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     layoutMode,
     stage,
     stageResourceUri,
+    lastScreenUri,
     previousStageResourceUri,
     stageReloadToken,
     filesReloadToken,

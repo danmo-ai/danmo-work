@@ -85,7 +85,6 @@ const rightDrawerTitle = computed(() => {
     tables: t('sessions.tabTables'),
     changes: t('sessions.tabChanges'),
     terminal: t('sessions.tabTerminal'),
-    desktop: t('sessions.tabDesktop'),
     trajectory: t('sessions.tabTrajectory'),
   }
   return map[rightTab.value]
@@ -115,17 +114,30 @@ const rightIconItems = computed(() => {
       badge: changesCount.value > 0 ? changesCount.value : undefined,
     },
     { value: 'terminal' as const, label: t('sessions.tabTerminal'), icon: Terminal },
-    { value: 'desktop' as const, label: t('sessions.tabDesktop'), icon: Monitor },
     { value: 'trajectory' as const, label: t('sessions.tabTrajectory'), icon: ListOrdered },
   ]
 })
 
-function onRightIconClick(tab: RightWorkspaceTab) {
-  if (tab === 'desktop') {
-    if (stage.value?.kind === 'desktop') workspaceUi.closeStage()
-    else workspaceUi.openDesktopStage(sessions.selectedProjectId ?? '')
+/**
+ * The Preview button opens/closes the Stage window. There is exactly one Stage:
+ * the address-bar URI (vnc:// / browser:// / https:// / file://) decides which
+ * renderer runs inside it, so this button never picks a surface itself.
+ */
+const previewActive = computed(
+  () => stage.value?.kind === 'desktop' || stage.value?.kind === 'browser-live' || stage.value?.kind === 'web',
+)
+
+/** Reopen the remembered preview URI; first run falls back to the sandbox desktop. */
+function togglePreview() {
+  if (previewActive.value) {
+    workspaceUi.closeStage()
     return
   }
+  if (workspaceUi.lastScreenUri && workspaceUi.openStageUri(workspaceUi.lastScreenUri)) return
+  workspaceUi.openDesktopStage(sessions.selectedProjectId ?? '')
+}
+
+function onRightIconClick(tab: RightWorkspaceTab) {
   workspaceUi.toggleRightDrawer(tab)
 }
 
@@ -1716,9 +1728,7 @@ function onTitleKeydown(e: KeyboardEvent) {
             :key="item.value"
             type="button"
             class="session-workspace__tool"
-            :class="{
-              'is-active': item.value === 'desktop' ? stage?.kind === 'desktop' : rightDrawerOpen && rightTab === item.value,
-            }"
+            :class="{ 'is-active': rightDrawerOpen && rightTab === item.value }"
             :aria-label="item.badge != null && item.badge !== '' ? `${item.label} ${item.badge}` : item.label"
             :title="item.badge != null && item.badge !== '' ? `${item.label} · ${item.badge}` : item.label"
             :aria-pressed="rightDrawerOpen && rightTab === item.value"
@@ -1730,6 +1740,21 @@ function onTitleKeydown(e: KeyboardEvent) {
               v-if="item.badge != null && item.badge !== ''"
               class="session-workspace__tool-badge"
             >{{ item.badge }}</span>
+          </button>
+        </div>
+        <!-- Preview is not a drawer tab: it opens the Stage window, whose URI picks the renderer. -->
+        <div class="session-workspace__preview" role="group" :aria-label="t('sessions.previewGroup')">
+          <button
+            type="button"
+            class="session-workspace__tool session-workspace__preview-btn"
+            :class="{ 'is-active': previewActive }"
+            :aria-label="t('sessions.previewToggle')"
+            :title="t('sessions.previewToggle')"
+            :aria-pressed="previewActive"
+            @click="togglePreview"
+          >
+            <Monitor class="session-workspace__tool-icon" :size="16" :stroke-width="2" aria-hidden="true" />
+            <span class="session-workspace__tool-label">{{ t('sessions.tabPreview') }}</span>
           </button>
         </div>
       </div>
@@ -2100,6 +2125,20 @@ function onTitleKeydown(e: KeyboardEvent) {
   color: var(--dq-label-secondary);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
+}
+
+/* Preview lives outside the drawer tab group: it owns the Stage window. */
+.session-workspace__preview {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid color-mix(in srgb, var(--dq-label-primary) 14%, transparent);
+}
+
+.session-workspace__preview-btn.is-active {
+  color: var(--dq-accent);
+  background: color-mix(in srgb, var(--dq-accent) 14%, transparent);
 }
 
 .session-workspace__tool-icon {

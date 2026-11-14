@@ -25,6 +25,8 @@ const emit = defineEmits<{
   attachElement: [att: ElementAttachment]
   attachConsole: [text: string]
   urlChange: [displayUrl: string, loadUrl: string]
+  /** Lets the Stage header render this surface's toolbar (single chrome row). */
+  toolbarState: [state: { selecting: boolean; drawing: boolean; consoleCount: number }]
 }>()
 
 const { t } = useI18n()
@@ -115,22 +117,13 @@ watch(
   { immediate: true },
 )
 
+/**
+ * Re-fetch the current resource. Navigation is owned by the Stage address bar
+ * (one URI, one bar), so this surface carries no address input of its own.
+ */
 function refresh() {
-  const display = urlInput.value.trim()
-  if (!display) return
-  if (display === props.path || (!/^https?:\/\//i.test(display) && !display.includes('/api/'))) {
-    applyLoad(props.path || display, projectRawUrl(props.path || display))
-    return
-  }
-  let url = display
-  if (!/^https?:\/\//i.test(url) && !url.startsWith('/')) {
-    url = 'https://' + url
-  }
-  applyLoad(url.startsWith('http') ? url : display, toProxyUrl(url))
-}
-
-function navigate() {
-  refresh()
+  refreshKey.value++
+  syncFromProps()
 }
 
 function clearPreview() {
@@ -140,6 +133,19 @@ function clearPreview() {
   refreshKey.value++
   emit('urlChange', '', '')
 }
+
+/** The Stage header renders these controls, so it needs their state. */
+watch(
+  [selectingElement, drawingRegion, consoleCount],
+  () => {
+    emit('toolbarState', {
+      selecting: selectingElement.value,
+      drawing: drawingRegion.value,
+      consoleCount: consoleCount.value,
+    })
+  },
+  { immediate: true },
+)
 
 function postToFrame(data: Record<string, unknown>) {
   frameRef.value?.contentWindow?.postMessage(data, '*')
@@ -292,62 +298,18 @@ onUnmounted(() => {
 })
 
 defineExpose({
-  navigate,
   refresh,
   clearPreview,
   startElementSelect,
+  startDrawRegion,
   stopElementSelect,
-  selectingElement,
-  urlInput,
+  requestConsoleDump,
 })
 </script>
 
 <template>
   <div class="web-surface">
     <p v-if="selectingElement" class="web-surface__hint">{{ drawingRegion ? t('sessions.designModeHintDraw') : t('sessions.designModeHint') }}</p>
-    <div class="web-surface__bar">
-      <input
-        v-model="urlInput"
-        class="web-surface__input"
-        :placeholder="t('office.previewUrlPlaceholder')"
-        @keydown.enter="navigate"
-      />
-      <button class="web-surface__btn" :title="t('office.previewRefresh')" @click="refresh">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-      </button>
-      <button class="web-surface__btn" :title="t('office.previewGo')" @click="navigate">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="9 18 15 12 9 6"/>
-        </svg>
-      </button>
-      <button
-        class="web-surface__btn"
-        :class="{ 'is-active': selectingElement && !drawingRegion }"
-        :title="selectingElement && !drawingRegion ? t('sessions.designModeOn') : t('sessions.designModeOff')"
-        @click="selectingElement && !drawingRegion ? stopElementSelect() : startElementSelect()"
-      >
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
-      </button>
-      <button
-        class="web-surface__btn"
-        :class="{ 'is-active': drawingRegion }"
-        :title="t('sessions.designModeDraw')"
-        @click="drawingRegion ? stopElementSelect() : startDrawRegion()"
-      >
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
-      </button>
-      <button
-        class="web-surface__btn web-surface__btn--console"
-        :title="t('sessions.designModeConsole')"
-        @click="requestConsoleDump"
-      >
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-        <span v-if="consoleCount" class="web-surface__badge">{{ consoleCount > 9 ? '9+' : consoleCount }}</span>
-      </button>
-      <button class="web-surface__btn" :title="t('office.previewClear')" @click="clearPreview">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
     <div class="web-surface__stage">
       <div
         v-if="mdHtml"
@@ -397,72 +359,6 @@ defineExpose({
   color: var(--dq-accent);
   background: color-mix(in srgb, var(--dq-accent) 10%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--dq-accent) 20%, transparent);
-}
-.web-surface__bar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--dq-separator-light);
-  background: color-mix(in srgb, var(--dq-bg-elevated) 45%, transparent);
-}
-.web-surface__input {
-  flex: 1;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 6px;
-  border: 1px solid var(--dq-border);
-  background: var(--dq-bg-elevated);
-  color: var(--dq-label-primary);
-  font-size: var(--dq-font-size-body);
-  outline: none;
-  font-family: var(--dq-font-mono, ui-monospace, monospace);
-}
-.web-surface__input::placeholder {
-  color: var(--dq-label-quaternary);
-}
-.web-surface__input:focus {
-  border-color: var(--dq-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dq-accent) 12%, transparent);
-}
-.web-surface__btn {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: none;
-  background: var(--dq-fill-tertiary);
-  color: var(--dq-label-secondary);
-  cursor: pointer;
-}
-.web-surface__btn:hover {
-  background: var(--dq-accent);
-  color: var(--dq-on-accent);
-}
-.web-surface__btn.is-active {
-  background: var(--dq-accent);
-  color: var(--dq-on-accent);
-}
-.web-surface__btn--console {
-  position: relative;
-}
-.web-surface__badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 7px;
-  background: var(--dq-system-orange, #f59e0b);
-  color: #fff;
-  font-size: 9px;
-  line-height: 14px;
-  text-align: center;
 }
 .web-surface__stage {
   position: relative;

@@ -8,6 +8,11 @@ const props = defineProps<{
   active?: boolean
 }>()
 
+const emit = defineEmits<{
+  /** The Stage header renders the live status (single chrome row). */
+  statusState: [state: { status: string; label: string; pageTitle: string; pageUrl: string }]
+}>()
+
 const { t } = useI18n()
 const frameUrl = ref('')
 const pageUrl = ref('')
@@ -91,16 +96,24 @@ onBeforeUnmount(() => {
   if (frameUrl.value) URL.revokeObjectURL(frameUrl.value)
 })
 watch(() => [props.sessionId, props.active], connect)
+
+/** Mirror live status into the Stage header instead of drawing a second bar. */
+watch(
+  [status, statusLabel, pageTitle, pageUrl],
+  () => {
+    emit('statusState', {
+      status: status.value,
+      label: statusLabel.value,
+      pageTitle: pageTitle.value,
+      pageUrl: pageUrl.value,
+    })
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
   <div class="browser-live">
-    <div class="browser-live__bar">
-      <span class="browser-live__dot" :class="`is-${status}`" />
-      <span class="browser-live__label">{{ t('sessions.browserLive.title') }}</span>
-      <span class="browser-live__readonly">{{ t('sessions.browserLive.readonly') }}</span>
-      <span class="browser-live__status">{{ statusLabel }}</span>
-    </div>
     <div class="browser-live__viewport">
       <img v-if="frameUrl" class="browser-live__frame" :src="frameUrl" :alt="pageTitle || t('sessions.browserLive.title')">
       <div v-if="!frameUrl || status === 'error'" class="browser-live__empty">
@@ -108,21 +121,12 @@ watch(() => [props.sessionId, props.active], connect)
         <template v-else>{{ t('sessions.browserLive.waiting') }}</template>
       </div>
     </div>
-    <div class="browser-live__location" :title="pageUrl">{{ pageTitle || pageUrl || t('sessions.browserLive.noPage') }}</div>
   </div>
 </template>
 
 <style scoped>
 .browser-live { display: flex; flex: 1; min-height: 0; flex-direction: column; background: var(--dq-bg-base); }
-.browser-live__bar { display: flex; align-items: center; gap: 8px; flex-shrink: 0; padding: 7px 12px; border-bottom: 1px solid var(--dq-separator-light); font-size: var(--dq-font-size-caption); }
-.browser-live__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dq-label-quaternary); }
-.browser-live__dot.is-live { background: var(--dq-success); }
-.browser-live__dot.is-error { background: var(--dq-danger); }
-.browser-live__label { font-weight: 600; }
-.browser-live__readonly { padding: 1px 6px; border-radius: 4px; color: var(--dq-accent); background: var(--dq-accent-tint); }
-.browser-live__status { margin-left: auto; color: var(--dq-label-tertiary); }
 .browser-live__viewport { position: relative; display: flex; flex: 1; min-height: 0; align-items: center; justify-content: center; overflow: auto; background: color-mix(in srgb, var(--dq-bg-base) 96%, var(--dq-label-primary)); }
 .browser-live__frame { display: block; width: 100%; height: 100%; object-fit: contain; }
 .browser-live__empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--dq-label-tertiary); background: var(--dq-bg-base); }
-.browser-live__location { flex-shrink: 0; overflow: hidden; padding: 7px 12px; border-top: 1px solid var(--dq-separator-light); font: var(--dq-font-size-caption) var(--dq-font-mono); color: var(--dq-label-tertiary); text-overflow: ellipsis; white-space: nowrap; }
 </style>

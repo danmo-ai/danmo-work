@@ -18,7 +18,8 @@
     "test:ms-office-convert": "node --experimental-strip-types scripts/test-ms-office-convert.mjs",
     "check-i18n": "NODE_ENV=production node --experimental-strip-types scripts/check-i18n.mjs",
     "preview": "vite preview",
-    "test:nested-scroll": "node --experimental-strip-types scripts/test-nested-scroll-chain.mjs"
+    "test:nested-scroll": "node --experimental-strip-types scripts/test-nested-scroll-chain.mjs",
+    "test:sfc-preview": "node --experimental-strip-types scripts/test-sfc-preview.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.8.0",

@@ -6,6 +6,7 @@ import {
   isMediaFilePath,
   languageFromPath,
   isUniverSheetPath,
+  isVueComponentPath,
 } from '../src/utils/file-route.ts'
 
 assert.equal(isCodeFilePath('src/main.go'), true)
@@ -49,6 +50,14 @@ assert.equal(routeProjectFile('photo.png').kind, 'media')
 assert.equal(routeProjectFile('photo.png').engine, 'image')
 assert.equal(routeProjectFile('logo.svg').kind, 'media')
 assert.equal(routeProjectFile('assets/brand.SVG').kind, 'media')
+
+// Vue SFCs are previewed live, not shown as source.
+assert.equal(routeProjectFile('src/Widget.vue').kind, 'web')
+assert.equal(routeProjectFile('src/Widget.vue').engine, 'vue-sfc')
+assert.equal(routeProjectFile('Button.VUE').engine, 'vue-sfc')
+assert.equal(isVueComponentPath('a/b/Card.vue'), true)
+assert.equal(isVueComponentPath('a/b/card.vue.txt'), false)
+assert.equal(routeProjectFile('src/main.ts').kind, 'code')
 
 assert.equal(languageFromPath('foo.ts'), 'typescript')
 assert.equal(languageFromPath('bar.py'), 'python')

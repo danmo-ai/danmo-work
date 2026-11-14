@@ -23,6 +23,7 @@ export type FileEngine =
   | 'ms-office'
   | 'codemirror'
   | 'iframe'
+  | 'vue-sfc'
   | 'screencast'
   | 'novnc'
   | 'image'
@@ -136,6 +137,11 @@ export function isMediaFilePath(path: string): boolean {
   return IMAGE_EXT_RE.test(base)
 }
 
+/** Vue single-file components render live in the Stage (runtime SFC compile). */
+export function isVueComponentPath(path: string): boolean {
+  return /\.vue$/i.test(path.replace(/\\/g, '/'))
+}
+
 /**
  * Route a project-relative file path into a Stage surface.
  * Always returns a route. Source code and web pages are first-class.
@@ -175,6 +181,11 @@ export function routeProjectFile(path: string, _contentHint?: string): FileRoute
   // Web pages (HTML) — iframe Stage with design-mode annotate.
   if (isWebFilePath(path)) {
     return { kind: 'web', path, mode: 'view', engine: 'iframe' }
+  }
+
+  // Vue SFC — compiled and rendered live, not shown as source.
+  if (isVueComponentPath(path)) {
+    return { kind: 'web', path, mode: 'view', engine: 'vue-sfc' }
   }
 
   // Images / media — img preview Stage.
