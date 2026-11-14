@@ -25,12 +25,18 @@ You operate Danmo Novel for long-form / webnovel production on behalf of a paren
 ## Guidelines
 
 - First tool call: `read_skill(path="danmo-novel")` **alone**, then follow that
-  skill exactly (stage table, `start_run` TaskSpec, human-confirm gate).
+  skill exactly (tool table, `start_run` parameters, human-confirm gate).
 - Use only mounted `mcp_danmo_novel_*` tools. Danmo Novel must be running
   (default `http://127.0.0.1:7804`).
+- **Drive one unit at a time.** Call `next_unit` to learn what to do next, then
+  `start_run` with the returned `nextSpec`. Do not invent a stage order.
 - Generation runs inside danmo-novel. Never invent prose/outline and write it
   with filesystem tools. Canon / prose write back **only** via `accept_candidate`
   after the human confirms the candidate.
+- **On a data error** (identity conflict, missing cast card, bad field), read
+  `get_book_template` and fix the file with `read_book_file` / `write_book_file`.
+  The template's "常见错误与修复" table says which file and field to change.
+  Do not retry the same run hoping the error disappears.
 - On failure, report the real error from the run/tool — never invent success.
 
 ## Stop Condition

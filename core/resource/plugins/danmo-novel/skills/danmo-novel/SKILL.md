@@ -9,7 +9,7 @@ license: MIT
 compatibility: Requires Danmo Novel running (default http://127.0.0.1:7804); mcp_danmo_novel_* tools
 metadata:
   author: danmo
-  version: "1.0.0"
+  version: "2.0.0"
   category: creative
 ---
 
@@ -24,49 +24,64 @@ prose are written **only** by `accept_candidate` after a human confirms.
 
 | Tool | Role |
 |------|------|
-| `health` | Probe the server; abort if not ok |
-| `list_books` / `get_book` | Shelf / one book + computed `primary` next action |
-| `create_book` / `import_book` | Scaffold 立项 / import a `novel/<book-id>/` tree |
-| `read_book_file` / `write_book_file` | Author-side 补洞 only (never production prose) |
-| `preview_run` | Inspect context packet without starting a run |
-| `start_run` | Start a controlled generation run (TaskSpec) |
-| `get_run` / `list_runs` / `cancel_run` | Run lifecycle |
-| `list_candidates` / `get_candidate` | Open candidates |
-| `accept_candidate` / `reject_candidate` | The ONLY write path (human-confirmed) |
-| `accept_volume` / `promote_cast` | Approve a volume / promote a cast card |
+| `next_unit` | 连续写作主入口：下一个该做哪个单元、该跑哪个阶段、能不能现在就跑 |
+| `start_run` | 启动一个单元生产任务（细纲/正文/审校/修复/定稿） |
+| `get_run` | 轮询一个 run 直到结束 |
+| `accept_candidate` / `reject_candidate` | 接受/拒绝候选（唯一写盘路径） |
+| `review_fixables` | 哪些审校意见能进修订（issueIds），按 roundsHit 排序 |
+| `read_book_file` / `write_book_file` | 读/写一个文件（卷纲/细纲/人物卡/身份时间线） |
+| `identity_segments` | 读身份时间线（action=list） |
+| `get_book_template` | 读书籍结构模板（含修复指南） |
 
-## TaskSpec for `start_run`
+## start_run 参数
 
-`{kind, bookId, volumeId?, unitId?, mode?, instruction?, knowledgeIds?}` —
-`kind`: `init | plan | outline | write | review | revise | finalize | polish | …`.
-`mode` only for `plan`: `init | reinit | volume`.
+`bookId` + `unitId` + `kind` + `baseRevision`（`next_unit` 的 `nextSpec` 里已带好），可选 `instruction`。
 
-## Workflow
+- `kind`: `outline` | `write` | `review` | `revise` | `finalize`
+- `review` 会自动 `supersedeReview`（归档旧清单后重审），不需要你传
+- `revise` 不传 `issueIds` 时默认修**全部可打补丁的意见**（等同脚本全选）；
+  传了则只修这几条。传错（含整单元结论或「没审完」标记）会直接报错并列出
+  哪几条不能用 —— 拿不准就先调 `review_fixables`。
 
-1. **`health`** — abort if not ok.
-2. **`get_book(bookId)`** (or `list_books`) → read `primary` (`kind`, `unitId`,
-   `volume`) when the user did not name a target.
-3. **Decide the run** from `primary.kind` / user intent:
+## 审校意见怎么挑
 
-   | Stage | Skill intent | Run |
-   |-------|--------------|-----|
-   | 立项 | new book | `create_book` → `start_run kind=plan mode=init` |
-   | 规划 | cast + volume outline | `start_run kind=plan mode=volume` |
-   | 一批细纲 | unit contracts | `start_run kind=outline` |
-   | 写单元 | one unit prose | `start_run kind=write` |
-   | 定稿 | review / finalize | `start_run kind=review` (findings → human) |
+`review_fixables` 返回两类信息：
 
-4. **`start_run(spec)`** — returns the run; surfaces candidates.
-5. **Show candidates** (`get_candidate`) and **stop for the human**. Do not
-   auto-accept.
-6. On approval: **`accept_candidate`** (optional `acceptFindingIds` /
-   `forceRiskAccept`). Volume-approve may use `accept_volume`; one card →
-   `promote_cast`. Status advances `proposed → accepted → drafted → reviewed`.
+| 字段 | 含义 |
+|------|------|
+| `issueIds` | 可以直接进 `revise` 的 id（有章号、非未审完标记、属于正文） |
+| `findings` | 上面这些条目的完整内容（含 severity / roundsHit / evidence / suggestion） |
+| `skippedCount` | 不能进正文补丁的条数（整单元结论、审校未完成标记） |
+
+两条路径都合法：
+- **全修**：`start_run{kind:revise}` 不传 `issueIds`
+- **挑着修**：先读 `review_fixables`，把选中的 id 传进 `issueIds`
+
+`blockingCount` 用的是与 verdict 同一口径（`severity=blocking` 且 `roundsHit>=2`），
+可以据此决定先修哪几条。
+
+## 连续写作循环
+
+```text
+next_unit(bookId) 
+  → 拿到 nextSpec（kind/unitId/baseRevision/issueIds）
+  → start_run(...nextSpec) 
+  → get_run(runId) 轮询直到结束
+  → accept_candidate(candidateId) 
+  → 再调 next_unit
+```
+
+如果失败，`next_unit` 会告诉你「卡在哪一步」，只需要重跑那一步。
+
+## 出错时怎么修
+
+1. **先读模板**：`get_book_template` → 里面有「常见错误与修复」表。
+2. **按表改文件**：用 `read_book_file` 读当前内容，按模板理解结构，用 `write_book_file` 写回。
+3. **改完再试**：重新 `start_run` 或 `accept_candidate`。
 
 ## Anti-patterns
 
-- Skipping `health` or `get_book`
-- Inventing prose / outline and writing it with `write_book_file` or filesystem tools
-- Calling `accept_candidate` before the human has seen and approved the candidate
-- Calling Danmo Novel REST directly instead of the MCP tools
-- Claiming success without a finished run + candidate/accept ids
+- 跳过 `next_unit` 直接调 `start_run`（可能起错阶段）
+- 用 `write_book_file` 直接写正文（正文必须走 candidate-accept）
+- 调用 Danmo Novel REST 直接代替 MCP 工具
+- 声称成功但没有 finished run + candidate/accept id
