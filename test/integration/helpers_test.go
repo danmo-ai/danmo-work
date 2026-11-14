@@ -124,6 +124,9 @@ func setupCoreWithAutoApprove(t *testing.T, autoApprove bool, script ...func(m *
 		copyDB(t, "data/work.db", dbPath)
 	}
 	dataDir := filepath.Join(tmpDir, "data")
+	// Isolate the config loader from the developer's ~/.danmo-work/config.yaml
+	// so an absolute history_database there cannot leak into the test DBs.
+	t.Setenv("WORK_HOME", tmpDir)
 	t.Setenv("WORK_DB_PATH", dbPath)
 	t.Setenv("WORK_STORE_DB_PATH", filepath.Join(tmpDir, "store.db"))
 	cfg := bootstrap.Config{AutoApprove: autoApprove, DataDir: dataDir}

@@ -53,11 +53,11 @@ func TestGateNetworkAskAndSessionAllow(t *testing.T) {
 		t.Fatalf("got %+v", r)
 	}
 	r2 := g.CheckRequest(Request{
-		ToolName:            "exec_shell",
-		Risk:                domain.RiskHigh,
-		Command:             "npm install lodash",
-		Sandbox:             strongSB(domain.SandboxNetworkDeny),
-		SessionAllowNetwork: true,
+		ToolName:      "exec_shell",
+		Risk:          domain.RiskHigh,
+		Command:       "npm install lodash",
+		Sandbox:       strongSB(domain.SandboxNetworkDeny),
+		SessionGrants: map[string]bool{GrantKeyNetwork: true},
 	})
 	if r2.Decision != DecisionAllow {
 		t.Fatalf("got %+v", r2)
@@ -229,6 +229,70 @@ func TestGateComputerAlwaysAsks(t *testing.T) {
 	}
 	if AutoApprovable(r2.Reason) {
 		t.Fatal("desktop_control must never be auto-approvable")
+	}
+}
+
+func TestGateSessionGrantIsGeneric(t *testing.T) {
+	g := NewGate(nil)
+
+	// Any tool ask can be remembered for the session under tool:<name>.
+	granted := map[string]bool{GrantKeyToolPrefix + "computer": true}
+	if r := g.CheckRequest(Request{ToolName: "computer", Risk: domain.RiskHigh, SessionGrants: granted}); r.Decision != DecisionAllow {
+		t.Fatalf("computer session grant got %+v", r)
+	}
+	// The grant is per tool, not a blanket bypass.
+	if r := g.CheckRequest(Request{ToolName: "mcp_notion_search", Risk: domain.RiskExternal, SessionGrants: granted}); r.Decision != DecisionAsk {
+		t.Fatalf("grant must not leak to another tool, got %+v", r)
+	}
+	// Same generic key works for an external MCP tool.
+	mcpGranted := map[string]bool{GrantKeyToolPrefix + "mcp_notion_search": true}
+	if r := g.CheckRequest(Request{ToolName: "mcp_notion_search", Risk: domain.RiskExternal, SessionGrants: mcpGranted}); r.Decision != DecisionAllow {
+		t.Fatalf("mcp session grant got %+v", r)
+	}
+	// Read-only modes still deny even with a stale grant.
+	if r := g.CheckRequest(Request{ToolName: "computer", Risk: domain.RiskHigh, Mode: domain.PermModePlan, SessionGrants: granted}); r.Decision != DecisionDeny {
+		t.Fatalf("plan + grant got %+v", r)
+	}
+	// Deny rules win over a session grant.
+	denyGate := NewGate([]domain.PermissionRule{{Pattern: "computer", Action: domain.PermDeny}})
+	if r := denyGate.CheckRequest(Request{ToolName: "computer", Risk: domain.RiskHigh, SessionGrants: granted}); r.Decision != DecisionDeny {
+		t.Fatalf("deny rule + grant got %+v", r)
+	}
+}
+
+func TestSessionGrantKeyScope(t *testing.T) {
+	if got := SessionGrantKey(ReasonDangerousCommand, "", "exec_shell"); got != "" {
+		t.Fatalf("dangerous command must not be session-grantable, got %q", got)
+	}
+	if got := SessionGrantKey(ReasonUnsandboxed, "", "exec_shell"); got != "" {
+		t.Fatalf("unsandboxed must not be session-grantable, got %q", got)
+	}
+	if got := SessionGrantKey(ReasonNetwork, "", "exec_shell"); got != GrantKeyNetwork {
+		t.Fatalf("network key = %q", got)
+	}
+	if got := SessionGrantKey(ReasonNetworkDomain, "api.example.com", "exec_shell"); got != GrantKeyDomainPrefix+"api.example.com" {
+		t.Fatalf("domain key = %q", got)
+	}
+	if got := SessionGrantKey(ReasonDesktopSandbox, "", "computer"); got != GrantKeyToolPrefix+"computer" {
+		t.Fatalf("desktop key = %q", got)
+	}
+	if got := SessionGrantKey(ReasonHighRisk, "", "write"); got != GrantKeyToolPrefix+"write" {
+		t.Fatalf("high risk key = %q", got)
+	}
+}
+
+func TestGateDangerousCommandNeverSessionGranted(t *testing.T) {
+	g := NewGate(nil)
+	// Even a (hypothetical) stale tool grant must not widen to a dangerous command.
+	r := g.CheckRequest(Request{
+		ToolName:      "exec_shell",
+		Risk:          domain.RiskHigh,
+		Command:       "rm -rf /",
+		Sandbox:       strongSB(domain.SandboxNetworkAllow),
+		SessionGrants: map[string]bool{GrantKeyToolPrefix + "exec_shell": true},
+	})
+	if r.Decision != DecisionAsk || r.Reason != ReasonDangerousCommand {
+		t.Fatalf("got %+v", r)
 	}
 }
 

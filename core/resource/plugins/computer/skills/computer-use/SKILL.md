@@ -21,8 +21,9 @@ metadata:
 
 # Computer Use (desktop GUI control)
 
-Drive real application windows through the single `computer` tool. Every call
-asks the user for approval. With `runtime.sandbox.profile=desktop` this drives
+Drive real application windows through the single `computer` tool. The first
+call asks the user for approval; the user may allow desktop control for the rest
+of the session. With `runtime.sandbox.profile=desktop` this drives
 the sandboxed Xvfb desktop (same machine as sandbox Chromium / noVNC) — not the
 host GUI. Otherwise it controls the host. Act deliberately and verify each step.
 

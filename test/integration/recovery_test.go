@@ -27,6 +27,7 @@ func setupRecoveryEnv(t *testing.T) (dbPath, dataDir string) {
 		copyDB(t, "data/work.db", dbPath)
 	}
 	dataDir = filepath.Join(tmpDir, "data")
+	t.Setenv("WORK_HOME", tmpDir)
 	t.Setenv("WORK_DB_PATH", dbPath)
 	t.Setenv("WORK_STORE_DB_PATH", filepath.Join(tmpDir, "store.db"))
 	return dbPath, dataDir

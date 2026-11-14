@@ -17,10 +17,10 @@ type ConfigFile struct {
 
 // ConfigRemoteSection enables the PC → danmo-hub outbound connector.
 type ConfigRemoteSection struct {
-	Enabled     bool   `json:"enabled" mapstructure:"enabled"`
-	HubURL      string `json:"hubUrl" mapstructure:"hub_url"`
-	LocalBase   string `json:"localBase" mapstructure:"local_base"`
-	TLSInsecure bool   `json:"tlsInsecure" mapstructure:"tls_insecure"`
+	Enabled     bool   `json:"enabled" mapstructure:"enabled" yaml:"enabled"`
+	HubURL      string `json:"hubUrl" mapstructure:"hub_url" yaml:"hub_url"`
+	LocalBase   string `json:"localBase" mapstructure:"local_base" yaml:"local_base"`
+	TLSInsecure bool   `json:"tlsInsecure" mapstructure:"tls_insecure" yaml:"tls_insecure"`
 }
 
 type ConfigLLMSection struct {
@@ -29,39 +29,39 @@ type ConfigLLMSection struct {
 }
 
 type ConfigDataSection struct {
-	Dir           string `json:"dir" mapstructure:"dir"`
-	Database      string `json:"database" mapstructure:"database"`
-	StoreDatabase string `json:"storeDatabase" mapstructure:"store_database"`
+	Dir           string `json:"dir" mapstructure:"dir" yaml:"dir"`
+	Database      string `json:"database" mapstructure:"database" yaml:"database"`
+	StoreDatabase string `json:"storeDatabase" mapstructure:"store_database" yaml:"store_database"`
 	// HistoryDatabase holds the history plane (turn_log_entries +
 	// stream_events). Empty = derived: <dir of database>/history.db.
-	HistoryDatabase string `json:"historyDatabase" mapstructure:"history_database"`
-	Store           string `json:"store" mapstructure:"store"`
+	HistoryDatabase string `json:"historyDatabase" mapstructure:"history_database" yaml:"history_database"`
+	Store           string `json:"store" mapstructure:"store" yaml:"store"`
 }
 
 type ConfigServerSection struct {
-	ListenAddr string `json:"listenAddr" mapstructure:"listen_addr"`
+	ListenAddr string `json:"listenAddr" mapstructure:"listen_addr" yaml:"listen_addr"`
 }
 
 type ConfigInstanceSection struct {
-	ID string `json:"id" mapstructure:"id"`
+	ID string `json:"id" mapstructure:"id" yaml:"id"`
 }
 
 type ConfigRuntimeSection struct {
-	AutoApprove     bool                      `json:"autoApprove" mapstructure:"auto_approve"`
-	PermissionMode  PermissionMode            `json:"permissionMode" mapstructure:"permission_mode"`
+	AutoApprove     bool                      `json:"autoApprove" mapstructure:"auto_approve" yaml:"auto_approve"`
+	PermissionMode  PermissionMode            `json:"permissionMode" mapstructure:"permission_mode" yaml:"permission_mode"`
 	PermissionRules []PermissionRule          `json:"permissionRules,omitempty" mapstructure:"permission_rules" yaml:"permission_rules,omitempty"`
-	Sandbox         ConfigSandboxSection      `json:"sandbox" mapstructure:"sandbox"`
+	Sandbox         ConfigSandboxSection      `json:"sandbox" mapstructure:"sandbox" yaml:"sandbox"`
 	Environment     *ConfigEnvironmentSection `json:"environment,omitempty" mapstructure:"environment" yaml:"environment,omitempty"`
-	Browser         ConfigBrowserSection      `json:"browser" mapstructure:"browser"`
-	Computer        ConfigComputerSection     `json:"computer" mapstructure:"computer"`
-	Turn            ConfigTurnSection         `json:"turn" mapstructure:"turn"`
-	Team            ConfigTeamSection         `json:"team" mapstructure:"team"`
-	Tools           ConfigToolsSection        `json:"tools" mapstructure:"tools"`
-	Memory          ConfigMemorySection       `json:"memory" mapstructure:"memory"`
-	Table           ConfigTableSection        `json:"table" mapstructure:"table"`
-	Knowledge       ConfigKnowledgeSection    `json:"knowledge" mapstructure:"knowledge"`
-	Compaction      ConfigCompactionSection   `json:"compaction" mapstructure:"compaction"`
-	Retention       ConfigRetentionSection    `json:"retention" mapstructure:"retention"`
+	Browser         ConfigBrowserSection      `json:"browser" mapstructure:"browser" yaml:"browser"`
+	Computer        ConfigComputerSection     `json:"computer" mapstructure:"computer" yaml:"computer"`
+	Turn            ConfigTurnSection         `json:"turn" mapstructure:"turn" yaml:"turn"`
+	Team            ConfigTeamSection         `json:"team" mapstructure:"team" yaml:"team"`
+	Tools           ConfigToolsSection        `json:"tools" mapstructure:"tools" yaml:"tools"`
+	Memory          ConfigMemorySection       `json:"memory" mapstructure:"memory" yaml:"memory"`
+	Table           ConfigTableSection        `json:"table" mapstructure:"table" yaml:"table"`
+	Knowledge       ConfigKnowledgeSection    `json:"knowledge" mapstructure:"knowledge" yaml:"knowledge"`
+	Compaction      ConfigCompactionSection   `json:"compaction" mapstructure:"compaction" yaml:"compaction"`
+	Retention       ConfigRetentionSection    `json:"retention" mapstructure:"retention" yaml:"retention"`
 }
 
 // ConfigRetentionSection bounds history.db growth. Orphaned history (sessions
@@ -72,48 +72,48 @@ type ConfigRetentionSection struct {
 	// last activity is older than this many days. Session/turn metadata and
 	// memories are kept; the pruned sessions lose timeline and LLM replay
 	// context. 0 disables age-based pruning (default).
-	HistoryMaxAgeDays int `json:"historyMaxAgeDays" mapstructure:"history_max_age_days"`
+	HistoryMaxAgeDays int `json:"historyMaxAgeDays" mapstructure:"history_max_age_days" yaml:"history_max_age_days"`
 }
 
 type ConfigCompactionSection struct {
-	Enabled bool   `json:"enabled" mapstructure:"enabled"`
-	Model   string `json:"model" mapstructure:"model"`
+	Enabled bool   `json:"enabled" mapstructure:"enabled" yaml:"enabled"`
+	Model   string `json:"model" mapstructure:"model" yaml:"model"`
 	// TriggerRatio is the high-water fraction of the model's usable context
 	// (context_window − max_output) that starts in-turn / session compaction.
 	// Default 0.85. Budget comes from the model catalog / llm.models entry —
 	// there is no separate compaction max_tokens override.
-	TriggerRatio float64 `json:"triggerRatio" mapstructure:"trigger_ratio"`
+	TriggerRatio float64 `json:"triggerRatio" mapstructure:"trigger_ratio" yaml:"trigger_ratio"`
 	// LowWaterRatio is the retained byte-size ratio of in-turn pressure
 	// compaction: after the high-water trigger, dedup/prune runs and then the
 	// oldest tool pairs are dropped until the remaining messages shrink to
 	// this fraction of the post-dedup/prune byte size (drop the rest).
 	// Default 0.50. Separate from CutTokens, which is the session-compaction
 	// retain window.
-	LowWaterRatio float64 `json:"lowWaterRatio" mapstructure:"low_water_ratio"`
+	LowWaterRatio float64 `json:"lowWaterRatio" mapstructure:"low_water_ratio" yaml:"low_water_ratio"`
 	// CutTokens is how many recent estimated tokens session compaction keeps
 	// after summarizing older history. Default 16000.
-	CutTokens    int `json:"cutTokens" mapstructure:"cut_tokens"`
-	TurnInterval int `json:"turnInterval" mapstructure:"turn_interval"`
-	SubInterval  int `json:"subInterval" mapstructure:"sub_interval"`
+	CutTokens    int `json:"cutTokens" mapstructure:"cut_tokens" yaml:"cut_tokens"`
+	TurnInterval int `json:"turnInterval" mapstructure:"turn_interval" yaml:"turn_interval"`
+	SubInterval  int `json:"subInterval" mapstructure:"sub_interval" yaml:"sub_interval"`
 	// ToolTruncate is the in-turn prune threshold (chars). Over-budget tool
 	// results are rewritten to head+marker+tail when token pressure qualifies.
 	// Default 8192.
-	ToolTruncate int `json:"toolTruncate" mapstructure:"tool_truncate"`
+	ToolTruncate int `json:"toolTruncate" mapstructure:"tool_truncate" yaml:"tool_truncate"`
 	// KeepRecentToolSteps is how many latest LLM tool-call batches keep full
 	// results during turn-internal prune/snip (pressure-gated). Default 3.
-	KeepRecentToolSteps int `json:"keepRecentToolSteps" mapstructure:"keep_recent_tool_steps"`
+	KeepRecentToolSteps int `json:"keepRecentToolSteps" mapstructure:"keep_recent_tool_steps" yaml:"keep_recent_tool_steps"`
 }
 
 type ConfigTurnSection struct {
-	DoomLoopThreshold int `json:"doomLoopThreshold" mapstructure:"doom_loop_threshold"`
-	MaxStepsDefault   int `json:"maxStepsDefault" mapstructure:"max_steps_default"`
+	DoomLoopThreshold int `json:"doomLoopThreshold" mapstructure:"doom_loop_threshold" yaml:"doom_loop_threshold"`
+	MaxStepsDefault   int `json:"maxStepsDefault" mapstructure:"max_steps_default" yaml:"max_steps_default"`
 	// MaxLLMFailures is consecutive LLM Chat errors before the turn fails
 	// (independent of max_steps). Resets after any successful Chat response.
-	MaxLLMFailures int `json:"maxLLMFailures" mapstructure:"max_llm_failures"`
+	MaxLLMFailures int `json:"maxLLMFailures" mapstructure:"max_llm_failures" yaml:"max_llm_failures"`
 	// LLMHTTPTimeoutSec is the per-request HTTP client timeout for non-streaming
 	// LLM Chat (includes waiting for the full response body). High-effort
 	// reasoning models often need well above 120s. Default 600.
-	LLMHTTPTimeoutSec int `json:"llmHttpTimeoutSec" mapstructure:"llm_http_timeout_sec"`
+	LLMHTTPTimeoutSec int `json:"llmHttpTimeoutSec" mapstructure:"llm_http_timeout_sec" yaml:"llm_http_timeout_sec"`
 }
 
 // ConfigToolsSection controls local tool execution safeguards.
@@ -121,26 +121,26 @@ type ConfigToolsSection struct {
 	// MaxOutputChars hard-caps a single tool result before it enters the
 	// LLM context, UI stream, and turn log. Prevents oversized shell/MCP
 	// outputs from blowing the context window.
-	MaxOutputChars int `json:"maxOutputChars" mapstructure:"max_output_chars"`
+	MaxOutputChars int `json:"maxOutputChars" mapstructure:"max_output_chars" yaml:"max_output_chars"`
 }
 
 type ConfigTeamSection struct {
-	MaxDelegationDepth int `json:"maxDelegationDepth" mapstructure:"max_delegation_depth"`
+	MaxDelegationDepth int `json:"maxDelegationDepth" mapstructure:"max_delegation_depth" yaml:"max_delegation_depth"`
 }
 
 // ConfigMemorySection controls durable memory_read result limits.
 type ConfigMemorySection struct {
-	ReadTopK int `json:"readTopK" mapstructure:"read_top_k"`
+	ReadTopK int `json:"readTopK" mapstructure:"read_top_k" yaml:"read_top_k"`
 }
 
 type ConfigKnowledgeSection struct {
-	SearchTopK int `json:"searchTopK" mapstructure:"search_top_k"`
+	SearchTopK int `json:"searchTopK" mapstructure:"search_top_k" yaml:"search_top_k"`
 	// ChapterMaxTokens is the chapter merge budget for the Markdown splitter
 	// (approximate subword units, tiersum-style). Default 512.
-	ChapterMaxTokens int `json:"chapterMaxTokens" mapstructure:"chapter_max_tokens"`
+	ChapterMaxTokens int `json:"chapterMaxTokens" mapstructure:"chapter_max_tokens" yaml:"chapter_max_tokens"`
 	// VectorHybrid enables optional dense-vector branch fused with BM25 (P2).
 	// Default false — BM25-only when off.
-	VectorHybrid bool `json:"vectorHybrid" mapstructure:"vector_hybrid"`
+	VectorHybrid bool `json:"vectorHybrid" mapstructure:"vector_hybrid" yaml:"vector_hybrid"`
 }
 
 // UpdateConfigFileRequest is sent by clients to update one or more sections

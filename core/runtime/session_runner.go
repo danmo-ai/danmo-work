@@ -77,13 +77,16 @@ type Engine struct {
 
 type approvalMeta struct {
 	SessionID string
+	ToolName  string
 	Reason    string
 	Domain    string
 }
 
+// sessionPermState holds explicit user approvals scoped to one session. Grants
+// are keyed by permission.SessionGrantKey so every ask reason shares the same
+// "allow for session" mechanism.
 type sessionPermState struct {
-	AllowNetwork   bool
-	AllowedDomains []string
+	Grants map[string]bool
 }
 
 // ApprovalOutcome is returned when a pending approval is resolved.
@@ -159,8 +162,7 @@ func NewEngine(sessions *service.SessionManager, turns *service.TurnManager, pro
 	turnRunner.Approval = e
 	turnRunner.SandboxStatus = e.sandboxStatus
 	turnRunner.EffectiveIsolation = e.effectiveIsolation
-	turnRunner.SessionAllowNetwork = e.sessionAllowsNetwork
-	turnRunner.SessionAllowDomains = e.sessionAllowDomains
+	turnRunner.SessionGrants = e.sessionGrants
 	turnRunner.GrantSessionDomains = e.grantSessionDomains
 	turnRunner.GrantTurnDomains = e.grantTurnDomains
 	turnRunner.ClearTurnDomains = e.clearTurnDomains
@@ -318,21 +320,18 @@ func (e *Engine) effectiveIsolation() domain.EffectiveIsolation {
 	return domain.ComputeEffectiveIsolation(sbSt, envSt)
 }
 
-func (e *Engine) sessionAllowsNetwork(sessionID string) bool {
+// sessionGrants returns a copy of the session's granted keys for the gate.
+func (e *Engine) sessionGrants(sessionID string) map[string]bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.sessionPerm[sessionID].AllowNetwork
-}
-
-func (e *Engine) sessionAllowDomains(sessionID string) []string {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	d := e.sessionPerm[sessionID].AllowedDomains
-	if len(d) == 0 {
+	g := e.sessionPerm[sessionID].Grants
+	if len(g) == 0 {
 		return nil
 	}
-	out := make([]string, len(d))
-	copy(out, d)
+	out := make(map[string]bool, len(g))
+	for k, v := range g {
+		out[k] = v
+	}
 	return out
 }
 
@@ -1218,8 +1217,7 @@ func (e *Engine) spawnTurnRunner(turnID string, reg *tool.Registry, skills []dom
 	r.Approval = e
 	r.SandboxStatus = e.sandboxStatus
 	r.EffectiveIsolation = e.effectiveIsolation
-	r.SessionAllowNetwork = e.sessionAllowsNetwork
-	r.SessionAllowDomains = e.sessionAllowDomains
+	r.SessionGrants = e.sessionGrants
 	r.GrantSessionDomains = e.grantSessionDomains
 	r.GrantTurnDomains = e.grantTurnDomains
 	r.ClearTurnDomains = e.clearTurnDomains
@@ -1769,19 +1767,17 @@ func (e *Engine) ResolveApproval(id string, approved bool, scope string) {
 	delete(e.approvalWait, id)
 	delete(e.approvalMeta, id)
 	if approved && scope == "session" && meta.SessionID != "" {
-		st := e.sessionPerm[meta.SessionID]
-		switch meta.Reason {
-		case permission.ReasonNetwork:
-			// Full egress escape — deny mode only.
-			st.AllowNetwork = true
-		case permission.ReasonNetworkDomain:
-			if meta.Domain != "" {
-				st.AllowedDomains = append(st.AllowedDomains, meta.Domain)
-				// Hard grant is applied in gateToolCall via GrantSessionDomains
-				// after WaitApproval returns with scope=session.
+		// One mechanism for every reason: remember what was approved.
+		if key := permission.SessionGrantKey(meta.Reason, meta.Domain, meta.ToolName); key != "" {
+			st := e.sessionPerm[meta.SessionID]
+			if st.Grants == nil {
+				st.Grants = make(map[string]bool)
 			}
+			st.Grants[key] = true
+			e.sessionPerm[meta.SessionID] = st
 		}
-		e.sessionPerm[meta.SessionID] = st
+		// Network/domain grants also widen the hard sandbox policy; that is
+		// applied by gateToolCall (GrantSessionDomains) after the wait returns.
 	}
 	e.mu.Unlock()
 	if ch != nil {
@@ -1857,7 +1853,7 @@ func (e *Engine) CreateApproval(sessionID, turnID, toolName, description, reason
 	ch := make(chan ApprovalOutcome, 1)
 	e.mu.Lock()
 	e.approvalWait[id] = ch
-	e.approvalMeta[id] = approvalMeta{SessionID: sessionID, Reason: reason, Domain: hostDomain}
+	e.approvalMeta[id] = approvalMeta{SessionID: sessionID, ToolName: toolName, Reason: reason, Domain: hostDomain}
 	e.mu.Unlock()
 	if err := e.approvals.Create(context.Background(), domain.Approval{
 		ID: id, SessionID: sessionID, TurnID: turnID, ToolName: toolName,

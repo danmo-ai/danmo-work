@@ -203,8 +203,7 @@ type TurnRunner struct {
 	FileChanges         FileChangeAppender
 	SandboxStatus       func() domain.SandboxStatus
 	EffectiveIsolation  func() domain.EffectiveIsolation
-	SessionAllowNetwork func(sessionID string) bool
-	SessionAllowDomains func(sessionID string) []string
+	SessionGrants       func(sessionID string) map[string]bool
 	GrantSessionDomains func(sessionID string, domains []string)
 	GrantTurnDomains    func(turnID string, domains []string)
 	ClearTurnDomains    func(turnID string)
@@ -823,14 +822,13 @@ func (p *TurnRunner) gateToolCall(
 	if p.EffectiveIsolation != nil {
 		isolation = p.EffectiveIsolation()
 	}
-	allowNet := false
-	if p.SessionAllowNetwork != nil {
-		allowNet = p.SessionAllowNetwork(tctx.SessionID)
+	var grants map[string]bool
+	if p.SessionGrants != nil {
+		grants = p.SessionGrants(tctx.SessionID)
 	}
-	var sessionDomains []string
-	if p.SessionAllowDomains != nil {
-		sessionDomains = p.SessionAllowDomains(tctx.SessionID)
-	}
+	// A session-wide egress grant also has to widen the sandbox/proxy policy
+	// for this call, not just the gate decision.
+	allowNet := grants[permission.GrantKeyNetwork]
 	searchProvider, searchBaseURL := "", ""
 	if call.Name == "web_search" && p.ConfigStore != nil {
 		if c, err := p.ConfigStore.Load(ctx); err == nil {
@@ -856,8 +854,7 @@ func (p *TurnRunner) gateToolCall(
 		SearchBaseURL:       searchBaseURL,
 		Sandbox:             sbStatus,
 		Isolation:           isolation,
-		SessionAllowNetwork: allowNet,
-		SessionAllowDomains: sessionDomains,
+		SessionGrants:       grants,
 		Mode:                cfg.permissionMode,
 	})
 	decision := permResult.Decision
@@ -878,9 +875,9 @@ func (p *TurnRunner) gateToolCall(
 				return nil, "approval could not be persisted: " + createErr.Error() + toolErrorHint, "approval persist failed", false, nil
 			}
 			scopeOpts := []string{"once"}
-			// Full-network session grant only in deny mode (ReasonNetwork).
-			// Domain grants use ReasonNetworkDomain with session scope.
-			if permResult.Reason == permission.ReasonNetwork || permResult.Reason == permission.ReasonNetworkDomain {
+			// "Allow for session" is offered whenever the ask has a session
+			// identity; auto_approve still cannot skip hard reasons.
+			if permission.SessionGrantKey(permResult.Reason, permResult.Domain, call.Name) != "" {
 				scopeOpts = append(scopeOpts, "session")
 			}
 			desc := describe

@@ -136,8 +136,11 @@ func (l *Loader) Path() string { return l.path }
 // Load reads the configuration file (if it exists), applies defaults and
 // environment-variable overrides, and returns the resolved config.
 func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	// Exclusive lock: ReadInConfig and the legacy-key migration both mutate the
+	// viper config map, and Load is called concurrently from channel syncs and
+	// turn runners.
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
 	if err := l.v.ReadInConfig(); err != nil {
 		// Ignore "file not found" so that defaults + env vars still work.
@@ -145,6 +148,7 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 			return nil, err
 		}
 	}
+	migrateLegacyFieldKeys(l.v)
 
 	var cfg domain.ConfigFile
 	if err := l.v.Unmarshal(&cfg); err != nil {
@@ -221,6 +225,84 @@ func (l *Loader) Load(_ context.Context) (*domain.ConfigFile, error) {
 	}
 	migrateSandboxBackends(&cfg)
 	return &cfg, nil
+}
+
+// legacyConfigKeyAliases maps keys emitted by older Save implementations
+// (yaml.Marshal of Go field names, e.g. "autoapprove") to the canonical
+// snake_case keys used by the mapstructure/yaml tags. Without this repair the
+// values written from Settings were silently dropped on the next Load because
+// "autoapprove" is not EqualFold("auto_approve"). canonical → legacy.
+var legacyConfigKeyAliases = map[string]string{
+	"data.store_database":     "data.storedatabase",
+	"data.history_database":   "data.historydatabase",
+	"server.listen_addr":      "server.listenaddr",
+	"runtime.auto_approve":    "runtime.autoapprove",
+	"runtime.permission_mode": "runtime.permissionmode",
+	"remote.hub_url":          "remote.huburl",
+	"remote.local_base":       "remote.localbase",
+	"remote.tls_insecure":     "remote.tlsinsecure",
+
+	"runtime.turn.doom_loop_threshold":          "runtime.turn.doomloopthreshold",
+	"runtime.turn.max_steps_default":            "runtime.turn.maxstepsdefault",
+	"runtime.turn.max_llm_failures":             "runtime.turn.maxllmfailures",
+	"runtime.turn.llm_http_timeout_sec":         "runtime.turn.llmhttptimeoutsec",
+	"runtime.team.max_delegation_depth":         "runtime.team.maxdelegationdepth",
+	"runtime.tools.max_output_chars":            "runtime.tools.maxoutputchars",
+	"runtime.memory.read_top_k":                 "runtime.memory.readtopk",
+	"runtime.knowledge.search_top_k":            "runtime.knowledge.searchtopk",
+	"runtime.knowledge.chapter_max_tokens":      "runtime.knowledge.chaptermaxtokens",
+	"runtime.knowledge.vector_hybrid":           "runtime.knowledge.vectorhybrid",
+	"runtime.compaction.trigger_ratio":          "runtime.compaction.triggerratio",
+	"runtime.compaction.low_water_ratio":        "runtime.compaction.lowwaterratio",
+	"runtime.compaction.cut_tokens":             "runtime.compaction.cuttokens",
+	"runtime.compaction.turn_interval":          "runtime.compaction.turninterval",
+	"runtime.compaction.sub_interval":           "runtime.compaction.subinterval",
+	"runtime.compaction.tool_truncate":          "runtime.compaction.tooltruncate",
+	"runtime.compaction.keep_recent_tool_steps": "runtime.compaction.keeprecenttoolsteps",
+	"runtime.retention.history_max_age_days":    "runtime.retention.historymaxagedays",
+	"runtime.table.max_rows_per_upsert":         "runtime.table.maxrowsperupsert",
+	"runtime.table.max_rows_per_turn":           "runtime.table.maxrowsperturn",
+	"runtime.table.max_rows_per_table":          "runtime.table.maxrowspertable",
+	"runtime.table.max_row_bytes":               "runtime.table.maxrowbytes",
+	"runtime.table.max_tables_per_scope":        "runtime.table.maxtablesperscope",
+	"runtime.table.query_default_limit":         "runtime.table.querydefaultlimit",
+	"runtime.table.query_max_limit":             "runtime.table.querymaxlimit",
+	"runtime.table.max_row_chars":               "runtime.table.maxrowchars",
+}
+
+// migrateLegacyFieldKeys copies legacy lowercase field-name keys onto their
+// canonical snake_case keys before unmarshalling. Canonical config-file keys
+// always win when both are present. Values are merged into the config map (not
+// set as overrides) so a later Save is visible to the next Load.
+func migrateLegacyFieldKeys(v *viper.Viper) {
+	if v == nil {
+		return
+	}
+	migrated := map[string]any{}
+	for canonical, legacy := range legacyConfigKeyAliases {
+		if v.InConfig(canonical) || !v.InConfig(legacy) {
+			continue
+		}
+		setNestedValue(migrated, canonical, v.Get(legacy))
+	}
+	if len(migrated) == 0 {
+		return
+	}
+	_ = v.MergeConfigMap(migrated)
+}
+
+func setNestedValue(m map[string]any, key string, val any) {
+	parts := strings.Split(key, ".")
+	cur := m
+	for _, p := range parts[:len(parts)-1] {
+		next, ok := cur[p].(map[string]any)
+		if !ok {
+			next = map[string]any{}
+			cur[p] = next
+		}
+		cur = next
+	}
+	cur[parts[len(parts)-1]] = val
 }
 
 // migrateSandboxBackends folds the legacy runtime.environment section into the
@@ -602,6 +684,7 @@ func (l *Loader) Save(_ context.Context, cfg *domain.ConfigFile) error {
 	root["llm"] = cfg.LLM
 	root["market"] = cfg.Market
 	root["channels"] = cfg.Channels
+	root["remote"] = cfg.Remote
 
 	if err := os.MkdirAll(filepath.Dir(l.path), 0755); err != nil {
 		return err

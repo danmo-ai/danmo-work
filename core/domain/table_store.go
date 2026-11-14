@@ -25,9 +25,9 @@ type TableRow struct {
 
 // TableQuery filters rows for table_query / debug API.
 type TableQuery struct {
-	Scope  TableScope
+	Scope   TableScope
 	ScopeID string
-	Table  string
+	Table   string
 	// Filter is top-level equality only: field → scalar JSON value.
 	Filter map[string]any
 	// Order: "updated_at_desc" (default) or "updated_at_asc" or "key_asc" / "key_desc".
@@ -52,14 +52,14 @@ type TableScopeRef struct {
 
 // ConfigTableSection controls agent table-store quotas and query limits.
 type ConfigTableSection struct {
-	MaxRowsPerUpsert  int `json:"maxRowsPerUpsert" mapstructure:"max_rows_per_upsert"`
-	MaxRowsPerTurn    int `json:"maxRowsPerTurn" mapstructure:"max_rows_per_turn"`
-	MaxRowsPerTable   int `json:"maxRowsPerTable" mapstructure:"max_rows_per_table"`
-	MaxRowBytes       int `json:"maxRowBytes" mapstructure:"max_row_bytes"`
-	MaxTablesPerScope int `json:"maxTablesPerScope" mapstructure:"max_tables_per_scope"`
-	QueryDefaultLimit int `json:"queryDefaultLimit" mapstructure:"query_default_limit"`
-	QueryMaxLimit     int `json:"queryMaxLimit" mapstructure:"query_max_limit"`
-	MaxRowChars       int `json:"maxRowChars" mapstructure:"max_row_chars"`
+	MaxRowsPerUpsert  int `json:"maxRowsPerUpsert" mapstructure:"max_rows_per_upsert" yaml:"max_rows_per_upsert"`
+	MaxRowsPerTurn    int `json:"maxRowsPerTurn" mapstructure:"max_rows_per_turn" yaml:"max_rows_per_turn"`
+	MaxRowsPerTable   int `json:"maxRowsPerTable" mapstructure:"max_rows_per_table" yaml:"max_rows_per_table"`
+	MaxRowBytes       int `json:"maxRowBytes" mapstructure:"max_row_bytes" yaml:"max_row_bytes"`
+	MaxTablesPerScope int `json:"maxTablesPerScope" mapstructure:"max_tables_per_scope" yaml:"max_tables_per_scope"`
+	QueryDefaultLimit int `json:"queryDefaultLimit" mapstructure:"query_default_limit" yaml:"query_default_limit"`
+	QueryMaxLimit     int `json:"queryMaxLimit" mapstructure:"query_max_limit" yaml:"query_max_limit"`
+	MaxRowChars       int `json:"maxRowChars" mapstructure:"max_row_chars" yaml:"max_row_chars"`
 }
 
 // DefaultTableSection returns MVP quota defaults from the landing plan.

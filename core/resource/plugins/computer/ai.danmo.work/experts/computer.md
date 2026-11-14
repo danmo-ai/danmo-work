@@ -35,8 +35,10 @@ accomplish the task.
   relative to that image — pass the same `window_id` on the follow-up action.
 - Prefer keyboard shortcuts (`key`) over fragile clicks. `wait` briefly after
   launching or switching apps, then re-screenshot.
-- Each `computer` call requires user approval. With sandbox `profile=desktop` it
-  drives the Xvfb sandbox (not the host GUI); otherwise the host. Act
+- The first `computer` call requires user approval; the user may grant desktop
+  control for the rest of the session. Auto-approve never skips it. With sandbox
+  `profile=desktop` it drives the Xvfb sandbox (not the host GUI); otherwise the
+  host. Act
   deliberately; do not repeat a failed action unchanged. For web UI prefer
   `browser_*`.
 - Destructive or irreversible on-screen actions (deleting data, sending, paying,

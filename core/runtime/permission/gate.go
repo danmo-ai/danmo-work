@@ -35,17 +35,16 @@ const (
 
 // Request is the structured input for permission checks.
 type Request struct {
-	ToolName             string
-	Risk                 domain.RiskLevel
-	Command              string // exec_shell command when applicable
-	URL                  string // host-egress tools (http_request / web_fetch)
-	SearchProvider       string // web_search configured provider (for Soft allowlist)
-	SearchBaseURL        string // web_search base_url (SearXNG / custom DDG)
-	Sandbox              domain.SandboxStatus
-	Isolation            domain.EffectiveIsolation // preferred over Sandbox for strength
-	SessionAllowNetwork  bool                      // deny-mode full open for session
-	SessionAllowDomains  []string                  // allowlist session grants
-	Mode                 domain.PermissionMode
+	ToolName       string
+	Risk           domain.RiskLevel
+	Command        string // exec_shell command when applicable
+	URL            string // host-egress tools (http_request / web_fetch)
+	SearchProvider string // web_search configured provider (for Soft allowlist)
+	SearchBaseURL  string // web_search base_url (SearXNG / custom DDG)
+	Sandbox        domain.SandboxStatus
+	Isolation      domain.EffectiveIsolation // preferred over Sandbox for strength
+	SessionGrants  map[string]bool           // session-scope approvals (see SessionGrantKey)
+	Mode           domain.PermissionMode
 }
 
 // Result is the gate outcome.
@@ -92,13 +91,76 @@ func AutoApprovable(reason string) bool {
 	return domain.AutoApprovableReason(reason)
 }
 
+// Session-scope approval keys. A user decision made with scope=session is
+// remembered under the identity of what was approved, so the same ask does not
+// prompt again for the rest of the session. This is the only mechanism; tools
+// are not special-cased.
+const (
+	// GrantKeyNetwork is the deny-mode full-egress escape.
+	GrantKeyNetwork = "network"
+	// GrantKeyDomainPrefix + host grants one allowlisted host.
+	GrantKeyDomainPrefix = "domain:"
+	// GrantKeyToolPrefix + tool name grants one tool.
+	GrantKeyToolPrefix = "tool:"
+)
+
+// SessionGrantKey returns the session-scope identity of an Ask result, or ""
+// when the reason must always ask again. Reasons with no safe session-wide
+// identity (a dangerous command or an unsandboxed shell can be anything) are
+// never remembered, so "allow for session" cannot widen into "allow any
+// command".
+func SessionGrantKey(reason, hostDomain, toolName string) string {
+	switch reason {
+	case ReasonNetwork:
+		return GrantKeyNetwork
+	case ReasonNetworkDomain:
+		if hostDomain == "" {
+			return ""
+		}
+		return GrantKeyDomainPrefix + hostDomain
+	case ReasonDangerousCommand, ReasonUnsandboxed, ReasonRuleDeny, ReasonModeDeny:
+		return ""
+	}
+	if toolName == "" {
+		return ""
+	}
+	return GrantKeyToolPrefix + toolName
+}
+
+// grantDomains returns the hosts granted for this session.
+func (req Request) grantDomains() []string {
+	if len(req.SessionGrants) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(req.SessionGrants))
+	for k, ok := range req.SessionGrants {
+		if ok && strings.HasPrefix(k, GrantKeyDomainPrefix) {
+			out = append(out, strings.TrimPrefix(k, GrantKeyDomainPrefix))
+		}
+	}
+	return out
+}
+
 // Check evaluates tool permission. Prefer CheckRequest for sandbox-aware policy.
 func (g *Gate) Check(toolName string, risk domain.RiskLevel) Decision {
 	return g.CheckRequest(Request{ToolName: toolName, Risk: risk}).Decision
 }
 
-// CheckRequest applies mode + Soft Gate policy (Hard enforcement is separate).
+// CheckRequest applies mode + Soft Gate policy (Hard enforcement is separate),
+// then lets an explicit session-scope approval override an Ask. Deny always
+// wins, so read-only modes and deny rules cannot be bypassed by a stale grant.
 func (g *Gate) CheckRequest(req Request) Result {
+	res := g.evaluate(req)
+	if res.Decision != DecisionAsk {
+		return res
+	}
+	if key := SessionGrantKey(res.Reason, res.Domain, req.ToolName); key != "" && req.SessionGrants[key] {
+		return Result{Decision: DecisionAllow}
+	}
+	return res
+}
+
+func (g *Gate) evaluate(req Request) Result {
 	mode := req.Mode
 	if mode == "" && g != nil {
 		mode = g.Mode
@@ -154,7 +216,9 @@ func (g *Gate) CheckRequest(req Request) Result {
 		return Result{Decision: DecisionAsk, Reason: ReasonUnsandboxed}
 	}
 
-	// Desktop control always asks; never let auto_approve skip it.
+	// Desktop control always asks at least once; never let auto_approve skip
+	// it. The generic session grant (tool:computer) is applied by
+	// CheckRequest, so an explicit "allow for session" stops further prompts.
 	// Container desktop profile uses a distinct reason so the UI can say
 	// "sandbox desktop" instead of "host GUI".
 	if req.ToolName == "computer" {
@@ -197,9 +261,9 @@ func networkOf(req Request) domain.SandboxNetwork {
 
 func allowlistDomainsOf(req Request) []string {
 	if len(req.Isolation.AllowlistDomains) > 0 {
-		return mergeDomains(req.Isolation.AllowlistDomains, req.SessionAllowDomains)
+		return mergeDomains(req.Isolation.AllowlistDomains, req.grantDomains())
 	}
-	return mergeDomains(req.Sandbox.AllowlistDomains, req.SessionAllowDomains)
+	return mergeDomains(req.Sandbox.AllowlistDomains, req.grantDomains())
 }
 
 func checkShellNetwork(req Request) Result {
@@ -208,9 +272,7 @@ func checkShellNetwork(req Request) Result {
 		if !LooksLikeNetwork(req.Command) {
 			return Result{Decision: DecisionAllow}
 		}
-		if req.SessionAllowNetwork {
-			return Result{Decision: DecisionAllow}
-		}
+		// A session-wide egress grant is applied by CheckRequest.
 		return Result{Decision: DecisionAsk, Reason: ReasonNetwork}
 	case domain.SandboxNetworkAllowlist:
 		hosts := ExtractHosts(req.Command)
@@ -238,9 +300,6 @@ func checkHostEgress(req Request) Result {
 		// Unknown provider endpoint — still subject to deny mode.
 		switch networkOf(req) {
 		case domain.SandboxNetworkDeny:
-			if req.SessionAllowNetwork {
-				return Result{Decision: DecisionAllow}
-			}
 			return Result{Decision: DecisionAsk, Reason: ReasonNetwork}
 		default:
 			return Result{Decision: DecisionAllow}
@@ -251,9 +310,6 @@ func checkHostEgress(req Request) Result {
 	}
 	switch networkOf(req) {
 	case domain.SandboxNetworkDeny:
-		if req.SessionAllowNetwork {
-			return Result{Decision: DecisionAllow}
-		}
 		return Result{Decision: DecisionAsk, Reason: ReasonNetwork}
 	case domain.SandboxNetworkAllowlist:
 		domains := allowlistDomainsOf(req)

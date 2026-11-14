@@ -67,6 +67,10 @@ const allowsSession = computed(() => {
 const sessionButtonLabel = computed(() => {
   if (reason.value === 'network_domain') return t('sessions.perm.allowDomainSession')
   if (reason.value === 'network') return t('sessions.perm.allowFullOutboundSession')
+  // Generic tool-level grant: name the tool so the scope is unambiguous.
+  if (toolName.value && toolName.value !== t('sessions.perm.unknownTool')) {
+    return t('sessions.perm.allowTaskSession', { tool: toolName.value })
+  }
   return t('sessions.perm.allowSession')
 })
 

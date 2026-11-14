@@ -43,7 +43,14 @@ func (m *ConfigManager) Update(ctx context.Context, req domain.UpdateConfigFileR
 		cfg.Instance = *req.Instance
 	}
 	if req.Runtime != nil {
-		cfg.Runtime = *req.Runtime
+		next := *req.Runtime
+		// Clients that do not edit permission rules omit the field; keep the
+		// existing rules instead of silently dropping hand-written Soft Gate
+		// policy on every Settings save.
+		if next.PermissionRules == nil {
+			next.PermissionRules = cfg.Runtime.PermissionRules
+		}
+		cfg.Runtime = next
 	}
 	if req.Search != nil {
 		if req.Search.Provider == "" {
