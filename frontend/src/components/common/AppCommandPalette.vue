@@ -159,7 +159,12 @@ const actions = computed<PaletteAction[]>(() => [
     id: 'tab.desktop',
     title: t('commandPalette.tabDesktop'),
     group: t('commandPalette.groupNavigate'),
-    run: () => goTab('desktop'),
+    run: () => {
+      workspaceUi.openDesktopStage(sessions.selectedProjectId ?? '')
+      if (router.currentRoute.value.name !== 'sessions') {
+        router.push({ name: 'sessions', params: sessions.currentSessionId ? { id: sessions.currentSessionId } : {} })
+      }
+    },
   },
   {
     id: 'tab.trajectory',

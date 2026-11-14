@@ -18,6 +18,7 @@ import (
 )
 
 var _ port.Browser = (*Manager)(nil)
+var _ port.BrowserWatcher = (*Manager)(nil)
 
 const sessionIdleTTL = 15 * time.Minute
 
@@ -48,6 +49,7 @@ type Manager struct {
 
 	// Sticky interactive sessions.
 	pages       map[string]*pageSession
+	lastFrames  map[string]port.BrowserLastFrame
 	allocCtx    context.Context
 	cancelAlloc context.CancelFunc
 	allocMode   string // attach | launch | ""
@@ -61,9 +63,10 @@ type Manager struct {
 // New creates a browser manager and probes availability.
 func New(cfg domain.ConfigBrowserSection) *Manager {
 	m := &Manager{
-		active:    make(map[uint64]context.CancelFunc),
-		pages:     make(map[string]*pageSession),
-		stopSweep: make(chan struct{}),
+		active:     make(map[uint64]context.CancelFunc),
+		pages:      make(map[string]*pageSession),
+		lastFrames: make(map[string]port.BrowserLastFrame),
+		stopSweep:  make(chan struct{}),
 	}
 	m.Configure(cfg)
 	go m.idleSweepLoop()
@@ -234,6 +237,49 @@ func (m *Manager) AcquirePage(ctx context.Context, sessionID string) (port.Brows
 	return p, nil
 }
 
+// WatchPage mirrors an existing sticky page without creating a browser or tab.
+// The returned channel closes when the page closes or all watchers disconnect.
+func (m *Manager) WatchPage(ctx context.Context, sessionID string, opts port.BrowserWatchOptions) (<-chan port.BrowserWatchEvent, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil, fmt.Errorf("session id is required")
+	}
+	m.mu.Lock()
+	p := m.pages[sessionID]
+	m.mu.Unlock()
+	if p == nil {
+		return nil, port.ErrBrowserPageNotFound
+	}
+	return p.watch(ctx, opts)
+}
+
+// LastPageFrame returns a process-local replay of the final frame, if any.
+func (m *Manager) LastPageFrame(sessionID string) (port.BrowserLastFrame, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	last, ok := m.lastFrames[sessionID]
+	return last, ok
+}
+
+func (m *Manager) saveLastFrame(p *pageSession, state string) {
+	if p == nil {
+		return
+	}
+	p.streamMu.Lock()
+	var last port.BrowserLastFrame
+	if p.live != nil {
+		last = p.live.lastFrame()
+	}
+	last.Status = port.BrowserPageStatus{SessionID: p.id, URL: p.liveURL, Title: p.liveTitle, State: state}
+	p.streamMu.Unlock()
+	if last.Frame.Data == nil {
+		return
+	}
+	m.mu.Lock()
+	m.lastFrames[p.id] = last
+	m.mu.Unlock()
+}
+
 // ClosePage tears down the sticky page for sessionID (idempotent).
 func (m *Manager) ClosePage(ctx context.Context, sessionID string) error {
 	_ = ctx
@@ -253,6 +299,12 @@ func (m *Manager) ClosePage(ctx context.Context, sessionID string) error {
 	cancel := p.cancel
 	p.cancel = nil
 	p.mu.Unlock()
+	m.saveLastFrame(p, "closed")
+	p.streamMu.Lock()
+	if p.live != nil {
+		p.live.close()
+	}
+	p.streamMu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
@@ -282,6 +334,12 @@ func (m *Manager) CloseAll(ctx context.Context) error {
 		cancel := p.cancel
 		p.cancel = nil
 		p.mu.Unlock()
+		m.saveLastFrame(p, "closed")
+		p.streamMu.Lock()
+		if p.live != nil {
+			p.live.close()
+		}
+		p.streamMu.Unlock()
 		if cancel != nil {
 			cancel()
 		}

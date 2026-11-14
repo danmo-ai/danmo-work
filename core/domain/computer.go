@@ -1,5 +1,7 @@
 package domain
 
+import "strings"
+
 // Computer use domain types. These describe an OS-agnostic desktop control
 // surface (window discovery, mouse, keyboard, screenshot) that the agent drives
 // through a single `computer` builtin tool. The concrete OS backends live in
@@ -15,8 +17,30 @@ type ConfigComputerSection struct {
 	// Empty inherits the process environment (host) or uses ":1" in desktop sandbox.
 	Display string `json:"display,omitempty" mapstructure:"display" yaml:"display,omitempty"`
 	// MaxShotEdge caps the longest screenshot edge sent to the model (JPEG
-	// downscale). Zero uses DefaultDesktopMaxShotEdge (1024). Negative disables.
+	// downscale). Zero uses 1568 for host targets, or the sandbox desktop cap.
 	MaxShotEdge int `json:"maxShotEdge,omitempty" mapstructure:"max_shot_edge" yaml:"max_shot_edge,omitempty"`
+	// Target selects the host GUI, a sandbox desktop, or automatic selection.
+	Target string `json:"target,omitempty" mapstructure:"target" yaml:"target,omitempty"`
+}
+
+const (
+	ComputerTargetAuto         = "auto"
+	ComputerTargetHost         = "host"
+	ComputerTargetSandbox      = "sandbox"
+	DefaultComputerMaxShotEdge = 1568
+)
+
+func NormalizeComputerTarget(target string) string {
+	switch strings.ToLower(strings.TrimSpace(target)) {
+	case "", ComputerTargetAuto:
+		return ComputerTargetAuto
+	case ComputerTargetHost:
+		return ComputerTargetHost
+	case ComputerTargetSandbox:
+		return ComputerTargetSandbox
+	default:
+		return ComputerTargetAuto
+	}
 }
 
 // ComputerStatus is the probed desktop-control capability surface.
@@ -54,11 +78,16 @@ type ComputerImage struct {
 	// image-relative coordinates back to absolute screen coordinates.
 	OriginX int `json:"originX"`
 	OriginY int `json:"originY"`
-	// DisplayWidth/DisplayHeight are the full virtual-screen size before any
-	// downscale for the model. When Width/Height differ, click coords from the
-	// image must be mapped: screen = image * (DisplayWidth/Width).
+	// DisplayWidth/DisplayHeight are the dimensions of the captured region in
+	// mouse coordinate units. On macOS these are logical points, not Retina
+	// pixels; on X11/Windows they are physical pixels. For a window or zoomed
+	// capture, they describe that region rather than the whole display.
+	// Map coordinates with: screen = Origin + image * (Display/Width).
 	DisplayWidth  int `json:"displayWidth,omitempty"`
 	DisplayHeight int `json:"displayHeight,omitempty"`
+	// Scope uniquely identifies the latest screenshot used for coordinate
+	// mapping. It includes the session, optional window, and optional zoom.
+	Scope string `json:"-"`
 }
 
 // MouseButton identifies which mouse button an action targets.
@@ -68,6 +97,24 @@ const (
 	MouseLeft   MouseButton = "left"
 	MouseRight  MouseButton = "right"
 	MouseMiddle MouseButton = "middle"
+)
+
+// ScreenRect is a rectangle in screen (mouse) coordinate units.
+type ScreenRect struct {
+	X      int `json:"x"`
+	Y      int `json:"y"`
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
+// KeyModifier is a modifier held during a mouse action.
+type KeyModifier string
+
+const (
+	ModifierShift KeyModifier = "shift"
+	ModifierCtrl  KeyModifier = "ctrl"
+	ModifierAlt   KeyModifier = "alt"
+	ModifierMeta  KeyModifier = "meta"
 )
 
 // ScrollDirection identifies a scroll axis/direction.

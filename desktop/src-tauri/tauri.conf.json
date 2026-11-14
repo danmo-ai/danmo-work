@@ -35,7 +35,8 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "bin/danmo-work-backend"
+      "bin/danmo-work-backend",
+      "bin/dq-darwin-input"
     ],
     "resources": [
       "resources/first_launch/*",

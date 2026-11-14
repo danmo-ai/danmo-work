@@ -35,7 +35,7 @@ func TestLinuxSmoke(t *testing.T) {
 	defer cancel()
 
 	// Screenshot of the full display must return image bytes.
-	img, err := m.Screenshot(ctx, "")
+	img, err := m.Screenshot(ctx, "smoke", "", nil)
 	if err != nil {
 		t.Fatalf("screenshot: %v", err)
 	}
@@ -44,19 +44,51 @@ func TestLinuxSmoke(t *testing.T) {
 	}
 
 	// Cursor move + position round-trip.
-	if err := m.MouseMove(ctx, 40, 40); err != nil {
+	if err := m.MouseMove(ctx, "smoke", "", 40, 40, nil); err != nil {
 		t.Fatalf("mouse move: %v", err)
 	}
 	x, y, err := m.CursorPosition(ctx)
 	if err != nil {
 		t.Fatalf("cursor position: %v", err)
 	}
-	if x < 0 || y < 0 {
-		t.Fatalf("unexpected cursor position (%d,%d)", x, y)
+	if x != 40 || y != 40 {
+		t.Fatalf("cursor moved to (%d,%d), want (40,40)", x, y)
 	}
 
-	// Window enumeration should not error (may be empty in a bare session).
-	if _, err := m.ListWindows(ctx, ""); err != nil {
+	// Verify downscaled coordinates map back to the physical X11 display.
+	scaled := New(domain.ConfigComputerSection{Enabled: true, Display: display, MaxShotEdge: 512})
+	img, err = scaled.Screenshot(ctx, "scaled-smoke", "", nil)
+	if err != nil {
+		t.Fatalf("scaled screenshot: %v", err)
+	}
+	targetX, targetY := img.Width/2, img.Height/2
+	if err := scaled.MouseMove(ctx, "scaled-smoke", "", targetX, targetY, nil); err != nil {
+		t.Fatalf("scaled mouse move: %v", err)
+	}
+	x, y, err = scaled.CursorPosition(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantX, wantY := targetX*img.DisplayWidth/img.Width, targetY*img.DisplayHeight/img.Height
+	if x != wantX || y != wantY {
+		t.Fatalf("scaled cursor moved to (%d,%d), want (%d,%d)", x, y, wantX, wantY)
+	}
+
+	wins, err := m.ListWindows(ctx, "")
+	if err != nil {
 		t.Fatalf("list windows: %v", err)
+	}
+	for _, win := range wins {
+		if win.Width <= 0 || win.Height <= 0 {
+			continue
+		}
+		windowShot, err := m.Screenshot(ctx, "window-smoke", win.ID, nil)
+		if err != nil {
+			t.Fatalf("window screenshot: %v", err)
+		}
+		if windowShot.Width != win.Width || windowShot.Height != win.Height || windowShot.OriginX != win.X || windowShot.OriginY != win.Y {
+			t.Fatalf("window capture=%dx%d at %d,%d; bounds=%+v", windowShot.Width, windowShot.Height, windowShot.OriginX, windowShot.OriginY, win)
+		}
+		break
 	}
 }

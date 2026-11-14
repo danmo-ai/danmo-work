@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useWorkspaceUiStore } from '@/stores/workspaceUi'
@@ -13,6 +13,8 @@ import UniverSheetSurface from '@/components/office/UniverSheetSurface.vue'
 import UniverDocSurface from '@/components/office/UniverDocSurface.vue'
 import MsOfficePreviewSurface from '@/components/office/MsOfficePreviewSurface.vue'
 import WebSurface from '@/components/office/WebSurface.vue'
+import BrowserLiveSurface from '@/components/office/BrowserLiveSurface.vue'
+import DesktopPanel from '@/components/center/DesktopPanel.vue'
 import CodeSurface from '@/components/office/CodeSurface.vue'
 import DiffSurface from '@/components/office/DiffSurface.vue'
 import OfficeAiToolbar from '@/components/office/OfficeAiToolbar.vue'
@@ -63,6 +65,8 @@ const turnRunning = computed(() => {
 })
 
 const isDiff = computed(() => stage.value?.kind === 'diff')
+const isVisualStage = computed(() => stage.value?.kind === 'browser-live' || stage.value?.kind === 'desktop')
+const hasVisualNavigation = computed(() => isVisualStage.value || stage.value?.kind === 'web')
 const isCodeKind = computed(() => stage.value?.kind === 'code')
 const stageEngine = computed(() => stage.value?.engine)
 const isMsOffice = computed(() => stageEngine.value === 'ms-office')
@@ -91,6 +95,8 @@ const activeSurface = computed(() => {
 
 const chromeLabel = computed(() => {
   if (!stage.value) return ''
+  if (stage.value.kind === 'browser-live') return t('sessions.browserLive.title')
+  if (stage.value.kind === 'desktop') return t('sessions.desktop.title')
   if (stage.value.kind === 'web' || stage.value.kind === 'media') {
     return stage.value.path || stage.value.url || ''
   }
@@ -213,6 +219,28 @@ function close() {
   workspaceUi.closeStage()
 }
 
+function openPreview() {
+  workspaceUi.openStageUri(stage.value?.kind === 'web' && stage.value.url ? stage.value.url : 'https://example.com/')
+  uriInput.value = workspaceUi.stageResourceUri
+}
+
+const uriInput = ref('')
+watch(() => workspaceUi.stageResourceUri, (uri) => { uriInput.value = uri }, { immediate: true })
+function navigateUri() {
+  if (!workspaceUi.openStageUri(uriInput.value)) return
+  void nextTick(() => { uriInput.value = workspaceUi.stageResourceUri })
+}
+
+function openAgentBrowser() {
+  if (sessions.currentSessionId) workspaceUi.openBrowserStage(sessions.currentSessionId)
+  uriInput.value = workspaceUi.stageResourceUri
+}
+
+function openDesktop() {
+  workspaceUi.openDesktopStage(props.projectId)
+  uriInput.value = workspaceUi.stageResourceUri
+}
+
 async function setMode(mode: 'view' | 'edit' | 'present') {
   if (!stage.value) return
   if (isMsOffice.value && mode === 'edit') {
@@ -228,11 +256,11 @@ function onPreviewUrlChange(_display: string, loadUrl: string) {
 
 watch(turnRunning, async (running, was) => {
   if (!(was && !running)) return
-  workspaceUi.requestStageReload()
+  if (!isVisualStage.value) workspaceUi.requestStageReload()
   if (aiReviewAfterTurn.value === 'off') return
   const path = stage.value?.path
   const sid = sessions.currentSessionId
-  if (!path || !sid || stage.value?.kind === 'diff' || stage.value?.kind === 'web' || stage.value?.kind === 'media') return
+  if (!path || !sid || isVisualStage.value || stage.value?.kind === 'diff' || stage.value?.kind === 'web' || stage.value?.kind === 'media') return
   // Prefer the turn that just finished (was running).
   const finished =
     sessions.turns.find((x) => x.status !== 'running' && x.id === lastFinishedTurnId.value) ||
@@ -369,6 +397,19 @@ defineExpose({ save })
       </div>
     </header>
 
+    <nav v-if="hasVisualNavigation" class="file-stage__resource-nav" :aria-label="t('sessions.visualStage.uriLabel')">
+      <button class="file-stage__chip" :class="{ 'is-active': stage.kind === 'web' }" @click="openPreview">{{ t('sessions.visualStage.preview') }}</button>
+      <button class="file-stage__chip" :class="{ 'is-active': stage.kind === 'browser-live' }" :disabled="!sessions.currentSessionId" @click="openAgentBrowser">{{ t('sessions.visualStage.browser') }}</button>
+      <button class="file-stage__chip" :class="{ 'is-active': stage.kind === 'desktop' }" @click="openDesktop">{{ t('sessions.visualStage.desktop') }}</button>
+      <input
+        v-model="uriInput"
+        class="file-stage__resource-uri"
+        :aria-label="t('sessions.visualStage.uriLabel')"
+        spellcheck="false"
+        @keydown.enter.prevent="navigateUri"
+      >
+    </nav>
+
     <div v-if="showAiBanner" class="file-stage__ai-banner" role="status">
       <span class="file-stage__ai-banner-text">{{ t('office.aiReviewBanner') }}</span>
       <span class="file-stage__ai-banner-actions">
@@ -404,8 +445,19 @@ defineExpose({ save })
       />
     </div>
 
+    <BrowserLiveSurface
+      v-if="stage.kind === 'browser-live' && stage.sessionId"
+      :key="stage.sessionId"
+      :session-id="stage.sessionId"
+      :active="true"
+    />
+    <DesktopPanel
+      v-else-if="stage.kind === 'desktop'"
+      :project-id="projectId"
+      :active="true"
+    />
     <DocSurface
-      v-if="stage.kind === 'doc' && stageEngine === 'md'"
+      v-else-if="stage.kind === 'doc' && stageEngine === 'md'"
       ref="docRef"
       :project-id="projectId"
       :path="stage.path"
@@ -514,6 +566,25 @@ defineExpose({ save })
 .file-stage.is-immersive {
   border: 0;
 }
+.file-stage__resource-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--dq-separator-light);
+  background: color-mix(in srgb, var(--dq-bg-elevated) 35%, transparent);
+}
+.file-stage__resource-uri {
+  min-width: 0;
+  margin-left: 8px;
+  overflow: hidden;
+  color: var(--dq-label-quaternary);
+  font: var(--dq-font-size-caption) var(--dq-font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-stage__resource-nav .file-stage__chip:disabled { opacity: 0.45; cursor: default; }
 .file-stage__ai-banner {
   display: flex;
   align-items: center;

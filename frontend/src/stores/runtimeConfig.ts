@@ -27,6 +27,7 @@ export interface RuntimeForm {
   browserCdpUrl: string
   computerEnabled: boolean
   computerDisplay: string
+  computerTarget: 'auto' | 'host' | 'sandbox'
   doomLoopThreshold: number
   maxStepsDefault: number
   maxLLMFailures: number
@@ -68,8 +69,8 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     envWorkspaceMount: sb?.workspaceMount ?? '',
     envCpus: sb?.resources?.cpus ?? '',
     envMemory: sb?.resources?.memory ?? '',
-    envDesktopWidth: sb?.desktopWidth && sb.desktopWidth > 0 ? sb.desktopWidth : 1280,
-    envDesktopHeight: sb?.desktopHeight && sb.desktopHeight > 0 ? sb.desktopHeight : 800,
+    envDesktopWidth: sb?.desktopWidth && sb.desktopWidth > 0 ? sb.desktopWidth : 1024,
+    envDesktopHeight: sb?.desktopHeight && sb.desktopHeight > 0 ? sb.desktopHeight : 768,
     envDesktopMaxShotEdge:
       sb?.desktopMaxShotEdge && sb.desktopMaxShotEdge > 0 ? sb.desktopMaxShotEdge : 1024,
     browserEnabled: br?.enabled ?? true,
@@ -77,6 +78,7 @@ function formFromRuntime(rt: ConfigFile['runtime']): RuntimeForm {
     browserCdpUrl: br?.cdpUrl ?? '',
     computerEnabled: comp?.enabled ?? false,
     computerDisplay: comp?.display ?? '',
+    computerTarget: comp?.target ?? 'auto',
     doomLoopThreshold: rt.turn.doomLoopThreshold,
     maxStepsDefault: rt.turn.maxStepsDefault,
     maxLLMFailures: rt.turn.maxLLMFailures ?? 3,
@@ -232,6 +234,7 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
         computer: {
           enabled: form.computerEnabled,
           display: form.computerDisplay.trim() || undefined,
+          target: form.computerTarget,
         },
         turn: {
           doomLoopThreshold: form.doomLoopThreshold,

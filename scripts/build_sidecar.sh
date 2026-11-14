@@ -51,6 +51,17 @@ fi
 echo "==> Building sidecar: $BINARY_NAME ($GOOS/$GOARCH)"
 
 cd "$ROOT_DIR"
+if [[ "$GOOS" == "darwin" ]]; then
+  DARWIN_INPUT="$BIN_DIR/dq-darwin-input-$TRIPLE"
+  echo "==> Building native macOS input helper"
+  xcrun clang -O2 -Wall -Wextra -Werror \
+    -o "$DARWIN_INPUT" core/runtime/computer/native/darwin_input.c \
+    -framework ApplicationServices -framework CoreFoundation -framework Carbon
+  chmod +x "$DARWIN_INPUT"
+  # The ordinary backend executable also uses this helper in local development.
+  mkdir -p "$HOME/.danmo-work/bin"
+  cp "$DARWIN_INPUT" "$HOME/.danmo-work/bin/dq-darwin-input"
+fi
 GOOS=$GOOS GOARCH=$GOARCH go build -trimpath -ldflags "$VERSION_LDFLAGS" -o "$BIN_DIR/$BINARY_NAME" ./server
 
 if [[ "$GOOS" != "windows" ]]; then

@@ -46,6 +46,7 @@ import { fetchJSON } from '@/api/client'
 import { formatTokenCount, useSessionContextUsage } from '@/composables/useSessionContextUsage'
 import { routeProjectFile } from '@/utils/file-route'
 import { planProgressFromEvents } from '@/utils/plan-from-stream'
+import { isBrowserActivityEvent, isBrowserCloseEvent } from '@/utils/browser-from-stream'
 
 import type { StreamEvent, TurnLog } from '@/types/mission'
 
@@ -120,6 +121,11 @@ const rightIconItems = computed(() => {
 })
 
 function onRightIconClick(tab: RightWorkspaceTab) {
+  if (tab === 'desktop') {
+    if (stage.value?.kind === 'desktop') workspaceUi.closeStage()
+    else workspaceUi.openDesktopStage(sessions.selectedProjectId ?? '')
+    return
+  }
   workspaceUi.toggleRightDrawer(tab)
 }
 
@@ -1597,6 +1603,28 @@ watch(
 )
 
 watch(
+  () => sessions.streamEvents.length,
+  () => {
+    const last = sessions.streamEvents[sessions.streamEvents.length - 1]
+    if (last && isBrowserActivityEvent(last) && sessions.currentSessionId) {
+      workspaceUi.openBrowserStage(sessions.currentSessionId, true)
+    }
+    if (last && isBrowserCloseEvent(last) && workspaceUi.dismissedBrowserSessionId === sessions.currentSessionId) {
+      workspaceUi.dismissedBrowserSessionId = null
+    }
+  },
+)
+
+watch(
+  () => sessions.currentSessionId,
+  (_id, previousId) => {
+    if (stage.value?.kind === 'browser-live' && stage.value.sessionId === previousId) {
+      workspaceUi.closeStage(false)
+    }
+  },
+)
+
+watch(
   () => sessions.selectedProjectId,
   () => { void refreshChangesCount() },
   { immediate: true },
@@ -1689,7 +1717,7 @@ function onTitleKeydown(e: KeyboardEvent) {
             type="button"
             class="session-workspace__tool"
             :class="{
-              'is-active': rightDrawerOpen && rightTab === item.value,
+              'is-active': item.value === 'desktop' ? stage?.kind === 'desktop' : rightDrawerOpen && rightTab === item.value,
             }"
             :aria-label="item.badge != null && item.badge !== '' ? `${item.label} ${item.badge}` : item.label"
             :title="item.badge != null && item.badge !== '' ? `${item.label} · ${item.badge}` : item.label"
@@ -1934,11 +1962,9 @@ function onTitleKeydown(e: KeyboardEvent) {
       :size="
         rightTab === 'trajectory'
           ? 'min(900px, 96vw)'
-          : rightTab === 'desktop'
-            ? 'min(720px, 94vw)'
-            : rightTab === 'changes'
-              ? 'min(520px, 92vw)'
-              : 'min(380px, 92vw)'
+          : rightTab === 'changes'
+            ? 'min(520px, 92vw)'
+            : 'min(380px, 92vw)'
       "
       :title="rightDrawerTitle"
       @update:open="workspaceUi.setRightDrawerOpen"

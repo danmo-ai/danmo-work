@@ -1,11 +1,10 @@
 // Package computer implements the OS-agnostic desktop-control surface behind
-// the `computer` builtin tool. The Manager holds configuration and delegates to
-// a per-OS backend (X11 via xdotool, macOS via osascript/screencapture, Windows
-// via user32/PowerShell) or a sandbox desktop backend when
-// runtime.sandbox.profile=desktop.
+// the `computer` builtin tool. The Manager owns coordinate mapping and delegates
+// input and capture to an OS backend or a containerized X11 desktop.
 package computer
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -23,13 +22,14 @@ type backend interface {
 	listWindows(ctx context.Context, query string) ([]domain.WindowInfo, error)
 	focusWindow(ctx context.Context, id string) error
 	windowBounds(ctx context.Context, id string) (domain.WindowInfo, error)
-	screenshot(ctx context.Context, windowID string) (domain.ComputerImage, error)
-	mouseMove(ctx context.Context, x, y int) error
-	mouseClick(ctx context.Context, button domain.MouseButton, x, y, clicks int) error
+	screenshot(ctx context.Context, windowID string, zoom *domain.ScreenRect) (domain.ComputerImage, error)
+	mouseMove(ctx context.Context, x, y int, modifiers []domain.KeyModifier) error
+	mouseClick(ctx context.Context, button domain.MouseButton, x, y, clicks int, modifiers []domain.KeyModifier) error
 	mouseDrag(ctx context.Context, x0, y0, x1, y1 int) error
+	mouseButton(ctx context.Context, button domain.MouseButton, pressed bool) error
 	scroll(ctx context.Context, x, y int, dir domain.ScrollDirection, amount int) error
 	typeText(ctx context.Context, text string) error
-	key(ctx context.Context, key string) error
+	key(ctx context.Context, key string, hold bool) error
 	cursorPosition(ctx context.Context) (int, int, error)
 }
 
@@ -42,21 +42,21 @@ type Manager struct {
 	desktop  *desktopBackend
 	backend  backend
 	env      port.DesktopEnvironment
-	// lastShot maps model image coords → screen coords after downscale.
-	lastImgW, lastImgH   int
-	lastDispW, lastDispH int
+	shots    map[string]domain.ComputerImage
+	zoomKeys map[string]string
+	lastData map[string][]byte
 }
 
 // New builds a Manager for the current OS and probes availability.
 func New(cfg domain.ConfigComputerSection) *Manager {
-	m := &Manager{host: newBackend()}
+	m := &Manager{host: newBackend(), shots: make(map[string]domain.ComputerImage), zoomKeys: make(map[string]string), lastData: make(map[string][]byte)}
 	m.backend = m.host
 	m.Configure(cfg)
 	return m
 }
 
-// SetDesktopEnvironment wires the sandbox desktop bridge. When the active
-// sandbox profile is "desktop", computer actions target the container DISPLAY.
+// SetDesktopEnvironment wires the sandbox desktop bridge and re-probes only
+// when configuration changes; per-action readiness never executes the container.
 func (m *Manager) SetDesktopEnvironment(env port.DesktopEnvironment) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -69,223 +69,297 @@ func (m *Manager) SetDesktopEnvironment(env port.DesktopEnvironment) {
 	m.reselectLocked()
 }
 
-// SetSession updates project/workdir for sandboxed desktop exec (from tool input).
-func (m *Manager) SetSession(opts port.SandboxRunOptions) {
+// SetSession binds a session to its own project/workdir for sandboxed exec.
+func (m *Manager) SetSession(opts port.SandboxRunOptions, sessionID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.desktop != nil {
-		m.desktop.SetSession(opts)
+		m.desktop.SetSession(sessionID, opts)
+		if m.status.Backend == "sandbox-desktop" && !m.status.Available {
+			m.status = m.desktop.probeWithSession(m.cfg, opts)
+			m.status.Enabled = m.cfg.Enabled
+		}
 	}
 }
 
-// Configure replaces policy and re-probes the backend.
+type sessionKey struct{}
+
+func withSession(ctx context.Context, sessionID string) context.Context {
+	return context.WithValue(ctx, sessionKey{}, sessionID)
+}
+
+func sessionFrom(ctx context.Context) string {
+	value, _ := ctx.Value(sessionKey{}).(string)
+	return value
+}
+
+// Configure replaces policy and re-probes the selected backend.
 func (m *Manager) Configure(cfg domain.ConfigComputerSection) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	cfg.Display = strings.TrimSpace(cfg.Display)
+	cfg.Target = domain.NormalizeComputerTarget(cfg.Target)
 	m.cfg = cfg
 	m.reselectLocked()
 }
 
 func (m *Manager) reselectLocked() {
-	if m.desktop != nil && m.env != nil && m.env.DesktopProfile() == domain.SandboxProfileDesktop {
+	previous := m.backend
+	target := m.cfg.Target
+	if target == domain.ComputerTargetAuto || target == "" {
+		target = domain.ComputerTargetHost
+		if m.desktop != nil && m.env != nil && m.env.DesktopProfile() == domain.SandboxProfileDesktop {
+			target = domain.ComputerTargetSandbox
+		}
+	}
+	if target == domain.ComputerTargetSandbox && m.desktop != nil {
 		m.backend = m.desktop
 	} else {
 		m.backend = m.host
 	}
 	m.status = m.backend.probe(m.cfg)
 	m.status.Enabled = m.cfg.Enabled
+	if previous != m.backend {
+		m.shots = make(map[string]domain.ComputerImage)
+		m.zoomKeys = make(map[string]string)
+		m.lastData = make(map[string][]byte)
+	} else if m.backend == m.desktop && m.desktop != nil && m.cfg.Display != "" && m.desktop.display != m.cfg.Display {
+		m.status = m.backend.probe(m.cfg)
+		m.status.Enabled = m.cfg.Enabled
+	}
 }
 
-// Status returns the last probed capability surface.
+// Status returns the last cached capability probe.
 func (m *Manager) Status() domain.ComputerStatus {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.reselectLocked()
 	return m.status
 }
 
-func (m *Manager) ready() error {
+func (m *Manager) ready() (backend, error) {
 	m.mu.Lock()
-	m.reselectLocked()
-	st := m.status
-	enabled := m.cfg.Enabled
-	m.mu.Unlock()
-	if !enabled {
-		return fmt.Errorf("desktop control is disabled; set runtime.computer.enabled=true in config to allow the computer tool")
+	defer m.mu.Unlock()
+	if !m.cfg.Enabled {
+		return nil, fmt.Errorf("desktop control is disabled; set runtime.computer.enabled=true in config to allow the computer tool")
 	}
-	if !st.Available {
-		reason := st.DegradedReason
+	if !m.status.Available {
+		reason := m.status.DegradedReason
 		if reason == "" {
-			reason = "no usable desktop backend on this host"
+			reason = "no usable desktop backend for the selected target"
 		}
-		return fmt.Errorf("desktop control unavailable: %s", reason)
+		return nil, fmt.Errorf("desktop control unavailable: %s", reason)
 	}
-	return nil
+	return m.backend, nil
 }
 
 func (m *Manager) maxShotEdge() int {
 	m.mu.Lock()
 	edge := m.cfg.MaxShotEdge
 	env := m.env
+	target := domain.NormalizeComputerTarget(m.cfg.Target)
 	m.mu.Unlock()
 	if edge != 0 {
 		return edge // negative disables downscale
 	}
-	if env != nil {
+	if target != domain.ComputerTargetHost && env != nil {
 		if n := env.DesktopMaxShotEdge(); n > 0 {
 			return n
 		}
 	}
-	return domain.DefaultDesktopMaxShotEdge
+	return domain.DefaultComputerMaxShotEdge
+}
+
+func scopeFor(sessionID, windowID string, zoom *domain.ScreenRect) string {
+	if zoom == nil {
+		return sessionID + "\x00" + windowID
+	}
+	return fmt.Sprintf("%s\x00%s\x00%d,%d,%d,%d", sessionID, windowID, zoom.X, zoom.Y, zoom.Width, zoom.Height)
 }
 
 func (m *Manager) rememberShot(img domain.ComputerImage) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.lastImgW, m.lastImgH = img.Width, img.Height
-	m.lastDispW, m.lastDispH = img.DisplayWidth, img.DisplayHeight
-	if m.lastDispW == 0 {
-		m.lastDispW = img.Width
+	base := strings.SplitN(img.Scope, "\x00", 3)
+	if len(base) < 2 {
+		return
 	}
-	if m.lastDispH == 0 {
-		m.lastDispH = img.Height
+	parent := base[0] + "\x00" + base[1]
+	if previous := m.zoomKeys[parent]; previous != "" && previous != img.Scope {
+		delete(m.shots, previous)
+		delete(m.lastData, previous)
 	}
+	if len(base) == 3 {
+		m.zoomKeys[parent] = img.Scope
+	} else {
+		delete(m.zoomKeys, parent)
+	}
+	m.shots[img.Scope] = img
 }
 
-func (m *Manager) mapXY(x, y int) (int, int) {
+func (m *Manager) mapXY(sessionID, windowID string, x, y int) (int, int, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	return mapShotCoord(x, y, m.lastImgW, m.lastImgH, m.lastDispW, m.lastDispH)
+	// A zoom supersedes its parent capture for that session/window. Full-screen
+	// and window captures still have independent scopes and cannot cross-map.
+	parent := scopeFor(sessionID, windowID, nil)
+	img, ok := m.shots[parent]
+	if zoomScope := m.zoomKeys[parent]; zoomScope != "" {
+		img, ok = m.shots[zoomScope]
+	}
+	m.mu.Unlock()
+	if !ok {
+		return 0, 0, fmt.Errorf("no screenshot is available for this target; take a screenshot first")
+	}
+	return mapImagePoint(img, x, y)
 }
 
 func (m *Manager) ListWindows(ctx context.Context, query string) ([]domain.WindowInfo, error) {
-	if err := m.ready(); err != nil {
+	return m.ListWindowsForSession(ctx, "", query)
+}
+
+func (m *Manager) ListWindowsForSession(ctx context.Context, sessionID, query string) ([]domain.WindowInfo, error) {
+	b, err := m.ready()
+	if err != nil {
 		return nil, err
 	}
-	m.mu.Lock()
-	b := m.backend
-	m.mu.Unlock()
-	return b.listWindows(ctx, query)
+	return b.listWindows(withSession(ctx, sessionID), query)
 }
 
 func (m *Manager) FocusWindow(ctx context.Context, id string) error {
-	if err := m.ready(); err != nil {
+	return m.FocusWindowForSession(ctx, "", id)
+}
+
+func (m *Manager) FocusWindowForSession(ctx context.Context, sessionID, id string) error {
+	b, err := m.ready()
+	if err != nil {
 		return err
 	}
-	m.mu.Lock()
-	b := m.backend
-	m.mu.Unlock()
-	return b.focusWindow(ctx, id)
+	return b.focusWindow(withSession(ctx, sessionID), id)
 }
 
 func (m *Manager) WindowBounds(ctx context.Context, id string) (domain.WindowInfo, error) {
-	if err := m.ready(); err != nil {
+	b, err := m.ready()
+	if err != nil {
 		return domain.WindowInfo{}, err
 	}
-	m.mu.Lock()
-	b := m.backend
-	m.mu.Unlock()
 	return b.windowBounds(ctx, id)
 }
 
-func (m *Manager) Screenshot(ctx context.Context, windowID string) (domain.ComputerImage, error) {
-	if err := m.ready(); err != nil {
-		return domain.ComputerImage{}, err
-	}
-	m.mu.Lock()
-	b := m.backend
-	m.mu.Unlock()
-	img, err := b.screenshot(ctx, windowID)
+func (m *Manager) Screenshot(ctx context.Context, sessionID, windowID string, zoom *domain.ScreenRect) (domain.ComputerImage, error) {
+	b, err := m.ready()
 	if err != nil {
 		return domain.ComputerImage{}, err
 	}
+	img, err := b.screenshot(withSession(ctx, sessionID), windowID, zoom)
+	if err != nil {
+		return domain.ComputerImage{}, err
+	}
+	img.Scope = scopeFor(sessionID, windowID, zoom)
 	img = shrinkComputerImage(img, m.maxShotEdge())
+	m.mu.Lock()
+	m.lastData[img.Scope] = bytes.Clone(img.Data)
+	m.mu.Unlock()
 	m.rememberShot(img)
 	return img, nil
 }
 
-func (m *Manager) MouseMove(ctx context.Context, x, y int) error {
-	if err := m.ready(); err != nil {
-		return err
-	}
-	x, y = m.mapXY(x, y)
+// ScreenshotUnchanged reports whether the same capture scope produced identical
+// pixels on consecutive calls. It never suppresses the screenshot itself.
+func (m *Manager) ScreenshotUnchanged(scope string, img domain.ComputerImage) bool {
 	m.mu.Lock()
-	b := m.backend
-	m.mu.Unlock()
-	return b.mouseMove(ctx, x, y)
+	defer m.mu.Unlock()
+	return bytes.Equal(m.lastData[scope], img.Data)
 }
 
-func (m *Manager) MouseClick(ctx context.Context, button domain.MouseButton, x, y, clicks int) error {
-	if err := m.ready(); err != nil {
+func (m *Manager) MouseMove(ctx context.Context, sessionID, windowID string, x, y int, modifiers []domain.KeyModifier) error {
+	b, err := m.ready()
+	if err != nil {
+		return err
+	}
+	x, y, err = m.mapXY(sessionID, windowID, x, y)
+	if err != nil {
+		return err
+	}
+	return b.mouseMove(withSession(ctx, sessionID), x, y, modifiers)
+}
+
+func (m *Manager) MouseClick(ctx context.Context, sessionID, windowID string, button domain.MouseButton, x, y, clicks int, modifiers []domain.KeyModifier) error {
+	b, err := m.ready()
+	if err != nil {
 		return err
 	}
 	if clicks < 1 {
 		clicks = 1
 	}
 	if x >= 0 && y >= 0 {
-		x, y = m.mapXY(x, y)
+		x, y, err = m.mapXY(sessionID, windowID, x, y)
+		if err != nil {
+			return err
+		}
 	}
-	m.mu.Lock()
-	b := m.backend
-	m.mu.Unlock()
-	return b.mouseClick(ctx, button, x, y, clicks)
+	return b.mouseClick(withSession(ctx, sessionID), button, x, y, clicks, modifiers)
 }
 
-func (m *Manager) MouseDrag(ctx context.Context, x0, y0, x1, y1 int) error {
-	if err := m.ready(); err != nil {
+func (m *Manager) MouseDrag(ctx context.Context, sessionID, windowID string, x0, y0, x1, y1 int) error {
+	b, err := m.ready()
+	if err != nil {
 		return err
 	}
-	x0, y0 = m.mapXY(x0, y0)
-	x1, y1 = m.mapXY(x1, y1)
-	m.mu.Lock()
-	b := m.backend
-	m.mu.Unlock()
-	return b.mouseDrag(ctx, x0, y0, x1, y1)
+	x0, y0, err = m.mapXY(sessionID, windowID, x0, y0)
+	if err != nil {
+		return err
+	}
+	x1, y1, err = m.mapXY(sessionID, windowID, x1, y1)
+	if err != nil {
+		return err
+	}
+	return b.mouseDrag(withSession(ctx, sessionID), x0, y0, x1, y1)
 }
 
-func (m *Manager) Scroll(ctx context.Context, x, y int, dir domain.ScrollDirection, amount int) error {
-	if err := m.ready(); err != nil {
+func (m *Manager) MouseButton(ctx context.Context, button domain.MouseButton, pressed bool) error {
+	b, err := m.ready()
+	if err != nil {
+		return err
+	}
+	return b.mouseButton(ctx, button, pressed)
+}
+
+func (m *Manager) Scroll(ctx context.Context, sessionID, windowID string, x, y int, dir domain.ScrollDirection, amount int) error {
+	b, err := m.ready()
+	if err != nil {
 		return err
 	}
 	if amount < 1 {
 		amount = 1
 	}
 	if x >= 0 && y >= 0 {
-		x, y = m.mapXY(x, y)
+		x, y, err = m.mapXY(sessionID, windowID, x, y)
+		if err != nil {
+			return err
+		}
 	}
-	m.mu.Lock()
-	b := m.backend
-	m.mu.Unlock()
-	return b.scroll(ctx, x, y, dir, amount)
+	return b.scroll(withSession(ctx, sessionID), x, y, dir, amount)
 }
 
 func (m *Manager) TypeText(ctx context.Context, text string) error {
-	if err := m.ready(); err != nil {
+	b, err := m.ready()
+	if err != nil {
 		return err
 	}
-	m.mu.Lock()
-	b := m.backend
-	m.mu.Unlock()
 	return b.typeText(ctx, text)
 }
 
-func (m *Manager) Key(ctx context.Context, key string) error {
-	if err := m.ready(); err != nil {
+func (m *Manager) Key(ctx context.Context, key string, hold bool) error {
+	b, err := m.ready()
+	if err != nil {
 		return err
 	}
-	m.mu.Lock()
-	b := m.backend
-	m.mu.Unlock()
-	return b.key(ctx, key)
+	return b.key(ctx, key, hold)
 }
 
 func (m *Manager) CursorPosition(ctx context.Context) (int, int, error) {
-	if err := m.ready(); err != nil {
+	b, err := m.ready()
+	if err != nil {
 		return 0, 0, err
 	}
-	m.mu.Lock()
-	b := m.backend
-	m.mu.Unlock()
 	return b.cursorPosition(ctx)
 }

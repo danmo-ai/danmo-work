@@ -29,19 +29,20 @@ func (b stubBackend) focusWindow(context.Context, string) error { return b.err()
 func (b stubBackend) windowBounds(context.Context, string) (domain.WindowInfo, error) {
 	return domain.WindowInfo{}, b.err()
 }
-func (b stubBackend) screenshot(context.Context, string) (domain.ComputerImage, error) {
+func (b stubBackend) screenshot(context.Context, string, *domain.ScreenRect) (domain.ComputerImage, error) {
 	return domain.ComputerImage{}, b.err()
 }
-func (b stubBackend) mouseMove(context.Context, int, int) error { return b.err() }
-func (b stubBackend) mouseClick(context.Context, domain.MouseButton, int, int, int) error {
+func (b stubBackend) mouseMove(context.Context, int, int, []domain.KeyModifier) error { return b.err() }
+func (b stubBackend) mouseClick(context.Context, domain.MouseButton, int, int, int, []domain.KeyModifier) error {
 	return b.err()
 }
-func (b stubBackend) mouseDrag(context.Context, int, int, int, int) error { return b.err() }
+func (b stubBackend) mouseDrag(context.Context, int, int, int, int) error         { return b.err() }
+func (b stubBackend) mouseButton(context.Context, domain.MouseButton, bool) error { return b.err() }
 func (b stubBackend) scroll(context.Context, int, int, domain.ScrollDirection, int) error {
 	return b.err()
 }
-func (b stubBackend) typeText(context.Context, string) error { return b.err() }
-func (b stubBackend) key(context.Context, string) error      { return b.err() }
+func (b stubBackend) typeText(context.Context, string) error  { return b.err() }
+func (b stubBackend) key(context.Context, string, bool) error { return b.err() }
 func (b stubBackend) cursorPosition(context.Context) (int, int, error) {
 	return 0, 0, b.err()
 }

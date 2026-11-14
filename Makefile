@@ -102,6 +102,10 @@ build-go: build-server build-cli build-tui
 
 build-server:
 	@mkdir -p $(OUT_DIR)/server
+	@if [ "$$(uname -s)" = Darwin ]; then \
+		xcrun clang -O2 -Wall -Wextra -Werror -o $(OUT_DIR)/server/dq-darwin-input core/runtime/computer/native/darwin_input.c -framework ApplicationServices -framework CoreFoundation -framework Carbon; \
+		mkdir -p "$$HOME/.danmo-work/bin"; cp $(OUT_DIR)/server/dq-darwin-input "$$HOME/.danmo-work/bin/dq-darwin-input"; \
+	fi
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(SERVER_BIN) ./server
 
 build-cli:

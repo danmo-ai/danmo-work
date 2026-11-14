@@ -122,6 +122,10 @@ if [[ "$SIGNED" == 1 ]]; then
   [[ -f "$SIDECAR_BIN" ]] || { echo "sidecar not found: $SIDECAR_BIN" >&2; exit 1; }
   sign_binary "$SIDECAR_BIN"
   echo "==> Signed sidecar: $SIDECAR_NAME"
+  INPUT_SIDECAR="$DQ_ROOT/desktop/src-tauri/bin/dq-darwin-input-$(rustc -vV | sed -n 's|host: ||p')"
+  [[ -f "$INPUT_SIDECAR" ]] || { echo "native input sidecar not found: $INPUT_SIDECAR" >&2; exit 1; }
+  sign_binary "$INPUT_SIDECAR"
+  echo "==> Signed native input sidecar"
 fi
 
 echo "==> Staging macOS first-launch script..."

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { FileEngine, FileKind, FileMode } from '@/utils/file-route'
+import { stageFromUri, stageUri } from '@/utils/stage-uri'
 
 export type { FileEngine, FileKind, FileMode }
 
@@ -76,10 +77,15 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   const paletteOpen = ref(false)
   const layoutMode = ref<LayoutMode>('chat')
   const stage = ref<FileStageState | null>(null)
+  /** Internal resource URI: the only address of the shared visual Stage. */
+  const stageResourceUri = ref('')
+  const previousStageResourceUri = ref('')
   /** Bumped when Stage should reload file from disk (e.g. after AI turn). */
   const stageReloadToken = ref(0)
   /** Bumped when the Files tree should reload (e.g. after composer upload). */
   const filesReloadToken = ref(0)
+  /** Manual close suppresses repeated auto-open for the same session. */
+  const dismissedBrowserSessionId = ref<string | null>(null)
   /** One-shot composer prefill (Changes / Diff “ask about this”). */
   const composerPrefill = ref<string | null>(null)
   const composerPrefillToken = ref(0)
@@ -169,15 +175,56 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     rightDrawerOpenBeforeStage.value = null
   }
 
-  function openStage(next: FileStageState) {
+  function openStage(next: FileStageState, auto = false) {
+    const nextUri = stageUri(next)
+    if (auto && stage.value && stageResourceUri.value !== nextUri) {
+      previousStageResourceUri.value = stageResourceUri.value
+    }
+    if (!auto) previousStageResourceUri.value = ''
     stage.value = { ...next }
+    stageResourceUri.value = nextUri
     layoutMode.value = next.mode === 'present' ? 'immersive' : 'stage'
     collapseLeftRailForStage()
     closeRightDrawerForStage()
   }
 
-  function closeStage() {
+  function openStageUri(uri: string): boolean {
+    const next = stageFromUri(uri)
+    if (!next) return false
+    if ((next.kind === 'web' || next.kind === 'media') && stage.value?.kind === next.kind) {
+      next.mode = stage.value.mode
+    }
+    openStage(next)
+    return true
+  }
+
+  function openBrowserStage(sessionId: string, auto = false): boolean {
+    if (!sessionId) return false
+    if (auto && dismissedBrowserSessionId.value === sessionId) return false
+    if (stage.value?.kind === 'browser-live' && stage.value.sessionId === sessionId) return true
+    if (!auto || stage.value?.kind !== 'browser-live') dismissedBrowserSessionId.value = null
+    openStage({ kind: 'browser-live', path: '', mode: 'view', engine: 'screencast', sessionId }, auto)
+    return true
+  }
+
+  function openDesktopStage(projectId: string) {
+    openStageUri(`vnc://${encodeURIComponent(projectId)}`)
+  }
+
+  function closeStage(restorePrevious = true) {
+    if (stage.value?.kind === 'browser-live' && restorePrevious) {
+      dismissedBrowserSessionId.value = stage.value.sessionId ?? null
+    }
+    const previous = restorePrevious ? stageFromUri(previousStageResourceUri.value) : null
+    previousStageResourceUri.value = ''
+    if (previous) {
+      stage.value = previous
+      stageResourceUri.value = stageUri(previous)
+      layoutMode.value = previous.mode === 'present' ? 'immersive' : 'stage'
+      return
+    }
     stage.value = null
+    stageResourceUri.value = ''
     layoutMode.value = 'chat'
     restoreLeftRailAfterStage()
     restoreRightDrawerAfterStage()
@@ -186,12 +233,14 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
   function setStageMode(mode: FileMode) {
     if (!stage.value) return
     stage.value = { ...stage.value, mode }
+    stageResourceUri.value = stageUri(stage.value)
     layoutMode.value = mode === 'present' ? 'immersive' : 'stage'
   }
 
   function setStageKind(kind: FileKind) {
     if (!stage.value) return
     stage.value = { ...stage.value, kind }
+    stageResourceUri.value = stageUri(stage.value)
   }
 
   /** Replace Stage path (and optional mode), e.g. md → sibling html for Present. */
@@ -199,6 +248,7 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     if (!stage.value) return
     const nextMode = mode ?? stage.value.mode
     stage.value = { ...stage.value, path, mode: nextMode }
+    stageResourceUri.value = stageUri(stage.value)
     layoutMode.value = nextMode === 'present' ? 'immersive' : 'stage'
   }
 
@@ -206,6 +256,7 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     if (!stage.value) return
     if (stage.value.url === url) return
     stage.value = { ...stage.value, url }
+    stageResourceUri.value = stageUri(stage.value)
   }
 
   function requestStageReload() {
@@ -256,8 +307,11 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     paletteOpen,
     layoutMode,
     stage,
+    stageResourceUri,
+    previousStageResourceUri,
     stageReloadToken,
     filesReloadToken,
+    dismissedBrowserSessionId,
     composerPrefill,
     composerPrefillToken,
     revealSessionId,
@@ -273,6 +327,9 @@ export const useWorkspaceUiStore = defineStore('workspaceUi', () => {
     closeRightDrawer,
     toggleRightDrawer,
     openStage,
+    openStageUri,
+    openBrowserStage,
+    openDesktopStage,
     closeStage,
     setStageMode,
     setStageKind,

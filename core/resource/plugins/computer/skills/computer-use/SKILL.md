@@ -8,10 +8,10 @@ description: >-
 license: Apache-2.0
 compatibility: >-
   Requires the `computer` tool bound and runtime.computer.enabled=true.
-  With sandbox.profile=desktop + container backend, actions target the Xvfb
-  sandbox (not the host GUI). Otherwise: Linux needs an X11 DISPLAY + xdotool +
-  a screenshot tool (imagemagick/scrot/ffmpeg/xwd); macOS needs Accessibility +
-  Screen Recording permission (mouse via cliclick); Windows uses PowerShell.
+  With runtime.computer.target=auto (default), sandbox.profile=desktop targets
+  the Xvfb sandbox; host and sandbox can also be selected explicitly. Linux needs
+  an X11 DISPLAY + xdotool + a capture tool; macOS uses the bundled CoreGraphics
+  helper and needs Accessibility + Screen Recording permission; Windows uses PowerShell.
   Screenshots require a vision model.
 metadata:
   author: danmo
@@ -60,8 +60,12 @@ changed, take one first.
 - `focus_window` — needs `window_id`.
 - `screenshot` — optional `window_id`.
 - `mouse_move` — needs `coordinate: [x, y]`.
-- `left_click` / `right_click` / `middle_click` / `double_click` — optional
-  `coordinate` (defaults to current cursor).
+- `left_click` / `right_click` / `middle_click` / `double_click` / `triple_click` — optional
+  `coordinate` (defaults to current cursor); optional `modifiers`.
+- `zoom` — needs a screen-coordinate `zoom` rectangle; returns native-resolution detail.
+  Follow-up coordinates belong to that zoomed image until the next normal screenshot.
+- `get_screen_size` — reports the current region in native input units.
+- `left_mouse_down` / `left_mouse_up` — hold/release at the current cursor.
 - `left_click_drag` — needs `start_coordinate` and `coordinate`.
 - `scroll` — needs `scroll_direction` (up/down/left/right); optional
   `coordinate` and `scroll_amount` (default 3).
@@ -85,15 +89,14 @@ changed, take one first.
 - **Linux/X11**: works when `DISPLAY` is set and `xdotool` plus a capture tool
   are installed. Wayland-only sessions are not supported (reported as degraded).
 - **macOS**: the host app must have Accessibility and Screen Recording
-  permission (System Settings → Privacy & Security). Mouse actions need
-  `cliclick` (`brew install cliclick`); keyboard/screenshot work without it.
+  permission (System Settings → Privacy & Security). The bundled CoreGraphics
+  helper handles mouse, scroll, and Unicode keyboard input.
 - **Windows**: uses PowerShell + Win32; no extra install.
 
 ## Limitations
 
 - Screenshots are returned to the model as images, so the routed model must
-  support vision. On a text-only model, `screenshot` returns a description only
-  and you are effectively blind — avoid GUI control in that case.
+  support vision. Text-only models are rejected before capture.
 - If `computer` reports desktop control is disabled or unavailable, stop and
   report the blocker (enable `runtime.computer.enabled`, install the missing
   tool, or grant OS permission) rather than retrying.

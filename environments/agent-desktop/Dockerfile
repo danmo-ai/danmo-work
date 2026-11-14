@@ -13,8 +13,8 @@ ARG TARGETARCH
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     DISPLAY=:1 \
-    DISPLAY_WIDTH=1280 \
-    DISPLAY_HEIGHT=800 \
+    DISPLAY_WIDTH=1024 \
+    DISPLAY_HEIGHT=768 \
     CDP_PORT=9222 \
     NOVNC_PORT=6080
 
@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     x11vnc \
     openbox \
     xdotool \
+    wmctrl \
     scrot \
     imagemagick \
     x11-utils \

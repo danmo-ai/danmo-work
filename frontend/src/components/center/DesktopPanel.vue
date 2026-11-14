@@ -35,7 +35,7 @@ async function refresh() {
   loading.value = true
   errorText.value = ''
   try {
-    status.value = await fetchJSON<EnvironmentStatus>('/environment/status')
+    status.value = await fetchJSON<EnvironmentStatus>('/environment/status').catch(() => null)
   } catch (e) {
     errorText.value = e instanceof Error ? e.message : String(e)
   } finally {

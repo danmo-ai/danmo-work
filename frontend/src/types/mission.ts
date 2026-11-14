@@ -275,6 +275,7 @@ export interface ConfigFile {
     computer?: {
       enabled: boolean
       display?: string
+      target?: 'auto' | 'host' | 'sandbox'
     }
     turn: {
       doomLoopThreshold: number

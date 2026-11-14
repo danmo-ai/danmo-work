@@ -28,10 +28,53 @@ type pageSession struct {
 	cancel   context.CancelFunc
 	lastUsed time.Time
 	mgr      *Manager
+
+	streamMu  sync.Mutex
+	live      *pageStream
+	liveURL   string
+	liveTitle string
 }
 
 func (p *pageSession) touch() {
 	p.lastUsed = time.Now()
+}
+
+func (p *pageSession) isClosed() bool {
+	return p.cancel == nil || p.tabCtx == nil
+}
+
+func (p *pageSession) tabContext() context.Context {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.tabCtx
+}
+
+func (p *pageSession) status(state string) port.BrowserPageStatus {
+	p.streamMu.Lock()
+	defer p.streamMu.Unlock()
+	return port.BrowserPageStatus{SessionID: p.id, URL: p.liveURL, Title: p.liveTitle, State: state}
+}
+
+func (p *pageSession) updateStatus(res port.BrowserSnapshotResult) {
+	p.streamMu.Lock()
+	p.liveURL = res.URL
+	p.liveTitle = res.Title
+	live := p.live
+	p.streamMu.Unlock()
+	if live != nil {
+		live.publish(port.BrowserWatchEvent{Status: port.BrowserPageStatus{
+			SessionID: p.id, URL: res.URL, Title: res.Title, State: "live",
+		}})
+	}
+}
+
+func (p *pageSession) watch(ctx context.Context, opts port.BrowserWatchOptions) (<-chan port.BrowserWatchEvent, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.cancel == nil || p.tabCtx == nil || p.tabCtx.Err() != nil {
+		return nil, port.ErrBrowserPageClosed
+	}
+	return p.stream(opts).subscribe(ctx)
 }
 
 func (p *pageSession) Navigate(ctx context.Context, opts port.BrowserNavigateOptions) (port.BrowserNavigateResult, error) {
@@ -60,6 +103,7 @@ func (p *pageSession) Navigate(ctx context.Context, opts port.BrowserNavigateOpt
 	if err != nil {
 		return port.BrowserNavigateResult{}, err
 	}
+	p.updateStatus(snap)
 	return port.BrowserNavigateResult{
 		URL:      snap.URL,
 		Title:    snap.Title,
@@ -74,7 +118,11 @@ func (p *pageSession) Snapshot(ctx context.Context) (port.BrowserSnapshotResult,
 	_ = ctx
 	runCtx, cancel := context.WithTimeout(p.tabCtx, defaultActTimeout)
 	defer cancel()
-	return p.snapshotLocked(runCtx)
+	res, err := p.snapshotLocked(runCtx)
+	if err == nil {
+		p.updateStatus(res)
+	}
+	return res, err
 }
 
 func (p *pageSession) Act(ctx context.Context, req port.BrowserActRequest) (port.BrowserActResult, error) {
@@ -126,6 +174,7 @@ func (p *pageSession) Act(ctx context.Context, req port.BrowserActRequest) (port
 	if err != nil {
 		return port.BrowserActResult{}, err
 	}
+	p.updateStatus(snap)
 	return port.BrowserActResult{
 		URL:      snap.URL,
 		Title:    snap.Title,
@@ -163,6 +212,11 @@ func (p *pageSession) Close(ctx context.Context) error {
 	cancel := p.cancel
 	p.cancel = nil
 	p.mu.Unlock()
+	p.streamMu.Lock()
+	if p.live != nil {
+		p.live.close()
+	}
+	p.streamMu.Unlock()
 	if cancel != nil {
 		cancel()
 	}

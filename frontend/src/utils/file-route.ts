@@ -10,7 +10,7 @@
  * Source code and web pages are first-class routes, same as Office IR files.
  */
 
-export type FileKind = 'doc' | 'slides' | 'sheet' | 'code' | 'web' | 'media' | 'diff'
+export type FileKind = 'doc' | 'slides' | 'sheet' | 'code' | 'web' | 'media' | 'diff' | 'browser-live' | 'desktop'
 export type FileMode = 'view' | 'edit' | 'present'
 
 /** Persistence / editor engine for the Stage surface. */
@@ -23,6 +23,8 @@ export type FileEngine =
   | 'ms-office'
   | 'codemirror'
   | 'iframe'
+  | 'screencast'
+  | 'novnc'
   | 'image'
   | 'diff'
 

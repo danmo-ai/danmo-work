@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	containerpkg "danmo-work/core/adapter/container"
 	"danmo-work/core/adapter/config"
+	containerpkg "danmo-work/core/adapter/container"
 	"danmo-work/core/domain"
 	"danmo-work/core/port"
 	"danmo-work/core/remote/connector"
@@ -107,6 +107,7 @@ func NewRouter(h *Handler, cfg RouterConfig) *gin.Engine {
 	api.POST("/sessions/:id/pending/:mid/steer", steerPending(h))
 	api.GET("/sessions/:id/events", streamEvents(h))
 	api.GET("/sessions/:id/events/poll", pollEvents(h))
+	api.GET("/sessions/:id/browser/live", sessionBrowserLive(h))
 	api.GET("/sessions/:id/usage", getSessionUsage(h))
 	api.POST("/projects", createProject(h))
 	api.GET("/projects", listProjects(h))

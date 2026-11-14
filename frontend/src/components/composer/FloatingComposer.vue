@@ -630,7 +630,7 @@ async function onPickSlash(cmd: ComposerSlashCommand) {
       workspaceUi.openRightDrawer('terminal')
       break
     case 'desktop':
-      workspaceUi.openRightDrawer('desktop')
+      workspaceUi.openDesktopStage(sessions.selectedProjectId ?? '')
       break
     case 'approve':
       emit('jump-pending')

@@ -84,7 +84,7 @@ type ConfigSandboxSection struct {
 	// Resources: default unlimited; optional user overrides (Settings / config).
 	Resources EnvironmentResources `json:"resources,omitempty" mapstructure:"resources" yaml:"resources,omitempty"`
 	// DesktopWidth/DesktopHeight size the Xvfb virtual display (profile=desktop).
-	// Zero → 1280×800.
+	// Zero → 1024×768, matching the default screenshot long-edge cap.
 	DesktopWidth  int `json:"desktopWidth,omitempty" mapstructure:"desktop_width" yaml:"desktop_width,omitempty"`
 	DesktopHeight int `json:"desktopHeight,omitempty" mapstructure:"desktop_height" yaml:"desktop_height,omitempty"`
 	// DesktopMaxShotEdge caps the longest screenshot edge sent to the model
@@ -95,8 +95,8 @@ type ConfigSandboxSection struct {
 
 // Default desktop display geometry.
 const (
-	DefaultDesktopWidth       = 1280
-	DefaultDesktopHeight      = 800
+	DefaultDesktopWidth       = 1024
+	DefaultDesktopHeight      = 768
 	DefaultDesktopMaxShotEdge = 1024
 )
 

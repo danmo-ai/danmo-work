@@ -250,14 +250,15 @@ const runtimeForm = ref({
   envWorkspaceMount: '',
   envCpus: '',
   envMemory: '',
-  envDesktopWidth: 1280,
-  envDesktopHeight: 800,
+  envDesktopWidth: 1024,
+  envDesktopHeight: 768,
   envDesktopMaxShotEdge: 1024,
   browserEnabled: true,
   browserExecutablePath: '',
   browserCdpUrl: '',
   computerEnabled: false,
   computerDisplay: '',
+  computerTarget: 'auto' as 'auto' | 'host' | 'sandbox',
   doomLoopThreshold: 10,
   maxStepsDefault: 200,
   maxLLMFailures: 3,
@@ -1854,6 +1855,14 @@ onUnmounted(() => {
               />
             </label>
             <template v-if="runtimeForm.computerEnabled">
+              <label class="settings-field">
+                <span class="settings-field__label">{{ $t('settings.computerTarget') }}</span>
+                <DqSelect v-model="runtimeForm.computerTarget">
+                  <DqOption value="auto" :label="$t('settings.computerTargetAuto')" />
+                  <DqOption value="host" :label="$t('settings.computerTargetHost')" />
+                  <DqOption value="sandbox" :label="$t('settings.computerTargetSandbox')" />
+                </DqSelect>
+              </label>
               <div class="settings-field">
                 <span class="settings-field__label">{{ $t('settings.computerDisplay') }}</span>
                 <DqInput

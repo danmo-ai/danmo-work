@@ -2,6 +2,7 @@ package port
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"danmo-work/core/domain"
@@ -57,6 +58,53 @@ type BrowserActResult struct {
 }
 
 // BrowserPage is a sticky tab keyed by Danmo session ID.
+var ErrBrowserPageNotFound = errors.New("browser page not found for session")
+var ErrBrowserPageClosed = errors.New("browser page is closed")
+
+// BrowserWatchOptions limits an ephemeral, read-only page screencast.
+type BrowserWatchOptions struct {
+	MaxWidth  int
+	MaxHeight int
+	Quality   int
+}
+
+// BrowserPageStatus describes the live sticky page without creating it.
+type BrowserPageStatus struct {
+	SessionID string `json:"sessionId"`
+	URL       string `json:"url,omitempty"`
+	Title     string `json:"title,omitempty"`
+	State     string `json:"state"` // live | closed
+}
+
+// BrowserFrame is one JPEG screencast frame. Frames are ephemeral and are not
+// written to turn logs or persisted browser history.
+type BrowserFrame struct {
+	Data     []byte
+	MimeType string
+	Width    int
+	Height   int
+}
+
+// BrowserWatchEvent carries either a status transition or a new frame.
+type BrowserWatchEvent struct {
+	Status BrowserPageStatus
+	Frame  *BrowserFrame
+}
+
+// BrowserLastFrame is the process-local final visual state of a closed page.
+type BrowserLastFrame struct {
+	Status BrowserPageStatus
+	Frame  BrowserFrame
+}
+
+// BrowserWatcher is implemented by browsers that can mirror an existing sticky
+// page. Watching must never call AcquirePage or launch a browser on its own.
+type BrowserWatcher interface {
+	WatchPage(ctx context.Context, sessionID string, opts BrowserWatchOptions) (<-chan BrowserWatchEvent, error)
+	LastPageFrame(sessionID string) (BrowserLastFrame, bool)
+}
+
+// BrowserPage interface controls the Agent-owned sticky tab.
 type BrowserPage interface {
 	Navigate(ctx context.Context, opts BrowserNavigateOptions) (BrowserNavigateResult, error)
 	Snapshot(ctx context.Context) (BrowserSnapshotResult, error)

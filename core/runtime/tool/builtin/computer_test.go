@@ -21,6 +21,10 @@ type fakeComputer struct {
 	lastDrag   [4]int
 	lastType   string
 	lastKey    string
+	lastHold   bool
+	lastButton bool
+	lastMods   []domain.KeyModifier
+	lastZoom   *domain.ScreenRect
 	lastScroll struct {
 		x, y   int
 		dir    domain.ScrollDirection
@@ -41,27 +45,41 @@ func (f *fakeComputer) FocusWindow(_ context.Context, id string) error {
 func (f *fakeComputer) WindowBounds(_ context.Context, _ string) (domain.WindowInfo, error) {
 	return f.bounds, nil
 }
-func (f *fakeComputer) Screenshot(_ context.Context, _ string) (domain.ComputerImage, error) {
+func (f *fakeComputer) Screenshot(_ context.Context, _, _ string, zoom *domain.ScreenRect) (domain.ComputerImage, error) {
+	f.lastZoom = zoom
+	if f.img.DisplayWidth == 0 {
+		f.img.DisplayWidth = f.img.Width
+		f.img.DisplayHeight = f.img.Height
+	}
 	return f.img, nil
 }
-func (f *fakeComputer) MouseMove(_ context.Context, x, y int) error {
+func (f *fakeComputer) MouseMove(_ context.Context, _, _ string, x, y int, _ []domain.KeyModifier) error {
 	f.lastMove = [2]int{x, y}
 	return nil
 }
-func (f *fakeComputer) MouseClick(_ context.Context, b domain.MouseButton, x, y, clicks int) error {
+func (f *fakeComputer) MouseClick(_ context.Context, _, _ string, b domain.MouseButton, x, y, clicks int, mods []domain.KeyModifier) error {
+	f.lastMods = mods
 	f.lastClick.button, f.lastClick.x, f.lastClick.y, f.lastClick.clicks = b, x, y, clicks
 	return nil
 }
-func (f *fakeComputer) MouseDrag(_ context.Context, x0, y0, x1, y1 int) error {
+func (f *fakeComputer) MouseDrag(_ context.Context, _, _ string, x0, y0, x1, y1 int) error {
 	f.lastDrag = [4]int{x0, y0, x1, y1}
 	return nil
 }
-func (f *fakeComputer) Scroll(_ context.Context, x, y int, dir domain.ScrollDirection, amount int) error {
+func (f *fakeComputer) MouseButton(_ context.Context, _ domain.MouseButton, pressed bool) error {
+	f.lastButton = pressed
+	return nil
+}
+func (f *fakeComputer) Scroll(_ context.Context, _, _ string, x, y int, dir domain.ScrollDirection, amount int) error {
 	f.lastScroll.x, f.lastScroll.y, f.lastScroll.dir, f.lastScroll.amount = x, y, dir, amount
 	return nil
 }
 func (f *fakeComputer) TypeText(_ context.Context, text string) error { f.lastType = text; return nil }
-func (f *fakeComputer) Key(_ context.Context, key string) error       { f.lastKey = key; return nil }
+func (f *fakeComputer) Key(_ context.Context, key string, hold bool) error {
+	f.lastKey = key
+	f.lastHold = hold
+	return nil
+}
 func (f *fakeComputer) CursorPosition(_ context.Context) (int, int, error) {
 	return 7, 9, nil
 }
@@ -93,31 +111,26 @@ func TestComputerScreenshotReturnsImagePart(t *testing.T) {
 	}
 }
 
-func TestComputerScreenshotNonVisionOmitsBytes(t *testing.T) {
+func TestComputerScreenshotNonVisionRejectedBeforeCapture(t *testing.T) {
 	f := &fakeComputer{img: domain.ComputerImage{MimeType: "image/png", Data: []byte{1, 2, 3}}}
 	h := &Computer{Ctl: f, SupportsImage: func(string) bool { return false }}
-	res, err := h.Execute(context.Background(), map[string]any{"action": "screenshot", "__model_id": "text-only"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Parts) != 0 {
-		t.Fatalf("expected no image parts, got %+v", res.Parts)
+	_, err := h.Execute(context.Background(), map[string]any{"action": "screenshot", "__model_id": "text-only"})
+	if err == nil {
+		t.Fatal("expected non-vision model to be rejected before capture")
 	}
 }
 
-func TestComputerClickWindowRelativeMapping(t *testing.T) {
+func TestComputerClickUsesScreenshotScope(t *testing.T) {
 	f := &fakeComputer{bounds: domain.WindowInfo{ID: "w1", X: 100, Y: 200}}
 	h := &Computer{Ctl: f}
 	_, err := h.Execute(context.Background(), map[string]any{
-		"action":     "left_click",
-		"window_id":  "w1",
-		"coordinate": []any{float64(5), float64(6)},
+		"action": "left_click", "window_id": "w1", "coordinate": []any{float64(5), float64(6)},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.lastClick.x != 105 || f.lastClick.y != 206 {
-		t.Fatalf("expected mapped (105,206), got (%d,%d)", f.lastClick.x, f.lastClick.y)
+	if f.lastClick.x != 5 || f.lastClick.y != 6 {
+		t.Fatalf("expected unshifted image coordinates (5,6), got (%d,%d)", f.lastClick.x, f.lastClick.y)
 	}
 	if f.lastClick.button != domain.MouseLeft || f.lastClick.clicks != 1 {
 		t.Fatalf("click=%+v", f.lastClick)
@@ -212,6 +225,47 @@ func TestComputerErrors(t *testing.T) {
 	}
 	if _, err := (&Computer{}).Execute(context.Background(), map[string]any{"action": "screenshot"}); err == nil {
 		t.Fatal("expected error when controller unset")
+	}
+}
+
+func TestComputerExtendedActions(t *testing.T) {
+	f := &fakeComputer{img: domain.ComputerImage{MimeType: "image/png", Data: []byte{1, 2, 3}, Width: 800, Height: 600}}
+	h := &Computer{Ctl: f}
+	if _, err := h.Execute(context.Background(), map[string]any{
+		"action": "triple_click", "coordinate": []any{3.0, 4.0}, "modifiers": []any{"shift", "ctrl"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if f.lastClick.clicks != 3 || len(f.lastMods) != 2 {
+		t.Fatalf("triple/modifiers=%+v %+v", f.lastClick, f.lastMods)
+	}
+	for action, want := range map[string]bool{"left_mouse_down": true, "left_mouse_up": false} {
+		if _, err := h.Execute(context.Background(), map[string]any{"action": action}); err != nil {
+			t.Fatal(err)
+		}
+		if f.lastButton != want {
+			t.Fatalf("%s: pressed=%v", action, f.lastButton)
+		}
+	}
+	if _, err := h.Execute(context.Background(), map[string]any{
+		"action": "zoom", "zoom": map[string]any{"x": 10.0, "y": 20.0, "width": 100.0, "height": 50.0},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if f.lastZoom == nil || f.lastZoom.X != 10 || f.lastZoom.Height != 50 {
+		t.Fatalf("zoom=%+v", f.lastZoom)
+	}
+	if _, err := h.Execute(context.Background(), map[string]any{"action": "hold_key", "text": "ctrl+s", "duration": 2.0}); err != nil {
+		t.Fatal(err)
+	}
+	if !f.lastHold || f.lastKey != "ctrl+s\x002" {
+		t.Fatalf("hold=%v key=%q", f.lastHold, f.lastKey)
+	}
+	if _, err := h.Execute(context.Background(), map[string]any{"action": "left_click", "modifiers": []any{"bogus"}}); err == nil {
+		t.Fatal("expected invalid modifier error")
+	}
+	if _, err := h.Execute(context.Background(), map[string]any{"action": "zoom", "zoom": map[string]any{"width": 0.0}}); err == nil {
+		t.Fatal("expected invalid zoom error")
 	}
 }
 
