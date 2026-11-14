@@ -62,6 +62,20 @@ fi
 # Stage platform first-launch script (post-install hooks; CodeGraph CLI comes from market).
 case "$(uname -s)" in
   Darwin)
+    # Native macOS input helper: macOS-only externalBin (tauri.macos.conf.json).
+    # tauri-build fails when it is missing, so build it before `tauri dev`.
+    DARWIN_INPUT="$DQ_ROOT/desktop/src-tauri/bin/dq-darwin-input-$TRIPLE"
+    echo "==> Building native macOS input helper -> $DARWIN_INPUT"
+    if xcrun clang -O2 -Wall -Wextra -Werror \
+      -o "$DARWIN_INPUT" "$DQ_ROOT/core/runtime/computer/native/darwin_input.c" \
+      -framework ApplicationServices -framework CoreFoundation -framework Carbon; then
+      chmod +x "$DARWIN_INPUT"
+      mkdir -p "$HOME/.danmo-work/bin"
+      cp -f "$DARWIN_INPUT" "$HOME/.danmo-work/bin/dq-darwin-input"
+    else
+      echo "WARNING: failed to build dq-darwin-input; computer tool falls back to cliclick" >&2
+      rm -f "$DARWIN_INPUT"
+    fi
     "$SCRIPT_DIR/stage_first_launch.sh" darwin "$HOME/.danmo-work/first_launch" || true
     "$SCRIPT_DIR/stage_first_launch.sh" darwin "$DQ_ROOT/desktop/src-tauri/resources/first_launch" || true
     ;;

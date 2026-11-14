@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "externalBin": [
+      "bin/danmo-work-backend",
+      "bin/dq-darwin-input"
+    ]
+  }
+}
