@@ -244,10 +244,8 @@ func (h *Computer) screenshot(ctx context.Context, input map[string]any, session
 	if len(img.Data) > maxComputerImageBytes {
 		return domain.ToolResult{}, fmt.Errorf("screenshot is %d bytes, larger than the %d MB cap", len(img.Data), maxComputerImageBytes/(1024*1024))
 	}
-	if dedup, ok := h.Ctl.(interface {
-		ScreenshotUnchanged(string, domain.ComputerImage) bool
-	}); ok && dedup.ScreenshotUnchanged(img.Scope, img) {
-		return domain.ToolResult{Content: "Screenshot is unchanged from the previous capture of this scope; reuse the existing image and coordinates.", Meta: map[string]any{"op": "screenshot", "unchanged": true}}, nil
+	if img.Unchanged {
+		return domain.ToolResult{Content: "Screenshot is unchanged from the previous capture of this scope in this turn; reuse the existing image and coordinates.", Meta: map[string]any{"op": "screenshot", "unchanged": true}}, nil
 	}
 	space := "absolute"
 	if windowID != "" {

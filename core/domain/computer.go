@@ -88,6 +88,10 @@ type ComputerImage struct {
 	// Scope uniquely identifies the latest screenshot used for coordinate
 	// mapping. It includes the session, optional window, and optional zoom.
 	Scope string `json:"-"`
+	// Unchanged reports that this capture is pixel-identical to the previous
+	// capture of the same scope within the same turn. The image bytes are still
+	// valid for coordinate mapping; callers may omit them from model context.
+	Unchanged bool `json:"-"`
 }
 
 // MouseButton identifies which mouse button an action targets.

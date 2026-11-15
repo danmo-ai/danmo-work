@@ -41,6 +41,20 @@ func (f *fakeDesktop) DesktopEndpoints(string) (domain.DesktopEndpoints, bool) {
 	return domain.DesktopEndpoints{}, false
 }
 
+type fakeDesktopEnv struct{ profile string }
+
+func (f fakeDesktopEnv) DesktopProfile() string  { return f.profile }
+func (f fakeDesktopEnv) DesktopMaxShotEdge() int { return 1024 }
+func (f fakeDesktopEnv) EnsureDesktop(context.Context, port.SandboxRunOptions) (domain.DesktopEndpoints, error) {
+	return domain.DesktopEndpoints{}, nil
+}
+func (f fakeDesktopEnv) ExecDesktop(context.Context, port.SandboxRunOptions, string, []string) ([]byte, error) {
+	return nil, nil
+}
+func (f fakeDesktopEnv) DesktopEndpoints(string) (domain.DesktopEndpoints, bool) {
+	return domain.DesktopEndpoints{}, false
+}
+
 func TestDesktopProbeChecksContainerAndTools(t *testing.T) {
 	f := &fakeDesktop{profile: domain.SandboxProfileDesktop, ensure: errors.New("container missing")}
 	b := newDesktopBackend(f)

@@ -45,11 +45,12 @@ type Manager struct {
 	shots    map[string]domain.ComputerImage
 	zoomKeys map[string]string
 	lastData map[string][]byte
+	lastTurn map[string]string
 }
 
 // New builds a Manager for the current OS and probes availability.
 func New(cfg domain.ConfigComputerSection) *Manager {
-	m := &Manager{host: newBackend(), shots: make(map[string]domain.ComputerImage), zoomKeys: make(map[string]string), lastData: make(map[string][]byte)}
+	m := &Manager{host: newBackend(), shots: make(map[string]domain.ComputerImage), zoomKeys: make(map[string]string), lastData: make(map[string][]byte), lastTurn: make(map[string]string)}
 	m.backend = m.host
 	m.Configure(cfg)
 	return m
@@ -93,6 +94,29 @@ func sessionFrom(ctx context.Context) string {
 	return value
 }
 
+type turnKey struct{}
+
+func withTurn(ctx context.Context, turnID string) context.Context {
+	return context.WithValue(ctx, turnKey{}, turnID)
+}
+
+func turnFrom(ctx context.Context) string {
+	value, _ := ctx.Value(turnKey{}).(string)
+	return value
+}
+
+// effectiveTargetLocked resolves auto to the actually selected backend target.
+func (m *Manager) effectiveTargetLocked() string {
+	target := domain.NormalizeComputerTarget(m.cfg.Target)
+	if target == domain.ComputerTargetAuto {
+		if m.desktop != nil && m.env != nil && m.env.DesktopProfile() == domain.SandboxProfileDesktop {
+			return domain.ComputerTargetSandbox
+		}
+		return domain.ComputerTargetHost
+	}
+	return target
+}
+
 // Configure replaces policy and re-probes the selected backend.
 func (m *Manager) Configure(cfg domain.ConfigComputerSection) {
 	m.mu.Lock()
@@ -105,13 +129,7 @@ func (m *Manager) Configure(cfg domain.ConfigComputerSection) {
 
 func (m *Manager) reselectLocked() {
 	previous := m.backend
-	target := m.cfg.Target
-	if target == domain.ComputerTargetAuto || target == "" {
-		target = domain.ComputerTargetHost
-		if m.desktop != nil && m.env != nil && m.env.DesktopProfile() == domain.SandboxProfileDesktop {
-			target = domain.ComputerTargetSandbox
-		}
-	}
+	target := m.effectiveTargetLocked()
 	if target == domain.ComputerTargetSandbox && m.desktop != nil {
 		m.backend = m.desktop
 	} else {
@@ -123,6 +141,7 @@ func (m *Manager) reselectLocked() {
 		m.shots = make(map[string]domain.ComputerImage)
 		m.zoomKeys = make(map[string]string)
 		m.lastData = make(map[string][]byte)
+		m.lastTurn = make(map[string]string)
 	} else if m.backend == m.desktop && m.desktop != nil && m.cfg.Display != "" && m.desktop.display != m.cfg.Display {
 		m.status = m.backend.probe(m.cfg)
 		m.status.Enabled = m.cfg.Enabled
@@ -156,7 +175,7 @@ func (m *Manager) maxShotEdge() int {
 	m.mu.Lock()
 	edge := m.cfg.MaxShotEdge
 	env := m.env
-	target := domain.NormalizeComputerTarget(m.cfg.Target)
+	target := m.effectiveTargetLocked()
 	m.mu.Unlock()
 	if edge != 0 {
 		return edge // negative disables downscale
@@ -187,6 +206,7 @@ func (m *Manager) rememberShot(img domain.ComputerImage) {
 	if previous := m.zoomKeys[parent]; previous != "" && previous != img.Scope {
 		delete(m.shots, previous)
 		delete(m.lastData, previous)
+		delete(m.lastTurn, previous)
 	}
 	if len(base) == 3 {
 		m.zoomKeys[parent] = img.Scope
@@ -255,19 +275,17 @@ func (m *Manager) Screenshot(ctx context.Context, sessionID, windowID string, zo
 	}
 	img.Scope = scopeFor(sessionID, windowID, zoom)
 	img = shrinkComputerImage(img, m.maxShotEdge())
+	turnID := turnFrom(ctx)
 	m.mu.Lock()
+	// Compare against the previous capture before overwriting it, and only
+	// within the same turn: the first screenshot of a new turn (or subagent)
+	// must always deliver real image bytes so see→act→verify never goes blind.
+	img.Unchanged = m.lastTurn[img.Scope] == turnID && bytes.Equal(m.lastData[img.Scope], img.Data)
+	m.lastTurn[img.Scope] = turnID
 	m.lastData[img.Scope] = bytes.Clone(img.Data)
 	m.mu.Unlock()
 	m.rememberShot(img)
 	return img, nil
-}
-
-// ScreenshotUnchanged reports whether the same capture scope produced identical
-// pixels on consecutive calls. It never suppresses the screenshot itself.
-func (m *Manager) ScreenshotUnchanged(scope string, img domain.ComputerImage) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return bytes.Equal(m.lastData[scope], img.Data)
 }
 
 func (m *Manager) MouseMove(ctx context.Context, sessionID, windowID string, x, y int, modifiers []domain.KeyModifier) error {

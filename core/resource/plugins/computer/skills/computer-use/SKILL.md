@@ -23,9 +23,11 @@ metadata:
 
 Drive real application windows through the single `computer` tool. The first
 call asks the user for approval; the user may allow desktop control for the rest
-of the session. With `runtime.sandbox.profile=desktop` this drives
-the sandboxed Xvfb desktop (same machine as sandbox Chromium / noVNC) — not the
-host GUI. Otherwise it controls the host. Act deliberately and verify each step.
+of the session. `runtime.computer.target` selects host, sandbox, or auto (auto
+follows `sandbox.profile=desktop`, driving the Xvfb desktop instead of the host
+GUI). Act deliberately and verify each step. A screenshot reported as
+"unchanged" means the screen is identical to your previous capture in this
+turn — reuse that image; the first capture of every turn always returns pixels.
 
 For web pages prefer the `browser` expert (`browser_*`). CDP is always
 `http://127.0.0.1:9222` (sandbox or host).

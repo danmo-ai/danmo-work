@@ -2,6 +2,7 @@ package computer
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"image/png"
 	"strings"
@@ -131,6 +132,97 @@ func TestManagerScopeMapping(t *testing.T) {
 	}
 	if x != 95 || y != 90 {
 		t.Fatalf("zoom scope returned (%d,%d)", x, y)
+	}
+}
+
+type fakeShotBackend struct{ img domain.ComputerImage }
+
+func (f fakeShotBackend) probe(domain.ConfigComputerSection) domain.ComputerStatus {
+	return domain.ComputerStatus{Available: true, Backend: "fake"}
+}
+func (f fakeShotBackend) listWindows(context.Context, string) ([]domain.WindowInfo, error) {
+	return nil, nil
+}
+func (f fakeShotBackend) focusWindow(context.Context, string) error { return nil }
+func (f fakeShotBackend) windowBounds(context.Context, string) (domain.WindowInfo, error) {
+	return domain.WindowInfo{}, nil
+}
+func (f fakeShotBackend) screenshot(context.Context, string, *domain.ScreenRect) (domain.ComputerImage, error) {
+	return f.img, nil
+}
+func (f fakeShotBackend) mouseMove(context.Context, int, int, []domain.KeyModifier) error { return nil }
+func (f fakeShotBackend) mouseClick(context.Context, domain.MouseButton, int, int, int, []domain.KeyModifier) error {
+	return nil
+}
+func (f fakeShotBackend) mouseDrag(context.Context, int, int, int, int) error { return nil }
+func (f fakeShotBackend) mouseButton(context.Context, domain.MouseButton, bool) error {
+	return nil
+}
+func (f fakeShotBackend) scroll(context.Context, int, int, domain.ScrollDirection, int) error {
+	return nil
+}
+func (f fakeShotBackend) typeText(context.Context, string) error  { return nil }
+func (f fakeShotBackend) key(context.Context, string, bool) error { return nil }
+func (f fakeShotBackend) cursorPosition(context.Context) (int, int, error) {
+	return 0, 0, nil
+}
+
+func TestScreenshotDedupIsPerTurnAndComparesPreviousCapture(t *testing.T) {
+	m := New(domain.ConfigComputerSection{Enabled: true, MaxShotEdge: -1})
+	m.host = fakeShotBackend{img: domain.ComputerImage{MimeType: "image/png", Data: []byte("pixels"), Width: 100, Height: 80}}
+	m.backend = m.host
+	m.status.Available = true
+	ctx := context.Background()
+
+	first, err := m.Screenshot(withTurn(withSession(ctx, "s"), "t1"), "s", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Unchanged {
+		t.Fatal("first capture of a turn must never be marked unchanged")
+	}
+	second, err := m.Screenshot(withTurn(withSession(ctx, "s"), "t1"), "s", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !second.Unchanged {
+		t.Fatal("identical capture within the same turn should be unchanged")
+	}
+	newTurn, err := m.Screenshot(withTurn(withSession(ctx, "s"), "t2"), "s", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if newTurn.Unchanged {
+		t.Fatal("first capture of a new turn must deliver image bytes")
+	}
+	m.host = fakeShotBackend{img: domain.ComputerImage{MimeType: "image/png", Data: []byte("changed"), Width: 100, Height: 80}}
+	m.backend = m.host
+	changed, err := m.Screenshot(withTurn(withSession(ctx, "s"), "t2"), "s", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed.Unchanged {
+		t.Fatal("changed pixels must not be marked unchanged")
+	}
+	// Mapping state must survive dedup so follow-up clicks still work.
+	if _, _, err := m.mapXY("s", "", 10, 10); err != nil {
+		t.Fatalf("mapping after dedup: %v", err)
+	}
+}
+
+func TestHostMaxShotEdgeIgnoresSandboxCap(t *testing.T) {
+	m := New(domain.ConfigComputerSection{Enabled: true})
+	m.SetDesktopEnvironment(fakeDesktopEnv{profile: domain.SandboxProfileCLI})
+	if got := m.maxShotEdge(); got != domain.DefaultComputerMaxShotEdge {
+		t.Fatalf("host edge=%d, want %d", got, domain.DefaultComputerMaxShotEdge)
+	}
+	m.SetDesktopEnvironment(fakeDesktopEnv{profile: domain.SandboxProfileDesktop})
+	if got := m.maxShotEdge(); got != domain.DefaultDesktopMaxShotEdge {
+		t.Fatalf("auto+sandbox edge=%d, want %d", got, domain.DefaultDesktopMaxShotEdge)
+	}
+	m.Configure(domain.ConfigComputerSection{Enabled: true, Target: domain.ComputerTargetHost})
+	if got := m.maxShotEdge(); got != domain.DefaultComputerMaxShotEdge {
+		t.Fatalf("explicit host edge=%d, want %d", got, domain.DefaultComputerMaxShotEdge)
 	}
 }
 
